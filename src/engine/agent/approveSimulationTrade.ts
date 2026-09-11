@@ -1,4 +1,3 @@
-import { submitSimulatedOrder } from '../simulator/submitSimulatedOrder'
 import type { SimulatedOrderDraft, SymbolSpec } from '../../types'
 import type { TradePlan } from './prepareTradePlan'
 
@@ -13,7 +12,7 @@ export const approveSimulationTrade = (input: ApprovalInput): SimulatedOrderDraf
   if (!input.approvedByUser) throw new Error('User approval is required before simulated execution.')
   if (!input.plan.isValid || !input.plan.risk.isValid) throw new Error('The trade plan is not risk-valid.')
   const setup = input.plan.setup
-  const draft: SimulatedOrderDraft = {
+  return {
     symbol: input.symbolSpec.symbol,
     type: setup.direction,
     lotSize: input.plan.lotSize,
@@ -25,6 +24,4 @@ export const approveSimulationTrade = (input: ApprovalInput): SimulatedOrderDraf
     rewardAmount: input.plan.estimatedReward,
     riskRewardRatio: input.plan.risk.riskRewardRatio,
   }
-  submitSimulatedOrder(draft)
-  return draft
 }
