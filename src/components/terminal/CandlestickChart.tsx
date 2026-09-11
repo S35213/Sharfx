@@ -1,13 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { createChart, type IChartApi, type ISeriesApi, type CandlestickData, type Time } from 'lightweight-charts'
 
-export interface ChartAnnotation {
-  id: string
-  type: 'support' | 'resistance' | 'liquidity' | 'entry' | 'stop' | 'target'
-  price: number
-  label: string
-}
-
+export interface ChartAnnotation { id: string; type: 'support' | 'resistance' | 'liquidity' | 'entry' | 'stop' | 'target'; price: number; label: string }
 interface CandlestickChartProps { candles: CandlestickData<Time>[]; annotations?: ChartAnnotation[] }
 
 export function CandlestickChart({ candles, annotations = [] }: CandlestickChartProps) {
