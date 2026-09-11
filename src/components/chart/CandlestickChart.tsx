@@ -10,14 +10,22 @@ export interface ChartAnnotation {
   lineWidth?: 1 | 2 | 3 | 4
 }
 
-interface CandlestickChartProps { data: OHLCV[]; height?: string; annotations?: ChartAnnotation[] }
+interface CandlestickChartProps {
+  data: OHLCV[]
+  height?: string
+  annotations?: ChartAnnotation[]
+}
 
 const prepareData = (data: OHLCV[]): CandlestickData[] => {
   const seen = new Set<number>()
   return [...data]
     .sort((a, b) => a.time - b.time)
     .filter((c) => Number.isFinite(c.time) && Number.isFinite(c.open) && Number.isFinite(c.high) && Number.isFinite(c.low) && Number.isFinite(c.close) && c.high >= Math.max(c.open, c.close) && c.low <= Math.min(c.open, c.close)))
-    .filter((c) => { if (seen.has(c.time)) return false; seen.add(c.time); return true })
+    .filter((c) => {
+      if (seen.has(c.time)) return false
+      seen.add(c.time)
+      return true
+    })
     .map((c) => ({ time: c.time as UTCTimestamp, open: c.open, high: c.high, low: c.low, close: c.close }))
 }
 
@@ -30,13 +38,30 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
-    const chart = createChart(el, { layout: { background: { type: ColorType.Solid, color: '#0B0E11' }, textColor: '#848E9C' }, grid: { vertLines: { color: '#1E2329' }, horzLines: { color: '#1E2329' } }, width: el.clientWidth, height: Math.max(240, el.clientHeight), crosshair: { mode: 1 }, rightPriceScale: { borderColor: '#2A2F38' }, timeScale: { borderColor: '#2A2F38', timeVisible: true, secondsVisible: false } })
+    const chart = createChart(el, {
+      layout: { background: { type: ColorType.Solid, color: '#0B0E11' }, textColor: '#848E9C' },
+      grid: { vertLines: { color: '#1E2329' }, horzLines: { color: '#1E2329' } },
+      width: el.clientWidth,
+      height: Math.max(240, el.clientHeight),
+      crosshair: { mode: 1 },
+      rightPriceScale: { borderColor: '#2A2F38' },
+      timeScale: { borderColor: '#2A2F38', timeVisible: true, secondsVisible: false },
+    })
     const series = chart.addCandlestickSeries({ upColor: '#0ECB81', downColor: '#F6465D', borderUpColor: '#0ECB81', borderDownColor: '#F6465D', wickUpColor: '#0ECB81', wickDownColor: '#F6465D' })
     chartRef.current = chart
     seriesRef.current = series
-    const ro = new ResizeObserver(([entry]) => { if (!entry) return; const { width, height: h } = entry.contentRect; if (width > 0 && h > 0) chart.applyOptions({ width, height: h }) })
+    const ro = new ResizeObserver(([entry]) => {
+      if (!entry) return
+      const { width, height: h } = entry.contentRect
+      if (width > 0 && h > 0) chart.applyOptions({ width, height: h })
+    })
     ro.observe(el)
-    return () => { ro.disconnect(); chart.remove(); chartRef.current = null; seriesRef.current = null }
+    return () => {
+      ro.disconnect()
+      chart.remove()
+      chartRef.current = null
+      seriesRef.current = null
+    }
   }, [])
 
   useEffect(() => {
@@ -52,12 +77,21 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     if (!series) return
     const lines: IPriceLine[] = []
     const seen = new Set<string>()
-    annotations.forEach((annotation) => {
-      if (!annotation.id || seen.has(annotation.id) || !Number.isFinite(annotation.price) || annotation.price <= 0) return
+    for (const annotation of annotations) {
+      if (!annotation.id || seen.has(annotation.id) || !Number.isFinite(annotation.price) || annotation.price <= 0) continue
       seen.add(annotation.id)
-      lines.push(series.createPriceLine({ price: annotation.price, color: annotation.color, lineWidth: annotation.lineWidth ?? 1, lineStyle: 2, axisLabelVisible: true, title: annotation.label }))
-    })
-    return () => { lines.forEach((line) => series.removePriceLine(line)) }
+      lines.push(series.createPriceLine({
+        price: annotation.price,
+        color: annotation.color,
+        lineWidth: annotation.lineWidth ?? 1,
+        lineStyle: 2,
+        axisLabelVisible: true,
+        title: annotation.label,
+      }))
+    }
+    return () => {
+      lines.forEach((line) => series.removePriceLine(line))
+    }
   }, [annotations])
 
   return <div ref={containerRef} className="w-full overflow-hidden rounded-lg border border-shafx-border" style={{ height, minHeight: 240 }} />
