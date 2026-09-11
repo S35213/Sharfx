@@ -8,6 +8,7 @@ import { Watchlist } from './components/watchlist/Watchlist'
 import { MarketAnalysisPanel } from './components/analysis/MarketAnalysis'
 import { AIAssistantPanel } from './components/ai/AIAssistantPanel'
 import { BacktestPanel } from './components/backtest/BacktestPanel'
+import { ReplayPanel } from './components/backtest/ReplayPanel'
 import { OrderPanel } from './components/order/OrderPanel'
 import { AccountPanel } from './components/account/AccountPanel'
 import { TradesPanel } from './components/trades/TradesPanel'
@@ -22,6 +23,7 @@ const TerminalContent: React.FC = () => {
   const { selectedSymbol, setSelectedSymbol, timeframe, setTimeframe } = useTerminal()
   const [currentPrice, setCurrentPrice] = useState(1.08542)
   const [candles, setCandles] = useState<OHLCV[]>([])
+  const [replayCount, setReplayCount] = useState(0)
   const [accountData, setAccountData] = useState<AccountData | null>(null)
   const [symbolSpec, setSymbolSpec] = useState<SymbolSpec | null>(null)
   const [watchlist, setWatchlist] = useState<MarketPair[]>([])
@@ -41,7 +43,7 @@ const TerminalContent: React.FC = () => {
     const load = async (): Promise<void> => {
       const [wl, acc, spec, cands, ma, ai, positions, pending, history] = await Promise.all([marketDataSource.getWatchlist(), marketDataSource.getAccountData(), marketDataSource.getSymbolSpec(selectedSymbol), marketDataSource.getCandles(selectedSymbol, timeframe), marketDataSource.getMarketAnalysis(selectedSymbol), marketDataSource.getAIAnalysis(selectedSymbol), marketDataSource.getOpenPositions(), marketDataSource.getPendingOrders(), marketDataSource.getTradeHistory()])
       if (cancelled) return
-      setWatchlist(wl); setSymbolSpec(spec); setCandles(cands); setMarketAnalysis(ma); setAiAnalysis(ai)
+      setWatchlist(wl); setSymbolSpec(spec); setCandles(cands); setReplayCount(cands.length); setMarketAnalysis(ma); setAiAnalysis(ai)
       if (!accountInitialized.current) { accountInitialized.current = true; setAccountData(acc) }
       if (!simulatorInitialized.current) { simulatorInitialized.current = true; setOpenPositions(positions); setPendingOrders(pending); setTradeHistory(history) }
       const pair = wl.find((p) => p.symbol === selectedSymbol)
@@ -51,9 +53,12 @@ const TerminalContent: React.FC = () => {
     return () => { cancelled = true }
   }, [selectedSymbol, timeframe])
 
+  const visibleCandles = useMemo(() => replayCount > 0 && replayCount < candles.length ? candles.slice(0, replayCount) : candles, [candles, replayCount])
+  const replayActive = visibleCandles.length > 0 && visibleCandles.length < candles.length
+  const displayPrice = replayActive ? (visibleCandles[visibleCandles.length - 1]?.close ?? currentPrice) : currentPrice
   const conversionRate = symbolSpec ? getConversionRate(symbolSpec.quoteCurrency, accountData?.currency ?? 'USD') : undefined
-  const chartAnnotations = useMemo(() => buildAIChartAnnotations(selectedSymbol, candles), [selectedSymbol, candles])
-  const aiSetup = useMemo(() => analyzeCurrentSetup(selectedSymbol, candles)?.preferredSetup ?? null, [selectedSymbol, candles])
+  const chartAnnotations = useMemo(() => buildAIChartAnnotations(selectedSymbol, visibleCandles), [selectedSymbol, visibleCandles])
+  const aiSetup = useMemo(() => analyzeCurrentSetup(selectedSymbol, visibleCandles)?.preferredSetup ?? null, [selectedSymbol, visibleCandles])
   const reviewAISetup = useCallback((): void => { document.getElementById('order-ticket')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }, [])
 
   const handleOrderSubmit = useCallback((draft: SimulatedOrderDraft): void => {
@@ -70,7 +75,7 @@ const TerminalContent: React.FC = () => {
     try {
       const [spec, wl] = await Promise.all([marketDataSource.getSymbolSpec(order.symbol), marketDataSource.getWatchlist()])
       const pair = wl.find((item) => item.symbol === order.symbol)
-      const exitPrice = order.symbol === selectedSymbol ? currentPrice : pair?.price
+      const exitPrice = order.symbol === selectedSymbol ? displayPrice : pair?.price
       if (!exitPrice) throw new Error('No simulated market price is available for this position.')
       const rate = getConversionRate(spec.quoteCurrency, accountData.currency)
       const closed = closeSimulatedPosition(order, { exitPrice, conversionRate: rate }, spec)
@@ -79,7 +84,7 @@ const TerminalContent: React.FC = () => {
       setAccountData((prev) => prev ? { ...prev, balance: Number((prev.balance + (closed.profit ?? 0)).toFixed(2)), equity: Number((prev.balance + (closed.profit ?? 0)).toFixed(2)), floatingPL: 0, freeMargin: Number((prev.freeMargin + (closed.profit ?? 0)).toFixed(2)) } : prev)
       pushToast(`Simulated ${closed.type} ${closed.symbol} closed at ${exitPrice.toFixed(spec.pricePrecision)} (${closed.profit !== undefined && closed.profit >= 0 ? '+' : ''}${closed.profit?.toFixed(2)} ${accountData.currency}).`)
     } catch (err) { pushToast(err instanceof Error ? err.message : 'Unable to close simulated position.') }
-  }, [accountData, currentPrice, openPositions, pushToast, selectedSymbol])
+  }, [accountData, displayPrice, openPositions, pushToast, selectedSymbol])
 
   useEffect(() => {
     if (!symbolSpec || !accountData || openPositions.length === 0) return
@@ -98,7 +103,7 @@ const TerminalContent: React.FC = () => {
   }, [accountData, currentPrice, openPositions, pushToast, selectedSymbol, symbolSpec])
 
   if (!accountData || !symbolSpec || !marketAnalysis || !aiAnalysis) return <div className="flex h-full items-center justify-center bg-shafx-bg text-shafx-text">Loading SHAFX Terminal...</div>
-  return <div className="flex h-full flex-col overflow-hidden bg-shafx-bg text-shafx-text"><TopNav symbol={selectedSymbol} price={currentPrice} pricePrecision={symbolSpec.pricePrecision} timeframe={timeframe} onTimeframeChange={setTimeframe} /><main className="flex flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden"><aside className="flex w-full flex-shrink-0 flex-col gap-4 border-b border-shafx-border p-4 lg:w-64 lg:border-b-0 lg:border-r lg:overflow-y-auto"><div className="h-64 flex-shrink-0 lg:h-80"><Watchlist pairs={watchlist} selectedPair={selectedSymbol} onSelectPair={setSelectedSymbol} /></div><AccountPanel account={accountData} /></aside><section className="flex min-w-0 flex-1 flex-col border-shafx-border lg:border-r"><div className="min-h-[320px] flex-1 p-4 lg:min-h-[400px]"><CandlestickChart data={candles} annotations={chartAnnotations} height="100%" /></div><div className="h-56 flex-shrink-0 p-4 pt-0 lg:h-64"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={currentPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} /></div></section><aside className="flex w-full flex-shrink-0 flex-col gap-4 p-4 lg:w-80 lg:overflow-y-auto"><MarketAnalysisPanel analysis={marketAnalysis} pricePrecision={symbolSpec.pricePrecision} /><AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={candles} setup={aiSetup} onReviewSetup={reviewAISetup} /><BacktestPanel symbol={selectedSymbol} candles={candles} symbolSpec={symbolSpec} initialBalance={accountData.balance} accountCurrency={accountData.currency} conversionRate={conversionRate} /><div id="order-ticket"><OrderPanel symbol={selectedSymbol} currentPrice={currentPrice} accountBalance={accountData.balance} accountCurrency={accountData.currency} symbolSpec={symbolSpec} conversionRate={conversionRate} onSubmitOrder={handleOrderSubmit} aiSetup={aiSetup} /></div></aside></main><footer className="flex items-center justify-between border-t border-shafx-border bg-shafx-surface px-4 py-1.5 text-[10px] text-shafx-textMuted"><span>SHAFX Terminal v0.1.0 • Simulator Mode • No real money trading</span><span className="hidden sm:inline">Demo data only — not financial advice</span></footer><Toast toast={toast} onDismiss={() => setToast(null)} /></div>
+  return <div className="flex h-full flex-col overflow-hidden bg-shafx-bg text-shafx-text"><TopNav symbol={selectedSymbol} price={displayPrice} pricePrecision={symbolSpec.pricePrecision} timeframe={timeframe} onTimeframeChange={setTimeframe} /><main className="flex flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden"><aside className="flex w-full flex-shrink-0 flex-col gap-4 border-b border-shafx-border p-4 lg:w-64 lg:border-b-0 lg:border-r lg:overflow-y-auto"><div className="h-64 flex-shrink-0 lg:h-80"><Watchlist pairs={watchlist} selectedPair={selectedSymbol} onSelectPair={setSelectedSymbol} /></div><AccountPanel account={accountData} /></aside><section className="flex min-w-0 flex-1 flex-col border-shafx-border"><div className="min-h-[320px] flex-1 p-4 lg:min-h-[400px]"><CandlestickChart data={visibleCandles} annotations={chartAnnotations} height="100%" /></div><div className="h-56 flex-shrink-0 p-4 pt-0 lg:h-64"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} /></div></section><aside className="flex w-full flex-shrink-0 flex-col gap-4 p-4 lg:w-80 lg:overflow-y-auto"><MarketAnalysisPanel analysis={marketAnalysis} pricePrecision={symbolSpec.pricePrecision} /><AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={visibleCandles} setup={aiSetup} onReviewSetup={reviewAISetup} /><ReplayPanel candles={candles} replayCount={replayCount || candles.length} onReplayCountChange={setReplayCount} /><BacktestPanel symbol={selectedSymbol} candles={candles} symbolSpec={symbolSpec} initialBalance={accountData.balance} accountCurrency={accountData.currency} conversionRate={conversionRate} /><div id="order-ticket"><OrderPanel symbol={selectedSymbol} currentPrice={displayPrice} accountBalance={accountData.balance} accountCurrency={accountData.currency} symbolSpec={symbolSpec} conversionRate={conversionRate} onSubmitOrder={handleOrderSubmit} aiSetup={aiSetup} /></div></aside></main><footer className="flex items-center justify-between border-t border-shafx-border bg-shafx-surface px-4 py-1.5 text-[10px] text-shafx-textMuted"><span>SHAFX Terminal v0.1.0 • Simulator Mode • No real money trading</span><span className="hidden sm:inline">{replayActive ? 'Visual replay — simulated candles only' : 'Demo data only — not financial advice'}</span></footer><Toast toast={toast} onDismiss={() => setToast(null)} /></div>
 }
 
 const App: React.FC = () => <ErrorBoundary><TerminalProvider><TerminalContent /></TerminalProvider></ErrorBoundary>
