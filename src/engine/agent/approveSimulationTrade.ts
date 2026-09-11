@@ -20,12 +20,11 @@ export const approveSimulationTrade = (input: ApprovalInput): SimulatedOrderDraf
     entryPrice: setup.entryPrice,
     stopLoss: setup.stopLoss,
     takeProfit: setup.takeProfit,
-    riskPercent: input.plan.risk.riskAmount > 0 ? Number(((input.plan.risk.riskAmount / 100)).toFixed(4)) : 0,
+    riskPercent: input.plan.riskPercent,
     riskAmount: input.plan.estimatedLoss,
     rewardAmount: input.plan.estimatedReward,
     riskRewardRatio: input.plan.risk.riskRewardRatio,
   }
-  if (draft.riskPercent <= 0) throw new Error(`Unable to create a valid ${input.accountCurrency} risk value for this plan.`)
   submitSimulatedOrder(draft)
   return draft
 }
