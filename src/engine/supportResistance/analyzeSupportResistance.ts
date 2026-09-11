@@ -3,12 +3,12 @@ import { findSwingPoints } from '../marketStructure'
 import type { ClassifiedSwing, SwingPoint } from '../marketStructure/types'
 import type { SRZone, SupportResistanceResult, ZoneStrength, ZoneType } from './types'
 
-interface SwingInput {
-  highs: ClassifiedSwing[]
-  lows: ClassifiedSwing[]
-}
-
 type AnySwing = SwingPoint | ClassifiedSwing
+
+interface SwingInput {
+  highs: AnySwing[]
+  lows: AnySwing[]
+}
 
 const isValidCandle = (candle: OHLCV): boolean =>
   Number.isFinite(candle.time) &&
@@ -35,6 +35,7 @@ const strengthForTouches = (touches: number): ZoneStrength => {
 const clusterPoints = (points: AnySwing[], type: ZoneType, tolerance: number): SRZone[] => {
   const sorted = points
     .filter((point) => isValidSwing(point, type))
+    .slice()
     .sort((a, b) => a.price - b.price || a.time - b.time || a.index - b.index)
 
   const clusters: Array<{
