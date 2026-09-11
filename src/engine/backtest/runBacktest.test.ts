@@ -33,9 +33,9 @@ describe('runBacktest', () => {
   })
 
   it('uses the conservative stop when stop and target occur in one candle', () => {
-    const result = runBacktest(candles, { initialBalance: 1000, accountCurrency: 'USD', symbolSpec: spec }, () => ({ side: 'BUY', stopLoss: 1.1008, takeProfit: 1.1020, lotSize: 0.01 }))
+    const result = runBacktest(candles, { initialBalance: 1000, accountCurrency: 'USD', symbolSpec: spec }, () => ({ side: 'BUY', stopLoss: 1.1000, takeProfit: 1.1020, lotSize: 0.01 }))
     expect(result.trades[0].exitReason).toBe('stop-loss')
-    expect(result.trades[0].profit).toBe(-0)
+    expect(result.trades[0].profit).toBe(-0.5)
   })
 
   it('does not leak future candles to the signal provider', () => {
