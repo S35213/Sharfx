@@ -20,8 +20,10 @@ export const analyzeCurrentSetup = (symbol: string, candles: OHLCV[]): SetupResu
 }
 
 export const buildAIChartAnnotations = (symbol: string, candles: OHLCV[]): ChartAnnotation[] => {
+  if (candles.length === 0) return []
+  const currentPrice = candles[candles.length - 1]?.close ?? Number.NaN
+  if (!Number.isFinite(currentPrice) || currentPrice <= 0) return []
   const setup = analyzeCurrentSetup(symbol, candles)
-  if (!setup) return []
   const result: ChartAnnotation[] = []
   const add = (id: string, price: number | null, label: string, color: string, lineWidth: 1 | 2 = 1): void => {
     if (typeof price !== 'number' || !Number.isFinite(price) || price <= 0) return
@@ -34,7 +36,7 @@ export const buildAIChartAnnotations = (symbol: string, candles: OHLCV[]): Chart
   add('resistance', supportResistance.nearestResistance, 'Resistance', '#F6465D')
   add('buy-liquidity', liquidity.nearestBuySide?.referencePrice ?? null, 'Buy liquidity', '#F0B90B')
   add('sell-liquidity', liquidity.nearestSellSide?.referencePrice ?? null, 'Sell liquidity', '#F0B90B')
-  const preferred = setup.preferredSetup
+  const preferred = setup?.preferredSetup ?? null
   if (preferred) {
     add('ai-entry', preferred.entryPrice, `AI ${preferred.direction} entry`, '#2962FF', 2)
     add('ai-stop', preferred.stopLoss, 'AI stop', '#F6465D', 2)
