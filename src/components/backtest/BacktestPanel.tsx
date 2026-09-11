@@ -26,7 +26,7 @@ export function BacktestPanel({ symbol, candles, symbolSpec, initialBalance, acc
   const maxRange = Math.max(20, candles.length - 1)
   const effectiveRange = Math.min(range, maxRange)
 
-  const signalProvider = useMemo(() => (history: OHLCV[], index: number) => {
+  const signalProvider = useMemo(() => (history: OHLCV[]) => {
     if (history.length < 8) return null
     const currentPrice = history[history.length - 1]?.close
     if (!Number.isFinite(currentPrice) || currentPrice <= 0) return null
@@ -36,8 +36,10 @@ export function BacktestPanel({ symbol, candles, symbolSpec, initialBalance, acc
     const liquidity = analyzeLiquidity(history, swings, toleranceFor(symbol))
     const setup = analyzeSetup({ currentPrice, structure, supportResistance, liquidity }).preferredSetup
     if (!setup || setup.status !== 'candidate') return null
-    const lotSize = Math.max(symbolSpec.minLotSize, Math.min(symbolSpec.maxLotSize, Number((Math.floor((0.01 - symbolSpec.minLotSize) / symbolSpec.lotStep) * symbolSpec.lotStep + symbolSpec.minLotSize).toFixed(8))))
-    if (!Number.isFinite(lotSize) || lotSize < symbolSpec.minLotSize) return null
+    const baseLot = 0.01
+    const steps = Math.max(0, Math.floor((baseLot - symbolSpec.minLotSize) / symbolSpec.lotStep))
+    const lotSize = Math.max(symbolSpec.minLotSize, Math.min(symbolSpec.maxLotSize, Number((symbolSpec.minLotSize + steps * symbolSpec.lotStep).toFixed(8))))
+    if (!Number.isFinite(lotSize)) return null
     return { side: setup.direction, stopLoss: setup.stopLoss, takeProfit: setup.takeProfit, lotSize }
   }, [symbol, symbolSpec])
 
