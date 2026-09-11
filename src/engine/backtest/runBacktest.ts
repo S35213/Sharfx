@@ -9,8 +9,7 @@ const validateCandle = (candle: OHLCV): boolean =>
 
 const priceToCash = (entry: number, exit: number, side: 'BUY' | 'SELL', lotSize: number, pipSize: number, contractSize: number, conversionRate: number): number => {
   const priceMove = side === 'BUY' ? exit - entry : entry - exit
-  const pips = priceMove / pipSize
-  return pips * pipSize * contractSize * lotSize * conversionRate
+  return (priceMove / pipSize) * pipSize * contractSize * lotSize * conversionRate
 }
 
 const validSignal = (signal: BacktestSignal, price: number, spec: BacktestConfig['symbolSpec']): boolean => {
@@ -24,21 +23,18 @@ const validSignal = (signal: BacktestSignal, price: number, spec: BacktestConfig
 
 const exitForCandle = (signal: BacktestSignal, candle: OHLCV): { price: number; reason: 'stop-loss' | 'take-profit' } | null => {
   if (signal.side === 'BUY') {
-    const hitStop = candle.low <= signal.stopLoss
-    const hitTarget = candle.high >= signal.takeProfit
-    if (hitStop) return { price: signal.stopLoss, reason: 'stop-loss' }
-    if (hitTarget) return { price: signal.takeProfit, reason: 'take-profit' }
+    if (candle.low <= signal.stopLoss) return { price: signal.stopLoss, reason: 'stop-loss' }
+    if (candle.high >= signal.takeProfit) return { price: signal.takeProfit, reason: 'take-profit' }
   } else {
-    const hitStop = candle.high >= signal.stopLoss
-    const hitTarget = candle.low <= signal.takeProfit
-    if (hitStop) return { price: signal.stopLoss, reason: 'stop-loss' }
-    if (hitTarget) return { price: signal.takeProfit, reason: 'take-profit' }
+    if (candle.high >= signal.stopLoss) return { price: signal.stopLoss, reason: 'stop-loss' }
+    if (candle.low <= signal.takeProfit) return { price: signal.takeProfit, reason: 'take-profit' }
   }
   return null
 }
 
 export const runBacktest = (candles: OHLCV[], config: BacktestConfig, signalProvider: BacktestSignalProvider): BacktestResult => {
   if (!finitePositive(config.initialBalance)) throw new Error('Initial balance must be a positive finite number.')
+  if (!config.accountCurrency.trim()) throw new Error('Account currency is required.')
   if (!finitePositive(config.symbolSpec.pipSize) || !finitePositive(config.symbolSpec.contractSize) || !finitePositive(config.symbolSpec.lotStep)) throw new Error('Symbol specification is invalid.')
   if (config.symbolSpec.minLotSize <= 0 || config.symbolSpec.maxLotSize < config.symbolSpec.minLotSize) throw new Error('Symbol lot configuration is invalid.')
   if (!Number.isInteger(config.symbolSpec.pricePrecision) || config.symbolSpec.pricePrecision < 0) throw new Error('Symbol price precision is invalid.')
@@ -46,11 +42,13 @@ export const runBacktest = (candles: OHLCV[], config: BacktestConfig, signalProv
   if (candles.some((candle) => !validateCandle(candle))) throw new Error('Backtest contains invalid OHLC data.')
   for (let i = 1; i < candles.length; i += 1) if (candles[i].time <= candles[i - 1].time) throw new Error('Backtest candles must be strictly chronological.')
 
+  const conversionRate = config.symbolSpec.quoteCurrency === config.accountCurrency ? 1 : config.conversionRate
+  if (!finitePositive(conversionRate)) throw new Error(`Missing or invalid conversion rate for ${config.symbolSpec.quoteCurrency}/${config.accountCurrency}.`)
+
   const start = Math.max(1, config.startIndex ?? 1)
   const end = Math.min(candles.length - 1, config.endIndex ?? candles.length - 1)
   if (start > end) throw new Error('Backtest index range is invalid.')
 
-  const conversionRate = config.symbolSpec.quoteCurrency === 'USD' ? 1 : 1
   let balance = config.initialBalance
   let peak = balance
   let maxDrawdown = 0
@@ -60,14 +58,12 @@ export const runBacktest = (candles: OHLCV[], config: BacktestConfig, signalProv
 
   for (let i = start; i <= end; i += 1) {
     const candle = candles[i]
-
     if (open) {
       const exit = exitForCandle(open.signal, candle)
       if (exit) {
         const profit = priceToCash(open.entryPrice, exit.price, open.signal.side, open.signal.lotSize, config.symbolSpec.pipSize, config.symbolSpec.contractSize, conversionRate)
         balance += profit
-        const outcome = profit >= 0 ? 'win' : 'loss'
-        trades.push({ id: open.id, side: open.signal.side, entryTime: open.entryTime, exitTime: candle.time, entryPrice: open.entryPrice, exitPrice: exit.price, stopLoss: open.signal.stopLoss, takeProfit: open.signal.takeProfit, lotSize: open.signal.lotSize, profit: Number(profit.toFixed(2)), outcome, exitReason: exit.reason })
+        trades.push({ id: open.id, side: open.signal.side, entryTime: open.entryTime, exitTime: candle.time, entryPrice: open.entryPrice, exitPrice: exit.price, stopLoss: open.signal.stopLoss, takeProfit: open.signal.takeProfit, lotSize: open.signal.lotSize, profit: Number(profit.toFixed(2)), outcome: profit >= 0 ? 'win' : 'loss', exitReason: exit.reason })
         open = null
         peak = Math.max(peak, balance)
         maxDrawdown = Math.max(maxDrawdown, peak - balance)
@@ -78,9 +74,7 @@ export const runBacktest = (candles: OHLCV[], config: BacktestConfig, signalProv
     if (!open) {
       const history = candles.slice(0, i)
       const signal = signalProvider(history, i)
-      if (signal && validSignal(signal, candle.open, config.symbolSpec)) {
-        open = { signal, entryPrice: candle.open, entryTime: candle.time, id: `BT-${String(++sequence).padStart(5, '0')}` }
-      }
+      if (signal && validSignal(signal, candle.open, config.symbolSpec)) open = { signal, entryPrice: candle.open, entryTime: candle.time, id: `BT-${String(++sequence).padStart(5, '0')}` }
     }
   }
 
