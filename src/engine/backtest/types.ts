@@ -9,7 +9,9 @@ export interface BacktestSignal {
 
 export interface BacktestConfig {
   initialBalance: number
+  accountCurrency: string
   symbolSpec: SymbolSpec
+  conversionRate?: number
   startIndex?: number
   endIndex?: number
 }
