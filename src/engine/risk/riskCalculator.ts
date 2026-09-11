@@ -27,8 +27,13 @@ export const calculateRisk = (inputs: RiskCalculationInputs): RiskCalculationRes
   if (!finitePositive(stopDistancePips)) return fail('Stop distance must be greater than zero.')
   if (!finitePositive(rewardDistancePips)) return fail('Reward distance must be greater than zero.')
 
-  const rate = symbolSpec.quoteCurrency === accountCurrency ? 1 : conversionRate
-  if (!finitePositive(rate)) return fail(`Missing or invalid conversion rate for ${symbolSpec.quoteCurrency}/${accountCurrency}.`)
+  let rate: number
+  if (symbolSpec.quoteCurrency === accountCurrency) {
+    rate = 1
+  } else {
+    if (!finitePositive(conversionRate)) return fail(`Missing or invalid conversion rate for ${symbolSpec.quoteCurrency}/${accountCurrency}.`)
+    rate = conversionRate
+  }
 
   const pipValuePerLot = symbolSpec.pipSize * symbolSpec.contractSize * rate
   const riskAmount = accountBalance * (riskPercent / 100)
