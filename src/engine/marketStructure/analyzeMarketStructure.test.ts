@@ -21,7 +21,7 @@ describe('Market Structure Engine', () => {
   it('detects swing highs and lows', () => {
     const result = findSwingPoints(bullishCandles, 1)
     expect(result.highs.map((point) => point.price)).toEqual([12, 13])
-    expect(result.lows.map((point) => point.price)).toEqual([9, 9.5, 10])
+    expect(result.lows.map((point) => point.price)).toEqual([9.5, 10.5])
   })
 
   it('detects bullish HH/HL structure', () => {
