@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react'
-import { BarChart3, Play, RotateCcw } from 'lucide-react'
+import { BarChart3, ChevronDown, Play, RotateCcw } from 'lucide-react'
 import { analyzeLiquidity } from '../../engine/liquidity'
 import { analyzeMarketStructure, findSwingPoints } from '../../engine/marketStructure'
 import { analyzeSetup } from '../../engine/setup'
 import { analyzeSupportResistance } from '../../engine/supportResistance'
-import { runBacktest, type BacktestResult } from '../../engine/backtest'
+import { runBacktest, type BacktestResult, type BacktestTrade } from '../../engine/backtest'
 import type { OHLCV, SymbolSpec } from '../../types'
 
 interface Props {
@@ -22,6 +22,7 @@ export function BacktestPanel({ symbol, candles, symbolSpec, initialBalance, acc
   const [result, setResult] = useState<BacktestResult | null>(null)
   const [running, setRunning] = useState(false)
   const [range, setRange] = useState(120)
+  const [showTrades, setShowTrades] = useState(false)
 
   const maxRange = Math.max(20, candles.length - 1)
   const effectiveRange = Math.min(range, maxRange)
@@ -43,6 +44,16 @@ export function BacktestPanel({ symbol, candles, symbolSpec, initialBalance, acc
     return { side: setup.direction, stopLoss: setup.stopLoss, takeProfit: setup.takeProfit, lotSize }
   }, [symbol, symbolSpec])
 
+  const averageRR = useMemo(() => {
+    if (!result || result.trades.length === 0) return null
+    const total = result.trades.reduce((sum, trade) => {
+      const risk = Math.abs(trade.entryPrice - trade.stopLoss)
+      const reward = Math.abs(trade.takeProfit - trade.entryPrice)
+      return sum + (risk > 0 ? reward / risk : 0)
+    }, 0)
+    return total / result.trades.length
+  }, [result])
+
   const run = (): void => {
     if (candles.length < 20 || running) return
     setRunning(true)
@@ -50,6 +61,7 @@ export function BacktestPanel({ symbol, candles, symbolSpec, initialBalance, acc
       const startIndex = Math.max(1, candles.length - effectiveRange)
       const backtest = runBacktest(candles, { initialBalance, accountCurrency, symbolSpec, conversionRate, startIndex, endIndex: candles.length - 1 }, signalProvider)
       setResult(backtest)
+      setShowTrades(false)
     } finally {
       setRunning(false)
     }
@@ -83,20 +95,41 @@ export function BacktestPanel({ symbol, candles, symbolSpec, initialBalance, acc
           <Metric label="Win rate" value={`${result.winRate.toFixed(1)}%`} />
           <Metric label="Drawdown" value={result.maxDrawdown.toFixed(2)} />
         </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <Metric label="Final balance" value={result.finalBalance.toFixed(2)} />
+          <Metric label="Avg R:R" value={averageRR === null ? '—' : `${averageRR.toFixed(2)}:1`} />
+          <Metric label="Gross profit" value={`+${result.grossProfit.toFixed(2)}`} />
+          <Metric label="Gross loss" value={`-${result.grossLoss.toFixed(2)}`} />
+        </div>
         <div className="grid grid-cols-2 gap-2 text-xs text-shafx-textMuted">
           <span>Trades <strong className="text-shafx-text">{result.totalTrades}</strong></span>
           <span>Profit factor <strong className="text-shafx-text">{result.profitFactor === null ? '—' : result.profitFactor.toFixed(2)}</strong></span>
           <span>Wins <strong className="text-shafx-text">{result.winningTrades}</strong></span>
           <span>Losses <strong className="text-shafx-text">{result.losingTrades}</strong></span>
         </div>
+        <button type="button" onClick={() => setShowTrades((visible) => !visible)} className="flex min-h-10 w-full items-center justify-between rounded border border-shafx-border bg-shafx-bg px-3 text-xs text-shafx-text hover:bg-shafx-surface" aria-expanded={showTrades}>
+          <span>Trade log ({result.trades.length})</span>
+          <ChevronDown className={`h-4 w-4 transition-transform ${showTrades ? 'rotate-180' : ''}`} />
+        </button>
+        {showTrades && <TradeLog trades={result.trades} precision={symbolSpec.pricePrecision} currency={accountCurrency} />}
         <div className="flex items-center justify-between border-t border-shafx-border pt-2 text-[10px] text-shafx-textMuted">
           <span>{symbol} • {result.trades.length} simulated trades</span>
-          <button type="button" onClick={() => setResult(null)} className="inline-flex min-h-9 items-center gap-1 rounded px-2 text-shafx-text hover:bg-shafx-bg" aria-label="Clear replay results"><RotateCcw className="h-3 w-3" />Clear</button>
+          <button type="button" onClick={() => { setResult(null); setShowTrades(false) }} className="inline-flex min-h-9 items-center gap-1 rounded px-2 text-shafx-text hover:bg-shafx-bg" aria-label="Clear replay results"><RotateCcw className="h-3 w-3" />Clear</button>
         </div>
       </div> : <p className="mt-3 text-[11px] text-shafx-textMuted">Run a replay to see how the current rule set behaved on the selected simulated candles.</p>}
       <p className="mt-3 text-[10px] text-shafx-textMuted">SIMULATED — NOT FINANCIAL ADVICE. Past replay results do not predict future performance.</p>
     </section>
   )
+}
+
+function TradeLog({ trades, precision, currency }: { trades: BacktestTrade[]; precision: number; currency: string }) {
+  if (trades.length === 0) return <p className="rounded border border-shafx-border bg-shafx-bg p-3 text-[11px] text-shafx-textMuted">No qualifying trades were produced in this replay window.</p>
+  return <div className="overflow-x-auto rounded border border-shafx-border bg-shafx-bg"><table className="w-full min-w-[560px] text-left text-[10px]"><thead className="border-b border-shafx-border text-shafx-textMuted"><tr><th className="px-2 py-2 font-medium">Trade</th><th className="px-2 py-2 font-medium">Side</th><th className="px-2 py-2 font-medium">Entry</th><th className="px-2 py-2 font-medium">Exit</th><th className="px-2 py-2 font-medium">Result</th><th className="px-2 py-2 font-medium">Reason</th></tr></thead><tbody>{trades.map((trade) => <TradeRow key={trade.id} trade={trade} precision={precision} currency={currency} />)}</tbody></table></div>
+}
+
+function TradeRow({ trade, precision, currency }: { trade: BacktestTrade; precision: number; currency: string }) {
+  const profit = trade.profit >= 0 ? `+${trade.profit.toFixed(2)}` : trade.profit.toFixed(2)
+  return <tr className="border-b border-shafx-border last:border-0"><td className="px-2 py-2 font-mono text-shafx-text">{trade.id}</td><td className="px-2 py-2 text-shafx-text">{trade.side}</td><td className="px-2 py-2 font-mono text-shafx-text">{trade.entryPrice.toFixed(precision)}</td><td className="px-2 py-2 font-mono text-shafx-text">{trade.exitPrice.toFixed(precision)}</td><td className="px-2 py-2 font-mono text-shafx-text">{profit} {currency}</td><td className="px-2 py-2 text-shafx-textMuted">{trade.exitReason}</td></tr>
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
