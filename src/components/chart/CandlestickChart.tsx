@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef } from 'react'
-import { ColorType, createChart, type CandlestickData, type IChartApi, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts'
+import { ColorType, createChart, type CandlestickData, type IChartApi, type IPriceLine, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts'
 import type { OHLCV } from '../../types'
 
 export interface ChartAnnotation {
@@ -10,11 +10,7 @@ export interface ChartAnnotation {
   lineWidth?: 1 | 2 | 3 | 4
 }
 
-interface CandlestickChartProps {
-  data: OHLCV[]
-  height?: string
-  annotations?: ChartAnnotation[]
-}
+interface CandlestickChartProps { data: OHLCV[]; height?: string; annotations?: ChartAnnotation[] }
 
 const prepareData = (data: OHLCV[]): CandlestickData[] => {
   const seen = new Set<number>()
@@ -54,16 +50,14 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   useEffect(() => {
     const series = seriesRef.current
     if (!series) return
-    const clean = annotations.filter((a) => a.id && Number.isFinite(a.price) && a.price > 0)
-    clean.forEach((annotation) => {
-      series.createPriceLine({ price: annotation.price, color: annotation.color, lineWidth: annotation.lineWidth ?? 1, lineStyle: 2, axisLabelVisible: true, title: annotation.label })
+    const lines: IPriceLine[] = []
+    const seen = new Set<string>()
+    annotations.forEach((annotation) => {
+      if (!annotation.id || seen.has(annotation.id) || !Number.isFinite(annotation.price) || annotation.price <= 0) return
+      seen.add(annotation.id)
+      lines.push(series.createPriceLine({ price: annotation.price, color: annotation.color, lineWidth: annotation.lineWidth ?? 1, lineStyle: 2, axisLabelVisible: true, title: annotation.label }))
     })
-    return () => {
-      clean.forEach((annotation) => {
-        const line = series.createPriceLine({ price: annotation.price, color: annotation.color, lineWidth: annotation.lineWidth ?? 1, lineStyle: 2, axisLabelVisible: true, title: annotation.label })
-        series.removePriceLine(line)
-      })
-    }
+    return () => { lines.forEach((line) => series.removePriceLine(line)) }
   }, [annotations])
 
   return <div ref={containerRef} className="w-full overflow-hidden rounded-lg border border-shafx-border" style={{ height, minHeight: 240 }} />
