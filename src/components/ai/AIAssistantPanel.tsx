@@ -7,7 +7,7 @@ import { analyzeSupportResistance } from '../../engine/supportResistance'
 import { buildTradingContext } from '../../engine/ai/context'
 import { detectMarketEvents } from '../../engine/ai/events'
 import { buildTradingResponse } from '../../engine/ai/response'
-import type { UserIntent } from '../../engine/ai/types'
+import type { AITradingContext, MarketEvent, UserIntent } from '../../engine/ai/types'
 import type { OHLCV, Timeframe } from '../../types'
 
 interface Props { symbol: string; timeframe: Timeframe; candles: OHLCV[] }
@@ -23,7 +23,9 @@ const INTENT_BUTTONS: Array<{ value: UserIntent; label: string }> = [
 
 export function AIAssistantPanel({ symbol, timeframe, candles }: Props) {
   const [intent, setIntent] = useState<UserIntent>('WHAT_IS_HAPPENING')
-  const previousContext = useRef<ReturnType<typeof buildTradingContext> | null>(null)
+  const [events, setEvents] = useState<MarketEvent[]>([])
+  const previousContext = useRef<AITradingContext | null>(null)
+
   const context = useMemo(() => {
     const structure = analyzeMarketStructure(candles, 2)
     const swings = findSwingPoints(candles, 2)
@@ -34,11 +36,13 @@ export function AIAssistantPanel({ symbol, timeframe, candles }: Props) {
     return buildTradingContext(symbol, timeframe, candles, structure, supportResistance, liquidity, setup)
   }, [candles, symbol, timeframe])
 
-  const previous = previousContext.current
-  const events = useMemo(() => detectMarketEvents(context, previous), [context, previous])
-  const response = useMemo(() => buildTradingResponse(context, events, intent), [context, events, intent])
+  useEffect(() => {
+    const nextEvents = detectMarketEvents(context, previousContext.current)
+    setEvents(nextEvents)
+    previousContext.current = context
+  }, [context])
 
-  useEffect(() => { previousContext.current = context }, [context])
+  const response = useMemo(() => buildTradingResponse(context, events, intent), [context, events, intent])
 
   return (
     <div className="space-y-4 rounded-lg border border-shafx-border bg-shafx-surface p-4 text-sm">
