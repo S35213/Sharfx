@@ -46,9 +46,9 @@ export function TradingJournalPanel({ tradeHistory, currency }: Props) {
       <select id="journal-trade" value={selected?.id ?? ''} onChange={(event) => setSelectedId(event.target.value)} className="min-h-11 w-full rounded border border-shafx-border bg-shafx-bg px-3 text-xs text-shafx-text">{closed.map((trade) => <option key={trade.id} value={trade.id}>{trade.id} • {trade.symbol} • {formatCurrency(trade.profit ?? 0, currency)}</option>)}</select>
       {selected && <div className="rounded border border-shafx-border bg-shafx-bg p-3">
         <div className="flex items-center gap-2 text-xs font-semibold text-shafx-text"><Sparkles className="h-3.5 w-3.5 text-shafx-primary" />Agent review</div>
-        <p className="mt-2 text-xs text-shafx-text">{buildReview(selected)}</p>
-        <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-shafx-textMuted"><span>Side <strong className="text-shafx-text">{selected.type}</strong></span><span>Outcome <strong className="text-shafx-text">{(selected.profit ?? 0) >= 0 ? 'Win' : 'Loss'}</strong></span><span>Risk <strong className="text-shafx-text">{formatCurrency(selected.riskAmount, currency)}</strong></span><span>R:R <strong className="text-shafx-text">{selected.riskRewardRatio.toFixed(2)}:1</strong></span></div>
-        <p className="mt-2 text-[10px] text-shafx-textMuted">{formatTimestamp(selected.openTime)}</p>
+        <p className="mt-2 text-xs text-shafx-text">{buildReview(selected, currency)}</p>
+        <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-shafx-textMuted"><span>Side <strong className="text-shafx-text">{selected.type}</strong></span><span>Outcome <strong className="text-shafx-text">{(selected.profit ?? 0) > 0 ? 'Win' : (selected.profit ?? 0) < 0 ? 'Loss' : 'Break-even'}</strong></span><span>Risk <strong className="text-shafx-text">{formatCurrency(selected.riskAmount, currency)}</strong></span><span>R:R <strong className="text-shafx-text">{selected.riskRewardRatio.toFixed(2)}:1</strong></span></div>
+        <p className="mt-2 text-[10px] text-shafx-textMuted">Opened {formatTimestamp(selected.openTime)}{selected.closeTime ? ` • Closed ${formatTimestamp(selected.closeTime)}` : ''}</p>
       </div>}
       <div><label className="block text-[10px] uppercase tracking-wider text-shafx-textMuted" htmlFor="journal-note">Your note</label><textarea id="journal-note" key={selected?.id} defaultValue={selectedNote} onBlur={(event) => saveNote(event.currentTarget.value)} placeholder="What did you learn from this trade?" className="mt-1 min-h-20 w-full resize-y rounded border border-shafx-border bg-shafx-bg p-3 text-xs text-shafx-text placeholder:text-shafx-textMuted" /></div>
       <p className="flex items-center gap-1 text-[10px] text-shafx-textMuted"><Save className="h-3 w-3" />Notes are saved locally on this device.</p>
@@ -57,9 +57,9 @@ export function TradingJournalPanel({ tradeHistory, currency }: Props) {
   </section>
 }
 
-function buildReview(trade: TradeOrder): string {
+function buildReview(trade: TradeOrder, currency: string): string {
   const profit = trade.profit ?? 0
-  if (profit > 0) return `${trade.type} ${trade.symbol} finished positive at ${formatCurrency(profit)}. Compare the entry, stop, target and market conditions before deciding what to repeat.`
-  if (profit < 0) return `${trade.type} ${trade.symbol} finished negative at ${formatCurrency(profit)}. Review whether the setup invalidated as expected and whether the risk stayed within your plan.`
+  if (profit > 0) return `${trade.type} ${trade.symbol} finished positive at ${formatCurrency(profit, currency)}. Compare the entry, stop, target and market conditions before deciding what to repeat.`
+  if (profit < 0) return `${trade.type} ${trade.symbol} finished negative at ${formatCurrency(profit, currency)}. Review whether the setup invalidated as expected and whether the risk stayed within your plan.`
   return `${trade.type} ${trade.symbol} finished around break-even. Review the entry timing, invalidation and target before taking another similar setup.`
 }
