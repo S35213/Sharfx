@@ -1,5 +1,6 @@
 import type { AIAnalysis, MarketAnalysis } from '../../types'
-import { analyzeMarketStructure } from '../../engine/marketStructure'
+import { analyzeLiquidity } from '../../engine/liquidity'
+import { analyzeMarketStructure, findSwingPoints } from '../../engine/marketStructure'
 import { analyzeSupportResistance } from '../../engine/supportResistance'
 import { getMockCandles } from './candles'
 
@@ -17,20 +18,39 @@ const AI_BY_SYMBOL: Record<string, AIAnalysis> = {
 
 const DEFAULT_MARKET = MARKET_BY_SYMBOL['EUR/USD']
 const DEFAULT_AI = AI_BY_SYMBOL['EUR/USD']
-
 const getTolerance = (symbol: string): number => (symbol.includes('JPY') ? 0.1 : 0.001)
 
 export const getMockMarketAnalysis = (symbol: string): MarketAnalysis => {
   const fallback = MARKET_BY_SYMBOL[symbol] ?? DEFAULT_MARKET
   const candles = getMockCandles(symbol, 'H1', 300)
   const structure = analyzeMarketStructure(candles)
-  const sr = analyzeSupportResistance(candles, getTolerance(symbol))
+  const swings = findSwingPoints(candles, 2)
+  const tolerance = getTolerance(symbol)
+  const sr = analyzeSupportResistance(candles, tolerance, swings)
+  const liquidity = analyzeLiquidity(candles, swings, tolerance)
   const bias: MarketAnalysis['bias'] = structure.bias === 'Unclear' || structure.bias === 'Sideways' ? 'Neutral' : structure.bias
+  const precision = symbol.includes('JPY') ? 3 : 5
+  const equalHighs = liquidity.pools.some((pool) => pool.association === 'equal-highs' && !pool.isSwept)
+  const equalLows = liquidity.pools.some((pool) => pool.association === 'equal-lows' && !pool.isSwept)
+  const zones = liquidity.pools
+    .filter((pool) => !pool.isSwept)
+    .map((pool) => {
+      const side = pool.type === 'buy-side' ? 'Buy-side' : 'Sell-side'
+      const association = pool.association.replace('-', ' ')
+      return `${pool.priceRange.min.toFixed(precision)} - ${pool.priceRange.max.toFixed(precision)} (${side} ${association}, ${pool.strength})`
+    })
 
   return {
     ...fallback,
     bias,
     structure: { type: structure.structureType, status: structure.status },
+    liquidity: {
+      previousHigh: liquidity.nearestBuySide?.referencePrice ?? structure.recentHigh,
+      previousLow: liquidity.nearestSellSide?.referencePrice ?? structure.recentLow,
+      equalHighs,
+      equalLows,
+      zones: zones.length > 0 ? zones : ['No clear liquidity zones detected'],
+    },
     supportResistance: {
       nearestSupport: sr.nearestSupport,
       nearestResistance: sr.nearestResistance,
