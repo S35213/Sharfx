@@ -20,7 +20,7 @@ const prepareData = (data: OHLCV[]): CandlestickData[] => {
   const seen = new Set<number>()
   return [...data]
     .sort((a, b) => a.time - b.time)
-    .filter((c) => Number.isFinite(c.time) && Number.isFinite(c.open) && Number.isFinite(c.high) && Number.isFinite(c.low) && Number.isFinite(c.close) && c.high >= Math.max(c.open, c.close) && c.low <= Math.min(c.open, c.close)))
+    .filter((c) => Number.isFinite(c.time) && Number.isFinite(c.open) && Number.isFinite(c.high) && Number.isFinite(c.low) && Number.isFinite(c.close) && c.high >= Math.max(c.open, c.close) && c.low <= Math.min(c.open, c.close))
     .filter((c) => {
       if (seen.has(c.time)) return false
       seen.add(c.time)
