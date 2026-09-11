@@ -1,6 +1,6 @@
 import type { OHLCV } from '../../types'
 import type { SwingPoint } from '../marketStructure/types'
-import type { LiquidityAssociation, LiquidityPool, LiquidityResult, LiquidityStrength, LiquidityType } from './types'
+import type { LiquidityPool, LiquidityResult, LiquidityStrength, LiquidityType } from './types'
 
 const isValidCandle = (candle: OHLCV): boolean =>
   Number.isFinite(candle.time) &&
@@ -25,11 +25,7 @@ const strengthForTouches = (touches: number): LiquidityStrength => {
   return 'weak'
 }
 
-const clusterSwings = (
-  points: SwingPoint[],
-  type: LiquidityType,
-  tolerance: number,
-): LiquidityPool[] => {
+const clusterSwings = (points: SwingPoint[], type: LiquidityType, tolerance: number): LiquidityPool[] => {
   const expectedType = type === 'buy-side' ? 'high' : 'low'
   const sorted = points
     .filter((point) => isValidSwing(point, expectedType))
@@ -38,10 +34,7 @@ const clusterSwings = (
 
   const pools: LiquidityPool[] = []
   for (const point of sorted) {
-    const existing = pools.find((pool) =>
-      Math.abs(point.price - pool.referencePrice) <= tolerance,
-    )
-
+    const existing = pools.find((pool) => Math.abs(point.price - pool.referencePrice) <= tolerance)
     if (!existing) {
       pools.push({
         type,
@@ -60,9 +53,7 @@ const clusterSwings = (
     existing.touches = existing.sourceSwings.length
     existing.priceRange.min = Math.min(existing.priceRange.min, point.price)
     existing.priceRange.max = Math.max(existing.priceRange.max, point.price)
-    existing.referencePrice = type === 'buy-side'
-      ? existing.priceRange.max
-      : existing.priceRange.min
+    existing.referencePrice = type === 'buy-side' ? existing.priceRange.max : existing.priceRange.min
     existing.strength = strengthForTouches(existing.touches)
     existing.association = type === 'buy-side' ? 'equal-highs' : 'equal-lows'
   }
@@ -70,18 +61,13 @@ const clusterSwings = (
   return pools
 }
 
-const hasHistoricalSweep = (
-  candles: OHLCV[],
-  pool: LiquidityPool,
-): boolean => {
+const hasHistoricalSweep = (candles: OHLCV[], pool: LiquidityPool): boolean => {
   const latestSourceIndex = Math.max(...pool.sourceSwings.map((swing) => swing.index))
   const reference = pool.referencePrice
 
   for (let i = latestSourceIndex + 1; i < candles.length; i += 1) {
     const candle = candles[i]
     if (pool.type === 'buy-side') {
-      // A basic liquidity sweep requires a wick through the high followed by a
-      // close back at or below the reference level.
       if (candle.high > reference && candle.close <= reference) return true
     } else if (candle.low < reference && candle.close >= reference) {
       return true
