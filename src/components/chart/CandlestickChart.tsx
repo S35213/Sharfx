@@ -2,13 +2,30 @@ import React, { useEffect, useMemo, useRef } from 'react'
 import { ColorType, createChart, type CandlestickData, type IChartApi, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts'
 import type { OHLCV } from '../../types'
 
-interface CandlestickChartProps { data: OHLCV[]; height?: string }
-const prepareData = (data: OHLCV[]): CandlestickData[] => {
-  const seen = new Set<number>()
-  return [...data].sort((a, b) => a.time - b.time).filter((c) => Number.isFinite(c.time) && Number.isFinite(c.open) && Number.isFinite(c.high) && Number.isFinite(c.low) && Number.isFinite(c.close) && c.high >= Math.max(c.open, c.close) && c.low <= Math.min(c.open, c.close)).filter((c) => { if (seen.has(c.time)) return false; seen.add(c.time); return true }).map((c) => ({ time: c.time as UTCTimestamp, open: c.open, high: c.high, low: c.low, close: c.close }))
+export interface ChartAnnotation {
+  id: string
+  price: number
+  label: string
+  color: string
+  lineWidth?: 1 | 2 | 3 | 4
 }
 
-export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%' }) => {
+interface CandlestickChartProps {
+  data: OHLCV[]
+  height?: string
+  annotations?: ChartAnnotation[]
+}
+
+const prepareData = (data: OHLCV[]): CandlestickData[] => {
+  const seen = new Set<number>()
+  return [...data]
+    .sort((a, b) => a.time - b.time)
+    .filter((c) => Number.isFinite(c.time) && Number.isFinite(c.open) && Number.isFinite(c.high) && Number.isFinite(c.low) && Number.isFinite(c.close) && c.high >= Math.max(c.open, c.close) && c.low <= Math.min(c.open, c.close)))
+    .filter((c) => { if (seen.has(c.time)) return false; seen.add(c.time); return true })
+    .map((c) => ({ time: c.time as UTCTimestamp, open: c.open, high: c.high, low: c.low, close: c.close }))
+}
+
+export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [] }) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
@@ -26,6 +43,28 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     return () => { ro.disconnect(); chart.remove(); chartRef.current = null; seriesRef.current = null }
   }, [])
 
-  useEffect(() => { const series = seriesRef.current; const chart = chartRef.current; if (!series || !chart) return; series.setData(chartData); if (chartData.length) chart.timeScale().fitContent() }, [chartData])
+  useEffect(() => {
+    const series = seriesRef.current
+    const chart = chartRef.current
+    if (!series || !chart) return
+    series.setData(chartData)
+    if (chartData.length) chart.timeScale().fitContent()
+  }, [chartData])
+
+  useEffect(() => {
+    const series = seriesRef.current
+    if (!series) return
+    const clean = annotations.filter((a) => a.id && Number.isFinite(a.price) && a.price > 0)
+    clean.forEach((annotation) => {
+      series.createPriceLine({ price: annotation.price, color: annotation.color, lineWidth: annotation.lineWidth ?? 1, lineStyle: 2, axisLabelVisible: true, title: annotation.label })
+    })
+    return () => {
+      clean.forEach((annotation) => {
+        const line = series.createPriceLine({ price: annotation.price, color: annotation.color, lineWidth: annotation.lineWidth ?? 1, lineStyle: 2, axisLabelVisible: true, title: annotation.label })
+        series.removePriceLine(line)
+      })
+    }
+  }, [annotations])
+
   return <div ref={containerRef} className="w-full overflow-hidden rounded-lg border border-shafx-border" style={{ height, minHeight: 240 }} />
 }
