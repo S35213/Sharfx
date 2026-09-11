@@ -27,9 +27,7 @@ describe('Liquidity Engine', () => {
   })
 
   it('clusters nearby same-side swings and assigns strong strength at four touches', () => {
-    const result = analyzeLiquidity(baseCandles(), {
-      highs: [swing(1, 11.0001, 'high'), swing(2, 11.0002, 'high'), swing(3, 11.0003, 'high'), swing(4, 11.0004, 'high')], lows: [],
-    }, 0.001)
+    const result = analyzeLiquidity(baseCandles(), { highs: [swing(1, 11.0001, 'high'), swing(2, 11.0002, 'high'), swing(3, 11.0003, 'high'), swing(4, 11.0004, 'high')], lows: [] }, 0.001)
     expect(result.pools).toHaveLength(1)
     expect(result.pools[0].touches).toBe(4)
     expect(result.pools[0].strength).toBe('strong')
@@ -64,7 +62,7 @@ describe('Liquidity Engine', () => {
   })
 
   it('detects a sell-side sweep as a wick through the level followed by a close back above', () => {
-    const candles = [...baseCandles(10), candle(6, 9.5, 8, 7.5, 9)]
+    const candles = [...baseCandles(10), candle(6, 8.8, 9, 7.5, 8.9)]
     const result = analyzeLiquidity(candles, { highs: [], lows: [swing(4, 8.5, 'low')] }, 0.001)
     expect(result.pools[0].isSwept).toBe(true)
     expect(result.nearestSellSide).toBeNull()
