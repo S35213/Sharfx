@@ -25,7 +25,8 @@ export function CandlestickChart({ candles, annotations = [] }: CandlestickChart
   useEffect(() => { const series = seriesRef.current; if (!series) return; series.setData(safeCandles); if (safeCandles.length) series.priceScale().applyOptions({ autoScale: true }) }, [safeCandles])
   useEffect(() => {
     const series = seriesRef.current; if (!series) return
-    const created = annotations.filter((a) => Number.isFinite(a.price)).map((a) => series.createPriceLine({ price: a.price, color: a.type === 'stop' ? '#ef5350' : a.type === 'target' ? '#26a69a' : a.type === 'entry' ? '#2962FF' : '#9AA4B2', lineWidth: a.type === 'entry' ? 2 : 1, lineStyle: a.type === 'liquidity' ? 2 : 0, axisLabelVisible: true, title: a.label }))
+    const valid = annotations.filter((a) => Number.isFinite(a.price))
+    const created = valid.map((a) => series.createPriceLine({ price: a.price, color: a.type === 'stop' ? '#ef5350' : a.type === 'target' ? '#26a69a' : a.type === 'entry' ? '#2962FF' : '#9AA4B2', lineWidth: a.type === 'entry' ? 2 : 1, lineStyle: a.type === 'liquidity' ? 2 : 0, axisLabelVisible: true, title: a.label }))
     return () => created.forEach((line) => series.removePriceLine(line))
   }, [annotations])
   return <div ref={containerRef} className="min-h-[240px] h-full w-full" aria-label="SHAFX candlestick chart" />
