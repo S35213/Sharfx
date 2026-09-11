@@ -1,6 +1,7 @@
 import type { AIAnalysis, MarketAnalysis } from '../../types'
-import { getMockCandles } from './candles'
 import { analyzeMarketStructure } from '../../engine/marketStructure'
+import { analyzeSupportResistance } from '../../engine/supportResistance'
+import { getMockCandles } from './candles'
 
 const MARKET_BY_SYMBOL: Record<string, MarketAnalysis> = {
   'EUR/USD': { bias: 'Bullish', structure: { type: 'HH/HL', status: 'Intact' }, liquidity: { previousHigh: 1.0875, previousLow: 1.0812, equalHighs: false, equalLows: true, zones: ['1.08100 - 1.08150 (Demand)', '1.08700 - 1.08800 (Supply)'] }, supportResistance: { nearestSupport: 1.0835, nearestResistance: 1.0875 } },
@@ -17,14 +18,23 @@ const AI_BY_SYMBOL: Record<string, AIAnalysis> = {
 const DEFAULT_MARKET = MARKET_BY_SYMBOL['EUR/USD']
 const DEFAULT_AI = AI_BY_SYMBOL['EUR/USD']
 
+const getTolerance = (symbol: string): number => (symbol.includes('JPY') ? 0.1 : 0.001)
+
 export const getMockMarketAnalysis = (symbol: string): MarketAnalysis => {
   const fallback = MARKET_BY_SYMBOL[symbol] ?? DEFAULT_MARKET
-  const structure = analyzeMarketStructure(getMockCandles(symbol, 'H1', 300))
+  const candles = getMockCandles(symbol, 'H1', 300)
+  const structure = analyzeMarketStructure(candles)
+  const sr = analyzeSupportResistance(candles, getTolerance(symbol))
   const bias: MarketAnalysis['bias'] = structure.bias === 'Unclear' || structure.bias === 'Sideways' ? 'Neutral' : structure.bias
+
   return {
     ...fallback,
     bias,
     structure: { type: structure.structureType, status: structure.status },
+    supportResistance: {
+      nearestSupport: sr.nearestSupport,
+      nearestResistance: sr.nearestResistance,
+    },
   }
 }
 
