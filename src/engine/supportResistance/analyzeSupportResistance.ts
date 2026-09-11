@@ -1,12 +1,14 @@
 import type { OHLCV } from '../../types'
 import { findSwingPoints } from '../marketStructure'
-import type { ClassifiedSwing } from '../marketStructure/types'
+import type { ClassifiedSwing, SwingPoint } from '../marketStructure/types'
 import type { SRZone, SupportResistanceResult, ZoneStrength, ZoneType } from './types'
 
 interface SwingInput {
   highs: ClassifiedSwing[]
   lows: ClassifiedSwing[]
 }
+
+type AnySwing = SwingPoint | ClassifiedSwing
 
 const isValidCandle = (candle: OHLCV): boolean =>
   Number.isFinite(candle.time) &&
@@ -17,7 +19,7 @@ const isValidCandle = (candle: OHLCV): boolean =>
   candle.high >= Math.max(candle.open, candle.close) &&
   candle.low <= Math.min(candle.open, candle.close)
 
-const isValidSwing = (point: ClassifiedSwing, type: ZoneType): boolean =>
+const isValidSwing = (point: AnySwing, type: ZoneType): boolean =>
   Number.isInteger(point.index) &&
   point.index >= 0 &&
   Number.isFinite(point.price) &&
@@ -30,13 +32,13 @@ const strengthForTouches = (touches: number): ZoneStrength => {
   return 'weak'
 }
 
-const clusterPoints = (points: ClassifiedSwing[], type: ZoneType, tolerance: number): SRZone[] => {
+const clusterPoints = (points: AnySwing[], type: ZoneType, tolerance: number): SRZone[] => {
   const sorted = points
     .filter((point) => isValidSwing(point, type))
     .sort((a, b) => a.price - b.price || a.time - b.time || a.index - b.index)
 
   const clusters: Array<{
-    points: ClassifiedSwing[]
+    points: AnySwing[]
     center: number
     minPrice: number
     maxPrice: number
@@ -46,13 +48,7 @@ const clusterPoints = (points: ClassifiedSwing[], type: ZoneType, tolerance: num
   for (const point of sorted) {
     const existing = clusters.find((cluster) => Math.abs(point.price - cluster.center) <= tolerance)
     if (!existing) {
-      clusters.push({
-        points: [point],
-        center: point.price,
-        minPrice: point.price,
-        maxPrice: point.price,
-        lastTouchTime: point.time,
-      })
+      clusters.push({ points: [point], center: point.price, minPrice: point.price, maxPrice: point.price, lastTouchTime: point.time })
       continue
     }
 
@@ -91,21 +87,14 @@ export const analyzeSupportResistance = (
   const swings = precomputedSwings ?? findSwingPoints(candles, 2)
   const supportZones = clusterPoints(swings.lows, 'support', tolerance)
   const resistanceZones = clusterPoints(swings.highs, 'resistance', tolerance)
-  const zones = [...supportZones, ...resistanceZones].sort(
-    (a, b) => a.minPrice - b.minPrice || a.type.localeCompare(b.type),
-  )
-
+  const zones = [...supportZones, ...resistanceZones].sort((a, b) => a.minPrice - b.minPrice || a.type.localeCompare(b.type))
   const currentPrice = candles[candles.length - 1].close
   const supportsBelowPrice = supportZones.filter((zone) => zone.maxPrice <= currentPrice)
   const resistancesAbovePrice = resistanceZones.filter((zone) => zone.minPrice >= currentPrice)
 
   return {
     zones,
-    nearestSupport: supportsBelowPrice.length > 0
-      ? Math.max(...supportsBelowPrice.map((zone) => zone.maxPrice))
-      : null,
-    nearestResistance: resistancesAbovePrice.length > 0
-      ? Math.min(...resistancesAbovePrice.map((zone) => zone.minPrice))
-      : null,
+    nearestSupport: supportsBelowPrice.length > 0 ? Math.max(...supportsBelowPrice.map((zone) => zone.maxPrice)) : null,
+    nearestResistance: resistancesAbovePrice.length > 0 ? Math.min(...resistancesAbovePrice.map((zone) => zone.minPrice)) : null,
   }
 }
