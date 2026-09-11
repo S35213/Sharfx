@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { BarChart3, ChevronDown, Play, RotateCcw } from 'lucide-react'
+import { BarChart3, ChevronDown, Play, RotateCcw, TrendingDown, TrendingUp } from 'lucide-react'
 import { analyzeLiquidity } from '../../engine/liquidity'
 import { analyzeMarketStructure, findSwingPoints } from '../../engine/marketStructure'
 import { analyzeSetup } from '../../engine/setup'
@@ -43,6 +43,23 @@ export function BacktestPanel({ symbol, candles, symbolSpec, initialBalance, acc
     if (!Number.isFinite(lotSize)) return null
     return { side: setup.direction, stopLoss: setup.stopLoss, takeProfit: setup.takeProfit, lotSize }
   }, [symbol, symbolSpec])
+
+  const analytics = useMemo(() => {
+    if (!result) return null
+    let balance = result.initialBalance
+    let peak = balance
+    let maxDrawdownAmount = 0
+    const curve = [balance]
+    for (const trade of result.trades) {
+      balance += trade.profit
+      peak = Math.max(peak, balance)
+      maxDrawdownAmount = Math.max(maxDrawdownAmount, peak - balance)
+      curve.push(balance)
+    }
+    const averageTrade = result.totalTrades ? result.netProfit / result.totalTrades : 0
+    const maxDrawdownPercent = peak > 0 ? (maxDrawdownAmount / peak) * 100 : 0
+    return { curve, averageTrade, maxDrawdownAmount, maxDrawdownPercent }
+  }, [result])
 
   const averageRR = useMemo(() => {
     if (!result || result.trades.length === 0) return null
@@ -88,19 +105,36 @@ export function BacktestPanel({ symbol, candles, symbolSpec, initialBalance, acc
         </button>
       </div>
 
-      {result ? <div className="mt-3 space-y-3">
+      {result && analytics ? <div className="mt-3 space-y-3">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <Metric label="Net profit" value={`${result.netProfit >= 0 ? '+' : ''}${result.netProfit.toFixed(2)}`} />
           <Metric label="Return" value={`${result.returnPercent.toFixed(2)}%`} />
           <Metric label="Win rate" value={`${result.winRate.toFixed(1)}%`} />
-          <Metric label="Drawdown" value={result.maxDrawdown.toFixed(2)} />
+          <Metric label="Drawdown" value={`${result.maxDrawdown.toFixed(2)} (${analytics.maxDrawdownPercent.toFixed(1)}%)`} />
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <Metric label="Final balance" value={result.finalBalance.toFixed(2)} />
           <Metric label="Avg R:R" value={averageRR === null ? '—' : `${averageRR.toFixed(2)}:1`} />
-          <Metric label="Gross profit" value={`+${result.grossProfit.toFixed(2)}`} />
-          <Metric label="Gross loss" value={`-${result.grossLoss.toFixed(2)}`} />
+          <Metric label="Avg trade" value={`${analytics.averageTrade >= 0 ? '+' : ''}${analytics.averageTrade.toFixed(2)}`} />
+          <Metric label="Profit factor" value={result.profitFactor === null ? '—' : result.profitFactor.toFixed(2)} />
         </div>
+
+        <div className="rounded border border-shafx-border bg-shafx-bg p-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="text-xs font-semibold text-shafx-text">Equity curve</h4>
+              <p className="mt-1 text-[10px] text-shafx-textMuted">Balance progression across completed simulated trades.</p>
+            </div>
+            <span className="font-mono text-[10px] text-shafx-textMuted">{result.finalBalance.toFixed(2)} {accountCurrency}</span>
+          </div>
+          <EquityCurve values={analytics.curve} />
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[10px] text-shafx-textMuted">
+            <span className="flex items-center gap-1"><TrendingUp className="h-3 w-3" />Start {result.initialBalance.toFixed(2)}</span>
+            <span className="flex items-center gap-1"><TrendingDown className="h-3 w-3" />Max drawdown {analytics.maxDrawdownAmount.toFixed(2)}</span>
+            <span>{result.trades.length} closed trades</span>
+          </div>
+        </div>
+
         <div className="grid grid-cols-2 gap-2 text-xs text-shafx-textMuted">
           <span>Trades <strong className="text-shafx-text">{result.totalTrades}</strong></span>
           <span>Profit factor <strong className="text-shafx-text">{result.profitFactor === null ? '—' : result.profitFactor.toFixed(2)}</strong></span>
@@ -120,6 +154,24 @@ export function BacktestPanel({ symbol, candles, symbolSpec, initialBalance, acc
       <p className="mt-3 text-[10px] text-shafx-textMuted">SIMULATED — NOT FINANCIAL ADVICE. Past replay results do not predict future performance.</p>
     </section>
   )
+}
+
+function EquityCurve({ values }: { values: number[] }) {
+  if (values.length < 2) return <div className="mt-3 h-20 rounded border border-dashed border-shafx-border" aria-label="Equity curve unavailable" />
+  const width = 320
+  const height = 88
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  const spread = max - min || 1
+  const points = values.map((value, index) => {
+    const x = (index / (values.length - 1)) * width
+    const y = height - ((value - min) / spread) * (height - 8) - 4
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  }).join(' ')
+  return <svg className="mt-3 h-20 w-full overflow-visible" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Simulated equity curve">
+    <line x1="0" y1={height - 4} x2={width} y2={height - 4} stroke="currentColor" strokeOpacity="0.15" />
+    <polyline points={points} fill="none" stroke="currentColor" strokeWidth="2" vectorEffect="non-scaling-stroke" className="text-shafx-primary" />
+  </svg>
 }
 
 function TradeLog({ trades, precision, currency }: { trades: BacktestTrade[]; precision: number; currency: string }) {
