@@ -36,7 +36,7 @@ describe('runBacktest', () => {
     const result = runBacktest(candles, { initialBalance: 1000, accountCurrency: 'USD', symbolSpec: spec }, (history) => history.length === 2 ? { side: 'BUY', stopLoss: 1.1008, takeProfit: 1.1030, lotSize: 0.01 } : null)
     expect(result.trades[0].entryPrice).toBe(1.101)
     expect(result.trades[0].exitReason).toBe('stop-loss')
-    expect(result.trades[0].profit).toBe(-2)
+    expect(result.trades[0].profit).toBe(-0.2)
   })
 
   it('does not leak future candles to the signal provider', () => {
