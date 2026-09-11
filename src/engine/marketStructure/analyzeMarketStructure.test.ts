@@ -3,16 +3,16 @@ import type { OHLCV } from '../../types'
 import { analyzeMarketStructure, findSwingPoints } from './analyzeMarketStructure'
 
 const candle = (time: number, high: number, low: number, close = (high + low) / 2): OHLCV => ({ time, open: close, high, low, close })
-const bullishCandles: OHLCV[] = [candle(1, 10, 8), candle(2, 11, 8.5), candle(3, 12, 9), candle(4, 11, 9.5), candle(5, 13, 10), candle(6, 12, 10.5), candle(7, 14, 11)]
+const bullishCandles: OHLCV[] = [candle(1, 10, 9), candle(2, 11, 10), candle(3, 12, 8), candle(4, 11, 10), candle(5, 13, 9), candle(6, 12, 11), candle(7, 14, 10)]
 const bearishCandles: OHLCV[] = [candle(1, 14, 11), candle(2, 13, 10.5), candle(3, 12, 9), candle(4, 13, 9.5), candle(5, 11, 8), candle(6, 12, 8.5), candle(7, 10, 7)]
 const expandingCandles: OHLCV[] = [candle(1, 10, 8), candle(2, 11, 7), candle(3, 12, 6), candle(4, 11, 7), candle(5, 13, 5), candle(6, 12, 6), candle(7, 14, 4)]
-const contractingCandles: OHLCV[] = [candle(1, 14, 4), candle(2, 13, 5), candle(3, 12, 6), candle(4, 13, 7), candle(5, 11, 7), candle(6, 12, 8), candle(7, 10, 9)]
+const contractingCandles: OHLCV[] = [candle(1, 14, 7), candle(2, 13, 7), candle(3, 12, 6), candle(4, 13, 8), candle(5, 11, 7), candle(6, 12, 8), candle(7, 10, 9)]
 
 describe('Market Structure Engine', () => {
   it('detects swing highs and lows', () => {
     const result = findSwingPoints(bullishCandles, 1)
     expect(result.highs.map((point) => point.price)).toEqual([12, 13])
-    expect(result.lows.map((point) => point.price)).toEqual([9.5, 10.5])
+    expect(result.lows.map((point) => point.price)).toEqual([8, 9])
   })
   it('detects bullish HH/HL structure', () => {
     const result = analyzeMarketStructure(bullishCandles, 1)
