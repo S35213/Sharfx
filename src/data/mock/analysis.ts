@@ -1,6 +1,7 @@
 import type { AIAnalysis, MarketAnalysis } from '../../types'
 import { analyzeLiquidity } from '../../engine/liquidity'
 import { analyzeMarketStructure, findSwingPoints } from '../../engine/marketStructure'
+import { analyzeSetup } from '../../engine/setup'
 import { analyzeSupportResistance } from '../../engine/supportResistance'
 import { getMockCandles } from './candles'
 
@@ -60,10 +61,42 @@ export const getMockMarketAnalysis = (symbol: string): MarketAnalysis => {
 
 export const getMockAIAnalysis = (symbol: string): AIAnalysis => {
   const fallback = AI_BY_SYMBOL[symbol] ?? DEFAULT_AI
-  const structure = analyzeMarketStructure(getMockCandles(symbol, 'H1', 300))
+  const candles = getMockCandles(symbol, 'H1', 300)
+  const structure = analyzeMarketStructure(candles)
+  const swings = findSwingPoints(candles, 2)
+  const tolerance = getTolerance(symbol)
+  const sr = analyzeSupportResistance(candles, tolerance, swings)
+  const liquidity = analyzeLiquidity(candles, swings, tolerance)
+  const setup = analyzeSetup({
+    currentPrice: candles[candles.length - 1]?.close ?? Number.NaN,
+    structure,
+    supportResistance: sr,
+    liquidity,
+  })
+  const preferred = setup.preferredSetup
+
+  if (!preferred) {
+    return {
+      ...fallback,
+      marketBias: structure.bias,
+      structure: `${structure.structureType} structure detected from H1 swing points.`,
+      potentialSetup: 'No aligned setup detected from the current structural, support/resistance, and liquidity conditions.',
+      confidence: 0,
+    }
+  }
+
+  const precision = symbol.includes('JPY') ? 3 : 5
   return {
     ...fallback,
     marketBias: structure.bias,
     structure: `${structure.structureType} structure detected from H1 swing points.`,
+    liquidity: preferred.liquidityTarget
+      ? `${preferred.direction === 'BUY' ? 'Buy-side' : 'Sell-side'} liquidity target at ${preferred.liquidityTarget.referencePrice.toFixed(precision)}.`
+      : fallback.liquidity,
+    potentialSetup: `${preferred.direction} candidate at ${preferred.entryPrice.toFixed(precision)}, with ${preferred.riskRewardRatio.toFixed(2)} R:R and ${preferred.confidence}% confidence.`,
+    invalidation: preferred.invalidation,
+    target: `${preferred.direction === 'BUY' ? 'Buy-side' : 'Sell-side'} liquidity at ${preferred.takeProfit.toFixed(precision)}.`,
+    riskReward: `1:${preferred.riskRewardRatio.toFixed(2)}`,
+    confidence: preferred.confidence,
   }
 }
