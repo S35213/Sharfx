@@ -29,6 +29,7 @@ describe('runBacktest', () => {
     expect(result.trades[0].exitPrice).toBe(1.102)
     expect(result.trades[0].exitReason).toBe('take-profit')
     expect(result.trades[0].profit).toBe(1.5)
+    expect(result.trades[0].outcome).toBe('win')
     expect(result.finalBalance).toBe(1001.5)
   })
 
@@ -37,6 +38,22 @@ describe('runBacktest', () => {
     expect(result.trades[0].entryPrice).toBe(1.101)
     expect(result.trades[0].exitReason).toBe('stop-loss')
     expect(result.trades[0].profit).toBe(-0.2)
+    expect(result.trades[0].outcome).toBe('loss')
+  })
+
+  it('records break-even trades separately from wins and losses', () => {
+    const flatCandles: OHLCV[] = [
+      { time: 1, open: 1.1000, high: 1.1010, low: 1.0990, close: 1.1005 },
+      { time: 2, open: 1.1005, high: 1.1010, low: 1.1000, close: 1.1005 },
+    ]
+    const result = runBacktest(flatCandles, { initialBalance: 1000, accountCurrency: 'USD', symbolSpec: spec }, () => ({ side: 'BUY', stopLoss: 1.0995, takeProfit: 1.1015, lotSize: 0.01 }))
+    expect(result.totalTrades).toBe(1)
+    expect(result.trades[0].profit).toBe(0)
+    expect(result.trades[0].outcome).toBe('breakeven')
+    expect(result.winningTrades).toBe(0)
+    expect(result.losingTrades).toBe(0)
+    expect(result.breakevenTrades).toBe(1)
+    expect(result.winRate).toBe(0)
   })
 
   it('does not leak future candles to the signal provider', () => {

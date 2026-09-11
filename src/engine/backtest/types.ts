@@ -27,7 +27,7 @@ export interface BacktestTrade {
   takeProfit: number
   lotSize: number
   profit: number
-  outcome: 'win' | 'loss'
+  outcome: 'win' | 'loss' | 'breakeven'
   exitReason: 'stop-loss' | 'take-profit' | 'end-of-test'
 }
 
@@ -39,6 +39,7 @@ export interface BacktestResult {
   totalTrades: number
   winningTrades: number
   losingTrades: number
+  breakevenTrades: number
   winRate: number
   grossProfit: number
   grossLoss: number

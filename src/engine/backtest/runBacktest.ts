@@ -7,9 +7,9 @@ const finite = (value: number): boolean => Number.isFinite(value)
 const validateCandle = (candle: OHLCV): boolean =>
   finite(candle.time) && finitePositive(candle.open) && finitePositive(candle.high) && finitePositive(candle.low) && finitePositive(candle.close) && candle.high >= Math.max(candle.open, candle.close) && candle.low <= Math.min(candle.open, candle.close) && candle.high >= candle.low
 
-const priceToCash = (entry: number, exit: number, side: 'BUY' | 'SELL', lotSize: number, pipSize: number, contractSize: number, conversionRate: number): number => {
+const priceToCash = (entry: number, exit: number, side: 'BUY' | 'SELL', lotSize: number, contractSize: number, conversionRate: number): number => {
   const priceMove = side === 'BUY' ? exit - entry : entry - exit
-  return (priceMove / pipSize) * pipSize * contractSize * lotSize * conversionRate
+  return priceMove * contractSize * lotSize * conversionRate
 }
 
 const validSignal = (signal: BacktestSignal, price: number, spec: BacktestConfig['symbolSpec']): boolean => {
@@ -61,9 +61,9 @@ export const runBacktest = (candles: OHLCV[], config: BacktestConfig, signalProv
     if (open) {
       const exit = exitForCandle(open.signal, candle)
       if (exit) {
-        const profit = priceToCash(open.entryPrice, exit.price, open.signal.side, open.signal.lotSize, config.symbolSpec.pipSize, config.symbolSpec.contractSize, conversionRate)
+        const profit = priceToCash(open.entryPrice, exit.price, open.signal.side, open.signal.lotSize, config.symbolSpec.contractSize, conversionRate)
         balance += profit
-        trades.push({ id: open.id, side: open.signal.side, entryTime: open.entryTime, exitTime: candle.time, entryPrice: open.entryPrice, exitPrice: exit.price, stopLoss: open.signal.stopLoss, takeProfit: open.signal.takeProfit, lotSize: open.signal.lotSize, profit: Number(profit.toFixed(2)), outcome: profit >= 0 ? 'win' : 'loss', exitReason: exit.reason })
+        trades.push({ id: open.id, side: open.signal.side, entryTime: open.entryTime, exitTime: candle.time, entryPrice: open.entryPrice, exitPrice: exit.price, stopLoss: open.signal.stopLoss, takeProfit: open.signal.takeProfit, lotSize: open.signal.lotSize, profit: Number(profit.toFixed(2)), outcome: profit > 0 ? 'win' : profit < 0 ? 'loss' : 'breakeven', exitReason: exit.reason })
         open = null
         peak = Math.max(peak, balance)
         maxDrawdown = Math.max(maxDrawdown, peak - balance)
@@ -80,9 +80,9 @@ export const runBacktest = (candles: OHLCV[], config: BacktestConfig, signalProv
 
   if (open) {
     const last = candles[end]
-    const profit = priceToCash(open.entryPrice, last.close, open.signal.side, open.signal.lotSize, config.symbolSpec.pipSize, config.symbolSpec.contractSize, conversionRate)
+    const profit = priceToCash(open.entryPrice, last.close, open.signal.side, open.signal.lotSize, config.symbolSpec.contractSize, conversionRate)
     balance += profit
-    trades.push({ id: open.id, side: open.signal.side, entryTime: open.entryTime, exitTime: last.time, entryPrice: open.entryPrice, exitPrice: last.close, stopLoss: open.signal.stopLoss, takeProfit: open.signal.takeProfit, lotSize: open.signal.lotSize, profit: Number(profit.toFixed(2)), outcome: profit >= 0 ? 'win' : 'loss', exitReason: 'end-of-test' })
+    trades.push({ id: open.id, side: open.signal.side, entryTime: open.entryTime, exitTime: last.time, entryPrice: open.entryPrice, exitPrice: last.close, stopLoss: open.signal.stopLoss, takeProfit: open.signal.takeProfit, lotSize: open.signal.lotSize, profit: Number(profit.toFixed(2)), outcome: profit > 0 ? 'win' : profit < 0 ? 'loss' : 'breakeven', exitReason: 'end-of-test' })
     peak = Math.max(peak, balance)
     maxDrawdown = Math.max(maxDrawdown, peak - balance)
   }
@@ -91,6 +91,7 @@ export const runBacktest = (candles: OHLCV[], config: BacktestConfig, signalProv
   const grossLoss = Math.abs(trades.filter((trade) => trade.profit < 0).reduce((sum, trade) => sum + trade.profit, 0))
   const winningTrades = trades.filter((trade) => trade.profit > 0).length
   const losingTrades = trades.filter((trade) => trade.profit < 0).length
+  const breakevenTrades = trades.filter((trade) => trade.profit === 0).length
   const totalTrades = trades.length
 
   return {
@@ -101,6 +102,7 @@ export const runBacktest = (candles: OHLCV[], config: BacktestConfig, signalProv
     totalTrades,
     winningTrades,
     losingTrades,
+    breakevenTrades,
     winRate: totalTrades ? Number(((winningTrades / totalTrades) * 100).toFixed(2)) : 0,
     grossProfit: Number(grossProfit.toFixed(2)),
     grossLoss: Number(grossLoss.toFixed(2)),
