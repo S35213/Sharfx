@@ -31,7 +31,9 @@ export const calculateRisk = (inputs: RiskCalculationInputs): RiskCalculationRes
   if (symbolSpec.quoteCurrency === accountCurrency) {
     rate = 1
   } else {
-    if (!finitePositive(conversionRate)) return fail(`Missing or invalid conversion rate for ${symbolSpec.quoteCurrency}/${accountCurrency}.`)
+    if (typeof conversionRate !== 'number' || !Number.isFinite(conversionRate) || conversionRate <= 0) {
+      return fail(`Missing or invalid conversion rate for ${symbolSpec.quoteCurrency}/${accountCurrency}.`)
+    }
     rate = conversionRate
   }
 
