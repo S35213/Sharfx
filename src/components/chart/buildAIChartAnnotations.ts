@@ -28,7 +28,6 @@ export const buildAIChartAnnotations = (symbol: string, candles: OHLCV[]): Chart
     result.push({ id, price, label, color, lineWidth })
   }
   const swings = findSwingPoints(candles, 2)
-  const structure = analyzeMarketStructure(candles, 2)
   const supportResistance = analyzeSupportResistance(candles, toleranceFor(symbol), swings)
   const liquidity = analyzeLiquidity(candles, swings, toleranceFor(symbol))
   add('support', supportResistance.nearestSupport, 'Support', '#0ECB81')
