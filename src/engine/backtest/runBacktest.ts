@@ -42,7 +42,7 @@ export const runBacktest = (candles: OHLCV[], config: BacktestConfig, signalProv
   if (candles.some((candle) => !validateCandle(candle))) throw new Error('Backtest contains invalid OHLC data.')
   for (let i = 1; i < candles.length; i += 1) if (candles[i].time <= candles[i - 1].time) throw new Error('Backtest candles must be strictly chronological.')
 
-  const conversionRate = config.symbolSpec.quoteCurrency === config.accountCurrency ? 1 : config.conversionRate
+  const conversionRate: number = config.symbolSpec.quoteCurrency === config.accountCurrency ? 1 : (config.conversionRate ?? NaN)
   if (!finitePositive(conversionRate)) throw new Error(`Missing or invalid conversion rate for ${config.symbolSpec.quoteCurrency}/${config.accountCurrency}.`)
 
   const start = Math.max(1, config.startIndex ?? 1)
