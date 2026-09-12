@@ -16,6 +16,8 @@ export interface MarketApiResponse {
 export interface HttpMarketTransportOptions {
   baseUrl: string
   fetchImpl?: typeof fetch
+  timeoutMs?: number
+  maxRetries?: number
 }
 
 const cleanBaseUrl = (value: string): string => value.replace(/\/$/, '')
@@ -29,22 +31,47 @@ const assertBaseUrl = (value: string): string => {
   return cleanBaseUrl(url.toString())
 }
 
+const assertPositiveInteger = (value: number, name: string): number => {
+  if (!Number.isInteger(value) || value <= 0) throw new Error(`${name} must be a positive integer.`)
+  return value
+}
+
 export class HttpMarketTransport implements LiveMarketTransport {
   private readonly baseUrl: string
   private readonly fetchImpl: typeof fetch
+  private readonly timeoutMs: number
+  private readonly maxRetries: number
 
   constructor(options: HttpMarketTransportOptions) {
     this.baseUrl = assertBaseUrl(options.baseUrl)
     this.fetchImpl = options.fetchImpl ?? fetch
+    this.timeoutMs = assertPositiveInteger(options.timeoutMs ?? 10_000, 'Request timeout')
+    if (!Number.isInteger(options.maxRetries ?? 2) || (options.maxRetries ?? 2) < 0) throw new Error('Maximum retries must be a non-negative integer.')
+    this.maxRetries = options.maxRetries ?? 2
   }
 
-  private async request<T>(path: string, init?: RequestInit): Promise<T> {
-    const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
-      ...init,
-      headers: { Accept: 'application/json', ...(init?.headers ?? {}) },
-    })
-    if (!response.ok) throw new Error(`Market API request failed (${response.status}).`)
-    return response.json() as Promise<T>
+  private async request<T>(path: string): Promise<T> {
+    let lastError: unknown
+    for (let attempt = 0; attempt <= this.maxRetries; attempt += 1) {
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), this.timeoutMs)
+      try {
+        const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+          method: 'GET',
+          headers: { Accept: 'application/json' },
+          signal: controller.signal,
+        })
+        if (!response.ok) throw new Error(`Market API request failed (${response.status}).`)
+        return await response.json() as T
+      } catch (error) {
+        lastError = error
+        if (attempt === this.maxRetries) break
+      } finally {
+        clearTimeout(timer)
+      }
+    }
+    if (lastError instanceof Error && lastError.name === 'AbortError') throw new Error(`Market API request timed out after ${this.timeoutMs}ms.`)
+    throw lastError instanceof Error ? lastError : new Error('Market API request failed.')
   }
 
   async getWatchlist(): Promise<MarketPair[]> { return this.request('/watchlist') }
