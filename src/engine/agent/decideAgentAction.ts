@@ -7,7 +7,7 @@ const permissionText = (permission: AgentPermission): string => {
 }
 
 export const decideAgentAction = (context: AgentContext): AgentDecision => {
-  const { tradingContext, preferredSetup, hasOpenPosition, permission, multiTimeframe } = context
+  const { tradingContext, preferredSetup, hasOpenPosition, permission, multiTimeframe, learning } = context
   const symbol = tradingContext.symbol
   const timeframe = tradingContext.timeframe
   if (hasOpenPosition) {
@@ -20,24 +20,16 @@ export const decideAgentAction = (context: AgentContext): AgentDecision => {
   const setupBias = preferredSetup.direction === 'BUY' ? 'Bullish' : 'Bearish'
   const higherTimeframeConflict = multiTimeframe?.dominantBias !== null && multiTimeframe?.dominantBias !== undefined && multiTimeframe.dominantBias !== setupBias && multiTimeframe.confidence >= 60
   if (higherTimeframeConflict) {
-    return {
-      state: 'NO_TRADE',
-      action: 'WAIT',
-      permission,
-      symbol,
-      timeframe,
-      setup: preferredSetup,
-      rationale: `The local ${preferredSetup.direction} setup conflicts with the stronger higher-timeframe ${multiTimeframe.dominantBias} evidence (${multiTimeframe.confidence}%). The agent will wait rather than force an entry.`,
-      approvalRequired: false,
-      safety: permissionText(permission),
-    }
+    return { state: 'NO_TRADE', action: 'WAIT', permission, symbol, timeframe, setup: preferredSetup, rationale: `The local ${preferredSetup.direction} setup conflicts with the stronger higher-timeframe ${multiTimeframe.dominantBias} evidence (${multiTimeframe.confidence}%). The agent will wait rather than force an entry.`, approvalRequired: false, safety: permissionText(permission) }
   }
 
-  if (permission === 'ANALYZE_ONLY') {
-    return { state: 'OPPORTUNITY', action: 'WAIT', permission, symbol, timeframe, setup: preferredSetup, rationale: `A ${preferredSetup.direction} opportunity is visible, but the current permission only allows analysis.`, approvalRequired: false, safety: permissionText(permission) }
+  const learningKey = `${symbol}:${preferredSetup.direction}`
+  if (learning?.cautionKeys.includes(learningKey)) {
+    return { state: 'NO_TRADE', action: 'WAIT', permission, symbol, timeframe, setup: preferredSetup, rationale: `The setup is technically valid, but the agent has recorded repeated underperformance for ${learningKey}. It will require stronger evidence before repeating that pattern.`, approvalRequired: false, safety: permissionText(permission) }
   }
-  if (permission === 'PREPARE_ONLY') {
-    return { state: 'OPPORTUNITY', action: 'PREPARE_TRADE', permission, symbol, timeframe, setup: preferredSetup, rationale: `The agent prepared a ${preferredSetup.direction} simulated trade from the current confluence. Execution remains disabled.`, approvalRequired: false, safety: permissionText(permission) }
-  }
-  return { state: 'AWAITING_APPROVAL', action: 'REQUEST_APPROVAL', permission, symbol, timeframe, setup: preferredSetup, rationale: `A ${preferredSetup.direction} simulated trade meets the current rules. Review the entry, stop, target and risk before approving execution.`, approvalRequired: true, safety: permissionText(permission) }
+
+  const learningNote = learning && learning.confidenceAdjustment !== 0 ? ` Historical simulator evidence adjusts caution by ${learning.confidenceAdjustment > 0 ? '+' : ''}${learning.confidenceAdjustment} points.` : ''
+  if (permission === 'ANALYZE_ONLY') return { state: 'OPPORTUNITY', action: 'WAIT', permission, symbol, timeframe, setup: preferredSetup, rationale: `A ${preferredSetup.direction} opportunity is visible, but the current permission only allows analysis.${learningNote}`, approvalRequired: false, safety: permissionText(permission) }
+  if (permission === 'PREPARE_ONLY') return { state: 'OPPORTUNITY', action: 'PREPARE_TRADE', permission, symbol, timeframe, setup: preferredSetup, rationale: `The agent prepared a ${preferredSetup.direction} simulated trade from the current confluence.${learningNote} Execution remains disabled.`, approvalRequired: false, safety: permissionText(permission) }
+  return { state: 'AWAITING_APPROVAL', action: 'REQUEST_APPROVAL', permission, symbol, timeframe, setup: preferredSetup, rationale: `A ${preferredSetup.direction} simulated trade meets the current rules. Review the entry, stop, target and risk before approving execution.${learningNote}`, approvalRequired: true, safety: permissionText(permission) }
 }
