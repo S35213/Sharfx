@@ -6,16 +6,18 @@ interface DerivLiveControlProps {
   symbol: string
   timeframe: Timeframe
   onUpdate: (candles: OHLCV[], price: number, epoch: number) => void
+  onActiveChange?: (active: boolean) => void
 }
 
 type Status = 'demo' | 'connecting' | 'live' | 'error'
 
-export const DerivLiveControl: React.FC<DerivLiveControlProps> = ({ symbol, timeframe, onUpdate }) => {
+export const DerivLiveControl: React.FC<DerivLiveControlProps> = ({ symbol, timeframe, onUpdate, onActiveChange }) => {
   const feedRef = useRef<DerivPublicMarketFeed | null>(null)
   const [enabled, setEnabled] = useState(false)
   const [status, setStatus] = useState<Status>('demo')
 
   useEffect(() => {
+    onActiveChange?.(enabled)
     if (!enabled) {
       feedRef.current?.disconnect()
       feedRef.current = null
@@ -33,7 +35,7 @@ export const DerivLiveControl: React.FC<DerivLiveControlProps> = ({ symbol, time
       feed.disconnect()
       if (feedRef.current === feed) feedRef.current = null
     }
-  }, [enabled, onUpdate, symbol, timeframe])
+  }, [enabled, onActiveChange, onUpdate, symbol, timeframe])
 
   const toggle = (): void => setEnabled((value) => !value)
   const label = status === 'live' ? 'Live' : status === 'connecting' ? 'Connecting' : status === 'error' ? 'Retry Live' : 'Demo'
