@@ -16,7 +16,7 @@ import { OrderPanel } from './components/order/OrderPanel'
 import { AccountPanel } from './components/account/AccountPanel'
 import { TradesPanel } from './components/trades/TradesPanel'
 import { Toast, type ToastMessage } from './components/common/Toast'
-import { marketDataSource } from './data/mock/MockDataSource'
+import { marketDataSource } from './data/createMarketDataSource'
 import { getConversionRate } from './data/mock/symbols'
 import { submitSimulatedOrder } from './engine/simulator/submitSimulatedOrder'
 import { closeSimulatedPosition, markSimulatedPosition } from './engine/simulator/positionManager'
@@ -44,17 +44,19 @@ const TerminalContent: React.FC = () => {
   useEffect(() => {
     let cancelled = false
     const load = async (): Promise<void> => {
-      const [wl, acc, spec, cands, ma, ai, positions, pending, history] = await Promise.all([marketDataSource.getWatchlist(), marketDataSource.getAccountData(), marketDataSource.getSymbolSpec(selectedSymbol), marketDataSource.getCandles(selectedSymbol, timeframe), marketDataSource.getMarketAnalysis(selectedSymbol), marketDataSource.getAIAnalysis(selectedSymbol), marketDataSource.getOpenPositions(), marketDataSource.getPendingOrders(), marketDataSource.getTradeHistory()])
-      if (cancelled) return
-      setWatchlist(wl); setSymbolSpec(spec); setCandles(cands); setReplayCount(cands.length); setMarketAnalysis(ma); setAiAnalysis(ai)
-      if (!accountInitialized.current) { accountInitialized.current = true; setAccountData(acc) }
-      if (!simulatorInitialized.current) { simulatorInitialized.current = true; setOpenPositions(positions); setPendingOrders(pending); setTradeHistory(history) }
-      const pair = wl.find((p) => p.symbol === selectedSymbol)
-      if (pair) setCurrentPrice(pair.price)
+      try {
+        const [wl, acc, spec, cands, ma, ai, positions, pending, history] = await Promise.all([marketDataSource.getWatchlist(), marketDataSource.getAccountData(), marketDataSource.getSymbolSpec(selectedSymbol), marketDataSource.getCandles(selectedSymbol, timeframe), marketDataSource.getMarketAnalysis(selectedSymbol), marketDataSource.getAIAnalysis(selectedSymbol), marketDataSource.getOpenPositions(), marketDataSource.getPendingOrders(), marketDataSource.getTradeHistory()])
+        if (cancelled) return
+        setWatchlist(wl); setSymbolSpec(spec); setCandles(cands); setReplayCount(cands.length); setMarketAnalysis(ma); setAiAnalysis(ai)
+        if (!accountInitialized.current) { accountInitialized.current = true; setAccountData(acc) }
+        if (!simulatorInitialized.current) { simulatorInitialized.current = true; setOpenPositions(positions); setPendingOrders(pending); setTradeHistory(history) }
+        const pair = wl.find((p) => p.symbol === selectedSymbol)
+        if (pair) setCurrentPrice(pair.price)
+      } catch (err) { if (!cancelled) pushToast(err instanceof Error ? err.message : 'Unable to load market data.') }
     }
     void load()
     return () => { cancelled = true }
-  }, [selectedSymbol, timeframe])
+  }, [pushToast, selectedSymbol, timeframe])
 
   const visibleCandles = useMemo(() => replayCount > 0 && replayCount < candles.length ? candles.slice(0, replayCount) : candles, [candles, replayCount])
   const replayActive = visibleCandles.length > 0 && visibleCandles.length < candles.length
@@ -65,11 +67,8 @@ const TerminalContent: React.FC = () => {
   const reviewAISetup = useCallback((): void => { document.getElementById('order-ticket')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }, [])
 
   const handleOrderSubmit = useCallback((draft: SimulatedOrderDraft): void => {
-    try {
-      const order = submitSimulatedOrder(draft)
-      setOpenPositions((prev) => [...prev, order])
-      pushToast(`Simulated ${order.type} ${order.lotSize.toFixed(2)} lots ${order.symbol} placed (${order.id}).`)
-    } catch (err) { pushToast(err instanceof Error ? err.message : 'Unable to place simulated order.') }
+    try { const order = submitSimulatedOrder(draft); setOpenPositions((prev) => [...prev, order]); pushToast(`Simulated ${order.type} ${order.lotSize.toFixed(2)} lots ${order.symbol} placed (${order.id}).`) }
+    catch (err) { pushToast(err instanceof Error ? err.message : 'Unable to place simulated order.') }
   }, [pushToast])
 
   const handleClosePosition = useCallback(async (id: string): Promise<void> => {
@@ -82,8 +81,7 @@ const TerminalContent: React.FC = () => {
       if (!exitPrice) throw new Error('No simulated market price is available for this position.')
       const rate = getConversionRate(spec.quoteCurrency, accountData.currency)
       const closed = closeSimulatedPosition(order, { exitPrice, conversionRate: rate }, spec)
-      setOpenPositions((prev) => prev.filter((item) => item.id !== id))
-      setTradeHistory((prev) => [closed, ...prev])
+      setOpenPositions((prev) => prev.filter((item) => item.id !== id)); setTradeHistory((prev) => [closed, ...prev])
       setAccountData((prev) => prev ? { ...prev, balance: Number((prev.balance + (closed.profit ?? 0)).toFixed(2)), equity: Number((prev.balance + (closed.profit ?? 0)).toFixed(2)), floatingPL: 0, freeMargin: Number((prev.freeMargin + (closed.profit ?? 0)).toFixed(2)) } : prev)
       pushToast(`Simulated ${closed.type} ${closed.symbol} closed at ${exitPrice.toFixed(spec.pricePrecision)} (${closed.profit !== undefined && closed.profit >= 0 ? '+' : ''}${closed.profit?.toFixed(2)} ${accountData.currency}).`)
     } catch (err) { pushToast(err instanceof Error ? err.message : 'Unable to close simulated position.') }
@@ -95,14 +93,11 @@ const TerminalContent: React.FC = () => {
     const updated = openPositions.map((position) => position.symbol === selectedSymbol ? markSimulatedPosition(position, { currentPrice, symbolSpec, conversionRate: conversion }) : position)
     const newlyClosed = updated.filter((position, index) => openPositions[index].status === 'open' && position.status === 'closed')
     if (newlyClosed.length > 0) {
-      setOpenPositions(updated.filter((position) => position.status === 'open'))
-      setTradeHistory((prev) => [...newlyClosed, ...prev])
+      setOpenPositions(updated.filter((position) => position.status === 'open')); setTradeHistory((prev) => [...newlyClosed, ...prev])
       const realized = newlyClosed.reduce((sum, position) => sum + (position.profit ?? 0), 0)
       setAccountData((prev) => prev ? { ...prev, balance: Number((prev.balance + realized).toFixed(2)), equity: Number((prev.balance + realized).toFixed(2)), floatingPL: 0, freeMargin: Number((prev.freeMargin + realized).toFixed(2)) } : prev)
       newlyClosed.forEach((position) => pushToast(`Simulated ${position.type} ${position.symbol} closed automatically at its ${position.profit !== undefined && position.profit >= 0 ? 'target' : 'stop'}.`))
-    } else if (updated.some((position, index) => position.profit !== openPositions[index].profit)) {
-      setOpenPositions(updated)
-    }
+    } else if (updated.some((position, index) => position.profit !== openPositions[index].profit)) setOpenPositions(updated)
   }, [accountData, currentPrice, openPositions, pushToast, selectedSymbol, symbolSpec])
 
   if (!accountData || !symbolSpec || !marketAnalysis || !aiAnalysis) return <div className="flex h-full items-center justify-center bg-shafx-bg text-shafx-text">Loading SHAFX Terminal...</div>
