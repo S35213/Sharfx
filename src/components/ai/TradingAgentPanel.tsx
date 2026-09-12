@@ -1,18 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Brain, CheckCircle2, Shield, Eye } from 'lucide-react'
+import { Brain, CheckCircle2, Shield, Eye, Activity } from 'lucide-react'
 import { analyzeLiquidity } from '../../engine/liquidity'
 import { analyzeMarketStructure, findSwingPoints } from '../../engine/marketStructure'
 import { analyzeSetup } from '../../engine/setup'
 import { analyzeSupportResistance } from '../../engine/supportResistance'
 import { buildTradingContext } from '../../engine/ai/context'
-import { decideAgentAction, analyzeMultiTimeframeBias } from '../../engine/agent'
+import { decideAgentAction, analyzeMultiTimeframeBias, monitorPosition } from '../../engine/agent'
 import { marketDataSource } from '../../data/mock/MockDataSource'
 import type { AgentPermission } from '../../engine/agent'
-import type { OHLCV, Timeframe } from '../../types'
+import type { OHLCV, Timeframe, TradeOrder } from '../../types'
 
-interface Props { symbol: string; timeframe: Timeframe; candles: OHLCV[]; hasOpenPosition: boolean; onReviewSetup?: () => void }
+interface Props { symbol: string; timeframe: Timeframe; candles: OHLCV[]; currentPrice: number; activePosition: TradeOrder | null; onReviewSetup?: () => void }
 
-export function TradingAgentPanel({ symbol, timeframe, candles, hasOpenPosition, onReviewSetup }: Props) {
+export function TradingAgentPanel({ symbol, timeframe, candles, currentPrice, activePosition, onReviewSetup }: Props) {
   const [permission, setPermission] = useState<AgentPermission>('USER_APPROVAL_REQUIRED')
   const [higherTimeframes, setHigherTimeframes] = useState<Partial<Record<Timeframe, OHLCV[]>>>({})
   const [contextStatus, setContextStatus] = useState<'loading' | 'ready' | 'unavailable'>('loading')
@@ -45,7 +45,8 @@ export function TradingAgentPanel({ symbol, timeframe, candles, hasOpenPosition,
   }, [candles, symbol, timeframe])
 
   const multiTimeframe = useMemo(() => analyzeMultiTimeframeBias({ ...higherTimeframes, [timeframe]: candles }), [candles, higherTimeframes, timeframe])
-  const decision = useMemo(() => decideAgentAction({ tradingContext, preferredSetup: tradingContext.setup.preferredSetup, hasOpenPosition, permission, multiTimeframe }), [hasOpenPosition, permission, tradingContext, multiTimeframe])
+  const decision = useMemo(() => decideAgentAction({ tradingContext, preferredSetup: tradingContext.setup.preferredSetup, hasOpenPosition: activePosition !== null, permission, multiTimeframe }), [activePosition, permission, tradingContext, multiTimeframe])
+  const positionMonitor = useMemo(() => activePosition ? monitorPosition(activePosition, currentPrice, tradingContext.setup.preferredSetup) : null, [activePosition, currentPrice, tradingContext.setup.preferredSetup])
 
   return <div className="space-y-3 rounded-lg border border-shafx-primary/30 bg-shafx-surface p-4 text-sm">
     <div className="flex items-start justify-between gap-2"><div><h3 className="flex items-center gap-2 font-semibold"><Brain className="h-4 w-4 text-shafx-primary" /> Agent control</h3><p className="mt-1 text-[11px] text-shafx-textMuted">The agent reasons across the selected chart and higher timeframes while keeping execution behind your approval.</p></div><Shield className="h-4 w-4 text-shafx-primary" /></div>
@@ -54,6 +55,7 @@ export function TradingAgentPanel({ symbol, timeframe, candles, hasOpenPosition,
     </div>
     <div className="rounded border border-shafx-border bg-shafx-bg p-3"><div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-shafx-textMuted"><Eye className="h-3 w-3" />State</div><div className="mt-1 text-lg font-semibold">{decision.state.replace(/_/g, ' ')}</div><p className="mt-1 text-xs text-shafx-textMuted">{decision.rationale}</p></div>
     <div className="rounded border border-shafx-border bg-shafx-bg p-3"><div className="flex items-center justify-between"><span className="text-[10px] uppercase tracking-wider text-shafx-textMuted">Multi-timeframe read</span><span className="text-[10px] text-shafx-textMuted">{contextStatus === 'ready' ? `${multiTimeframe.confidence}% evidence` : contextStatus}</span></div><div className="mt-1 flex items-baseline justify-between gap-2"><span className="text-base font-semibold">{multiTimeframe.dominantBias ?? 'Neutral / mixed'}</span><span className="text-[10px] text-shafx-textMuted">{multiTimeframe.aligned ? 'Aligned' : 'Conflict / incomplete'}</span></div><p className="mt-1 text-xs text-shafx-textMuted">{multiTimeframe.summary}</p></div>
+    {positionMonitor && <div className="rounded border border-shafx-border bg-shafx-bg p-3"><div className="flex items-center justify-between"><span className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-shafx-textMuted"><Activity className="h-3 w-3" />Position monitor</span><span className="text-[10px] font-semibold">{positionMonitor.state.replace(/_/g, ' ')}</span></div><p className="mt-1 text-xs text-shafx-textMuted">{positionMonitor.message}</p><div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-shafx-textMuted"><span>Stop distance: {positionMonitor.distanceToStop?.toPrecision(5) ?? '—'}</span><span>Target distance: {positionMonitor.distanceToTarget?.toPrecision(5) ?? '—'}</span></div></div>}
     {decision.setup && <div className="grid grid-cols-3 gap-2 text-xs"><div><span className="block text-[10px] text-shafx-textMuted">Entry</span><span className="font-mono">{decision.setup.entryPrice}</span></div><div><span className="block text-[10px] text-shafx-textMuted">Stop</span><span className="font-mono">{decision.setup.stopLoss}</span></div><div><span className="block text-[10px] text-shafx-textMuted">Target</span><span className="font-mono">{decision.setup.takeProfit}</span></div></div>}
     {decision.approvalRequired && onReviewSetup && <button type="button" onClick={onReviewSetup} className="flex min-h-11 w-full items-center justify-center gap-2 rounded bg-shafx-primary px-3 py-2 text-xs font-semibold text-white"><CheckCircle2 className="h-4 w-4" /> Review and approve in simulator</button>}
     <p className="text-[10px] text-shafx-textMuted">SIMULATED — NOT FINANCIAL ADVICE. No broker or real-money execution is available.</p>
