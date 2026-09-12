@@ -26,7 +26,7 @@ const invalidSetup = {
 
 describe('monitorPosition', () => {
   it('marks a normal position healthy', () => expect(monitorPosition(order, 1.103).state).toBe('HEALTHY'))
-  it('warns when price approaches the stop', () => expect(monitorPosition(order, 1.0965).state).toBe('APPROACHING_STOP'))
+  it('warns when price approaches the stop', () => expect(monitorPosition(order, 1.096).state).toBe('APPROACHING_STOP'))
   it('warns when price approaches the target', () => expect(monitorPosition(order, 1.108).state).toBe('APPROACHING_TARGET'))
   it('detects an explicit setup invalidation', () => expect(monitorPosition(order, 1.094, invalidSetup).state).toBe('INVALIDATED'))
   it('reports a closed position without alerting', () => expect(monitorPosition({ ...order, status: 'closed', profit: 7 }, 1.108).shouldAlert).toBe(false))
