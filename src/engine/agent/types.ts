@@ -2,6 +2,7 @@ import type { AITradingContext } from '../ai/types'
 import type { SetupCandidate } from '../setup/types'
 import type { MarketBias } from '../marketStructure/types'
 import type { AgentLearningSummary } from './learning'
+import type { AgentResearchReport } from './research'
 
 export type AgentState = 'MONITORING' | 'OPPORTUNITY' | 'AWAITING_APPROVAL' | 'EXECUTING_SIMULATION' | 'IN_POSITION' | 'NO_TRADE'
 export type AgentAction = 'WAIT' | 'PREPARE_TRADE' | 'REQUEST_APPROVAL' | 'EXECUTE_SIMULATION' | 'MONITOR_POSITION'
@@ -30,4 +31,5 @@ export interface AgentContext {
     aligned: boolean
   }
   learning?: AgentLearningSummary
+  research?: AgentResearchReport
 }
