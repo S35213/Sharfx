@@ -34,26 +34,46 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
   const chartData = useMemo(() => prepareData(data), [data])
+  const lastClose = chartData.length ? Number(chartData[chartData.length - 1]?.close) : Number.NaN
 
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
     const chart = createChart(el, {
-      layout: { background: { type: ColorType.Solid, color: '#0B0E11' }, textColor: '#848E9C' },
-      grid: { vertLines: { color: '#1E2329' }, horzLines: { color: '#1E2329' } },
+      layout: {
+        background: { type: ColorType.Solid, color: '#0B0E11' },
+        textColor: '#848E9C',
+        attributionLogo: false,
+      },
+      grid: { vertLines: { color: '#171B21' }, horzLines: { color: '#171B21' } },
       width: el.clientWidth,
-      height: Math.max(240, el.clientHeight),
-      crosshair: { mode: 1 },
-      rightPriceScale: { borderColor: '#2A2F38' },
-      timeScale: { borderColor: '#2A2F38', timeVisible: true, secondsVisible: false },
+      height: Math.max(280, el.clientHeight),
+      crosshair: {
+        mode: 1,
+        vertLine: { color: '#596273', width: 1, style: 2, labelBackgroundColor: '#2A2F38' },
+        horzLine: { color: '#596273', width: 1, style: 2, labelBackgroundColor: '#2A2F38' },
+      },
+      rightPriceScale: { borderColor: '#2A2F38', minimumWidth: 76, scaleMargins: { top: 0.08, bottom: 0.08 } },
+      timeScale: { borderColor: '#2A2F38', timeVisible: true, secondsVisible: false, rightOffset: 6, barSpacing: 8, minBarSpacing: 3 },
+      handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
+      handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true },
     })
-    const series = chart.addCandlestickSeries({ upColor: '#0ECB81', downColor: '#F6465D', borderUpColor: '#0ECB81', borderDownColor: '#F6465D', wickUpColor: '#0ECB81', wickDownColor: '#F6465D' })
+    const series = chart.addCandlestickSeries({
+      upColor: '#0ECB81',
+      downColor: '#F6465D',
+      borderUpColor: '#0ECB81',
+      borderDownColor: '#F6465D',
+      wickUpColor: '#0ECB81',
+      wickDownColor: '#F6465D',
+      priceLineVisible: false,
+      lastValueVisible: true,
+    })
     chartRef.current = chart
     seriesRef.current = series
     const ro = new ResizeObserver(([entry]) => {
       if (!entry) return
       const { width, height: h } = entry.contentRect
-      if (width > 0 && h > 0) chart.applyOptions({ width, height: h })
+      if (width > 0 && h > 0) chart.applyOptions({ width, height: Math.max(280, h) })
     })
     ro.observe(el)
     return () => {
@@ -84,15 +104,27 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         price: annotation.price,
         color: annotation.color,
         lineWidth: annotation.lineWidth ?? 1,
-        lineStyle: 2,
+        lineStyle: annotation.lineWidth && annotation.lineWidth > 1 ? 0 : 2,
         axisLabelVisible: true,
         title: annotation.label,
+      }))
+    }
+    if (Number.isFinite(lastClose) && lastClose > 0) {
+      lines.push(series.createPriceLine({
+        price: lastClose,
+        color: '#848E9C',
+        lineWidth: 1,
+        lineStyle: 2,
+        axisLabelVisible: true,
+        title: 'Last',
       }))
     }
     return () => {
       lines.forEach((line) => series.removePriceLine(line))
     }
-  }, [annotations])
+  }, [annotations, lastClose])
 
-  return <div ref={containerRef} className="w-full overflow-hidden rounded-lg border border-shafx-border" style={{ height, minHeight: 240 }} />
+  return <div ref={containerRef} className="relative w-full overflow-hidden border border-shafx-border bg-shafx-bg" style={{ height, minHeight: 280 }}>
+    <div className="pointer-events-none absolute left-3 top-3 z-10 rounded border border-shafx-border bg-shafx-bg/90 px-2 py-1 text-[10px] font-medium tracking-wide text-shafx-textMuted">SHAFX • PRICE CHART</div>
+  </div>
 }
