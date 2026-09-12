@@ -36,4 +36,21 @@ describe('LiveMarketDataSource', () => {
     const source = new LiveMarketDataSource(transport())
     await expect(source.getCandles('EUR/USD', 'M5', 1)).rejects.toThrow('at least 2')
   })
+
+  it('blocks stale candles when freshness enforcement is enabled', async () => {
+    const source = new LiveMarketDataSource(transport([candle(100, 1, 2, 0.5, 1.5), candle(200, 1.5, 2.5, 1, 2)]), {
+      enforceFreshness: true,
+      nowSeconds: () => 1200,
+      staleAfterIntervals: 3,
+    })
+    await expect(source.getCandles('EUR/USD', 'M5')).rejects.toThrow('stale')
+  })
+
+  it('blocks timestamps that are ahead of the local clock', async () => {
+    const source = new LiveMarketDataSource(transport([candle(100, 1, 2, 0.5, 1.5), candle(200, 1.5, 2.5, 1, 2)]), {
+      enforceFreshness: true,
+      nowSeconds: () => 100,
+    })
+    await expect(source.getCandles('EUR/USD', 'M5')).rejects.toThrow('invalid')
+  })
 })
