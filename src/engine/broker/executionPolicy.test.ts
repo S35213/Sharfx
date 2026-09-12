@@ -23,6 +23,16 @@ const trade: TradeOrder = {
   status: 'open',
 }
 
+const guards = {
+  order,
+  currentPrice: 1.1001,
+  maxPriceAgeSeconds: 5,
+  priceTimestamp: 100,
+  nowSeconds: 102,
+  expectedConfirmationId: 'confirm-1',
+  confirmationId: 'confirm-1',
+}
+
 function broker(overrides: Partial<BrokerAdapter> = {}): BrokerAdapter {
   return {
     getCapabilities: () => ({
@@ -75,6 +85,19 @@ describe('executeWithPolicy', () => {
     expect(live.placeOrder).not.toHaveBeenCalled()
   })
 
+  it('requires execution guards before live placement', async () => {
+    const live = broker()
+    const result = await executeWithPolicy(live, {
+      order,
+      permission: 'USER_APPROVAL_REQUIRED',
+      approvedByUser: true,
+      confirmationId: 'confirm-1',
+    })
+    expect(result.submitted).toBe(false)
+    expect(result.reason).toContain('fresh-price')
+    expect(live.placeOrder).not.toHaveBeenCalled()
+  })
+
   it('rejects brokers that do not advertise live placement', async () => {
     const live = broker({
       getCapabilities: () => ({
@@ -102,6 +125,7 @@ describe('executeWithPolicy', () => {
       permission: 'USER_APPROVAL_REQUIRED',
       approvedByUser: true,
       confirmationId: 'confirm-1',
+      executionGuards: guards,
     })
     expect(result.submitted).toBe(true)
     expect(result.order).toEqual(trade)
