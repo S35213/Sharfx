@@ -36,6 +36,8 @@ const assertPositiveInteger = (value: number, name: string): number => {
   return value
 }
 
+const isRetryableStatus = (status: number): boolean => status >= 500 && status <= 599
+
 export class HttpMarketTransport implements LiveMarketTransport {
   private readonly baseUrl: string
   private readonly fetchImpl: typeof fetch
@@ -61,11 +63,16 @@ export class HttpMarketTransport implements LiveMarketTransport {
           headers: { Accept: 'application/json' },
           signal: controller.signal,
         })
-        if (!response.ok) throw new Error(`Market API request failed (${response.status}).`)
+        if (!response.ok) {
+          const error = new Error(`Market API request failed (${response.status}).`)
+          if (!isRetryableStatus(response.status)) throw error
+          throw Object.assign(error, { retryable: true })
+        }
         return await response.json() as T
       } catch (error) {
         lastError = error
-        if (attempt === this.maxRetries) break
+        const retryable = error instanceof Error && (error.name === 'AbortError' || 'retryable' in error)
+        if (!retryable || attempt === this.maxRetries) break
       } finally {
         clearTimeout(timer)
       }
