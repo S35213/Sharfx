@@ -13,7 +13,9 @@ export const getDataMode = (): DataMode => {
 export const createMarketDataSource = (mode: DataMode = getDataMode()): MarketDataSource => {
   if (mode === 'demo') return mockMarketDataSource
   const baseUrl = typeof window === 'undefined' ? '/api/market' : `${window.location.origin}/api/market`
-  return new LiveMarketDataSource(new HttpMarketTransport({ baseUrl }))
+  return new LiveMarketDataSource(new HttpMarketTransport({ baseUrl }), {
+    enforceFreshness: true,
+  })
 }
 
 export const marketDataSource = createMarketDataSource()
