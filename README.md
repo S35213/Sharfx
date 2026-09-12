@@ -1,19 +1,21 @@
 # SHAFX
 
-SHAFX is an original Forex analysis terminal prototype and **simulator only**.
+SHAFX is an original Forex analysis terminal prototype with a **simulator-first safety boundary**.
 
 ## Safety boundary
 
-**SIMULATED — NOT FINANCIAL ADVICE.** SHAFX has no broker connection, no real-money order execution, no payment processing, and no live market-data connection. Market data, analysis, account values, orders, replay, and backtests are simulated.
+**SIMULATED — NOT FINANCIAL ADVICE.** The default application remains simulator mode. No real-money order is submitted unless an explicit live broker gateway is configured, live execution is approved, and every execution safety gate passes.
+
+The repository contains live-integration infrastructure, but it does **not** contain broker credentials, provider secrets, or a claim of live-money readiness. Market and broker gateways are external boundaries and must be supplied by a secure backend/provider configuration.
 
 ## Stack
 
-- React 18 + TypeScript
+- React + TypeScript
 - Vite
 - Tailwind CSS
 - Lightweight Charts
 - Vitest
-- ESLint 9 flat config
+- ESLint flat config
 
 ## Run locally
 
@@ -28,31 +30,49 @@ npm audit
 
 ## Architecture
 
-The UI consumes the `MarketDataSource` interface. The current implementation is `MockDataSource`. Simulated user orders cross one explicit boundary: `src/engine/simulator/submitSimulatedOrder.ts`.
+The UI consumes the `MarketDataSource` interface. The default implementation is `MockDataSource`. Live mode is an explicit alternate path through `createMarketDataSource`, `LiveMarketDataSource`, and `HttpMarketTransport`.
+
+The live market boundary validates OHLC shape and chronological ordering, supports timeout and controlled retry behavior, and blocks stale/future market data when live freshness enforcement is enabled. `LiveMarketSnapshot` exposes candle data together with a freshness result, while `LiveMarketPoller` provides non-overlapping polling for a future live gateway.
+
+The live broker boundary is deliberately fail-closed. `LiveBroker` has no configured transport by default. `HttpBrokerTransport` is a gateway client using browser credentials rather than embedding broker secrets in the frontend. `executeWithPolicy` requires explicit user approval, a matching confirmation id, a live broker capable of placement, and fresh-price execution guards before submitting an order.
 
 The analysis stack is deterministic and simulator-safe: market structure, support/resistance, liquidity, setup detection, and the AI trading-agent layer operate on supplied candle data. The AI agent can prepare and review simulated opportunities, but execution still requires explicit user approval.
 
-The backtest engine replays historical candle sequences without lookahead: signals receive only prior candles, entries occur at the next candle open, and ambiguous same-candle stop/target events resolve conservatively to the stop. Quote-to-account conversion must be explicit when required.
-
 ## Phase 3 acceptance
 
-Phase 3 — Backtesting & Strategy Development — is complete on the simulator boundary. It includes:
+Phase 3 — Backtesting & Strategy Development — is complete on the simulator boundary. It includes deterministic backtesting, no-lookahead replay, conservative SL/TP handling, strategy analytics, visual replay, performance statistics, a trading journal, responsive controls, persistent safety disclaimers, and automated CI verification.
 
-- deterministic backtest engine with strict OHLC/chronology validation
-- no-lookahead signal evaluation and next-candle entries
-- conservative intrabar SL/TP handling
-- explicit currency conversion validation
-- break-even trade classification
-- strategy replay analytics, trade log, and equity curve
-- visual candle-by-candle replay controls
-- simulator trading performance statistics
-- completed-trade journal with local notes and deterministic review text
-- responsive/mobile-friendly replay and analysis controls
-- persistent simulator and financial-safety disclaimers
+## Phase 4 acceptance
+
+Phase 4 — Advanced AI Trading Agent — is implemented on the simulator boundary. It includes multi-timeframe reasoning, setup preparation and explicit approval, visible chart annotations, position monitoring, deterministic learning from completed simulator trades, recurring-mistake detection, internal multi-source evidence aggregation, and pluggable future research/data boundaries. It does not fabricate live news or silently access live networks.
+
+## Phase 5 acceptance
+
+Phase 5 — Live Market & Broker Integration Infrastructure — is implemented as a provider-neutral, fail-closed foundation. It includes:
+
+- validated HTTP market transport with timeout and transient-failure retry policy
+- client-error fail-fast behavior
+- strict live candle validation
+- freshness and clock health gates
+- freshness-aware live snapshots
+- non-overlapping live market polling
+- explicit simulator/live data-source selection
+- fail-closed live broker adapter
+- secure HTTP broker-gateway transport with no frontend broker secrets
+- explicit user-approval and confirmation gates
+- mandatory fresh-price execution guards
 - automated CI verification of build, lint, tests, and high-severity dependency audit
+
+### External prerequisites before real-money use
+
+A real market-data provider and real broker gateway still have to be deployed and configured outside this frontend repository. That includes provider-specific credentials, server-side authentication/session handling, account permissions, instrument mappings, production observability, and independent paper/live end-to-end testing. Credentials must never be committed to this repository or exposed through `VITE_*` client variables.
+
+Until those external prerequisites are supplied and tested, SHAFX remains a simulator by default and must not be treated as a live-money trading system.
 
 ## Roadmap
 
-- v0.1: terminal foundation, mock data, analysis UI, risk calculator, simulator, responsive UX, tests — **complete**.
+- v0.1: terminal foundation — **complete**.
 - v0.2: backtesting, replay, journal, performance statistics — **complete**.
-- v0.3+: advanced AI/trading-agent capabilities and evaluation of real market/broker integrations only after the simulator is validated.
+- v0.3: advanced AI/trading-agent capabilities — **complete on simulator boundary**.
+- v0.4: live market/broker integration infrastructure — **complete as a provider-neutral safety boundary; external provider/broker deployment remains required**.
+- v1.0: production deployment, compliance, business/payment/licensing decisions, and real-money certification — **not started**.
