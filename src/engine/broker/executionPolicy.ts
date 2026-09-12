@@ -1,5 +1,6 @@
 import type { SimulatedOrderDraft, TradeOrder } from '../../types'
 import type { BrokerAdapter } from './types'
+import { validateExecutionGuards, type ExecutionGuardInput } from './executionGuards'
 
 export type BrokerExecutionPermission = 'DISABLED' | 'USER_APPROVAL_REQUIRED'
 
@@ -8,6 +9,7 @@ export interface ExecutionRequest {
   permission: BrokerExecutionPermission
   approvedByUser: boolean
   confirmationId?: string
+  executionGuards?: ExecutionGuardInput
 }
 
 export interface ExecutionResult {
@@ -30,6 +32,17 @@ export async function executeWithPolicy(
 
   if (!request.confirmationId?.trim()) {
     return { submitted: false, reason: 'A confirmation id is required for an approved execution.' }
+  }
+
+  if (request.executionGuards) {
+    const guardResult = validateExecutionGuards({
+      ...request.executionGuards,
+      order: request.order,
+      confirmationId: request.confirmationId,
+    })
+    if (!guardResult.isValid) {
+      return { submitted: false, reason: guardResult.reason ?? 'Execution guard rejected the order.' }
+    }
   }
 
   const capabilities = broker.getCapabilities()
