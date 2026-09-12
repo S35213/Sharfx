@@ -1,5 +1,6 @@
 import type { AITradingContext } from '../ai/types'
 import type { AgentLearningSummary } from './learning'
+import type { MarketBias } from '../marketStructure/types'
 
 export interface ResearchEvidence {
   source: 'MARKET_STRUCTURE' | 'SUPPORT_RESISTANCE' | 'LIQUIDITY' | 'SETUP' | 'MULTI_TIMEFRAME' | 'SIMULATOR_HISTORY'
@@ -17,7 +18,7 @@ export interface AgentResearchReport {
 export interface ResearchInput {
   context: AITradingContext
   learning?: AgentLearningSummary
-  multiTimeframe?: { dominantBias: 'Bullish' | 'Bearish' | null; confidence: number; aligned: boolean }
+  multiTimeframe?: { dominantBias: MarketBias | null; confidence: number; aligned: boolean }
 }
 
 export const buildAgentResearch = (input: ResearchInput): AgentResearchReport => {
@@ -28,10 +29,10 @@ export const buildAgentResearch = (input: ResearchInput): AgentResearchReport =>
   if (structureBias !== 'Unclear') evidence.push({ source: 'MARKET_STRUCTURE', finding: `${structureBias} structure is currently detected.`, weight: 3 })
   if (context.supportResistance.nearestSupport !== null) evidence.push({ source: 'SUPPORT_RESISTANCE', finding: `Nearest support is ${context.supportResistance.nearestSupport}.`, weight: 2 })
   if (context.supportResistance.nearestResistance !== null) evidence.push({ source: 'SUPPORT_RESISTANCE', finding: `Nearest resistance is ${context.supportResistance.nearestResistance}.`, weight: 2 })
-  if (context.liquidity.nearestBuySide !== null) evidence.push({ source: 'LIQUIDITY', finding: `Buy-side liquidity is mapped near ${context.liquidity.nearestBuySide}.`, weight: 2 })
-  if (context.liquidity.nearestSellSide !== null) evidence.push({ source: 'LIQUIDITY', finding: `Sell-side liquidity is mapped near ${context.liquidity.nearestSellSide}.`, weight: 2 })
+  if (context.liquidity.nearestBuySide !== null) evidence.push({ source: 'LIQUIDITY', finding: `Buy-side liquidity is mapped near ${context.liquidity.nearestBuySide.referencePrice}.`, weight: 2 })
+  if (context.liquidity.nearestSellSide !== null) evidence.push({ source: 'LIQUIDITY', finding: `Sell-side liquidity is mapped near ${context.liquidity.nearestSellSide.referencePrice}.`, weight: 2 })
   if (context.setup.preferredSetup) evidence.push({ source: 'SETUP', finding: `${context.setup.preferredSetup.direction} setup with ${context.setup.preferredSetup.quality} quality and ${context.setup.preferredSetup.confidence} confluence.`, weight: 4 })
-  if (multiTimeframe?.dominantBias) {
+  if (multiTimeframe?.dominantBias === 'Bullish' || multiTimeframe?.dominantBias === 'Bearish') {
     evidence.push({ source: 'MULTI_TIMEFRAME', finding: `Higher-timeframe evidence is ${multiTimeframe.dominantBias} at ${multiTimeframe.confidence}% confidence.`, weight: 4 })
     if (structureBias !== 'Unclear' && structureBias !== multiTimeframe.dominantBias && multiTimeframe.confidence >= 60) contradictions.push(`Local ${structureBias} structure conflicts with stronger ${multiTimeframe.dominantBias} higher-timeframe evidence.`)
   }
