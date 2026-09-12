@@ -45,7 +45,7 @@ export function TradingAgentPanel({ symbol, timeframe, candles, hasOpenPosition,
   }, [candles, symbol, timeframe])
 
   const multiTimeframe = useMemo(() => analyzeMultiTimeframeBias({ ...higherTimeframes, [timeframe]: candles }), [candles, higherTimeframes, timeframe])
-  const decision = useMemo(() => decideAgentAction({ tradingContext, preferredSetup: tradingContext.setup.preferredSetup, hasOpenPosition, permission }), [hasOpenPosition, permission, tradingContext])
+  const decision = useMemo(() => decideAgentAction({ tradingContext, preferredSetup: tradingContext.setup.preferredSetup, hasOpenPosition, permission, multiTimeframe }), [hasOpenPosition, permission, tradingContext, multiTimeframe])
 
   return <div className="space-y-3 rounded-lg border border-shafx-primary/30 bg-shafx-surface p-4 text-sm">
     <div className="flex items-start justify-between gap-2"><div><h3 className="flex items-center gap-2 font-semibold"><Brain className="h-4 w-4 text-shafx-primary" /> Agent control</h3><p className="mt-1 text-[11px] text-shafx-textMuted">The agent reasons across the selected chart and higher timeframes while keeping execution behind your approval.</p></div><Shield className="h-4 w-4 text-shafx-primary" /></div>

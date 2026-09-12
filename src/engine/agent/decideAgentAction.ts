@@ -7,7 +7,7 @@ const permissionText = (permission: AgentPermission): string => {
 }
 
 export const decideAgentAction = (context: AgentContext): AgentDecision => {
-  const { tradingContext, preferredSetup, hasOpenPosition, permission } = context
+  const { tradingContext, preferredSetup, hasOpenPosition, permission, multiTimeframe } = context
   const symbol = tradingContext.symbol
   const timeframe = tradingContext.timeframe
   if (hasOpenPosition) {
@@ -16,6 +16,23 @@ export const decideAgentAction = (context: AgentContext): AgentDecision => {
   if (!preferredSetup || preferredSetup.status !== 'candidate') {
     return { state: 'NO_TRADE', action: 'WAIT', permission, symbol, timeframe, setup: null, rationale: 'No valid setup currently satisfies the agent rules. Waiting is the active decision.', approvalRequired: false, safety: permissionText(permission) }
   }
+
+  const setupBias = preferredSetup.direction === 'BUY' ? 'Bullish' : 'Bearish'
+  const higherTimeframeConflict = multiTimeframe?.dominantBias !== null && multiTimeframe?.dominantBias !== undefined && multiTimeframe.dominantBias !== setupBias && multiTimeframe.confidence >= 60
+  if (higherTimeframeConflict) {
+    return {
+      state: 'NO_TRADE',
+      action: 'WAIT',
+      permission,
+      symbol,
+      timeframe,
+      setup: preferredSetup,
+      rationale: `The local ${preferredSetup.direction} setup conflicts with the stronger higher-timeframe ${multiTimeframe.dominantBias} evidence (${multiTimeframe.confidence}%). The agent will wait rather than force an entry.`,
+      approvalRequired: false,
+      safety: permissionText(permission),
+    }
+  }
+
   if (permission === 'ANALYZE_ONLY') {
     return { state: 'OPPORTUNITY', action: 'WAIT', permission, symbol, timeframe, setup: preferredSetup, rationale: `A ${preferredSetup.direction} opportunity is visible, but the current permission only allows analysis.`, approvalRequired: false, safety: permissionText(permission) }
   }
