@@ -28,10 +28,10 @@ export const monitorPosition = (order: TradeOrder, currentPrice: number, setup?:
   const targetDistance = distanceToTarget ?? Number.POSITIVE_INFINITY
   const nearStop = Number.isFinite(stopDistance) && stopDistance <= entryDistance * 0.35
   const nearTarget = Number.isFinite(targetDistance) && targetDistance <= entryDistance * 0.35
+  const setupInvalidated = setup?.status === 'invalid'
 
-  const setupInvalidated = setup?.status === 'invalid' || (setup?.invalidation !== null && setup?.invalidation !== undefined && ((order.type === 'BUY' && currentPrice <= setup.invalidation) || (order.type === 'SELL' && currentPrice >= setup.invalidation)))
   if (setupInvalidated) {
-    return { state: 'INVALIDATED', distanceToStop, distanceToTarget, currentProfit: order.profit ?? null, message: 'The original setup invalidation condition has been reached. Review the position rather than assuming the thesis still holds.', shouldAlert: true }
+    return { state: 'INVALIDATED', distanceToStop, distanceToTarget, currentProfit: order.profit ?? null, message: 'The original setup is marked invalid. Review the position rather than assuming the thesis still holds.', shouldAlert: true }
   }
 
   if (nearStop) {
