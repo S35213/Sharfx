@@ -1,4 +1,5 @@
 import type { AccountData, AIAnalysis, MarketAnalysis, MarketDataSource, MarketPair, OHLCV, SymbolSpec, Timeframe, TradeOrder } from '../../types'
+import { evaluateMarketDataHealth } from './marketDataHealth'
 
 export interface LiveMarketTransport {
   getWatchlist(): Promise<MarketPair[]>
@@ -10,6 +11,12 @@ export interface LiveMarketTransport {
   getOpenPositions(): Promise<TradeOrder[]>
   getPendingOrders(): Promise<TradeOrder[]>
   getTradeHistory(): Promise<TradeOrder[]>
+}
+
+export interface LiveMarketDataSourceOptions {
+  enforceFreshness?: boolean
+  nowSeconds?: () => number
+  staleAfterIntervals?: number
 }
 
 const assertNonEmpty = (value: unknown, name: string): void => {
@@ -28,7 +35,15 @@ const validateCandles = (candles: OHLCV[]): OHLCV[] => {
 }
 
 export class LiveMarketDataSource implements MarketDataSource {
-  constructor(private readonly transport: LiveMarketTransport) {}
+  private readonly enforceFreshness: boolean
+  private readonly nowSeconds: () => number
+  private readonly staleAfterIntervals: number
+
+  constructor(private readonly transport: LiveMarketTransport, options: LiveMarketDataSourceOptions = {}) {
+    this.enforceFreshness = options.enforceFreshness ?? false
+    this.nowSeconds = options.nowSeconds ?? (() => Date.now() / 1000)
+    this.staleAfterIntervals = options.staleAfterIntervals ?? 3
+  }
 
   async getWatchlist(): Promise<MarketPair[]> {
     const result = await this.transport.getWatchlist()
@@ -40,7 +55,12 @@ export class LiveMarketDataSource implements MarketDataSource {
   async getCandles(symbol: string, timeframe: Timeframe, limit = 300): Promise<OHLCV[]> {
     assertNonEmpty(symbol, 'Symbol')
     if (!Number.isInteger(limit) || limit < 2) throw new Error('Candle limit must be at least 2.')
-    return validateCandles(await this.transport.getCandles(symbol, timeframe, limit))
+    const candles = validateCandles(await this.transport.getCandles(symbol, timeframe, limit))
+    if (this.enforceFreshness) {
+      const health = evaluateMarketDataHealth(candles, timeframe, this.nowSeconds(), this.staleAfterIntervals)
+      if (health.status !== 'FRESH') throw new Error(`Live market data is ${health.status.toLowerCase()}: ${health.message}`)
+    }
+    return candles
   }
 
   async getAccountData(): Promise<AccountData> { return this.transport.getAccountData() }
