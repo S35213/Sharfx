@@ -57,25 +57,28 @@ export class HttpMarketTransport implements LiveMarketTransport {
     for (let attempt = 0; attempt <= this.maxRetries; attempt += 1) {
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), this.timeoutMs)
+      let response: Response
       try {
-        const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+        response = await this.fetchImpl(`${this.baseUrl}${path}`, {
           method: 'GET',
           headers: { Accept: 'application/json' },
           signal: controller.signal,
         })
-        if (!response.ok) {
-          const error = new Error(`Market API request failed (${response.status}).`)
-          if (!isRetryableStatus(response.status)) throw error
-          throw Object.assign(error, { retryable: true })
-        }
-        return await response.json() as T
       } catch (error) {
         lastError = error
-        const retryable = error instanceof Error && (error.name === 'AbortError' || 'retryable' in error)
-        if (!retryable || attempt === this.maxRetries) break
+        if (attempt === this.maxRetries) break
+        continue
       } finally {
         clearTimeout(timer)
       }
+
+      if (!response.ok) {
+        lastError = new Error(`Market API request failed (${response.status}).`)
+        if (!isRetryableStatus(response.status) || attempt === this.maxRetries) break
+        continue
+      }
+
+      return await response.json() as T
     }
     if (lastError instanceof Error && lastError.name === 'AbortError') throw new Error(`Market API request timed out after ${this.timeoutMs}ms.`)
     throw lastError instanceof Error ? lastError : new Error('Market API request failed.')
