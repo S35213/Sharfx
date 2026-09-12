@@ -27,12 +27,19 @@ const weights: Record<Timeframe, number> = {
   D1: 5,
 }
 
+const chooseLookback = (candles: OHLCV[]): number => {
+  if (candles.length >= 9) return 2
+  if (candles.length >= 5) return 1
+  return 0
+}
+
 export const analyzeMultiTimeframeBias = (frames: Partial<Record<Timeframe, OHLCV[]>>): MultiTimeframeResult => {
   const order: Timeframe[] = ['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1']
   const biases = order
     .filter((timeframe) => (frames[timeframe]?.length ?? 0) > 0)
     .map((timeframe) => {
-      const result = analyzeMarketStructure(frames[timeframe] ?? [], 2)
+      const candles = frames[timeframe] ?? []
+      const result = analyzeMarketStructure(candles, chooseLookback(candles))
       return { timeframe, bias: result.bias, structure: result.status, weight: weights[timeframe] }
     })
 
