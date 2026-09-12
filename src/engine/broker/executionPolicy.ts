@@ -34,20 +34,22 @@ export async function executeWithPolicy(
     return { submitted: false, reason: 'A confirmation id is required for an approved execution.' }
   }
 
-  if (request.executionGuards) {
-    const guardResult = validateExecutionGuards({
-      ...request.executionGuards,
-      order: request.order,
-      confirmationId: request.confirmationId,
-    })
-    if (!guardResult.isValid) {
-      return { submitted: false, reason: guardResult.reason ?? 'Execution guard rejected the order.' }
-    }
-  }
-
   const capabilities = broker.getCapabilities()
   if (capabilities.environment !== 'LIVE' || !capabilities.canPlaceOrders) {
     return { submitted: false, reason: 'The selected broker cannot place live orders.' }
+  }
+
+  if (!request.executionGuards) {
+    return { submitted: false, reason: 'Live execution requires fresh-price and confirmation safety guards.' }
+  }
+
+  const guardResult = validateExecutionGuards({
+    ...request.executionGuards,
+    order: request.order,
+    confirmationId: request.confirmationId,
+  })
+  if (!guardResult.isValid) {
+    return { submitted: false, reason: guardResult.reason ?? 'Execution guard rejected the order.' }
   }
 
   const order = await broker.placeOrder(request.order)
