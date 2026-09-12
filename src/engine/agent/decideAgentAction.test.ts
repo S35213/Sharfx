@@ -9,22 +9,11 @@ const makeContext = (permission: AgentContext['permission'], hasOpenPosition = f
 
 describe('decideAgentAction', () => {
   it('waits when no setup exists', () => expect(decideAgentAction({ ...makeContext('USER_APPROVAL_REQUIRED'), preferredSetup: null }).action).toBe('WAIT'))
-  it('requires approval for executable permission', () => {
-    const result = decideAgentAction(makeContext('USER_APPROVAL_REQUIRED'))
-    expect(result.state).toBe('AWAITING_APPROVAL')
-    expect(result.approvalRequired).toBe(true)
-    expect(result.action).toBe('REQUEST_APPROVAL')
-  })
+  it('requires approval for executable permission', () => { const result = decideAgentAction(makeContext('USER_APPROVAL_REQUIRED')); expect(result.state).toBe('AWAITING_APPROVAL'); expect(result.approvalRequired).toBe(true); expect(result.action).toBe('REQUEST_APPROVAL') })
   it('never executes from the decision engine', () => expect(decideAgentAction(makeContext('PREPARE_ONLY')).action).toBe('PREPARE_TRADE'))
   it('monitors an existing position', () => expect(decideAgentAction(makeContext('USER_APPROVAL_REQUIRED', true)).action).toBe('MONITOR_POSITION'))
-  it('blocks a local buy when strong higher-timeframe evidence is bearish', () => {
-    const result = decideAgentAction({ ...makeContext('USER_APPROVAL_REQUIRED'), multiTimeframe: { dominantBias: 'Bearish', confidence: 75, aligned: false } })
-    expect(result.state).toBe('NO_TRADE')
-    expect(result.action).toBe('WAIT')
-    expect(result.approvalRequired).toBe(false)
-  })
-  it('does not block when higher-timeframe evidence is weak', () => {
-    const result = decideAgentAction({ ...makeContext('USER_APPROVAL_REQUIRED'), multiTimeframe: { dominantBias: 'Bearish', confidence: 50, aligned: false } })
-    expect(result.action).toBe('REQUEST_APPROVAL')
-  })
+  it('blocks a local buy when strong higher-timeframe evidence is bearish', () => { const result = decideAgentAction({ ...makeContext('USER_APPROVAL_REQUIRED'), multiTimeframe: { dominantBias: 'Bearish', confidence: 75, aligned: false } }); expect(result.state).toBe('NO_TRADE'); expect(result.action).toBe('WAIT'); expect(result.approvalRequired).toBe(false) })
+  it('does not block when higher-timeframe evidence is weak', () => { const result = decideAgentAction({ ...makeContext('USER_APPROVAL_REQUIRED'), multiTimeframe: { dominantBias: 'Bearish', confidence: 50, aligned: false } }); expect(result.action).toBe('REQUEST_APPROVAL') })
+  it('uses learned repeated underperformance as a trade filter', () => { const result = decideAgentAction({ ...makeContext('USER_APPROVAL_REQUIRED'), learning: { lessons: [], cautionKeys: ['EURUSD:BUY'], confidenceAdjustment: -10, summary: 'caution' } }); expect(result.action).toBe('WAIT'); expect(result.state).toBe('NO_TRADE') })
+  it('waits when research evidence is contradictory and weakly agreed', () => { const result = decideAgentAction({ ...makeContext('USER_APPROVAL_REQUIRED'), research: { evidence: [], agreement: 40, contradictions: ['conflict'], conclusion: 'mixed' } }); expect(result.action).toBe('WAIT'); expect(result.state).toBe('NO_TRADE') })
 })
