@@ -10,11 +10,20 @@ describe('HttpMarketTransport', () => {
     expect(fetchImpl).toHaveBeenCalledWith('https://example.test/api/candles?symbol=EUR%2FUSD&timeframe=M5&limit=100', expect.objectContaining({ method: 'GET', headers: { Accept: 'application/json' }, signal: expect.any(AbortSignal) }))
   })
 
-  it('rejects failed API responses after configured retries', async () => {
-    const fetchImpl = vi.fn().mockResolvedValue({ ok: false, status: 503 })
+  it('retries transient 5xx API responses', async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 503 })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ ok: true }) })
     const transport = new HttpMarketTransport({ baseUrl: 'https://example.test', fetchImpl, maxRetries: 2 })
-    await expect(transport.getWatchlist()).rejects.toThrow('Market API request failed (503).')
-    expect(fetchImpl).toHaveBeenCalledTimes(3)
+    await expect(transport.getWatchlist()).resolves.toEqual({ ok: true })
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not retry client errors', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: false, status: 400 })
+    const transport = new HttpMarketTransport({ baseUrl: 'https://example.test', fetchImpl, maxRetries: 2 })
+    await expect(transport.getWatchlist()).rejects.toThrow('Market API request failed (400).')
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
   })
 
   it('rejects an invalid base URL', () => {
