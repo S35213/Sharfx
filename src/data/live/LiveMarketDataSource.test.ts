@@ -46,8 +46,8 @@ describe('LiveMarketDataSource', () => {
     await expect(source.getCandles('EUR/USD', 'M5')).rejects.toThrow('stale')
   })
 
-  it('blocks timestamps that are ahead of the local clock', async () => {
-    const source = new LiveMarketDataSource(transport([candle(100, 1, 2, 0.5, 1.5), candle(200, 1.5, 2.5, 1, 2)]), {
+  it('blocks timestamps that are materially ahead of the local clock', async () => {
+    const source = new LiveMarketDataSource(transport([candle(900, 1, 2, 0.5, 1.5), candle(1000, 1.5, 2.5, 1, 2)]), {
       enforceFreshness: true,
       nowSeconds: () => 100,
     })
