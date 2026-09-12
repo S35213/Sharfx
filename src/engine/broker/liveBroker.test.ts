@@ -5,10 +5,10 @@ import { LiveBroker } from './liveBroker'
 const draft: SimulatedOrderDraft = {
   symbol: 'EURUSD', type: 'BUY', lotSize: 0.01, entryPrice: 1.1, stopLoss: 1.09,
   takeProfit: 1.12, riskPercent: 1, riskAmount: 10, rewardAmount: 20,
-  riskRewardRatio: 2, status: 'open',
+  riskRewardRatio: 2,
 }
 
-const trade: TradeOrder = { ...draft, id: 'live-1', openTime: '2026-01-01T00:00:00.000Z' }
+const trade: TradeOrder = { ...draft, id: 'live-1', status: 'open', openTime: '2026-01-01T00:00:00.000Z' }
 
 describe('LiveBroker', () => {
   it('fails closed when no live transport is configured', async () => {
