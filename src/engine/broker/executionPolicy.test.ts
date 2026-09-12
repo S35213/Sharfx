@@ -14,13 +14,13 @@ const order: SimulatedOrderDraft = {
   riskAmount: 5,
   rewardAmount: 10,
   riskRewardRatio: 2,
-  status: 'pending',
 }
 
 const trade: TradeOrder = {
   id: 'live-1',
   openTime: '2026-09-12T00:00:00.000Z',
   ...order,
+  status: 'open',
 }
 
 function broker(overrides: Partial<BrokerAdapter> = {}): BrokerAdapter {
