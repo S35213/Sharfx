@@ -16,24 +16,8 @@ export function TradingAgentPanel({ symbol, timeframe, candles, currentPrice, ac
   const [permission, setPermission] = useState<AgentPermission>('USER_APPROVAL_REQUIRED')
   const [higherTimeframes, setHigherTimeframes] = useState<Partial<Record<Timeframe, OHLCV[]>>>({})
   const [contextStatus, setContextStatus] = useState<'loading' | 'ready' | 'unavailable'>('loading')
-  useEffect(() => {
-    let cancelled = false
-    const loadHigherTimeframes = async (): Promise<void> => {
-      try {
-        const requested: Timeframe[] = ['H1', 'H4', 'D1']
-        const entries = await Promise.all(requested.map(async (frame) => [frame, await marketDataSource.getCandles(symbol, frame)] as const))
-        if (cancelled) return
-        setHigherTimeframes(Object.fromEntries(entries)); setContextStatus('ready')
-      } catch { if (!cancelled) setContextStatus('unavailable') }
-    }
-    void loadHigherTimeframes(); return () => { cancelled = true }
-  }, [symbol])
-  const tradingContext = useMemo(() => {
-    const swings = findSwingPoints(candles, 2); const structure = analyzeMarketStructure(candles, 2); const tolerance = symbol.includes('JPY') ? 0.1 : 0.001
-    const supportResistance = analyzeSupportResistance(candles, tolerance, swings); const liquidity = analyzeLiquidity(candles, swings, tolerance)
-    const setup = analyzeSetup({ currentPrice: candles[candles.length - 1]?.close ?? Number.NaN, structure, supportResistance, liquidity })
-    return buildTradingContext(symbol, timeframe, candles, structure, supportResistance, liquidity, setup)
-  }, [candles, symbol, timeframe])
+  useEffect(() => { let cancelled = false; const load = async (): Promise<void> => { try { const requested: Timeframe[] = ['H1', 'H4', 'D1']; const entries = await Promise.all(requested.map(async (frame) => [frame, await marketDataSource.getCandles(symbol, frame)] as const)); if (cancelled) return; setHigherTimeframes(Object.fromEntries(entries)); setContextStatus('ready') } catch { if (!cancelled) setContextStatus('unavailable') } }; void load(); return () => { cancelled = true } }, [symbol])
+  const tradingContext = useMemo(() => { const swings = findSwingPoints(candles, 2); const structure = analyzeMarketStructure(candles, 2); const tolerance = symbol.includes('JPY') ? 0.1 : 0.001; const supportResistance = analyzeSupportResistance(candles, tolerance, swings); const liquidity = analyzeLiquidity(candles, swings, tolerance); const setup = analyzeSetup({ currentPrice: candles[candles.length - 1]?.close ?? Number.NaN, structure, supportResistance, liquidity }); return buildTradingContext(symbol, timeframe, candles, structure, supportResistance, liquidity, setup) }, [candles, symbol, timeframe])
   const multiTimeframe = useMemo(() => analyzeMultiTimeframeBias({ ...higherTimeframes, [timeframe]: candles }), [candles, higherTimeframes, timeframe])
   const learning = useMemo(() => learnFromTrades(tradeHistory.filter((trade) => trade.status === 'closed').map((trade) => ({ symbol: trade.symbol, direction: trade.type, profit: trade.profit, riskRewardRatio: trade.riskRewardRatio }))), [tradeHistory])
   const research = useMemo(() => buildAgentResearch({ context: tradingContext, learning, multiTimeframe }), [learning, multiTimeframe, tradingContext])
