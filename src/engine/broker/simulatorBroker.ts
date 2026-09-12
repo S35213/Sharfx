@@ -13,10 +13,12 @@ export class SimulatorBroker implements BrokerAdapter {
   }
 
   async placeOrder(order: SimulatedOrderDraft): Promise<TradeOrder> {
+    const openTime = new Date().toISOString()
     return {
       ...order,
-      id: `sim-${order.symbol}-${order.openTime}`,
-      status: order.type === 'MARKET' ? 'open' : 'pending',
+      id: `sim-${order.symbol}-${openTime}`,
+      status: 'open',
+      openTime,
     }
   }
 
