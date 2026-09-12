@@ -23,7 +23,8 @@ const cleanBaseUrl = (value: string): string => value.replace(/\/$/, '')
 const assertBaseUrl = (value: string): string => {
   const trimmed = value.trim()
   if (!trimmed) throw new Error('A market API base URL is required.')
-  const url = new URL(trimmed, window.location.origin)
+  const origin = typeof window === 'undefined' ? 'http://localhost' : window.location.origin
+  const url = new URL(trimmed, origin)
   if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Market API base URL must use HTTP or HTTPS.')
   return cleanBaseUrl(url.toString())
 }
@@ -47,11 +48,9 @@ export class HttpMarketTransport implements LiveMarketTransport {
   }
 
   async getWatchlist(): Promise<MarketPair[]> { return this.request('/watchlist') }
-
   async getCandles(symbol: string, timeframe: Timeframe, limit = 300): Promise<OHLCV[]> {
     return this.request(`/candles?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}&limit=${limit}`)
   }
-
   async getAccountData(): Promise<AccountData> { return this.request('/account') }
   async getSymbolSpec(symbol: string): Promise<SymbolSpec> { return this.request(`/symbols/${encodeURIComponent(symbol)}`) }
   async getMarketAnalysis(symbol: string): Promise<MarketAnalysis> { return this.request(`/analysis/${encodeURIComponent(symbol)}`) }
