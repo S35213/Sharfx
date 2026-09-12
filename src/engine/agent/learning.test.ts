@@ -25,6 +25,7 @@ describe('learnFromTrades', () => {
       { symbol: 'EURUSD', direction: 'SELL', profit: 3 },
     ])
     expect(result.lessons[0]?.winRate).toBe(100)
-    expect(result.summary).toContain('evidence')
+    expect(result.lessons[0]?.lesson).toContain('evidence')
+    expect(result.confidenceAdjustment).toBe(5)
   })
 })
