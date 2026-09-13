@@ -15,3 +15,10 @@ html, body, #root { min-height: 100%; margin: 0; }
 body { min-width: 320px; background: #0B0E11; }
 button, input { font: inherit; }
 .tabular { font-variant-numeric: tabular-nums; }
+
+@media (max-width: 1023px) {
+  /* On phones the chart is the primary workspace; supporting panels follow it. */
+  main > aside:first-child { order: 2; }
+  main > section { order: 1; }
+  .shafx-chart-shell { min-height: 58vh !important; }
+}
