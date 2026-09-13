@@ -19,17 +19,38 @@ const rest = (path, options = {}) => fetch(`${process.env.SUPABASE_URL}/rest/v1$
     ...(options.headers || {}),
   },
 })
-const setSessionCookie = (res, token) => res.setHeader('Set-Cookie', `shafx_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=3600`)
-const clearSessionCookie = (res) => res.setHeader('Set-Cookie', 'shafx_session=; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=0')
+
+const sessionCookie = 'shafx_session'
+const refreshCookie = 'shafx_refresh'
+const setSessionCookies = (res, session) => res.setHeader('Set-Cookie', [
+  `${sessionCookie}=${encodeURIComponent(session.access_token)}; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=3600`,
+  `${refreshCookie}=${encodeURIComponent(session.refresh_token)}; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=2592000`,
+])
+const clearSessionCookie = (res) => res.setHeader('Set-Cookie', [
+  `${sessionCookie}=; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=0`,
+  `${refreshCookie}=; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=0`,
+])
 const cookie = (req, name) => (req.headers.cookie || '').split(';').map((part) => part.trim()).find((part) => part.startsWith(`${name}=`))?.slice(name.length + 1) || null
 
-async function currentUser(req) {
-  const token = cookie(req, 'shafx_session')
-  if (!token) return { token: null, user: null }
-  const decoded = decodeURIComponent(token)
-  const response = await supabase('/user', { headers: { Authorization: `Bearer ${decoded}` } })
-  if (!response.ok) return { token: null, user: null }
-  return { token: decoded, user: await response.json() }
+async function refreshSession(req, res) {
+  const refresh = cookie(req, refreshCookie)
+  if (!refresh) return null
+  const response = await supabase('/token?grant_type=refresh_token', { method: 'POST', body: JSON.stringify({ refresh_token: decodeURIComponent(refresh) }) })
+  if (!response.ok) return null
+  const session = await response.json()
+  if (!session.access_token || !session.refresh_token || !session.user) return null
+  setSessionCookies(res, session)
+  return { token: session.access_token, user: session.user }
+}
+
+async function currentUser(req, res) {
+  const token = cookie(req, sessionCookie)
+  if (token) {
+    const decoded = decodeURIComponent(token)
+    const response = await supabase('/user', { headers: { Authorization: `Bearer ${decoded}` } })
+    if (response.ok) return { token: decoded, user: await response.json() }
+  }
+  return (await refreshSession(req, res)) || { token: null, user: null }
 }
 
 async function profileFor(userId) {
@@ -62,14 +83,14 @@ export default async function handler(req, res) {
 
   try {
     if (action === 'logout') {
-      const { user } = await currentUser(req)
+      const { user } = await currentUser(req, res)
       if (user) await securityEvent({ user_id: user.id, event_type: 'logout', decision: 'allow', risk_score: 0, fingerprint: securityFingerprint(req), metadata: {} })
       clearSessionCookie(res)
       return json(res, 200, { ok: true })
     }
 
     if (action === 'me') {
-      const { user } = await currentUser(req)
+      const { user } = await currentUser(req, res)
       if (!user) return json(res, 401, { ok: false, error: 'Not signed in' })
       const profile = await profileFor(user.id)
       if (!profile) return json(res, 403, { ok: false, error: 'SHAFX account profile is missing.' })
@@ -106,7 +127,7 @@ export default async function handler(req, res) {
       if (!data.session) return json(res, 202, { ok: true, needsEmailConfirmation: true, message: 'Account created. Confirm your email, then sign in. No owner approval is required.' })
       const profile = await profileFor(data.user.id)
       if (!profile || profile.status !== 'active') return json(res, 403, { ok: false, error: 'This SHAFX account is not active.' })
-      setSessionCookie(res, data.session.access_token)
+      setSessionCookies(res, data.session)
       return json(res, 201, { ok: true, user: { id: data.user.id, email: data.user.email, displayName: profile.display_name, status: profile.status, simulatorAccountId: profile.simulator_account_id, createdAt: profile.created_at } })
     }
 
@@ -136,7 +157,7 @@ export default async function handler(req, res) {
       clearLoginFailures(req)
       await updateSecurityProfile(data.user.id, { last_login_at: new Date().toISOString(), failed_login_count: 0 })
       await securityEvent({ user_id: data.user.id, event_type: 'login_success', decision: 'allow', risk_score: profile.risk_score || 0, fingerprint: securityFingerprint(req), metadata: {} })
-      setSessionCookie(res, data.access_token)
+      setSessionCookies(res, data)
       return json(res, 200, { ok: true, user: { id: data.user.id, email: data.user.email, displayName: profile.display_name, status: profile.status, simulatorAccountId: profile.simulator_account_id, createdAt: profile.created_at } })
     }
 
