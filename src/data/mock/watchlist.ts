@@ -8,4 +8,5 @@ export const mockWatchlist: MarketPair[] = [
   { symbol: 'AUD/USD', price: 0.6512, change: 0.0008, changePercent: 0.12, status: 'open' },
   { symbol: 'USD/CAD', price: 1.3625, change: 0.0014, changePercent: 0.10, status: 'open' },
   { symbol: 'NZD/USD', price: 0.6085, change: -0.0006, changePercent: -0.10, status: 'open' },
+  { symbol: 'XAU/USD', price: 2650.00, change: 4.20, changePercent: 0.16, status: 'open' },
 ]
