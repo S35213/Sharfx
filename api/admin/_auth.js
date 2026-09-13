@@ -41,7 +41,7 @@ export function isValidSession(req) {
   const parts = value.split('.')
   if (parts.length !== 3) return false
   const [expiresAt, nonce, providedSignature] = parts
-  if (!/^\\d+$/.test(expiresAt) || Number(expiresAt) < Math.floor(Date.now() / 1000) || !nonce || !providedSignature) return false
+  if (!/^\d+$/.test(expiresAt) || Number(expiresAt) < Math.floor(Date.now() / 1000) || !nonce || !providedSignature) return false
   const expectedSignature = sign(`${expiresAt}.${nonce}`)
   const provided = Buffer.from(providedSignature)
   const expected = Buffer.from(expectedSignature)
