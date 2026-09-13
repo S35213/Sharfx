@@ -21,6 +21,12 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
+const syncSimulatorIdentity = (user: ShafxUser | null): void => {
+  if (typeof window === 'undefined') return
+  if (user?.simulatorAccountId) window.sessionStorage.setItem('shafx-simulator-account-id', user.simulatorAccountId)
+  else window.sessionStorage.removeItem('shafx-simulator-account-id')
+}
+
 async function request(action: string, options: RequestInit = {}) {
   const response = await fetch(`/api/auth?action=${encodeURIComponent(action)}`, { credentials: 'same-origin', headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }, ...options })
   const data = await response.json().catch(() => ({ ok: false, error: 'Unexpected SHAFX identity response.' }))
@@ -35,8 +41,8 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
 
   const refresh = useCallback(async () => {
     setLoading(true)
-    try { const data = await request('me'); setUser(data.user); setError(null) }
-    catch (err) { setUser(null); setError(err instanceof Error && err.message !== 'Not signed in' ? err.message : null) }
+    try { const data = await request('me'); setUser(data.user); syncSimulatorIdentity(data.user); setError(null) }
+    catch (err) { setUser(null); syncSimulatorIdentity(null); setError(err instanceof Error && err.message !== 'Not signed in' ? err.message : null) }
     finally { setLoading(false) }
   }, [])
 
@@ -44,16 +50,16 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
 
   const signUp = useCallback(async (input: { displayName: string; email: string; password: string; website?: string }) => {
     const data = await request('signup', { method: 'POST', body: JSON.stringify(input) })
-    if (data.user) setUser(data.user)
+    if (data.user) { setUser(data.user); syncSimulatorIdentity(data.user) }
     return { needsEmailConfirmation: data.needsEmailConfirmation, message: data.message }
   }, [])
 
   const signIn = useCallback(async (input: { email: string; password: string }) => {
     const data = await request('login', { method: 'POST', body: JSON.stringify(input) })
-    setUser(data.user); setError(null)
+    setUser(data.user); syncSimulatorIdentity(data.user); setError(null)
   }, [])
 
-  const signOut = useCallback(async () => { await request('logout'); setUser(null); setError(null) }, [])
+  const signOut = useCallback(async () => { await request('logout'); setUser(null); syncSimulatorIdentity(null); setError(null) }, [])
 
   const value = useMemo(() => ({ user, loading, error, signUp, signIn, signOut, refresh }), [user, loading, error, signUp, signIn, signOut, refresh])
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
