@@ -10,14 +10,10 @@ export const SYMBOL_SPECS: Record<string, SymbolSpec> = {
   'AUD/USD': { symbol: 'AUD/USD', baseCurrency: 'AUD', quoteCurrency: 'USD', pipSize: 0.0001, contractSize: 100000, minLotSize: 0.01, maxLotSize: 100, lotStep: 0.01, pricePrecision: 5 },
   'USD/CAD': { symbol: 'USD/CAD', baseCurrency: 'USD', quoteCurrency: 'CAD', pipSize: 0.0001, contractSize: 100000, minLotSize: 0.01, maxLotSize: 100, lotStep: 0.01, pricePrecision: 5 },
   'NZD/USD': { symbol: 'NZD/USD', baseCurrency: 'NZD', quoteCurrency: 'USD', pipSize: 0.0001, contractSize: 100000, minLotSize: 0.01, maxLotSize: 100, lotStep: 0.01, pricePrecision: 5 },
+  'XAU/USD': { symbol: 'XAU/USD', baseCurrency: 'XAU', quoteCurrency: 'USD', pipSize: 0.01, contractSize: 100, minLotSize: 0.01, maxLotSize: 100, lotStep: 0.01, pricePrecision: 2 },
 }
 
-const USD_PER_UNIT: Record<string, number> = {
-  USD: 1,
-  JPY: 1 / 149.85,
-  CHF: 0.8842,
-  CAD: 1 / 1.3625,
-}
+const USD_PER_UNIT: Record<string, number> = { USD: 1, JPY: 1 / 149.85, CHF: 0.8842, CAD: 1 / 1.3625 }
 
 export const getConversionRate = (fromCurrency: string, toCurrency: string): number | undefined => {
   if (fromCurrency === toCurrency) return 1
