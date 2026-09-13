@@ -41,7 +41,7 @@ export function TradingAgentPanel({ symbol, timeframe, candles, currentPrice, ac
   const [cycles, setCycles] = useState(0)
   const [lastResult, setLastResult] = useState<'WIN' | 'LOSS' | 'WAIT' | null>(null)
   const [status, setStatus] = useState('Ready to scan')
-  const [bias, setBias] = useState<'Bullish' | 'Bearish' | 'Neutral'>('Neutral')
+  const [bias, setBias] = useState<string>('Neutral')
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [botPositionId, setBotPositionId] = useState<string | null>(null)
   const processedHistory = useRef(new Set<string>())
