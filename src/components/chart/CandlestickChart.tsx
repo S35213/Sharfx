@@ -119,6 +119,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     if (!series) return
     const lines: IPriceLine[] = []
     const seen = new Set<string>()
+    const compact = (containerRef.current?.clientWidth ?? 1000) < 640
     for (const annotation of annotations) {
       if (!annotation.id || seen.has(annotation.id) || !Number.isFinite(annotation.price) || annotation.price <= 0) continue
       seen.add(annotation.id)
@@ -127,7 +128,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         color: annotation.color,
         lineWidth: annotation.lineWidth ?? 1,
         lineStyle: annotation.lineWidth && annotation.lineWidth > 1 ? 0 : 2,
-        axisLabelVisible: true,
+        axisLabelVisible: !compact || annotation.id === 'support' || annotation.id === 'resistance',
         title: annotation.label,
       }))
     }
