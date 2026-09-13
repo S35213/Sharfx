@@ -4,6 +4,7 @@ import type { MarketPair, Timeframe } from '../../types'
 import { TIMEFRAMES } from '../../types'
 import { formatPrice } from '../../lib/format'
 import { DerivAccountControl } from '../market/DerivAccountControl'
+import { setStoredTradingMode } from '../../app/tradingMode'
 
 type TerminalView = 'market' | 'agent' | 'history' | 'account'
 interface TopNavProps { symbol: string; price: number; pricePrecision: number; timeframe: Timeframe; onTimeframeChange: (tf: Timeframe) => void; pairs: MarketPair[]; onSelectPair: (symbol: string) => void; view?: TerminalView }
@@ -13,7 +14,7 @@ export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, t
   const [marketOpen, setMarketOpen] = useState(false); const [accountOpen, setAccountOpen] = useState(false); const [query, setQuery] = useState('')
   const instruments = useMemo(() => Array.from(new Set([...pairs.map((pair) => pair.symbol), 'XAU/USD'])), [pairs]); const filtered = instruments.filter((item) => item.toLowerCase().includes(query.trim().toLowerCase())); const compactMobile = view !== 'market'
   const currentMode = typeof window !== 'undefined' && sessionStorage.getItem('shafx-trading-mode') === 'broker' ? 'broker' : 'simulator'
-  const switchMode = (mode: 'simulator' | 'broker') => { sessionStorage.setItem('shafx-trading-mode', mode); window.location.assign(`/?account=${mode === 'broker' ? 'broker' : 'demo'}`) }
+  const switchMode = (mode: 'simulator' | 'broker') => { setStoredTradingMode(mode, sessionStorage.getItem('shafx-simulator-account-id') || undefined); window.location.assign(`/?account=${mode === 'broker' ? 'broker' : 'demo'}`) }
   return <header className="sticky top-0 z-40 border-b border-shafx-border bg-shafx-surface shadow-sm"><div className="flex min-h-14 items-center gap-2 px-2 sm:gap-3 sm:px-4">
     <div className="flex flex-shrink-0 items-center gap-2"><div className="flex h-8 w-8 items-center justify-center rounded-lg bg-shafx-primary"><Activity className="h-5 w-5 text-white" /></div><span className="hidden text-lg font-bold tracking-tight sm:block">SHAFX</span></div>
     {compactMobile ? <div className="flex min-w-0 flex-1 items-center justify-between gap-2"><div><div className="text-sm font-semibold">{viewTitles[view]}</div><div className="text-[10px] text-shafx-textMuted">{currentMode === 'broker' ? 'Broker account' : 'Demo simulator'}</div></div><span className="rounded border border-shafx-primary/20 bg-shafx-primary/10 px-2 py-1 text-[10px] text-shafx-primary">{currentMode === 'broker' ? 'BROKER' : 'DEMO'}</span></div> : <>
