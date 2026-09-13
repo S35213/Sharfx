@@ -37,9 +37,9 @@ export class MockDataSource implements MarketDataSource {
   async getSymbolSpec(symbol: string): Promise<SymbolSpec> { return SYMBOL_SPECS[symbol] ?? SYMBOL_SPECS['EUR/USD'] }
   async getMarketAnalysis(symbol: string): Promise<MarketAnalysis> { return getMockMarketAnalysis(symbol) }
   async getAIAnalysis(symbol: string): Promise<AIAnalysis> { return getMockAIAnalysis(symbol) }
-  async getOpenPositions(): Promise<TradeOrder[]> { return mockOpenPositions }
-  async getPendingOrders(): Promise<TradeOrder[]> { return mockPendingOrders }
-  async getTradeHistory(): Promise<TradeOrder[]> { return mockTradeHistory }
+  async getOpenPositions(): Promise<TradeOrder[]> { return brokerMode() ? [] : mockOpenPositions }
+  async getPendingOrders(): Promise<TradeOrder[]> { return brokerMode() ? [] : mockPendingOrders }
+  async getTradeHistory(): Promise<TradeOrder[]> { return brokerMode() ? [] : mockTradeHistory }
 }
 
 export const marketDataSource: MarketDataSource = new MockDataSource()
