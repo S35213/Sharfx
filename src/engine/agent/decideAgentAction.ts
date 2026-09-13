@@ -3,6 +3,7 @@ import type { AgentContext, AgentDecision, AgentPermission } from './types'
 const permissionText = (permission: AgentPermission): string => {
   if (permission === 'ANALYZE_ONLY') return 'The agent may analyze the market but cannot prepare or place an order.'
   if (permission === 'PREPARE_ONLY') return 'The agent may prepare a simulated trade plan but cannot place it.'
+  if (permission === 'AUTONOMOUS_SIMULATION') return 'The agent may execute paper trades automatically inside the SHAFX simulator. Broker execution is not permitted.'
   return 'The agent may prepare a simulated trade, but explicit user approval is required before execution.'
 }
 
@@ -27,5 +28,6 @@ export const decideAgentAction = (context: AgentContext): AgentDecision => {
   const researchNote = research ? ` Research agreement is ${research.agreement.toFixed(0)}%.` : ''
   if (permission === 'ANALYZE_ONLY') return { state: 'OPPORTUNITY', action: 'WAIT', permission, symbol, timeframe, setup: preferredSetup, rationale: `A ${preferredSetup.direction} opportunity is visible, but the current permission only allows analysis.${learningNote}${researchNote}`, approvalRequired: false, safety: permissionText(permission) }
   if (permission === 'PREPARE_ONLY') return { state: 'OPPORTUNITY', action: 'PREPARE_TRADE', permission, symbol, timeframe, setup: preferredSetup, rationale: `The agent prepared a ${preferredSetup.direction} simulated trade from the current confluence.${learningNote}${researchNote} Execution remains disabled.`, approvalRequired: false, safety: permissionText(permission) }
+  if (permission === 'AUTONOMOUS_SIMULATION') return { state: 'EXECUTING_SIMULATION', action: 'EXECUTE_SIMULATION', permission, symbol, timeframe, setup: preferredSetup, rationale: `The ${preferredSetup.direction} setup passed the SHAFX analysis, research, learning and risk gates. The bot will execute a paper trade only.${learningNote}${researchNote}`, approvalRequired: false, safety: permissionText(permission) }
   return { state: 'AWAITING_APPROVAL', action: 'REQUEST_APPROVAL', permission, symbol, timeframe, setup: preferredSetup, rationale: `A ${preferredSetup.direction} simulated trade meets the current rules. Review the entry, stop, target and risk before approving execution.${learningNote}${researchNote}`, approvalRequired: true, safety: permissionText(permission) }
 }
