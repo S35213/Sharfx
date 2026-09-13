@@ -3,8 +3,8 @@ import { ArrowRight, BarChart3, CheckCircle2, ShieldCheck, WalletCards } from 'l
 import { PublicWelcome } from './PublicWelcome'
 import { DerivAccountControl } from '../market/DerivAccountControl'
 import { useAuth } from '../../app/AuthContext'
+import { setStoredTradingMode, type TradingMode } from '../../app/tradingMode'
 
-type TradingMode = 'simulator' | 'broker'
 interface Props { onEnterTerminal: (mode: TradingMode) => void }
 
 export const AccountAccessGate: React.FC<Props> = ({ onEnterTerminal }) => {
@@ -14,7 +14,7 @@ export const AccountAccessGate: React.FC<Props> = ({ onEnterTerminal }) => {
     const requested = new URLSearchParams(window.location.search).get('account')
     return requested === 'broker' ? 'broker' : requested === 'demo' ? 'simulator' : null
   })
-  const enter = (nextMode: TradingMode) => { sessionStorage.setItem('shafx-trading-mode', nextMode); onEnterTerminal(nextMode) }
+  const enter = (nextMode: TradingMode) => { setStoredTradingMode(nextMode, user?.simulatorAccountId); onEnterTerminal(nextMode) }
 
   if (loading) return <div className="flex min-h-[calc(100vh-32px)] items-center justify-center bg-shafx-bg px-4 text-shafx-text"><div className="rounded-2xl border border-shafx-border bg-shafx-surface px-6 py-5 text-center shadow-xl"><div className="text-sm font-semibold">Checking your SHAFX account…</div><div className="mt-1 text-[11px] text-shafx-textMuted">Please wait.</div></div></div>
   if (!user) return <PublicWelcome />
