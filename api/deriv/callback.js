@@ -23,7 +23,7 @@ export default async function handler(req, res) {
     const session = encryptSession({ accessToken: token.access_token, expiresAt: Date.now() + Number(token.expires_in || 3600) * 1000 })
     res.setHeader('Cache-Control', 'no-store')
     res.setHeader('Set-Cookie', [clearCookie(STATE_COOKIE), setCookie(SESSION_COOKIE, session, Math.max(60, Number(token.expires_in || 3600)))])
-    return res.status(200).send(html('SHAFX connected to Deriv', 'Your Deriv authorization succeeded. The access token is kept server-side in an encrypted, HttpOnly session cookie and is not exposed to the browser code.'))
+    return res.redirect(302, '/?deriv=connected')
   } catch (errorValue) {
     const message = errorValue instanceof Error ? errorValue.message : 'Deriv authorization failed'
     res.setHeader('Cache-Control', 'no-store')
