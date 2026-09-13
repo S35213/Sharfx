@@ -6,7 +6,7 @@ import type { AgentResearchReport } from './research'
 
 export type AgentState = 'MONITORING' | 'OPPORTUNITY' | 'AWAITING_APPROVAL' | 'EXECUTING_SIMULATION' | 'IN_POSITION' | 'NO_TRADE'
 export type AgentAction = 'WAIT' | 'PREPARE_TRADE' | 'REQUEST_APPROVAL' | 'EXECUTE_SIMULATION' | 'MONITOR_POSITION'
-export type AgentPermission = 'ANALYZE_ONLY' | 'PREPARE_ONLY' | 'USER_APPROVAL_REQUIRED'
+export type AgentPermission = 'ANALYZE_ONLY' | 'PREPARE_ONLY' | 'USER_APPROVAL_REQUIRED' | 'AUTONOMOUS_SIMULATION'
 
 export interface AgentDecision {
   state: AgentState
