@@ -21,9 +21,12 @@ import { TradesPanel } from './components/trades/TradesPanel'
 import { Toast, type ToastMessage } from './components/common/Toast'
 import { marketDataSource } from './data/createMarketDataSource'
 import { getConversionRate } from './data/mock/symbols'
+import { applyDemoProfit } from './engine/simulator/accountStore'
 import { submitSimulatedOrder } from './engine/simulator/submitSimulatedOrder'
 import { closeSimulatedPosition, markSimulatedPosition } from './engine/simulator/positionManager'
 import type { AccountData, AIAnalysis, MarketAnalysis, MarketPair, OHLCV, SimulatedOrderDraft, SymbolSpec, TradeOrder } from './types'
+
+const isBrokerMode = (): boolean => typeof window !== 'undefined' && window.sessionStorage.getItem('shafx-trading-mode') === 'broker'
 
 const TerminalContent: React.FC = () => {
   const { selectedSymbol, setSelectedSymbol, timeframe, setTimeframe } = useTerminal()
@@ -45,6 +48,7 @@ const TerminalContent: React.FC = () => {
   const [toast, setToast] = useState<ToastMessage | null>(null)
   const accountInitialized = useRef(false)
   const simulatorInitialized = useRef(false)
+  const symbolSpecCache = useRef<Record<string, SymbolSpec>>({})
   const toastId = useRef(0)
   const pushToast = useCallback((text: string) => { toastId.current += 1; setToast({ id: toastId.current, text }) }, [])
 
@@ -54,6 +58,7 @@ const TerminalContent: React.FC = () => {
       try {
         const [wl, acc, spec, cands, ma, ai, positions, pending, history] = await Promise.all([marketDataSource.getWatchlist(), marketDataSource.getAccountData(), marketDataSource.getSymbolSpec(selectedSymbol), marketDataSource.getCandles(selectedSymbol, timeframe), marketDataSource.getMarketAnalysis(selectedSymbol), marketDataSource.getAIAnalysis(selectedSymbol), marketDataSource.getOpenPositions(), marketDataSource.getPendingOrders(), marketDataSource.getTradeHistory()])
         if (cancelled) return
+        symbolSpecCache.current[selectedSymbol] = spec
         setWatchlist(wl); setSymbolSpec(spec); setCandles(cands); setLiveCandles([]); setReplayCount(cands.length); setMarketAnalysis(ma); setAiAnalysis(ai)
         if (!accountInitialized.current) { accountInitialized.current = true; setAccountData(acc) }
         if (!simulatorInitialized.current) { simulatorInitialized.current = true; setOpenPositions(positions); setPendingOrders(pending); setTradeHistory(history) }
@@ -64,6 +69,28 @@ const TerminalContent: React.FC = () => {
     void load()
     return () => { cancelled = true }
   }, [pushToast, selectedSymbol, timeframe])
+
+  useEffect(() => {
+    if (!accountData || !isBrokerMode()) return
+    let cancelled = false
+    const refreshBrokerBalance = async (): Promise<void> => {
+      try {
+        const next = await marketDataSource.getAccountData()
+        if (cancelled) return
+        setAccountData((prev) => {
+          if (!prev) return next
+          const equity = Number((next.balance + prev.floatingPL).toFixed(2))
+          const freeMargin = Number((equity - next.usedMargin).toFixed(2))
+          if (prev.balance === next.balance && prev.currency === next.currency && prev.equity === equity && prev.freeMargin === freeMargin) return prev
+          return { ...prev, balance: next.balance, currency: next.currency, usedMargin: next.usedMargin, equity, freeMargin }
+        })
+      } catch {
+        // Keep the last known broker balance if a refresh is temporarily unavailable.
+      }
+    }
+    const timer = window.setInterval(() => { void refreshBrokerBalance() }, 5000)
+    return () => { cancelled = true; window.clearInterval(timer) }
+  }, [accountData?.currency])
 
   const visibleCandles = useMemo(() => replayCount > 0 && replayCount < candles.length ? candles.slice(0, replayCount) : candles, [candles, replayCount])
   const chartCandles = liveMarketActive && liveCandles.length > 0 ? liveCandles : visibleCandles
@@ -93,24 +120,69 @@ const TerminalContent: React.FC = () => {
       if (!exitPrice) throw new Error('No simulated market price is available for this position.')
       const rate = getConversionRate(spec.quoteCurrency, accountData.currency)
       const closed = closeSimulatedPosition(order, { exitPrice, conversionRate: rate }, spec)
+      const realized = closed.profit ?? 0
+      if (!isBrokerMode()) applyDemoProfit(realized)
       setOpenPositions((prev) => prev.filter((item) => item.id !== id)); setTradeHistory((prev) => [closed, ...prev])
-      setAccountData((prev) => prev ? { ...prev, balance: Number((prev.balance + (closed.profit ?? 0)).toFixed(2)), equity: Number((prev.balance + (closed.profit ?? 0)).toFixed(2)), floatingPL: 0, freeMargin: Number((prev.freeMargin + (closed.profit ?? 0)).toFixed(2)) } : prev)
+      setAccountData((prev) => {
+        if (!prev) return prev
+        const balance = Number((prev.balance + realized).toFixed(2))
+        const floatingPL = openPositions.filter((item) => item.id !== id && item.status === 'open').reduce((sum, item) => sum + (item.profit ?? 0), 0)
+        const equity = Number((balance + floatingPL).toFixed(2))
+        return { ...prev, balance, equity, floatingPL, freeMargin: Number((equity - prev.usedMargin).toFixed(2)) }
+      })
       pushToast(`Simulated ${closed.type} ${closed.symbol} closed at ${exitPrice.toFixed(spec.pricePrecision)} (${closed.profit !== undefined && closed.profit >= 0 ? '+' : ''}${closed.profit?.toFixed(2)} ${accountData.currency}).`)
     } catch (err) { pushToast(err instanceof Error ? err.message : 'Unable to close simulated position.') }
   }, [accountData, displayPrice, openPositions, pushToast, selectedSymbol])
 
   useEffect(() => {
-    if (!symbolSpec || !accountData || openPositions.length === 0) return
-    const conversion = getConversionRate(symbolSpec.quoteCurrency, accountData.currency)
-    const updated = openPositions.map((position) => position.symbol === selectedSymbol ? markSimulatedPosition(position, { currentPrice, symbolSpec, conversionRate: conversion }) : position)
-    const newlyClosed = updated.filter((position, index) => openPositions[index].status === 'open' && position.status === 'closed')
-    if (newlyClosed.length > 0) {
-      setOpenPositions(updated.filter((position) => position.status === 'open')); setTradeHistory((prev) => [...newlyClosed, ...prev])
-      const realized = newlyClosed.reduce((sum, position) => sum + (position.profit ?? 0), 0)
-      setAccountData((prev) => prev ? { ...prev, balance: Number((prev.balance + realized).toFixed(2)), equity: Number((prev.balance + realized).toFixed(2)), floatingPL: 0, freeMargin: Number((prev.freeMargin + realized).toFixed(2)) } : prev)
-      newlyClosed.forEach((position) => pushToast(`Simulated ${position.type} ${position.symbol} closed automatically at its ${position.profit !== undefined && position.profit >= 0 ? 'target' : 'stop'}.`))
-    } else if (updated.some((position, index) => position.profit !== openPositions[index].profit)) setOpenPositions(updated)
-  }, [accountData, currentPrice, openPositions, pushToast, selectedSymbol, symbolSpec])
+    if (!accountData || openPositions.length === 0) return
+    let cancelled = false
+    const refreshPositions = async (): Promise<void> => {
+      try {
+        const prices = new Map(watchlist.map((pair) => [pair.symbol, pair.price]))
+        prices.set(selectedSymbol, currentPrice)
+        const uniqueSymbols = [...new Set(openPositions.map((position) => position.symbol))]
+        const specs = await Promise.all(uniqueSymbols.map(async (symbol) => {
+          if (symbol === selectedSymbol && symbolSpec) return [symbol, symbolSpec] as const
+          if (symbolSpecCache.current[symbol]) return [symbol, symbolSpecCache.current[symbol]] as const
+          const spec = await marketDataSource.getSymbolSpec(symbol)
+          symbolSpecCache.current[symbol] = spec
+          return [symbol, spec] as const
+        }))
+        if (cancelled) return
+        const specMap = new Map(specs)
+        const updated = openPositions.map((position) => {
+          const spec = specMap.get(position.symbol)
+          const price = prices.get(position.symbol)
+          if (!spec || !price) return position
+          const rate = getConversionRate(spec.quoteCurrency, accountData.currency)
+          return markSimulatedPosition(position, { currentPrice: price, symbolSpec: spec, conversionRate: rate })
+        })
+        const newlyClosed = updated.filter((position, index) => openPositions[index].status === 'open' && position.status === 'closed')
+        const stillOpen = updated.filter((position) => position.status === 'open')
+        const realized = newlyClosed.reduce((sum, position) => sum + (position.profit ?? 0), 0)
+        if (newlyClosed.length > 0) {
+          if (!isBrokerMode()) applyDemoProfit(realized)
+          setOpenPositions(stillOpen); setTradeHistory((prev) => [...newlyClosed, ...prev])
+          newlyClosed.forEach((position) => pushToast(`Simulated ${position.type} ${position.symbol} closed automatically at its ${position.profit !== undefined && position.profit >= 0 ? 'target' : 'stop'}.`))
+        } else if (updated.some((position, index) => position.profit !== openPositions[index].profit)) setOpenPositions(updated)
+
+        const floatingPL = stillOpen.reduce((sum, position) => sum + (position.profit ?? 0), 0)
+        setAccountData((prev) => {
+          if (!prev) return prev
+          const balance = newlyClosed.length > 0 && !isBrokerMode() ? Number((prev.balance + realized).toFixed(2)) : prev.balance
+          const equity = Number((balance + floatingPL).toFixed(2))
+          const freeMargin = Number((equity - prev.usedMargin).toFixed(2))
+          if (prev.balance === balance && prev.equity === equity && prev.floatingPL === floatingPL && prev.freeMargin === freeMargin) return prev
+          return { ...prev, balance, equity, floatingPL, freeMargin }
+        })
+      } catch (err) {
+        if (!cancelled) pushToast(err instanceof Error ? err.message : 'Unable to update open position values.')
+      }
+    }
+    void refreshPositions()
+    return () => { cancelled = true }
+  }, [accountData?.currency, currentPrice, openPositions, pushToast, selectedSymbol, symbolSpec, watchlist])
 
   if (!accountData || !symbolSpec || !marketAnalysis || !aiAnalysis) return <div className="flex h-full items-center justify-center bg-shafx-bg text-shafx-text">Loading SHAFX Terminal...</div>
   const activePosition = openPositions.find((position) => position.symbol === selectedSymbol && position.status === 'open') ?? null
@@ -119,6 +191,7 @@ const TerminalContent: React.FC = () => {
   const showHistory = mobileTab === 'history'
   const showAccount = mobileTab === 'account'
   const liveControl = <DerivLiveControl symbol={selectedSymbol} timeframe={timeframe} onUpdate={handleLiveUpdate} onActiveChange={handleLiveActiveChange} />
+  const brokerMode = isBrokerMode()
 
   const botProps = { symbol: selectedSymbol, timeframe, candles: chartCandles, currentPrice: displayPrice, activePosition, tradeHistory, accountBalance: accountData.balance, accountCurrency: accountData.currency, symbolSpec, conversionRate, onBotOrder: handleBotOrder, onReviewSetup: reviewAISetup }
 
@@ -126,9 +199,8 @@ const TerminalContent: React.FC = () => {
     <TopNav symbol={selectedSymbol} price={displayPrice} pricePrecision={symbolSpec.pricePrecision} timeframe={timeframe} onTimeframeChange={setTimeframe} pairs={watchlist} onSelectPair={setSelectedSymbol} view={mobileTab} />
     <main className="flex flex-1 flex-col overflow-y-auto pb-16 lg:flex-row lg:overflow-hidden lg:pb-0">
       <aside className="hidden w-56 flex-shrink-0 flex-col gap-4 border-r border-shafx-border p-3 lg:flex lg:overflow-y-auto"><div className="h-72 flex-shrink-0"><Watchlist pairs={watchlist} selectedPair={selectedSymbol} onSelectPair={setSelectedSymbol} /></div><AccountPanel account={accountData} /></aside>
-
       <section className={`${showMarket ? '' : 'hidden'} flex min-w-0 flex-1 flex-col lg:flex`}>
-        <div className="flex h-11 flex-shrink-0 items-center justify-between gap-3 border-b border-shafx-border px-3 sm:px-4"><span className="text-[11px] text-shafx-textMuted">{liveMarketActive ? 'Live market feed • Deriv' : 'Demo market feed'}</span>{liveControl}</div>
+        <div className="flex h-11 flex-shrink-0 items-center justify-between gap-3 border-b border-shafx-border px-3 sm:px-4"><span className="text-[11px] text-shafx-textMuted">{liveMarketActive ? 'Live market feed • Deriv' : brokerMode ? 'Broker-connected account • market analysis' : 'Demo market feed'}</span>{liveControl}</div>
         <div className="min-h-[500px] flex-1 p-2 sm:min-h-[560px] sm:p-3 lg:min-h-[620px]"><CandlestickChart data={chartCandles} annotations={chartAnnotations} timeframe={timeframe} height="100%" /></div>
         <div className="h-48 flex-shrink-0 border-t border-shafx-border p-2 sm:p-3 lg:h-36"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} /></div>
         <div className="space-y-3 p-3 lg:hidden">
@@ -139,15 +211,13 @@ const TerminalContent: React.FC = () => {
           </div>
         </div>
       </section>
-
       <aside className={`${showAgent ? '' : 'hidden'} flex w-full flex-shrink-0 flex-col gap-4 p-3 sm:p-4 lg:hidden`}><TradingAgentPanel {...botProps} /></aside>
       <aside className={`${showHistory ? '' : 'hidden'} flex w-full flex-shrink-0 flex-col gap-4 p-3 sm:p-4 lg:hidden`}><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /><TradingJournalPanel tradeHistory={tradeHistory} currency={accountData.currency} /></aside>
       <aside className={`${showAccount ? '' : 'hidden'} flex w-full flex-shrink-0 flex-col gap-4 p-3 sm:p-4 lg:hidden`}><AccountPanel account={accountData} /></aside>
-
       <aside className="hidden w-72 flex-shrink-0 flex-col gap-4 border-l border-shafx-border p-3 lg:flex lg:overflow-y-auto"><MarketAnalysisPanel analysis={marketAnalysis} pricePrecision={symbolSpec.pricePrecision} /><TradingAgentPanel {...botProps} /><AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={chartCandles} setup={aiSetup} onReviewSetup={reviewAISetup} /><ReplayPanel candles={candles} replayCount={replayCount || candles.length} onReplayCountChange={setReplayCount} /><BacktestPanel symbol={selectedSymbol} candles={candles} symbolSpec={symbolSpec} initialBalance={accountData.balance} accountCurrency={accountData.currency} conversionRate={conversionRate} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /><TradingJournalPanel tradeHistory={tradeHistory} currency={accountData.currency} /><div id="order-ticket"><OrderPanel symbol={selectedSymbol} currentPrice={displayPrice} accountBalance={accountData.balance} accountCurrency={accountData.currency} symbolSpec={symbolSpec} conversionRate={conversionRate} onSubmitOrder={handleOrderSubmit} aiSetup={aiSetup} /></div></aside>
     </main>
     <MobileNav activeTab={mobileTab} onChange={setMobileTab} />
-    <footer className="hidden items-center justify-between border-t border-shafx-border bg-shafx-surface px-4 py-1.5 text-[10px] text-shafx-textMuted lg:flex"><span>SHAFX Terminal v0.1.0 • Simulator Mode • No real money trading</span><span className="hidden sm:inline">{replayActive ? 'Visual replay — simulated candles only' : 'Demo data only — not financial advice'}</span></footer>
+    <footer className="hidden items-center justify-between border-t border-shafx-border bg-shafx-surface px-4 py-1.5 text-[10px] text-shafx-textMuted lg:flex"><span>SHAFX Terminal v0.1.0 • {brokerMode ? 'Broker-connected view • Real execution disabled' : 'Simulator Mode • No real money trading'}</span><span className="hidden sm:inline">{replayActive ? 'Visual replay — simulated candles only' : brokerMode ? 'Broker balance is read from the connected account' : 'Demo data only — not financial advice'}</span></footer>
     <Toast toast={toast} onDismiss={() => setToast(null)} />
   </div>
 }
