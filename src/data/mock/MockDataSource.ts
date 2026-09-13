@@ -5,7 +5,7 @@ import { getMockCandles } from './candles'
 import { SYMBOL_SPECS } from './symbols'
 import { getMockMarketAnalysis, getMockAIAnalysis } from './analysis'
 import { mockOpenPositions, mockPendingOrders, mockTradeHistory } from './trades'
-import { getDemoAccountData } from '../../engine/simulator/accountStore'
+import { getDemoAccountData, getDemoOpenPositions, getDemoTradeHistory } from '../../engine/simulator/accountStore'
 
 interface BrokerAccount { account_type?: string; balance?: number; currency?: string }
 
@@ -37,9 +37,9 @@ export class MockDataSource implements MarketDataSource {
   async getSymbolSpec(symbol: string): Promise<SymbolSpec> { return SYMBOL_SPECS[symbol] ?? SYMBOL_SPECS['EUR/USD'] }
   async getMarketAnalysis(symbol: string): Promise<MarketAnalysis> { return getMockMarketAnalysis(symbol) }
   async getAIAnalysis(symbol: string): Promise<AIAnalysis> { return getMockAIAnalysis(symbol) }
-  async getOpenPositions(): Promise<TradeOrder[]> { return brokerMode() ? [] : mockOpenPositions }
+  async getOpenPositions(): Promise<TradeOrder[]> { return brokerMode() ? [] : getDemoOpenPositions(mockOpenPositions) }
   async getPendingOrders(): Promise<TradeOrder[]> { return brokerMode() ? [] : mockPendingOrders }
-  async getTradeHistory(): Promise<TradeOrder[]> { return brokerMode() ? [] : mockTradeHistory }
+  async getTradeHistory(): Promise<TradeOrder[]> { return brokerMode() ? [] : getDemoTradeHistory(mockTradeHistory) }
 }
 
 export const marketDataSource: MarketDataSource = new MockDataSource()
