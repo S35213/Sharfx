@@ -32,6 +32,16 @@ const clearSessionCookie = (res) => res.setHeader('Set-Cookie', [
 ])
 const cookie = (req, name) => (req.headers.cookie || '').split(';').map((part) => part.trim()).find((part) => part.startsWith(`${name}=`))?.slice(name.length + 1) || null
 
+const authError = (data, fallback) => {
+  const code = String(data?.code || '').toLowerCase()
+  const message = String(data?.msg || data?.message || data?.error_description || data?.error || '').trim()
+  if (code === 'email_exists' || code === 'user_already_exists') return 'A SHAFX account with that email already exists. Sign in instead.'
+  if (code === 'weak_password') return 'That password is too weak. Use a stronger password.'
+  if (code === 'email_provider_disabled') return 'Email sign-up is temporarily unavailable. Please try again later.'
+  if (code === 'validation_failed') return message || 'Please check the account details and try again.'
+  return message || fallback
+}
+
 async function refreshSession(req, res) {
   const refresh = cookie(req, refreshCookie)
   if (!refresh) return null
@@ -117,9 +127,12 @@ export default async function handler(req, res) {
       if (password.length < 10) return json(res, 400, { ok: false, error: 'Password must be at least 10 characters.' })
 
       const response = await supabase('/signup', { method: 'POST', body: JSON.stringify({ email, password, data: { display_name: displayName || email.split('@')[0] } }) })
-      const data = await response.json()
-      if (!response.ok) return json(res, response.status, { ok: false, error: data.msg || data.message || 'Unable to create SHAFX account.' })
-      if (!data.user) return json(res, 400, { ok: false, error: 'Unable to create SHAFX account.' })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) return json(res, response.status, { ok: false, error: authError(data, 'Unable to create SHAFX account.') })
+      if (!data.user) return json(res, 500, { ok: false, error: 'SHAFX account service returned an incomplete signup response. Please try again.' })
+      if (Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+        return json(res, 409, { ok: false, error: 'A SHAFX account with that email already exists. Sign in instead.' })
+      }
 
       await securityEvent({ user_id: data.user.id, event_type: 'signup', decision: 'allow', risk_score: guard.risk || 0, fingerprint: guard.fingerprint, metadata: { security_state: guard.reason === 'elevated_sign_up_risk' ? 'elevated' : 'normal' } })
       await updateSecurityProfile(data.user.id, { risk_score: guard.risk || 0, security_state: guard.reason === 'elevated_sign_up_risk' ? 'elevated' : 'normal' })
