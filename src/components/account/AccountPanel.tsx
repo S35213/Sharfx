@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { ChevronRight, Copy, Link2, Lock, LogIn, LogOut, Plus, ShieldCheck, TrendingDown, TrendingUp, UserCircle, UserPlus, Wallet, KeyRound, CheckCircle2 } from 'lucide-react'
+import { ChevronRight, Copy, Link2, LogIn, LogOut, Plus, ShieldCheck, TrendingDown, TrendingUp, UserCircle, UserPlus, Wallet, KeyRound, CheckCircle2 } from 'lucide-react'
 import type { AccountData } from '../../types'
 import { formatCurrency, formatPercent } from '../../lib/format'
 import { DerivAccountControl } from '../market/DerivAccountControl'
