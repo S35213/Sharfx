@@ -29,12 +29,28 @@ const prepareData = (data: OHLCV[]): CandlestickData[] => {
     .map((c) => ({ time: c.time as UTCTimestamp, open: c.open, high: c.high, low: c.low, close: c.close }))
 }
 
+const timeframeFromData = (data: CandlestickData[]): { label: string; interval: string } => {
+  if (data.length < 2) return { label: '—', interval: 'candle' }
+  const seconds = Number(data[1].time) - Number(data[0].time)
+  const known: Record<number, { label: string; interval: string }> = {
+    60: { label: 'M1', interval: '1m' },
+    300: { label: 'M5', interval: '5m' },
+    900: { label: 'M15', interval: '15m' },
+    1800: { label: 'M30', interval: '30m' },
+    3600: { label: 'H1', interval: '1h' },
+    14400: { label: 'H4', interval: '4h' },
+    86400: { label: 'D1', interval: '1d' },
+  }
+  return known[seconds] ?? { label: 'Custom', interval: `${Math.round(seconds / 60)}m` }
+}
+
 export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [] }) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
   const chartData = useMemo(() => prepareData(data), [data])
   const lastClose = chartData.length ? Number(chartData[chartData.length - 1]?.close) : Number.NaN
+  const timeframe = timeframeFromData(chartData)
 
   useEffect(() => {
     const el = containerRef.current
@@ -54,7 +70,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         horzLine: { color: '#596273', width: 1, style: 2, labelBackgroundColor: '#2A2F38' },
       },
       rightPriceScale: { borderColor: '#2A2F38', minimumWidth: 76, scaleMargins: { top: 0.08, bottom: 0.08 } },
-      timeScale: { borderColor: '#2A2F38', timeVisible: true, secondsVisible: false, rightOffset: 6, barSpacing: 8, minBarSpacing: 3 },
+      timeScale: { borderColor: '#2A2F38', timeVisible: true, secondsVisible: false, rightOffset: 6, barSpacing: 9, minBarSpacing: 4 },
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
       handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true },
     })
@@ -89,7 +105,13 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     const chart = chartRef.current
     if (!series || !chart) return
     series.setData(chartData)
-    if (chartData.length) chart.timeScale().fitContent()
+    if (chartData.length) {
+      const visibleBars = containerRef.current && containerRef.current.clientWidth < 640 ? 65 : 110
+      chart.timeScale().setVisibleLogicalRange({
+        from: Math.max(0, chartData.length - visibleBars),
+        to: chartData.length + 3,
+      })
+    }
   }, [chartData])
 
   useEffect(() => {
@@ -124,7 +146,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     }
   }, [annotations, lastClose])
 
-  return <div ref={containerRef} className="relative w-full overflow-hidden border border-shafx-border bg-shafx-bg" style={{ height, minHeight: 280 }}>
+  return <div ref={containerRef} className="shafx-chart-shell relative w-full overflow-hidden border border-shafx-border bg-shafx-bg" style={{ height, minHeight: 280 }}>
     <div className="pointer-events-none absolute left-3 top-3 z-10 rounded border border-shafx-border bg-shafx-bg/90 px-2 py-1 text-[10px] font-medium tracking-wide text-shafx-textMuted">SHAFX • PRICE CHART</div>
+    <div className="pointer-events-none absolute right-3 top-3 z-10 rounded border border-shafx-border bg-shafx-bg/90 px-2 py-1 text-[10px] font-semibold text-shafx-text">{timeframe.label} <span className="font-normal text-shafx-textMuted">• {timeframe.interval} candles</span></div>
   </div>
 }
