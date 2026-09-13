@@ -1,4 +1,5 @@
 import type { SymbolSpec, TradeOrder } from '../../types'
+import { applyDemoProfit } from './accountStore'
 
 export interface PositionCloseInput {
   exitPrice: number
@@ -33,6 +34,7 @@ export const calculatePositionProfit = (order: TradeOrder, exitPrice: number, sp
 export const closeSimulatedPosition = (order: TradeOrder, input: PositionCloseInput, spec: SymbolSpec): TradeOrder => {
   if (order.status !== 'open') throw new Error('Only open positions can be closed.')
   const profit = calculatePositionProfit(order, input.exitPrice, spec, input.conversionRate)
+  applyDemoProfit(profit)
   return { ...order, status: 'closed', closeTime: input.closeTime ?? new Date().toISOString(), profit }
 }
 
