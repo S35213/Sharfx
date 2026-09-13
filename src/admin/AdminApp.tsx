@@ -48,14 +48,18 @@ function StatusDot({ state }: { state: ServiceState }) {
 
 function Card({ title, value, detail, icon: Icon }: { title: string; value: string; detail: string; icon: typeof Gauge }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#11161d] p-5 shadow-xl shadow-black/10">
-      <div className="mb-5 flex items-center justify-between">
+    <div className="min-w-[250px] snap-start rounded-2xl border border-white/10 bg-[#11161d] p-4 shadow-xl shadow-black/10 sm:min-w-0 sm:p-5">
+      <div className="flex items-center gap-3">
         <span className="rounded-xl bg-white/5 p-2 text-slate-300"><Icon className="h-5 w-5" /></span>
-        <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Owner</span>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium text-slate-200">{title}</div>
+          <div className="mt-0.5 text-lg font-semibold tracking-tight text-white">{value}</div>
+        </div>
+        <span className="shrink-0 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-1.5 text-emerald-300" aria-label="Status checked">
+          <CheckCircle2 className="h-4 w-4" />
+        </span>
       </div>
-      <div className="text-2xl font-semibold tracking-tight text-white">{value}</div>
-      <div className="mt-1 text-sm font-medium text-slate-300">{title}</div>
-      <div className="mt-2 text-xs text-slate-500">{detail}</div>
+      <div className="mt-3 text-xs text-slate-500">{detail}</div>
     </div>
   )
 }
@@ -101,7 +105,7 @@ export default function AdminApp() {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ key }),
+        body: JSON.stringify({ key: key.trim() }),
       })
       const data = await response.json()
       if (!response.ok || !data.ok) throw new Error(data.error || 'Access denied')
@@ -180,12 +184,14 @@ export default function AdminApp() {
             </div>
             <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-400">Environment: <span className="font-semibold text-white">{overview?.environment || 'unknown'}</span></div>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+
+          <div className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-2 sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:pb-0 lg:grid-cols-4">
             <Card title="Owner authentication" value={services?.adminAuth === 'online' ? 'Protected' : 'Offline'} detail="Private server-side key" icon={ShieldCheck} />
             <Card title="SHAFX users" value="Not connected" detail="Persistent identity database comes next" icon={Users} />
             <Card title="Broker connections" value="Not connected" detail="Database-backed connection registry comes next" icon={Wifi} />
             <Card title="Bot activity" value="Simulator" detail="Existing SHAFX bot engine remains simulation-only" icon={Bot} />
           </div>
+          <p className="mt-2 text-[10px] text-slate-600 sm:hidden">Swipe left or right to view the owner status cards.</p>
         </section>
 
         <section className="grid gap-5 lg:grid-cols-3">
@@ -211,9 +217,9 @@ export default function AdminApp() {
 
         <section className="rounded-2xl border border-white/10 bg-[#11161d] p-5">
           <div className="mb-5 flex items-center justify-between"><div><h2 className="font-semibold text-white">Broker integration registry</h2><p className="mt-1 text-xs text-slate-500">This is the control layer for future multi-broker connections.</p></div><Boxes className="h-5 w-5 text-slate-500" /></div>
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-2 md:grid md:grid-cols-3 md:overflow-visible md:pb-0">
             {(overview?.integrations || []).map((integration) => (
-              <div key={integration.name} className="rounded-xl border border-white/10 bg-black/10 p-4">
+              <div key={integration.name} className="min-w-[245px] snap-start rounded-xl border border-white/10 bg-black/10 p-4 md:min-w-0">
                 <div className="flex items-center justify-between gap-3"><span className="font-medium text-white">{integration.name}</span><StatusPill state={integration.status} /></div>
                 <p className="mt-2 text-xs leading-5 text-slate-500">{integration.detail}</p>
               </div>
@@ -221,7 +227,7 @@ export default function AdminApp() {
           </div>
         </section>
 
-        <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+        <section className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-2 md:grid md:grid-cols-2 md:gap-5 md:overflow-visible md:pb-0 xl:grid-cols-4">
           <Placeholder title="Users" icon={Users} text="Will show registered SHAFX accounts once real authentication and database storage are connected." />
           <Placeholder title="Broker connections" icon={Wifi} text="Will show Deriv, cTrader and other broker connection states without exposing secrets." />
           <Placeholder title="Bot activity" icon={Bot} text="Will show bot sessions, simulator trades, risk modes and failure/review events." />
@@ -251,5 +257,5 @@ function Meta({ label, value }: { label: string; value: string }) {
 }
 
 function Placeholder({ title, icon: Icon, text }: { title: string; icon: typeof Users; text: string }) {
-  return <div className="rounded-2xl border border-white/10 bg-[#11161d] p-5"><Icon className="h-5 w-5 text-slate-500" /><h3 className="mt-4 font-medium text-white">{title}</h3><p className="mt-2 text-xs leading-5 text-slate-500">{text}</p></div>
+  return <div className="min-w-[245px] snap-start rounded-2xl border border-white/10 bg-[#11161d] p-5 md:min-w-0"><Icon className="h-5 w-5 text-slate-500" /><h3 className="mt-4 font-medium text-white">{title}</h3><p className="mt-2 text-xs leading-5 text-slate-500">{text}</p></div>
 }
