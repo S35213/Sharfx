@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, SlidersHorizontal } from 'lucide-react'
+import { ChevronDown } from 'lucide-react'
 import { TerminalProvider, useTerminal } from './app/TerminalContext'
 import { ErrorBoundary } from './app/ErrorBoundary'
 import { TopNav } from './components/layout/TopNav'
@@ -137,8 +137,7 @@ const TerminalContent: React.FC = () => {
         </div>
       </section>
 
-      <aside className={`${showAgent ? '' : 'hidden'} flex w-full flex-shrink-0 flex-col gap-4 p-3 sm:p-4 lg:flex lg:w-72 lg:overflow-y-auto`}><TradingAgentPanel symbol={selectedSymbol} timeframe={timeframe} candles={chartCandles} currentPrice={displayPrice} activePosition={activePosition} tradeHistory={tradeHistory} accountBalance={accountData.balance} onReviewSetup={reviewAISetup} /><AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={chartCandles} setup={aiSetup} onReviewSetup={reviewAISetup} /><OrderPanel symbol={selectedSymbol} currentPrice={displayPrice} accountBalance={accountData.balance} accountCurrency={accountData.currency} symbolSpec={symbolSpec} conversionRate={conversionRate} onSubmitOrder={handleOrderSubmit} aiSetup={aiSetup} /></aside>
-
+      <aside className={`${showAgent ? '' : 'hidden'} flex w-full flex-shrink-0 flex-col gap-4 p-3 sm:p-4 lg:hidden`}><TradingAgentPanel symbol={selectedSymbol} timeframe={timeframe} candles={chartCandles} currentPrice={displayPrice} activePosition={activePosition} tradeHistory={tradeHistory} accountBalance={accountData.balance} onReviewSetup={reviewAISetup} /></aside>
       <aside className={`${showHistory ? '' : 'hidden'} flex w-full flex-shrink-0 flex-col gap-4 p-3 sm:p-4 lg:hidden`}><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /><TradingJournalPanel tradeHistory={tradeHistory} currency={accountData.currency} /></aside>
       <aside className={`${showAccount ? '' : 'hidden'} flex w-full flex-shrink-0 flex-col gap-4 p-3 sm:p-4 lg:hidden`}><AccountPanel account={accountData} /></aside>
 
