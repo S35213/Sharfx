@@ -21,12 +21,13 @@ import { TradesPanel } from './components/trades/TradesPanel'
 import { Toast, type ToastMessage } from './components/common/Toast'
 import { marketDataSource } from './data/createMarketDataSource'
 import { getConversionRate } from './data/mock/symbols'
-import { applyDemoProfit } from './engine/simulator/accountStore'
+import { applyDemoProfit, setDemoOpenPositions, setDemoTradeHistory } from './engine/simulator/accountStore'
 import { submitSimulatedOrder } from './engine/simulator/submitSimulatedOrder'
 import { closeSimulatedPosition, markSimulatedPosition } from './engine/simulator/positionManager'
 import type { AccountData, AIAnalysis, MarketAnalysis, MarketPair, OHLCV, SimulatedOrderDraft, SymbolSpec, TradeOrder } from './types'
 
 const isBrokerMode = (): boolean => typeof window !== 'undefined' && window.sessionStorage.getItem('shafx-trading-mode') === 'broker'
+const isSimulatorMode = (): boolean => !isBrokerMode()
 
 const TerminalContent: React.FC = () => {
   const { selectedSymbol, setSelectedSymbol, timeframe, setTimeframe } = useTerminal()
@@ -92,6 +93,12 @@ const TerminalContent: React.FC = () => {
     return () => { cancelled = true; window.clearInterval(timer) }
   }, [accountData?.currency])
 
+  useEffect(() => {
+    if (!isSimulatorMode()) return
+    setDemoOpenPositions(openPositions)
+    setDemoTradeHistory(tradeHistory)
+  }, [openPositions, tradeHistory])
+
   const visibleCandles = useMemo(() => replayCount > 0 && replayCount < candles.length ? candles.slice(0, replayCount) : candles, [candles, replayCount])
   const chartCandles = liveMarketActive && liveCandles.length > 0 ? liveCandles : visibleCandles
   const replayActive = !liveMarketActive && visibleCandles.length > 0 && visibleCandles.length < candles.length
@@ -107,7 +114,13 @@ const TerminalContent: React.FC = () => {
   }, [])
   const handleLiveUpdate = useCallback((nextCandles: OHLCV[], price: number): void => { setLiveCandles(nextCandles); setCurrentPrice(price) }, [])
   const handleLiveActiveChange = useCallback((active: boolean): void => { setLiveMarketActive(active); if (!active) setLiveCandles([]) }, [])
-  const handleOrderSubmit = useCallback((draft: SimulatedOrderDraft): void => { try { const order = submitSimulatedOrder(draft); setOpenPositions((prev) => [...prev, order]); pushToast(`Simulated ${order.type} ${order.lotSize.toFixed(2)} lots ${order.symbol} placed (${order.id}).`) } catch (err) { pushToast(err instanceof Error ? err.message : 'Unable to place simulated order.') } }, [pushToast])
+  const handleOrderSubmit = useCallback((draft: SimulatedOrderDraft): void => {
+    try {
+      const order = submitSimulatedOrder(draft)
+      setOpenPositions((prev) => [...prev, order])
+      pushToast(`Simulated ${order.type} ${order.lotSize.toFixed(2)} lots ${order.symbol} placed (${order.id}).`)
+    } catch (err) { pushToast(err instanceof Error ? err.message : 'Unable to place simulated order.') }
+  }, [pushToast])
   const handleBotOrder = useCallback((order: TradeOrder): void => { setOpenPositions((prev) => prev.some((item) => item.id === order.id) ? prev : [...prev, order]); pushToast(`SHAFX Bot opened simulated ${order.type} ${order.symbol} at ${order.entryPrice}. SL ${order.stopLoss ?? '—'} • TP ${order.takeProfit ?? '—'}.`) }, [pushToast])
 
   const handleClosePosition = useCallback(async (id: string): Promise<void> => {
@@ -121,7 +134,7 @@ const TerminalContent: React.FC = () => {
       const rate = getConversionRate(spec.quoteCurrency, accountData.currency)
       const closed = closeSimulatedPosition(order, { exitPrice, conversionRate: rate }, spec)
       const realized = closed.profit ?? 0
-      if (!isBrokerMode()) applyDemoProfit(realized)
+      if (isSimulatorMode()) applyDemoProfit(realized)
       setOpenPositions((prev) => prev.filter((item) => item.id !== id)); setTradeHistory((prev) => [closed, ...prev])
       setAccountData((prev) => {
         if (!prev) return prev
@@ -162,7 +175,7 @@ const TerminalContent: React.FC = () => {
         const stillOpen = updated.filter((position) => position.status === 'open')
         const realized = newlyClosed.reduce((sum, position) => sum + (position.profit ?? 0), 0)
         if (newlyClosed.length > 0) {
-          if (!isBrokerMode()) applyDemoProfit(realized)
+          if (isSimulatorMode()) applyDemoProfit(realized)
           setOpenPositions(stillOpen); setTradeHistory((prev) => [...newlyClosed, ...prev])
           newlyClosed.forEach((position) => pushToast(`Simulated ${position.type} ${position.symbol} closed automatically at its ${position.profit !== undefined && position.profit >= 0 ? 'target' : 'stop'}.`))
         } else if (updated.some((position, index) => position.profit !== openPositions[index].profit)) setOpenPositions(updated)
@@ -170,7 +183,7 @@ const TerminalContent: React.FC = () => {
         const floatingPL = stillOpen.reduce((sum, position) => sum + (position.profit ?? 0), 0)
         setAccountData((prev) => {
           if (!prev) return prev
-          const balance = newlyClosed.length > 0 && !isBrokerMode() ? Number((prev.balance + realized).toFixed(2)) : prev.balance
+          const balance = newlyClosed.length > 0 && isSimulatorMode() ? Number((prev.balance + realized).toFixed(2)) : prev.balance
           const equity = Number((balance + floatingPL).toFixed(2))
           const freeMargin = Number((equity - prev.usedMargin).toFixed(2))
           if (prev.balance === balance && prev.equity === equity && prev.floatingPL === floatingPL && prev.freeMargin === freeMargin) return prev
