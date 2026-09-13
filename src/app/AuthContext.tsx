@@ -13,7 +13,7 @@ interface AuthContextValue {
   user: ShafxUser | null
   loading: boolean
   error: string | null
-  signUp: (input: { displayName: string; email: string; password: string }) => Promise<{ needsEmailConfirmation?: boolean; message?: string }>
+  signUp: (input: { displayName: string; email: string; password: string; website?: string }) => Promise<{ needsEmailConfirmation?: boolean; message?: string }>
   signIn: (input: { email: string; password: string }) => Promise<void>
   signOut: () => Promise<void>
   refresh: () => Promise<void>
@@ -42,7 +42,7 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
 
   useEffect(() => { void refresh() }, [refresh])
 
-  const signUp = useCallback(async (input: { displayName: string; email: string; password: string }) => {
+  const signUp = useCallback(async (input: { displayName: string; email: string; password: string; website?: string }) => {
     const data = await request('signup', { method: 'POST', body: JSON.stringify(input) })
     if (data.user) setUser(data.user)
     return { needsEmailConfirmation: data.needsEmailConfirmation, message: data.message }
