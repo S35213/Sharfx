@@ -22,7 +22,7 @@ import { marketDataSource } from './data/createMarketDataSource'
 import { getConversionRate } from './data/mock/symbols'
 import { submitSimulatedOrder } from './engine/simulator/submitSimulatedOrder'
 import { closeSimulatedPosition, markSimulatedPosition } from './engine/simulator/positionManager'
-import type { AccountData, AIAnalysis, MarketAnalysis, MarketPair, OHLCV, SimulatedOrderDraft, SymbolSpec, Timeframe, TradeOrder } from './types'
+import type { AccountData, AIAnalysis, MarketAnalysis, MarketPair, OHLCV, SimulatedOrderDraft, SymbolSpec, TradeOrder } from './types'
 
 const TerminalContent: React.FC = () => {
   const { selectedSymbol, setSelectedSymbol, timeframe, setTimeframe } = useTerminal()
@@ -73,11 +73,7 @@ const TerminalContent: React.FC = () => {
   const reviewAISetup = useCallback((): void => { document.getElementById('order-ticket')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }, [])
   const handleLiveUpdate = useCallback((nextCandles: OHLCV[], price: number): void => { setLiveCandles(nextCandles); setCurrentPrice(price) }, [])
   const handleLiveActiveChange = useCallback((active: boolean): void => { setLiveMarketActive(active); if (!active) setLiveCandles([]) }, [])
-
-  const handleOrderSubmit = useCallback((draft: SimulatedOrderDraft): void => {
-    try { const order = submitSimulatedOrder(draft); setOpenPositions((prev) => [...prev, order]); pushToast(`Simulated ${order.type} ${order.lotSize.toFixed(2)} lots ${order.symbol} placed (${order.id}).`) }
-    catch (err) { pushToast(err instanceof Error ? err.message : 'Unable to place simulated order.') }
-  }, [pushToast])
+  const handleOrderSubmit = useCallback((draft: SimulatedOrderDraft): void => { try { const order = submitSimulatedOrder(draft); setOpenPositions((prev) => [...prev, order]); pushToast(`Simulated ${order.type} ${order.lotSize.toFixed(2)} lots ${order.symbol} placed (${order.id}).`) } catch (err) { pushToast(err instanceof Error ? err.message : 'Unable to place simulated order.') } }, [pushToast])
 
   const handleClosePosition = useCallback(async (id: string): Promise<void> => {
     const order = openPositions.find((item) => item.id === id)
@@ -119,23 +115,15 @@ const TerminalContent: React.FC = () => {
   return <div className="flex h-full flex-col overflow-hidden bg-shafx-bg text-shafx-text">
     <TopNav symbol={selectedSymbol} price={displayPrice} pricePrecision={symbolSpec.pricePrecision} timeframe={timeframe} onTimeframeChange={setTimeframe} pairs={watchlist} onSelectPair={setSelectedSymbol} />
     <main className="flex flex-1 flex-col overflow-y-auto pb-16 lg:flex-row lg:overflow-hidden lg:pb-0">
-      <aside className="hidden w-56 flex-shrink-0 flex-col gap-4 border-r border-shafx-border p-3 lg:flex lg:overflow-y-auto">
-        <div className="h-72 flex-shrink-0"><Watchlist pairs={watchlist} selectedPair={selectedSymbol} onSelectPair={setSelectedSymbol} /></div>
-        <AccountPanel account={accountData} />
-      </aside>
-
+      <aside className="hidden w-56 flex-shrink-0 flex-col gap-4 border-r border-shafx-border p-3 lg:flex lg:overflow-y-auto"><div className="h-72 flex-shrink-0"><Watchlist pairs={watchlist} selectedPair={selectedSymbol} onSelectPair={setSelectedSymbol} /></div><AccountPanel account={accountData} /></aside>
       <section className={`${showMarket ? '' : 'hidden'} flex min-w-0 flex-1 flex-col lg:flex`}>
         <div className="flex h-11 flex-shrink-0 items-center justify-between gap-3 border-b border-shafx-border px-3 sm:px-4"><span className="text-[11px] text-shafx-textMuted">{liveMarketActive ? 'Live market feed • Deriv' : 'Demo market feed'}</span>{liveControl}</div>
         <div className="min-h-[500px] flex-1 p-2 sm:min-h-[560px] sm:p-3 lg:min-h-[620px]"><CandlestickChart data={chartCandles} annotations={chartAnnotations} timeframe={timeframe} height="100%" /></div>
         <div className="h-48 flex-shrink-0 border-t border-shafx-border p-2 sm:p-3 lg:h-36"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} /></div>
       </section>
-
       <aside className={`${showAgent ? '' : 'hidden'} flex w-full flex-shrink-0 flex-col gap-4 p-3 sm:p-4 lg:flex lg:w-72 lg:overflow-y-auto`}><TradingAgentPanel symbol={selectedSymbol} timeframe={timeframe} candles={chartCandles} currentPrice={displayPrice} activePosition={activePosition} tradeHistory={tradeHistory} onReviewSetup={reviewAISetup} /><AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={chartCandles} setup={aiSetup} onReviewSetup={reviewAISetup} /><OrderPanel symbol={selectedSymbol} currentPrice={displayPrice} accountBalance={accountData.balance} accountCurrency={accountData.currency} symbolSpec={symbolSpec} conversionRate={conversionRate} onSubmitOrder={handleOrderSubmit} aiSetup={aiSetup} /></aside>
-
       <aside className={`${showHistory ? '' : 'hidden'} flex w-full flex-shrink-0 flex-col gap-4 p-3 sm:p-4 lg:hidden`}><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /><TradingJournalPanel tradeHistory={tradeHistory} currency={accountData.currency} /></aside>
-
       <aside className={`${showAccount ? '' : 'hidden'} flex w-full flex-shrink-0 flex-col gap-4 p-3 sm:p-4 lg:hidden`}><AccountPanel account={accountData} /><BacktestPanel symbol={selectedSymbol} candles={candles} symbolSpec={symbolSpec} initialBalance={accountData.balance} accountCurrency={accountData.currency} conversionRate={conversionRate} /><ReplayPanel candles={candles} replayCount={replayCount || candles.length} onReplayCountChange={setReplayCount} /><MarketAnalysisPanel analysis={marketAnalysis} pricePrecision={symbolSpec.pricePrecision} /></aside>
-
       <aside className="hidden w-72 flex-shrink-0 flex-col gap-4 border-l border-shafx-border p-3 lg:flex lg:overflow-y-auto"><MarketAnalysisPanel analysis={marketAnalysis} pricePrecision={symbolSpec.pricePrecision} /><TradingAgentPanel symbol={selectedSymbol} timeframe={timeframe} candles={chartCandles} currentPrice={displayPrice} activePosition={activePosition} tradeHistory={tradeHistory} onReviewSetup={reviewAISetup} /><AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={chartCandles} setup={aiSetup} onReviewSetup={reviewAISetup} /><ReplayPanel candles={candles} replayCount={replayCount || candles.length} onReplayCountChange={setReplayCount} /><BacktestPanel symbol={selectedSymbol} candles={candles} symbolSpec={symbolSpec} initialBalance={accountData.balance} accountCurrency={accountData.currency} conversionRate={conversionRate} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /><TradingJournalPanel tradeHistory={tradeHistory} currency={accountData.currency} /><div id="order-ticket"><OrderPanel symbol={selectedSymbol} currentPrice={displayPrice} accountBalance={accountData.balance} accountCurrency={accountData.currency} symbolSpec={symbolSpec} conversionRate={conversionRate} onSubmitOrder={handleOrderSubmit} aiSetup={aiSetup} /></div></aside>
     </main>
     <MobileNav activeTab={mobileTab} onChange={setMobileTab} />
