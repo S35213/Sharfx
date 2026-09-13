@@ -36,6 +36,7 @@ const authError = (data, fallback) => {
   const code = String(data?.code || '').toLowerCase()
   const message = String(data?.msg || data?.message || data?.error_description || data?.error || '').trim()
   if (code === 'email_exists' || code === 'user_already_exists') return 'A SHAFX account with that email already exists. Sign in instead.'
+  if (code === 'email_not_confirmed') return 'Please confirm your email address before signing in.'
   if (code === 'weak_password') return 'That password is too weak. Use a stronger password.'
   if (code === 'email_provider_disabled') return 'Email sign-up is temporarily unavailable. Please try again later.'
   if (code === 'validation_failed') return message || 'Please check the account details and try again.'
@@ -111,6 +112,33 @@ export default async function handler(req, res) {
       return json(res, 200, { ok: true, user: { id: user.id, email: user.email, displayName: profile.display_name, status: profile.status, simulatorAccountId: profile.simulator_account_id, createdAt: profile.created_at } })
     }
 
+    if (action === 'reset-request') {
+      if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'Method not allowed' })
+      const body = typeof req.body === 'object' && req.body ? req.body : {}
+      const email = String(body.email || '').trim().toLowerCase()
+      if (!/^\S+@\S+\.\S+$/.test(email)) return json(res, 400, { ok: false, error: 'Enter a valid email address.' })
+      const redirectTo = `${process.env.SHAfx_SITE_URL || 'https://shafx.vercel.app'}/?auth=reset`
+      const response = await supabase('/recover', { method: 'POST', body: JSON.stringify({ email, redirect_to: redirectTo }) })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) return json(res, response.status, { ok: false, error: authError(data, 'Unable to send the password reset email.') })
+      await securityEvent({ event_type: 'password_reset_requested', decision: 'allow', risk_score: 0, fingerprint: securityFingerprint(req), metadata: {} })
+      return json(res, 200, { ok: true, message: 'If that email belongs to a SHAFX account, a password reset email has been sent.' })
+    }
+
+    if (action === 'update-password') {
+      if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'Method not allowed' })
+      const body = typeof req.body === 'object' && req.body ? req.body : {}
+      const token = String(body.token || '')
+      const password = String(body.password || '')
+      if (!token) return json(res, 401, { ok: false, error: 'Password reset session is missing or expired. Request a new reset email.' })
+      if (password.length < 10) return json(res, 400, { ok: false, error: 'Password must be at least 10 characters.' })
+      const response = await supabase('/user', { method: 'PUT', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ password }) })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) return json(res, response.status, { ok: false, error: authError(data, 'Unable to change your password.') })
+      await securityEvent({ user_id: data.id, event_type: 'password_reset_completed', decision: 'allow', risk_score: 0, fingerprint: securityFingerprint(req), metadata: {} })
+      return json(res, 200, { ok: true, message: 'Password changed. You can now sign in to SHAFX.' })
+    }
+
     if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'Method not allowed' })
     const body = typeof req.body === 'object' && req.body ? req.body : {}
 
@@ -153,10 +181,11 @@ export default async function handler(req, res) {
         return json(res, guard.status, { ok: false, error: guard.error, retryAfterSeconds: guard.retryAfterSeconds })
       }
       const response = await supabase('/token?grant_type=password', { method: 'POST', body: JSON.stringify({ email, password }) })
-      const data = await response.json()
+      const data = await response.json().catch(() => ({}))
       if (!response.ok || !data.access_token || !data.user) {
         recordLoginFailure(req)
-        await securityEvent({ event_type: 'login_failed', decision: 'deny', risk_score: 30, fingerprint: securityFingerprint(req), metadata: { reason: 'invalid_credentials' } })
+        await securityEvent({ event_type: 'login_failed', decision: 'deny', risk_score: 30, fingerprint: securityFingerprint(req), metadata: { reason: String(data?.code || data?.error || 'invalid_credentials') } })
+        if (String(data?.code || '').toLowerCase() === 'email_not_confirmed') return json(res, 401, { ok: false, error: 'Please confirm your email address before signing in.' })
         return json(res, 401, { ok: false, error: 'Invalid email or password.' })
       }
 
