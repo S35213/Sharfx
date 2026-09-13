@@ -1,9 +1,59 @@
-import React from 'react'
-import { Activity, ChevronDown, Wifi } from 'lucide-react'
-import type { Timeframe } from '../../types'
+import React, { useMemo, useState } from 'react'
+import { Activity, ChevronDown, LockKeyhole, Search, Wifi } from 'lucide-react'
+import type { MarketPair, Timeframe } from '../../types'
 import { TIMEFRAMES } from '../../types'
 import { formatPrice } from '../../lib/format'
 import { DerivAccountControl } from '../market/DerivAccountControl'
 
-interface TopNavProps { symbol: string; price: number; pricePrecision: number; timeframe: Timeframe; onTimeframeChange: (tf: Timeframe) => void }
-export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, timeframe, onTimeframeChange }) => <header className="sticky top-0 z-40 border-b border-shafx-border bg-shafx-surface"><div className="flex items-center gap-3 px-3 py-2 sm:gap-4 sm:px-4"><div className="flex flex-shrink-0 items-center gap-2"><div className="flex h-8 w-8 items-center justify-center rounded-lg bg-shafx-primary"><Activity className="h-5 w-5 text-white" /></div><span className="text-lg font-bold tracking-tight sm:text-xl">SHAFX</span></div><div className="hidden items-center gap-4 border-l border-shafx-border pl-4 md:flex"><div><div className="flex items-center gap-2"><span className="text-base font-semibold">{symbol}</span><ChevronDown className="h-4 w-4 text-shafx-textMuted" /></div><span className="text-xs text-shafx-textMuted">Forex • Spot</span></div><div><div className="font-mono text-lg font-semibold tabular">{formatPrice(price, pricePrecision)}</div><span className="flex items-center gap-1 text-xs text-shafx-success"><Wifi className="h-3 w-3" />Simulated feed</span></div></div><div className="min-w-0 flex-1 md:hidden"><div className="flex items-center justify-between gap-2"><span className="truncate text-sm font-semibold">{symbol}</span><span className="font-mono text-sm font-semibold tabular">{formatPrice(price, pricePrecision)}</span></div></div><div className="ml-auto flex items-center gap-2"><div className="hidden sm:block"><DerivAccountControl /></div><div className="flex max-w-[58vw] items-center gap-0.5 overflow-x-auto rounded-lg border border-shafx-border bg-shafx-bg p-1 sm:max-w-none sm:gap-1">{TIMEFRAMES.map((tf) => <button key={tf} type="button" onClick={() => onTimeframeChange(tf)} aria-pressed={timeframe === tf} className={`min-h-11 flex-shrink-0 rounded px-2.5 text-xs font-medium transition-colors sm:px-3 ${timeframe === tf ? 'bg-shafx-surfaceHover text-shafx-primary' : 'text-shafx-textMuted hover:bg-shafx-surfaceHover hover:text-shafx-text'}`}>{tf}</button>)}</div><div className="hidden items-center gap-3 border-l border-shafx-border pl-4 sm:flex"><div className="hidden flex-col items-end lg:flex"><span className="text-xs text-shafx-textMuted">Demo Account</span><span className="font-mono text-sm font-semibold text-shafx-primary tabular">Simulator</span></div><div className="flex h-8 w-8 items-center justify-center rounded-full border border-shafx-primary/30 bg-shafx-primary/20"><span className="text-xs font-bold text-shafx-primary">D</span></div></div></div></div></header>
+interface TopNavProps {
+  symbol: string
+  price: number
+  pricePrecision: number
+  timeframe: Timeframe
+  onTimeframeChange: (tf: Timeframe) => void
+  pairs: MarketPair[]
+  onSelectPair: (symbol: string) => void
+}
+
+export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, timeframe, onTimeframeChange, pairs, onSelectPair }) => {
+  const [marketOpen, setMarketOpen] = useState(false)
+  const [accountOpen, setAccountOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const instruments = useMemo(() => {
+    const base = pairs.map((pair) => pair.symbol)
+    return Array.from(new Set([...base, 'XAU/USD']))
+  }, [pairs])
+  const filtered = instruments.filter((item) => item.toLowerCase().includes(query.trim().toLowerCase()))
+
+  return <header className="sticky top-0 z-40 border-b border-shafx-border bg-shafx-surface shadow-sm">
+    <div className="flex min-h-14 items-center gap-2 px-2.5 sm:gap-3 sm:px-4">
+      <div className="flex flex-shrink-0 items-center gap-2">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-shafx-primary"><Activity className="h-5 w-5 text-white" /></div>
+        <span className="hidden text-lg font-bold tracking-tight sm:block">SHAFX</span>
+      </div>
+
+      <div className="relative min-w-0 flex-1 md:flex-none">
+        <button type="button" onClick={() => setMarketOpen((open) => !open)} className="flex min-h-11 w-full min-w-0 items-center gap-2 rounded-md border border-shafx-border bg-shafx-bg px-2.5 text-left hover:bg-shafx-surfaceHover md:w-52" aria-expanded={marketOpen} aria-label="Choose trading instrument">
+          <div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold">{symbol}</div><div className="hidden text-[10px] text-shafx-textMuted sm:block">Market • {formatPrice(price, pricePrecision)}</div></div>
+          <ChevronDown className={`h-4 w-4 flex-shrink-0 text-shafx-textMuted transition-transform ${marketOpen ? 'rotate-180' : ''}`} />
+        </button>
+        {marketOpen && <div className="absolute left-0 top-[calc(100%+6px)] z-50 w-[min(92vw,320px)] rounded-lg border border-shafx-border bg-shafx-surface p-2 shadow-2xl">
+          <div className="mb-2 flex items-center gap-2 rounded border border-shafx-border bg-shafx-bg px-2.5"><Search className="h-4 w-4 text-shafx-textMuted" /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search symbol e.g. EUR/USD, gold" className="h-10 w-full bg-transparent text-sm outline-none placeholder:text-shafx-textMuted" /></div>
+          <div className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-wider text-shafx-textMuted">Markets</div>
+          <div className="max-h-64 overflow-y-auto">{filtered.map((item) => <button key={item} type="button" onClick={() => { onSelectPair(item); setMarketOpen(false); setQuery('') }} className={`flex min-h-11 w-full items-center justify-between rounded px-2.5 text-left text-sm hover:bg-shafx-surfaceHover ${item === symbol ? 'bg-shafx-primary/10 text-shafx-primary' : ''}`}><span>{item}</span><span className="text-[10px] text-shafx-textMuted">{item === 'XAU/USD' ? 'Gold' : 'Forex'}</span></button>)}{filtered.length === 0 && <div className="px-2.5 py-4 text-center text-xs text-shafx-textMuted">No matching instrument</div>}</div>
+        </div>}
+      </div>
+
+      <div className="hidden items-center gap-2 border-l border-shafx-border pl-3 lg:flex"><div className="font-mono text-base font-semibold tabular">{formatPrice(price, pricePrecision)}</div><span className="flex items-center gap-1 text-[10px] text-shafx-success"><Wifi className="h-3 w-3" />Simulated</span></div>
+
+      <div className="ml-auto flex min-w-0 items-center gap-1.5">
+        <div className="relative hidden sm:block">
+          <button type="button" onClick={() => setAccountOpen((open) => !open)} className="flex min-h-11 items-center gap-2 rounded-md border border-shafx-border bg-shafx-bg px-2.5" aria-expanded={accountOpen} aria-label="Select account mode"><span className="h-2 w-2 rounded-full bg-shafx-success" /><span className="text-xs font-semibold">Demo</span><ChevronDown className="h-3.5 w-3.5 text-shafx-textMuted" /></button>
+          {accountOpen && <div className="absolute right-0 top-[calc(100%+6px)] z-50 w-52 rounded-lg border border-shafx-border bg-shafx-surface p-1.5 shadow-2xl"><button type="button" className="flex min-h-11 w-full items-center justify-between rounded bg-shafx-primary/10 px-3 text-left text-sm"><span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-shafx-success" />Demo account</span><span className="text-[10px] text-shafx-primary">ACTIVE</span></button><button type="button" disabled className="mt-1 flex min-h-11 w-full cursor-not-allowed items-center justify-between rounded px-3 text-left text-sm text-shafx-textMuted"><span className="flex items-center gap-2"><LockKeyhole className="h-3.5 w-3.5" />Real account</span><span className="text-[10px]">LOCKED</span></button><p className="px-3 py-2 text-[10px] leading-relaxed text-shafx-textMuted">Real-money execution stays disabled. Connect a supported broker and complete the live-trading stage before this can be enabled.</p></div>}
+        </div>
+        <div className="hidden sm:block"><DerivAccountControl /></div>
+        <div className="flex max-w-[49vw] items-center gap-0.5 overflow-x-auto rounded-md border border-shafx-border bg-shafx-bg p-1 sm:max-w-none sm:gap-1">{TIMEFRAMES.map((tf) => <button key={tf} type="button" onClick={() => onTimeframeChange(tf)} aria-pressed={timeframe === tf} className={`min-h-10 flex-shrink-0 rounded px-2.5 text-[11px] font-medium transition-colors sm:px-3 ${timeframe === tf ? 'bg-shafx-primary text-white' : 'text-shafx-textMuted hover:bg-shafx-surfaceHover hover:text-shafx-text'}`}>{tf}</button>)}</div>
+      </div>
+    </div>
+  </header>
+}
