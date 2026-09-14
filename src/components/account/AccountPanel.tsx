@@ -3,6 +3,7 @@ import { ChevronRight, Copy, Link2, LogIn, LogOut, Plus, ShieldCheck, TrendingDo
 import type { AccountData } from '../../types'
 import { formatCurrency, formatPercent } from '../../lib/format'
 import { DerivAccountControl } from '../market/DerivAccountControl'
+import { BotStore } from '../store/BotStore'
 import { useAuth } from '../../app/AuthContext'
 
 interface Props { account: AccountData }
@@ -104,6 +105,8 @@ export const AccountPanel: React.FC<Props> = ({ account }) => {
     </section>
 
     {user && <section className="rounded-xl border border-shafx-primary/20 bg-shafx-surface p-4 shadow-sm"><div className="flex items-start gap-2"><CheckCircle2 className="mt-0.5 h-5 w-5 text-shafx-primary" /><div><h3 className="font-semibold">Choose your trading account</h3><p className="mt-1 text-[11px] text-shafx-textMuted">You can practice inside SHAFX without a broker, or connect a broker account when you are ready.</p></div></div><div className="mt-3 grid grid-cols-2 gap-2 rounded-lg border border-shafx-border bg-shafx-bg p-1"><button type="button" onClick={() => chooseTradeMode('simulator')} className={`min-h-12 rounded-lg text-xs font-semibold ${tradeMode === 'simulator' ? 'bg-shafx-primary text-white' : 'text-shafx-textMuted'}`}><span className="block">SHAFX Simulator</span><span className="mt-1 block text-[9px] opacity-80">Practice • no broker</span></button><button type="button" onClick={() => chooseTradeMode('broker')} className={`min-h-12 rounded-lg text-xs font-semibold ${tradeMode === 'broker' ? 'bg-shafx-primary text-white' : 'text-shafx-textMuted'}`}><span className="block">Connect Broker</span><span className="mt-1 block text-[9px] opacity-80">Use a broker account</span></button></div>{tradeMode === 'broker' && <div className="mt-3 rounded-lg border border-shafx-border bg-shafx-bg p-3"><div className="flex items-center justify-between gap-3"><div><div className="flex items-center gap-2 text-sm font-semibold"><Link2 className="h-4 w-4 text-shafx-primary" />Connect your broker</div><p className="mt-1 text-[10px] leading-relaxed text-shafx-textMuted">Start with a supported broker connection. Connecting a broker does not automatically enable real-money order execution.</p></div><DerivAccountControl /></div></div>}</section>}
+
+    {user && <BotStore />}
 
     <section className="rounded-xl border border-shafx-border bg-shafx-surface p-4 shadow-sm"><div className="flex items-start justify-between gap-3"><div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-shafx-primary" /><div><h3 className="font-semibold">Automatic account status</h3><p className="mt-1 text-[10px] text-shafx-textMuted">Every sign-in checks the account status automatically.</p></div></div></div><div className="mt-3 grid grid-cols-3 gap-2 text-center text-[10px]"><div className="rounded border border-shafx-success/20 bg-shafx-success/10 p-2 text-shafx-success">ACTIVE<br /><span className="text-shafx-textMuted">allowed</span></div><div className="rounded border border-yellow-500/20 bg-yellow-500/10 p-2 text-yellow-400">SUSPENDED<br /><span className="text-shafx-textMuted">blocked</span></div><div className="rounded border border-shafx-danger/20 bg-shafx-danger/10 p-2 text-shafx-danger">BANNED<br /><span className="text-shafx-textMuted">blocked</span></div></div></section>
 
