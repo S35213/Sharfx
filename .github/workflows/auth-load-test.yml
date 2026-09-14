@@ -1,0 +1,27 @@
+name: SHAFX authenticated quota load test
+
+on:
+  workflow_dispatch:
+  repository_dispatch:
+    types: [run-shafx-auth-load-test]
+
+permissions:
+  contents: read
+
+jobs:
+  auth-load-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Upgrade npm for Arborist compatibility
+        run: npm install --global npm@11.6.0
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Run authenticated quota concurrency test
+        env:
+          SHAFX_LOADTEST_URL: https://shafx.vercel.app
+        run: node scripts/auth-load-test.mjs
