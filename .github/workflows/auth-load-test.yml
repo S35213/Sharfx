@@ -31,4 +31,6 @@ jobs:
       - name: Run authenticated quota concurrency test
         env:
           SHAFX_LOADTEST_URL: https://shafx.vercel.app
+          SHAFX_TEST_EMAIL: ${{ secrets.SHAFX_TEST_EMAIL }}
+          SHAFX_TEST_PASSWORD: ${{ secrets.SHAFX_TEST_PASSWORD }}
         run: node scripts/auth-load-test.mjs
