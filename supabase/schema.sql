@@ -60,6 +60,11 @@ alter table public.shafx_profiles add column if not exists failed_login_count in
 create table if not exists public.shafx_bot_entitlements (
   user_id uuid primary key references auth.users(id) on delete cascade,
   plan text not null default 'FREE' check (plan in ('FREE','REGULAR','PRO')),
+  subscription_status text not null default 'active' check (subscription_status in ('inactive','trialing','active','past_due','canceled','unpaid','paused')),
+  subscription_ends_at timestamptz,
+  provider text,
+  provider_customer_id text,
+  provider_subscription_id text,
   updated_at timestamptz not null default now()
 );
 alter table public.shafx_bot_entitlements enable row level security;
@@ -70,22 +75,57 @@ create table if not exists public.shafx_bot_usage (
   user_id uuid primary key references auth.users(id) on delete cascade,
   run_id text,
   used_cycle_units integer not null default 0 check (used_cycle_units >= 0),
+  usage_day date not null default ((now() at time zone 'UTC')::date),
   updated_at timestamptz not null default now()
 );
 alter table public.shafx_bot_usage enable row level security;
 drop policy if exists "Users can read own bot usage" on public.shafx_bot_usage;
 create policy "Users can read own bot usage" on public.shafx_bot_usage for select using (auth.uid() = user_id);
+create index if not exists shafx_bot_usage_day_idx on public.shafx_bot_usage (usage_day);
 
 create or replace function public.handle_new_shafx_user_bot_defaults()
 returns trigger language plpgsql security definer set search_path = public
 as $$
 begin
-  insert into public.shafx_bot_entitlements(user_id, plan) values (new.id, 'FREE') on conflict (user_id) do nothing;
-  insert into public.shafx_bot_usage(user_id, used_cycle_units) values (new.id, 0) on conflict (user_id) do nothing;
+  insert into public.shafx_bot_entitlements(user_id, plan, subscription_status) values (new.id, 'FREE', 'active') on conflict (user_id) do nothing;
+  insert into public.shafx_bot_usage(user_id, used_cycle_units, usage_day) values (new.id, 0, (now() at time zone 'UTC')::date) on conflict (user_id) do nothing;
   return new;
 end;
 $$;
 drop trigger if exists on_auth_user_created_shafx_bot on auth.users;
 create trigger on_auth_user_created_shafx_bot after insert on auth.users for each row execute procedure public.handle_new_shafx_user_bot_defaults();
-insert into public.shafx_bot_entitlements(user_id, plan) select id, 'FREE' from auth.users on conflict (user_id) do nothing;
-insert into public.shafx_bot_usage(user_id, used_cycle_units) select id, 0 from auth.users on conflict (user_id) do nothing;
+insert into public.shafx_bot_entitlements(user_id, plan, subscription_status) select id, 'FREE', 'active' from auth.users on conflict (user_id) do nothing;
+insert into public.shafx_bot_usage(user_id, used_cycle_units, usage_day) select id, 0, (now() at time zone 'UTC')::date from auth.users on conflict (user_id) do nothing;
+
+-- Daily bot allowance: Free=5 units/day, Regular=15 units/day, Pro=unlimited while active.
+drop function if exists public.consume_shafx_bot_cycle(uuid,text,integer);
+create function public.consume_shafx_bot_cycle(p_user_id uuid, p_run_id text, p_units integer)
+returns table(ok boolean, plan text, used_cycle_units integer, max_cycle_units integer, usage_day date)
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_plan text;
+  v_used integer;
+  v_max integer;
+  v_day date := (now() at time zone 'UTC')::date;
+  v_current_day date;
+begin
+  if p_units not in (1,2) then raise exception 'invalid cycle units'; end if;
+  select case
+    when e.plan in ('PRO','REGULAR') and e.subscription_status in ('trialing','active') and (e.subscription_ends_at is null or e.subscription_ends_at > now()) then e.plan
+    else 'FREE'
+  end into v_plan
+  from public.shafx_bot_entitlements e where e.user_id = p_user_id;
+  if v_plan is null then v_plan := 'FREE'; end if;
+  v_max := case v_plan when 'PRO' then null when 'REGULAR' then 15 else 5 end;
+  insert into public.shafx_bot_usage(user_id, run_id, used_cycle_units, usage_day) values (p_user_id, p_run_id, 0, v_day) on conflict (user_id) do nothing;
+  select u.used_cycle_units, u.usage_day into v_used, v_current_day from public.shafx_bot_usage u where u.user_id = p_user_id for update;
+  if v_current_day is distinct from v_day then
+    v_used := 0;
+    update public.shafx_bot_usage set usage_day=v_day, run_id=p_run_id, used_cycle_units=0, updated_at=now() where user_id=p_user_id;
+  end if;
+  if v_max is not null and v_used + p_units > v_max then return query select false, v_plan, v_used, v_max, v_day; return; end if;
+  update public.shafx_bot_usage set run_id=p_run_id, used_cycle_units=v_used+p_units, updated_at=now(), usage_day=v_day where user_id=p_user_id;
+  return query select true, v_plan, v_used+p_units, v_max, v_day;
+end;
+$$;
