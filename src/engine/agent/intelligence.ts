@@ -1,5 +1,7 @@
-import type { MarketAnalysisContext } from '../ai/context'
-import type { MultiTimeframeBias, AgentLearningSummary, AgentResearch } from './types'
+import type { AITradingContext } from '../ai/types'
+import type { MarketBias } from '../marketStructure/types'
+import type { AgentLearningSummary } from './learning'
+import type { AgentResearchReport } from './research'
 
 export interface IntelligenceSnapshot {
   score: number
@@ -11,10 +13,10 @@ export interface IntelligenceSnapshot {
 }
 
 interface Input {
-  context: MarketAnalysisContext
-  multiTimeframe: MultiTimeframeBias
+  context: AITradingContext
+  multiTimeframe: { dominantBias: MarketBias | null; confidence: number; aligned: boolean }
   learning: AgentLearningSummary
-  research: AgentResearch
+  research: AgentResearchReport
   currentPrice: number
 }
 
@@ -24,10 +26,11 @@ export const scoreIntelligence = ({ context, multiTimeframe, learning, research 
   const reasons: string[] = []
   const warnings: string[] = []
   let score = 50
+  const structureBias = context.marketStructure.bias
 
-  if (context.structure.bias === 'Bullish') { score += 12; reasons.push('Bullish market structure') }
-  if (context.structure.bias === 'Bearish') { score -= 12; reasons.push('Bearish market structure') }
-  if (context.structure.status === 'Intact') { score += 6; reasons.push('Structure remains intact') }
+  if (structureBias === 'Bullish') { score += 12; reasons.push('Bullish market structure') }
+  if (structureBias === 'Bearish') { score -= 12; reasons.push('Bearish market structure') }
+  if (context.marketStructure.status === 'Intact') { score += 6; reasons.push('Structure remains intact') }
 
   const setup = context.setup.preferredSetup
   if (setup) {
@@ -42,15 +45,11 @@ export const scoreIntelligence = ({ context, multiTimeframe, learning, research 
   if (research.agreement < 60) { score -= 8; warnings.push('Evidence agreement is weak') }
   if (learning.cautionKeys.length > 0) { score -= 8; warnings.push('Historical simulator patterns require caution') }
 
-  const regime = context.structure.bias === 'Bullish' || context.structure.bias === 'Bearish'
+  const regime = structureBias === 'Bullish' || structureBias === 'Bearish'
     ? (setup ? 'TREND' : 'BREAKOUT')
     : setup ? 'RANGE' : 'UNCLEAR'
-
   const confidence = Math.round(clamp(50 + Math.abs(score - 50) * 0.8))
-  const decision = setup && confidence >= 62 && research.agreement >= 55
-    ? setup.direction
-    : 'WAIT'
-
+  const decision = setup && confidence >= 62 && research.agreement >= 55 ? setup.direction : 'WAIT'
   if (decision === 'WAIT') warnings.push('The intelligence gate prefers waiting instead of forcing a trade')
   return { score: Math.round(clamp(score)), confidence, decision, regime, reasons, warnings }
 }
