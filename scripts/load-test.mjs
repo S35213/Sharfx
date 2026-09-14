@@ -2,7 +2,8 @@ const BASE_URL = process.env.SHAFX_LOADTEST_URL || 'https://shafx.vercel.app'
 const TARGETS = [50, 100, 200, 1000]
 const ROUTES = [
   { name: 'home', path: '/', expected: [200] },
-  { name: 'auth-me', path: '/api/auth/me', expected: [401] },
+  // Vercel maps api/auth.js to /api/auth; auth actions are query parameters.
+  { name: 'auth-me', path: '/api/auth?action=me', expected: [401] },
   { name: 'bot-usage', path: '/api/bot/usage', expected: [401] },
 ]
 
