@@ -1,5 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 
+export type BotPlan = 'FREE' | 'REGULAR' | 'PRO'
+
 export interface ShafxUser {
   id: string
   email: string
@@ -7,6 +9,7 @@ export interface ShafxUser {
   status: 'active' | 'suspended' | 'banned'
   simulatorAccountId: string
   createdAt: string
+  botPlan: BotPlan
 }
 
 interface AuthContextValue {
@@ -18,8 +21,6 @@ interface AuthContextValue {
   signOut: () => Promise<void>
   refresh: () => Promise<void>
 }
-
-const AuthContext = createContext<AuthContextValue | null>(null)
 
 const syncSimulatorIdentity = (user: ShafxUser | null): void => {
   if (typeof window === 'undefined') return
