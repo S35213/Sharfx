@@ -4,207 +4,38 @@ const json = (res, status, body) => res.status(status).json(body)
 const configured = () => Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY && process.env.SUPABASE_SERVICE_ROLE_KEY)
 const supabase = (path, options = {}, service = false) => fetch(`${process.env.SUPABASE_URL}/auth/v1${path}`, {
   ...options,
-  headers: {
-    apikey: service ? process.env.SUPABASE_SERVICE_ROLE_KEY : process.env.SUPABASE_ANON_KEY,
-    'Content-Type': 'application/json',
-    ...(options.headers || {}),
-  },
+  headers: { apikey: service ? process.env.SUPABASE_SERVICE_ROLE_KEY : process.env.SUPABASE_ANON_KEY, 'Content-Type': 'application/json', ...(options.headers || {}) },
 })
 const rest = (path, options = {}) => fetch(`${process.env.SUPABASE_URL}/rest/v1${path}`, {
   ...options,
-  headers: {
-    apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-    Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-    'Content-Type': 'application/json',
-    ...(options.headers || {}),
-  },
+  headers: { apikey: process.env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`, 'Content-Type': 'application/json', ...(options.headers || {}) },
 })
-
 const sessionCookie = 'shafx_session'
 const refreshCookie = 'shafx_refresh'
-const setSessionCookies = (res, session) => res.setHeader('Set-Cookie', [
-  `${sessionCookie}=${encodeURIComponent(session.access_token)}; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=3600`,
-  `${refreshCookie}=${encodeURIComponent(session.refresh_token)}; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=2592000`,
-])
-const clearSessionCookie = (res) => res.setHeader('Set-Cookie', [
-  `${sessionCookie}=; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=0`,
-  `${refreshCookie}=; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=0`,
-])
+const setSessionCookies = (res, session) => res.setHeader('Set-Cookie', [`${sessionCookie}=${encodeURIComponent(session.access_token)}; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=3600`, `${refreshCookie}=${encodeURIComponent(session.refresh_token)}; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=2592000`])
+const clearSessionCookie = (res) => res.setHeader('Set-Cookie', [`${sessionCookie}=; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=0`, `${refreshCookie}=; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=0`])
 const cookie = (req, name) => (req.headers.cookie || '').split(';').map((part) => part.trim()).find((part) => part.startsWith(`${name}=`))?.slice(name.length + 1) || null
-
-const authError = (data, fallback) => {
-  const code = String(data?.code || '').toLowerCase()
-  const message = String(data?.msg || data?.message || data?.error_description || data?.error || '').trim()
-  if (code === 'email_exists' || code === 'user_already_exists') return 'A SHAFX account with that email already exists. Sign in instead.'
-  if (code === 'email_not_confirmed') return 'Please confirm your email address before signing in.'
-  if (code === 'weak_password') return 'That password is too weak. Use a stronger password.'
-  if (code === 'email_provider_disabled') return 'Email sign-up is temporarily unavailable. Please try again later.'
-  if (code === 'validation_failed') return message || 'Please check the account details and try again.'
-  return message || fallback
-}
-
-async function refreshSession(req, res) {
-  const refresh = cookie(req, refreshCookie)
-  if (!refresh) return null
-  const response = await supabase('/token?grant_type=refresh_token', { method: 'POST', body: JSON.stringify({ refresh_token: decodeURIComponent(refresh) }) })
-  if (!response.ok) return null
-  const session = await response.json()
-  if (!session.access_token || !session.refresh_token || !session.user) return null
-  setSessionCookies(res, session)
-  return { token: session.access_token, user: session.user }
-}
-
-async function currentUser(req, res) {
-  const token = cookie(req, sessionCookie)
-  if (token) {
-    const decoded = decodeURIComponent(token)
-    const response = await supabase('/user', { headers: { Authorization: `Bearer ${decoded}` } })
-    if (response.ok) return { token: decoded, user: await response.json() }
-  }
-  return (await refreshSession(req, res)) || { token: null, user: null }
-}
-
-async function profileFor(userId) {
-  const response = await rest(`/shafx_profiles?id=eq.${encodeURIComponent(userId)}&select=id,display_name,status,simulator_account_id,created_at,risk_score,security_state,last_login_at,failed_login_count`)
-  if (!response.ok) throw new Error('SHAFX profile database is not ready. Run supabase/schema.sql once in the Supabase SQL Editor.')
-  const rows = await response.json()
-  return rows[0] || null
-}
-
-async function securityEvent(event) {
-  try {
-    await rest('/shafx_security_events', { method: 'POST', body: JSON.stringify(event) })
-  } catch {
-    // Security telemetry must never make a legitimate login fail.
-  }
-}
-
-async function updateSecurityProfile(userId, patch) {
-  try {
-    await rest(`/shafx_profiles?id=eq.${encodeURIComponent(userId)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch) })
-  } catch {
-    // The identity path remains usable if the optional security columns are not migrated yet.
-  }
-}
-
+const authError = (data, fallback) => { const code = String(data?.code || '').toLowerCase(); const message = String(data?.msg || data?.message || data?.error_description || data?.error || '').trim(); if (code === 'email_exists' || code === 'user_already_exists') return 'A SHAFX account with that email already exists. Sign in instead.'; if (code === 'email_not_confirmed') return 'Please confirm your email address before signing in.'; if (code === 'weak_password') return 'That password is too weak. Use a stronger password.'; if (code === 'email_provider_disabled') return 'Email sign-up is temporarily unavailable. Please try again later.'; if (code === 'validation_failed') return message || 'Please check the account details and try again.'; return message || fallback }
+async function refreshSession(req, res) { const refresh = cookie(req, refreshCookie); if (!refresh) return null; const response = await supabase('/token?grant_type=refresh_token', { method: 'POST', body: JSON.stringify({ refresh_token: decodeURIComponent(refresh) }) }); if (!response.ok) return null; const session = await response.json(); if (!session.access_token || !session.refresh_token || !session.user) return null; setSessionCookies(res, session); return { token: session.access_token, user: session.user } }
+async function currentUser(req, res) { const token = cookie(req, sessionCookie); if (token) { const decoded = decodeURIComponent(token); const response = await supabase('/user', { headers: { Authorization: `Bearer ${decoded}` } }); if (response.ok) return { token: decoded, user: await response.json() } } return (await refreshSession(req, res)) || { token: null, user: null } }
+async function profileFor(userId) { const response = await rest(`/shafx_profiles?id=eq.${encodeURIComponent(userId)}&select=id,display_name,status,simulator_account_id,created_at,risk_score,security_state,last_login_at,failed_login_count`); if (!response.ok) throw new Error('SHAFX profile database is not ready. Run supabase/schema.sql once in the Supabase SQL Editor.'); const rows = await response.json(); return rows[0] || null }
+async function botEntitlementFor(userId) { const response = await rest(`/shafx_bot_entitlements?user_id=eq.${encodeURIComponent(userId)}&select=plan`); if (!response.ok) throw new Error('SHAFX bot entitlement service is not ready.'); const rows = await response.json(); return rows[0]?.plan === 'PRO' || rows[0]?.plan === 'REGULAR' ? rows[0].plan : 'FREE' }
+const publicUser = async (user) => { const profile = await profileFor(user.id); if (!profile) return null; return { id: user.id, email: user.email, displayName: profile.display_name, status: profile.status, simulatorAccountId: profile.simulator_account_id, createdAt: profile.created_at, botPlan: await botEntitlementFor(user.id) } }
+async function securityEvent(event) { try { await rest('/shafx_security_events', { method: 'POST', body: JSON.stringify(event) }) } catch {} }
+async function updateSecurityProfile(userId, patch) { try { await rest(`/shafx_profiles?id=eq.${encodeURIComponent(userId)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch) }) } catch {} }
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store')
   if (!configured()) return json(res, 503, { ok: false, error: 'SHAFX identity is not configured on this deployment.' })
   const action = typeof req.query.action === 'string' ? req.query.action : ''
-
   try {
-    if (action === 'logout') {
-      const { user } = await currentUser(req, res)
-      if (user) await securityEvent({ user_id: user.id, event_type: 'logout', decision: 'allow', risk_score: 0, fingerprint: securityFingerprint(req), metadata: {} })
-      clearSessionCookie(res)
-      return json(res, 200, { ok: true })
-    }
-
-    if (action === 'me') {
-      const { user } = await currentUser(req, res)
-      if (!user) return json(res, 401, { ok: false, error: 'Not signed in' })
-      const profile = await profileFor(user.id)
-      if (!profile) return json(res, 403, { ok: false, error: 'SHAFX account profile is missing.' })
-      if (profile.status !== 'active') {
-        clearSessionCookie(res)
-        return json(res, 403, { ok: false, error: profile.status === 'banned' ? 'This SHAFX account has been banned.' : 'This SHAFX account is suspended.', status: profile.status })
-      }
-      return json(res, 200, { ok: true, user: { id: user.id, email: user.email, displayName: profile.display_name, status: profile.status, simulatorAccountId: profile.simulator_account_id, createdAt: profile.created_at } })
-    }
-
-    if (action === 'reset-request') {
-      if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'Method not allowed' })
-      const body = typeof req.body === 'object' && req.body ? req.body : {}
-      const email = String(body.email || '').trim().toLowerCase()
-      if (!/^\S+@\S+\.\S+$/.test(email)) return json(res, 400, { ok: false, error: 'Enter a valid email address.' })
-      const redirectTo = `${process.env.SHAfx_SITE_URL || 'https://shafx.vercel.app'}/?auth=reset`
-      const response = await supabase('/recover', { method: 'POST', body: JSON.stringify({ email, redirect_to: redirectTo }) })
-      const data = await response.json().catch(() => ({}))
-      if (!response.ok) return json(res, response.status, { ok: false, error: authError(data, 'Unable to send the password reset email.') })
-      await securityEvent({ event_type: 'password_reset_requested', decision: 'allow', risk_score: 0, fingerprint: securityFingerprint(req), metadata: {} })
-      return json(res, 200, { ok: true, message: 'If that email belongs to a SHAFX account, a password reset email has been sent.' })
-    }
-
-    if (action === 'update-password') {
-      if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'Method not allowed' })
-      const body = typeof req.body === 'object' && req.body ? req.body : {}
-      const token = String(body.token || '')
-      const password = String(body.password || '')
-      if (!token) return json(res, 401, { ok: false, error: 'Password reset session is missing or expired. Request a new reset email.' })
-      if (password.length < 10) return json(res, 400, { ok: false, error: 'Password must be at least 10 characters.' })
-      const response = await supabase('/user', { method: 'PUT', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ password }) })
-      const data = await response.json().catch(() => ({}))
-      if (!response.ok) return json(res, response.status, { ok: false, error: authError(data, 'Unable to change your password.') })
-      await securityEvent({ user_id: data.id, event_type: 'password_reset_completed', decision: 'allow', risk_score: 0, fingerprint: securityFingerprint(req), metadata: {} })
-      return json(res, 200, { ok: true, message: 'Password changed. You can now sign in to SHAFX.' })
-    }
-
+    if (action === 'logout') { const { user } = await currentUser(req, res); if (user) await securityEvent({ user_id: user.id, event_type: 'logout', decision: 'allow', risk_score: 0, fingerprint: securityFingerprint(req), metadata: {} }); clearSessionCookie(res); return json(res, 200, { ok: true }) }
+    if (action === 'me') { const { user } = await currentUser(req, res); if (!user) return json(res, 401, { ok: false, error: 'Not signed in' }); const result = await publicUser(user); if (!result) return json(res, 403, { ok: false, error: 'SHAFX account profile is missing.' }); if (result.status !== 'active') { clearSessionCookie(res); return json(res, 403, { ok: false, error: result.status === 'banned' ? 'This SHAFX account has been banned.' : 'This SHAFX account is suspended.', status: result.status }) } return json(res, 200, { ok: true, user: result }) }
+    if (action === 'reset-request') { if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'Method not allowed' }); const body = typeof req.body === 'object' && req.body ? req.body : {}; const email = String(body.email || '').trim().toLowerCase(); if (!/^\S+@\S+\.\S+$/.test(email)) return json(res, 400, { ok: false, error: 'Enter a valid email address.' }); const redirectTo = `${process.env.SHAfx_SITE_URL || 'https://shafx.vercel.app'}/?auth=reset`; const response = await supabase('/recover', { method: 'POST', body: JSON.stringify({ email, redirect_to: redirectTo }) }); const data = await response.json().catch(() => ({})); if (!response.ok) return json(res, response.status, { ok: false, error: authError(data, 'Unable to send the password reset email.') }); await securityEvent({ event_type: 'password_reset_requested', decision: 'allow', risk_score: 0, fingerprint: securityFingerprint(req), metadata: {} }); return json(res, 200, { ok: true, message: 'If that email belongs to a SHAFX account, a password reset email has been sent.' }) }
+    if (action === 'update-password') { if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'Method not allowed' }); const body = typeof req.body === 'object' && req.body ? req.body : {}; const token = String(body.token || ''); const password = String(body.password || ''); if (!token) return json(res, 401, { ok: false, error: 'Password reset session is missing or expired. Request a new reset email.' }); if (password.length < 10) return json(res, 400, { ok: false, error: 'Password must be at least 10 characters.' }); const response = await supabase('/user', { method: 'PUT', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ password }) }); const data = await response.json().catch(() => ({})); if (!response.ok) return json(res, response.status, { ok: false, error: authError(data, 'Unable to change your password.') }); await securityEvent({ user_id: data.id, event_type: 'password_reset_completed', decision: 'allow', risk_score: 0, fingerprint: securityFingerprint(req), metadata: {} }); return json(res, 200, { ok: true, message: 'Password changed. You can now sign in to SHAFX.' }) }
     if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'Method not allowed' })
     const body = typeof req.body === 'object' && req.body ? req.body : {}
-
-    if (action === 'signup') {
-      const email = String(body.email || '').trim().toLowerCase()
-      const password = String(body.password || '')
-      const displayName = String(body.displayName || '').trim().slice(0, 60)
-      const guard = signupGuard(req, body)
-      if (!guard.allowed) {
-        await securityEvent({ event_type: 'signup_blocked', decision: 'block', risk_score: guard.risk || 100, fingerprint: guard.fingerprint || securityFingerprint(req), metadata: { reason: guard.reason || 'automatic_guard' } })
-        return json(res, guard.status || 400, { ok: false, error: guard.error, ...(guard.retryAfterSeconds ? { retryAfterSeconds: guard.retryAfterSeconds } : {}) })
-      }
-      if (!/^\S+@\S+\.\S+$/.test(email)) return json(res, 400, { ok: false, error: 'Enter a valid email address.' })
-      if (password.length < 10) return json(res, 400, { ok: false, error: 'Password must be at least 10 characters.' })
-
-      const response = await supabase('/signup', { method: 'POST', body: JSON.stringify({ email, password, data: { display_name: displayName || email.split('@')[0] } }) })
-      const data = await response.json().catch(() => ({}))
-      if (!response.ok) return json(res, response.status, { ok: false, error: authError(data, 'Unable to create SHAFX account.') })
-      if (!data.user) return json(res, 500, { ok: false, error: 'SHAFX account service returned an incomplete signup response. Please try again.' })
-      if (Array.isArray(data.user.identities) && data.user.identities.length === 0) {
-        return json(res, 409, { ok: false, error: 'A SHAFX account with that email already exists. Sign in instead.' })
-      }
-
-      await securityEvent({ user_id: data.user.id, event_type: 'signup', decision: 'allow', risk_score: guard.risk || 0, fingerprint: guard.fingerprint, metadata: { security_state: guard.reason === 'elevated_sign_up_risk' ? 'elevated' : 'normal' } })
-      await updateSecurityProfile(data.user.id, { risk_score: guard.risk || 0, security_state: guard.reason === 'elevated_sign_up_risk' ? 'elevated' : 'normal' })
-
-      if (!data.session) return json(res, 202, { ok: true, needsEmailConfirmation: true, message: 'Account created. Confirm your email, then sign in. No owner approval is required.' })
-      const profile = await profileFor(data.user.id)
-      if (!profile || profile.status !== 'active') return json(res, 403, { ok: false, error: 'This SHAFX account is not active.' })
-      setSessionCookies(res, data.session)
-      return json(res, 201, { ok: true, user: { id: data.user.id, email: data.user.email, displayName: profile.display_name, status: profile.status, simulatorAccountId: profile.simulator_account_id, createdAt: profile.created_at } })
-    }
-
-    if (action === 'login') {
-      const email = String(body.email || '').trim().toLowerCase()
-      const password = String(body.password || '')
-      const guard = loginGuard(req)
-      if (!guard.allowed) {
-        await securityEvent({ event_type: 'login_rate_limited', decision: 'block', risk_score: 100, fingerprint: securityFingerprint(req), metadata: { reason: 'automatic_rate_limit' } })
-        return json(res, guard.status, { ok: false, error: guard.error, retryAfterSeconds: guard.retryAfterSeconds })
-      }
-      const response = await supabase('/token?grant_type=password', { method: 'POST', body: JSON.stringify({ email, password }) })
-      const data = await response.json().catch(() => ({}))
-      if (!response.ok || !data.access_token || !data.user) {
-        recordLoginFailure(req)
-        await securityEvent({ event_type: 'login_failed', decision: 'deny', risk_score: 30, fingerprint: securityFingerprint(req), metadata: { reason: String(data?.code || data?.error || 'invalid_credentials') } })
-        if (String(data?.code || '').toLowerCase() === 'email_not_confirmed') return json(res, 401, { ok: false, error: 'Please confirm your email address before signing in.' })
-        return json(res, 401, { ok: false, error: 'Invalid email or password.' })
-      }
-
-      const profile = await profileFor(data.user.id)
-      if (!profile) return json(res, 403, { ok: false, error: 'SHAFX account profile is not ready.' })
-      if (profile.status !== 'active') {
-        await securityEvent({ user_id: data.user.id, event_type: 'login_blocked_account_status', decision: 'block', risk_score: profile.risk_score || 0, fingerprint: securityFingerprint(req), metadata: { status: profile.status } })
-        return json(res, 403, { ok: false, error: profile.status === 'banned' ? 'This SHAFX account has been banned.' : 'This SHAFX account is suspended.', status: profile.status })
-      }
-
-      clearLoginFailures(req)
-      await updateSecurityProfile(data.user.id, { last_login_at: new Date().toISOString(), failed_login_count: 0 })
-      await securityEvent({ user_id: data.user.id, event_type: 'login_success', decision: 'allow', risk_score: profile.risk_score || 0, fingerprint: securityFingerprint(req), metadata: {} })
-      setSessionCookies(res, data)
-      return json(res, 200, { ok: true, user: { id: data.user.id, email: data.user.email, displayName: profile.display_name, status: profile.status, simulatorAccountId: profile.simulator_account_id, createdAt: profile.created_at } })
-    }
-
+    if (action === 'signup') { const email = String(body.email || '').trim().toLowerCase(); const password = String(body.password || ''); const displayName = String(body.displayName || '').trim().slice(0, 60); const guard = signupGuard(req, body); if (!guard.allowed) { await securityEvent({ event_type: 'signup_blocked', decision: 'block', risk_score: guard.risk || 100, fingerprint: guard.fingerprint || securityFingerprint(req), metadata: { reason: guard.reason || 'automatic_guard' } }); return json(res, guard.status || 400, { ok: false, error: guard.error, ...(guard.retryAfterSeconds ? { retryAfterSeconds: guard.retryAfterSeconds } : {}) }) } if (!/^\S+@\S+\.\S+$/.test(email)) return json(res, 400, { ok: false, error: 'Enter a valid email address.' }); if (password.length < 10) return json(res, 400, { ok: false, error: 'Password must be at least 10 characters.' }); const response = await supabase('/signup', { method: 'POST', body: JSON.stringify({ email, password, data: { display_name: displayName || email.split('@')[0] } }) }); const data = await response.json().catch(() => ({})); if (!response.ok) return json(res, response.status, { ok: false, error: authError(data, 'Unable to create SHAFX account.') }); if (!data.user) return json(res, 500, { ok: false, error: 'SHAFX account service returned an incomplete signup response. Please try again.' }); if (Array.isArray(data.user.identities) && data.user.identities.length === 0) return json(res, 409, { ok: false, error: 'A SHAFX account with that email already exists. Sign in instead.' }); await securityEvent({ user_id: data.user.id, event_type: 'signup', decision: 'allow', risk_score: guard.risk || 0, fingerprint: guard.fingerprint, metadata: { security_state: guard.reason === 'elevated_sign_up_risk' ? 'elevated' : 'normal' } }); await updateSecurityProfile(data.user.id, { risk_score: guard.risk || 0, security_state: guard.reason === 'elevated_sign_up_risk' ? 'elevated' : 'normal' }); if (!data.session) return json(res, 202, { ok: true, needsEmailConfirmation: true, message: 'Account created. Confirm your email, then sign in. No owner approval is required.' }); const result = await publicUser(data.user); if (!result || result.status !== 'active') return json(res, 403, { ok: false, error: 'This SHAFX account is not active.' }); setSessionCookies(res, data.session); return json(res, 201, { ok: true, user: result }) }
+    if (action === 'login') { const email = String(body.email || '').trim().toLowerCase(); const password = String(body.password || ''); const guard = loginGuard(req); if (!guard.allowed) { await securityEvent({ event_type: 'login_rate_limited', decision: 'block', risk_score: 100, fingerprint: securityFingerprint(req), metadata: { reason: 'automatic_rate_limit' } }); return json(res, guard.status, { ok: false, error: guard.error, retryAfterSeconds: guard.retryAfterSeconds }) } const response = await supabase('/token?grant_type=password', { method: 'POST', body: JSON.stringify({ email, password }) }); const data = await response.json().catch(() => ({})); if (!response.ok || !data.access_token || !data.user) { recordLoginFailure(req); await securityEvent({ event_type: 'login_failed', decision: 'deny', risk_score: 30, fingerprint: securityFingerprint(req), metadata: { reason: String(data?.code || data?.error || 'invalid_credentials') } }); if (String(data?.code || '').toLowerCase() === 'email_not_confirmed') return json(res, 401, { ok: false, error: 'Please confirm your email address before signing in.' }); return json(res, 401, { ok: false, error: 'Invalid email or password.' }) } const result = await publicUser(data.user); if (!result) return json(res, 403, { ok: false, error: 'SHAFX account profile is not ready.' }); if (result.status !== 'active') { await securityEvent({ user_id: data.user.id, event_type: 'login_blocked_account_status', decision: 'block', risk_score: result.risk_score || 0, fingerprint: securityFingerprint(req), metadata: { status: result.status } }); return json(res, 403, { ok: false, error: result.status === 'banned' ? 'This SHAFX account has been banned.' : 'This SHAFX account is suspended.', status: result.status }) } clearLoginFailures(req); await updateSecurityProfile(data.user.id, { last_login_at: new Date().toISOString(), failed_login_count: 0 }); await securityEvent({ user_id: data.user.id, event_type: 'login_success', decision: 'allow', risk_score: 0, fingerprint: securityFingerprint(req), metadata: {} }); setSessionCookies(res, data); return json(res, 200, { ok: true, user: result }) }
     return json(res, 400, { ok: false, error: 'Unknown action.' })
-  } catch (error) {
-    return json(res, 500, { ok: false, error: error instanceof Error ? error.message : 'SHAFX identity service failed.' })
-  }
+  } catch (error) { return json(res, 500, { ok: false, error: error instanceof Error ? error.message : 'SHAFX identity service failed.' }) }
 }
