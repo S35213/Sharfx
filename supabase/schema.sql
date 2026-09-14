@@ -129,3 +129,78 @@ begin
   return query select true, v_plan, v_used+p_units, v_max, v_day;
 end;
 $$;
+
+-- Paid bot catalog and Paystack purchase records.
+create table if not exists public.shafx_bot_catalog (
+  slug text primary key,
+  name text not null,
+  description text not null default '',
+  price_kes integer not null check (price_kes > 0),
+  grant_plan text not null default 'REGULAR' check (grant_plan in ('REGULAR','PRO')),
+  active boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.shafx_bot_purchases (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  bot_slug text not null references public.shafx_bot_catalog(slug),
+  provider text not null default 'paystack',
+  reference text not null unique,
+  amount_kes integer not null check (amount_kes > 0),
+  phone text,
+  email text not null,
+  status text not null default 'pending' check (status in ('pending','success','failed','abandoned')),
+  provider_transaction_id text,
+  provider_payload jsonb not null default '{}'::jsonb,
+  paid_at timestamptz,
+  activated_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table public.shafx_bot_purchases enable row level security;
+drop policy if exists "Users can read own bot purchases" on public.shafx_bot_purchases;
+create policy "Users can read own bot purchases" on public.shafx_bot_purchases for select using (auth.uid() = user_id);
+create index if not exists shafx_bot_purchases_user_created_idx on public.shafx_bot_purchases (user_id, created_at desc);
+create index if not exists shafx_bot_purchases_reference_idx on public.shafx_bot_purchases (reference);
+
+create table if not exists public.shafx_user_bots (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  bot_slug text not null references public.shafx_bot_catalog(slug),
+  source_purchase_id uuid references public.shafx_bot_purchases(id) on delete set null,
+  active boolean not null default true,
+  activated_at timestamptz not null default now(),
+  expires_at timestamptz,
+  primary key (user_id, bot_slug)
+);
+alter table public.shafx_user_bots enable row level security;
+drop policy if exists "Users can read own bot access" on public.shafx_user_bots;
+create policy "Users can read own bot access" on public.shafx_user_bots for select using (auth.uid() = user_id);
+
+create or replace function public.set_shafx_bot_store_updated_at()
+returns trigger language plpgsql as $$ begin new.updated_at = now(); return new; end; $$;
+drop trigger if exists on_shafx_bot_catalog_updated on public.shafx_bot_catalog;
+create trigger on_shafx_bot_catalog_updated before update on public.shafx_bot_catalog for each row execute procedure public.set_shafx_bot_store_updated_at();
+drop trigger if exists on_shafx_bot_purchase_updated on public.shafx_bot_purchases;
+create trigger on_shafx_bot_purchase_updated before update on public.shafx_bot_purchases for each row execute procedure public.set_shafx_bot_store_updated_at();
+
+create or replace function public.activate_shafx_bot_purchase(p_reference text, p_provider_transaction_id text, p_paid_at timestamptz, p_payload jsonb)
+returns table(ok boolean, user_id uuid, bot_slug text)
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_purchase public.shafx_bot_purchases%rowtype;
+  v_catalog public.shafx_bot_catalog%rowtype;
+begin
+  select * into v_purchase from public.shafx_bot_purchases where reference = p_reference for update;
+  if not found then return query select false, null::uuid, null::text; return; end if;
+  select * into v_catalog from public.shafx_bot_catalog where slug = v_purchase.bot_slug;
+  if not found or not v_catalog.active then return query select false, v_purchase.user_id, v_purchase.bot_slug; return; end if;
+  if v_purchase.status = 'success' then return query select true, v_purchase.user_id, v_purchase.bot_slug; return; end if;
+  update public.shafx_bot_purchases set status='success', provider_transaction_id=coalesce(p_provider_transaction_id, provider_transaction_id), provider_payload=coalesce(p_payload,'{}'::jsonb), paid_at=coalesce(p_paid_at, now()), activated_at=now(), updated_at=now() where id=v_purchase.id;
+  insert into public.shafx_user_bots(user_id, bot_slug, source_purchase_id, active, activated_at) values (v_purchase.user_id, v_purchase.bot_slug, v_purchase.id, true, now()) on conflict (user_id, bot_slug) do update set active=true, source_purchase_id=excluded.source_purchase_id, activated_at=excluded.activated_at;
+  update public.shafx_bot_entitlements set plan=v_catalog.grant_plan, subscription_status='active', subscription_ends_at=null, provider='paystack', provider_customer_id=null, provider_subscription_id=p_reference, updated_at=now() where user_id=v_purchase.user_id and v_catalog.grant_plan in ('REGULAR','PRO');
+  return query select true, v_purchase.user_id, v_purchase.bot_slug;
+end;
+$$;
