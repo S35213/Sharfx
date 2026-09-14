@@ -4,14 +4,19 @@ on:
   workflow_dispatch:
   repository_dispatch:
     types: [run-shafx-load-test]
-  push:
-    branches: [main]
+  deployment_status:
 
 permissions:
   contents: read
 
 jobs:
   load-test:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'repository_dispatch' ||
+      (github.event_name == 'deployment_status' &&
+       github.event.deployment_status.state == 'success' &&
+       github.event.deployment_status.environment == 'Production')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -19,8 +24,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
       - name: Install dependencies
-        run: npm install
+        run: npm install --no-audit --no-fund
       - name: Run production concurrency test
         env:
           SHAFX_LOADTEST_URL: https://shafx.vercel.app
