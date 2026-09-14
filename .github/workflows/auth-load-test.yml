@@ -4,12 +4,19 @@ on:
   workflow_dispatch:
   repository_dispatch:
     types: [run-shafx-auth-load-test]
+  deployment_status:
 
 permissions:
   contents: read
 
 jobs:
   auth-load-test:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'repository_dispatch' ||
+      (github.event_name == 'deployment_status' &&
+       github.event.deployment_status.state == 'success' &&
+       github.event.deployment_status.environment == 'Production')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
