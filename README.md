@@ -63,6 +63,10 @@ Phase 5 — Live Market & Broker Integration Infrastructure — is implemented a
 - mandatory fresh-price execution guards
 - automated CI verification of build, lint, tests, and high-severity dependency audit
 
+## Quota and concurrency verification
+
+The bot's daily cycle-unit boundary is covered by an authenticated production concurrency test. The test uses a dedicated isolated account and verifies that a FREE account receiving 20 simultaneous 1-unit requests can consume exactly 5 units, with the remaining requests rejected by the daily limit. REGULAR/PRO subscription provisioning remains separate from this test.
+
 ### External prerequisites before real-money use
 
 A real market-data provider and real broker gateway still have to be deployed and configured outside this frontend repository. That includes provider-specific credentials, server-side authentication/session handling, account permissions, instrument mappings, production observability, and independent paper/live end-to-end testing. Credentials must never be committed to this repository or exposed through `VITE_*` client variables.
