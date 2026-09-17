@@ -1,4 +1,4 @@
-import { clearLoginFailures, loginGuard, recordLoginFailure, securityFingerprint, signupGuard } from './authSecurity.js'
+import { clearLoginFailures, loginGuard, recordLoginFailure, securityFingerprint, signupGuard } from '../server/authSecurity.js'
 
 const json = (res, status, body) => res.status(status).json(body)
 const configured = () => Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY && process.env.SUPABASE_SERVICE_ROLE_KEY)
