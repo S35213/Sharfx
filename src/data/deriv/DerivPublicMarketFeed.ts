@@ -33,6 +33,10 @@ const toCandles = (items: DerivTickResponse['candles']): OHLCV[] => (items ?? []
 
 export class DerivPublicMarketFeed {
   private socket: WebSocket | null = null
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null
+  private stopped = true
+  private reconnectAttempt = 0
+  private connectionGeneration = 0
   private symbol = ''
   private timeframe: Timeframe = 'M5'
   private candles: OHLCV[] = []
@@ -45,17 +49,29 @@ export class DerivPublicMarketFeed {
     this.timeframe = timeframe
     this.onUpdate = callbacks.onUpdate
     this.onStatus = callbacks.onStatus
-    this.onStatus('connecting')
+    this.candles = []
+    this.reconnectAttempt = 0
+    this.stopped = false
+    this.connectionGeneration += 1
+    this.openSocket(this.connectionGeneration)
+  }
+
+  private openSocket(generation: number): void {
+    if (this.stopped || generation !== this.connectionGeneration) return
+    this.onStatus?.('connecting')
     const socket = new WebSocket(DERIV_PUBLIC_WS_URL)
     this.socket = socket
 
     socket.onopen = () => {
+      if (this.stopped || generation !== this.connectionGeneration) return
+      this.reconnectAttempt = 0
       this.onStatus?.('connected')
       socket.send(JSON.stringify({ ticks_history: this.symbol, end: 'latest', count: 200, style: 'candles', granularity: timeframeSeconds[this.timeframe], subscribe: 0, req_id: 1 }))
       socket.send(JSON.stringify({ ticks: this.symbol, subscribe: 1, req_id: 2 }))
     }
 
     socket.onmessage = (event) => {
+      if (this.stopped || generation !== this.connectionGeneration) return
       try {
         const response = JSON.parse(String(event.data)) as DerivTickResponse
         if (response.error?.message) {
@@ -63,7 +79,7 @@ export class DerivPublicMarketFeed {
           return
         }
         if (response.msg_type === 'candles') {
-          this.candles = toCandles(response.candles).sort((a, b) => a.time - b.time)
+          this.candles = toCandles(response.candles).sort((a, b) => a.time - b.time).slice(-300)
           return
         }
         if (response.msg_type === 'tick' && response.tick?.quote !== undefined && response.tick.epoch !== undefined) {
@@ -80,15 +96,38 @@ export class DerivPublicMarketFeed {
         this.onStatus?.('error', 'Received invalid market-data message.')
       }
     }
-    socket.onerror = () => this.onStatus?.('error', 'Deriv public market-data connection failed.')
-    socket.onclose = () => this.onStatus?.('disconnected')
+
+    socket.onerror = () => {
+      if (this.stopped || generation !== this.connectionGeneration) return
+      this.onStatus?.('error', 'Deriv public market-data connection failed.')
+    }
+
+    socket.onclose = () => {
+      if (this.stopped || generation !== this.connectionGeneration) return
+      this.onStatus?.('disconnected')
+      this.scheduleReconnect(generation)
+    }
+  }
+
+  private scheduleReconnect(generation: number): void {
+    if (this.stopped || generation !== this.connectionGeneration || this.reconnectTimer !== null) return
+    const baseDelay = Math.min(30000, 1000 * (2 ** Math.min(this.reconnectAttempt, 5)))
+    const jitter = Math.floor(Math.random() * Math.min(5000, Math.max(250, baseDelay * 0.2)))
+    this.reconnectAttempt += 1
+    this.reconnectTimer = globalThis.setTimeout(() => {
+      this.reconnectTimer = null
+      this.openSocket(generation)
+    }, baseDelay + jitter)
   }
 
   disconnect(): void {
-    if (this.socket) {
-      this.socket.close()
-      this.socket = null
-    }
+    this.stopped = true
+    this.connectionGeneration += 1
+    if (this.reconnectTimer !== null) globalThis.clearTimeout(this.reconnectTimer)
+    this.reconnectTimer = null
+    const socket = this.socket
+    this.socket = null
+    socket?.close()
     this.onUpdate = undefined
     this.onStatus = undefined
   }
