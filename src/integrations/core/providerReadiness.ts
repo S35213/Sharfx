@@ -19,35 +19,32 @@ const capabilityMethods: Array<[keyof ProviderCapabilities, keyof ProviderAdapte
   ['ordersRead', 'getOrders'],
   ['orderPlacement', 'placeOrder'],
   ['orderCancellation', 'cancelOrder'],
+  ['orderModification', 'modifyOrder'],
+  ['orderLookupByClientOrderId', 'getOrderByClientOrderId'],
   ['positionClose', 'closePosition'],
   ['symbolMetadata', 'getInstruments'],
-  ['funding', 'getDepositInstructions'],
 ]
 
 export const assessProviderReadiness = (adapter: ProviderAdapter): ProviderReadinessResult => {
   const missingMethods: string[] = []
 
   for (const [capability, method] of capabilityMethods) {
-    if (capability === 'funding') {
-      if (adapter.descriptor.capabilities.funding.deposit !== 'unsupported' && typeof adapter.getDepositInstructions !== 'function') {
-        missingMethods.push('getDepositInstructions')
-      }
-      if (adapter.descriptor.capabilities.funding.withdrawal !== 'unsupported' && typeof adapter.getWithdrawalInstructions !== 'function') {
-        missingMethods.push('getWithdrawalInstructions')
-      }
-      continue
-    }
-
     if (adapter.descriptor.capabilities[capability] && typeof adapter[method] !== 'function') {
       missingMethods.push(String(method))
     }
   }
 
+  if (adapter.descriptor.capabilities.funding.deposit !== 'unsupported' && typeof adapter.getDepositInstructions !== 'function') {
+    missingMethods.push('getDepositInstructions')
+  }
+  if (adapter.descriptor.capabilities.funding.withdrawal !== 'unsupported' && typeof adapter.getWithdrawalInstructions !== 'function') {
+    missingMethods.push('getWithdrawalInstructions')
+  }
+
   const issues: ProviderReadinessIssue[] = missingMethods.length > 0 ? ['MISSING_ADAPTER_METHOD'] : []
 
-  // The architecture deliberately keeps live execution disabled until the runtime
-  // has an explicit execution boundary. A provider descriptor alone must never turn
-  // on real-money trading.
+  // Real-money execution remains deliberately disabled. An adapter method alone
+  // must never make the browser capable of sending live orders.
   if (adapter.descriptor.capabilities.orderPlacement && typeof adapter.placeOrder === 'function') {
     issues.push('LIVE_EXECUTION_DISABLED')
   }
