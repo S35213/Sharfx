@@ -7,6 +7,14 @@ export interface HttpBrokerTransportOptions {
   timeoutMs?: number
 }
 
+class BrokerGatewayError extends Error {
+  constructor(message: string, cause: unknown) {
+    super(message)
+    this.name = 'BrokerGatewayError'
+    Object.defineProperty(this, 'cause', { configurable: true, enumerable: false, value: cause, writable: true })
+  }
+}
+
 const assertBaseUrl = (value: string): string => {
   const trimmed = value.trim()
   if (!trimmed) throw new Error('A broker gateway base URL is required.')
@@ -44,10 +52,11 @@ export class HttpBrokerTransport implements LiveBrokerTransport {
       return await response.json() as T
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
-        throw new Error(`Broker gateway request timed out after ${this.timeoutMs}ms.`)
+        throw new BrokerGatewayError(`Broker gateway request timed out after ${this.timeoutMs}ms.`, error)
       }
+      if (error instanceof BrokerGatewayError) throw error
       if (error instanceof Error) throw error
-      throw new Error('Broker gateway request failed.')
+      throw new BrokerGatewayError('Broker gateway request failed.', error)
     } finally {
       clearTimeout(timer)
     }
