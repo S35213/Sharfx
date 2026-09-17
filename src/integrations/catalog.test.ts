@@ -9,9 +9,12 @@ const byId = (id: string) => {
 }
 
 describe('SHAFX provider catalog', () => {
-  it('keeps simulator and current Deriv integration available', () => {
+  it('keeps simulator and the implemented Deriv market adapter available', () => {
     expect(byId('simulator').status).toBe('available')
     expect(byId('deriv').status).toBe('available')
+    expect(byId('deriv').capabilities.marketData).toBe(true)
+    expect(byId('deriv').capabilities.realtimeMarketData).toBe(true)
+    expect(byId('deriv').capabilities.historicalCandles).toBe(true)
   })
 
   it('does not advertise real execution before an execution adapter exists', () => {
@@ -19,11 +22,11 @@ describe('SHAFX provider catalog', () => {
     expect(supportsOrderPlacement(byId('binance'))).toBe(false)
   })
 
-  it('represents funding separately from trading capability', () => {
-    expect(supportsDeposit(byId('deriv'))).toBe(true)
-    expect(supportsWithdrawal(byId('deriv'))).toBe(true)
-    expect(byId('deriv').capabilities.funding.deposit).toBe('redirect')
-    expect(byId('deriv').capabilities.funding.withdrawal).toBe('redirect')
+  it('does not conflate market-data integration with account funding', () => {
+    expect(supportsDeposit(byId('deriv'))).toBe(false)
+    expect(supportsWithdrawal(byId('deriv'))).toBe(false)
+    expect(byId('deriv').capabilities.funding.deposit).toBe('unsupported')
+    expect(byId('deriv').capabilities.funding.withdrawal).toBe('unsupported')
     expect(supportsDeposit(byId('simulator'))).toBe(false)
     expect(supportsWithdrawal(byId('simulator'))).toBe(false)
   })
