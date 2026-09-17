@@ -1,9 +1,8 @@
 import { createHash } from 'node:crypto'
 
-const WINDOW_MS = 15 * 60 * 1000
+const WINDOW_SECONDS = 15 * 60
 const MAX_SIGNUPS = 5
 const MAX_LOGIN_FAILURES = 8
-const attempts = new Map()
 const DISPOSABLE_DOMAINS = new Set(['mailinator.com','guerrillamail.com','10minutemail.com','tempmail.com','temp-mail.org','yopmail.com','sharklasers.com','guerrillamail.net','getnada.com','throwawaymail.com','dispostable.com'])
 
 function hash(secret, value) {
@@ -19,30 +18,55 @@ function bucketId(req, action) {
   return hash(secret, `${action}:${clientIp(req)}:${req.headers?.['user-agent'] || 'unknown'}`)
 }
 
-function hit(bucket, limit) {
-  const now = Date.now()
-  const current = attempts.get(bucket)
-  const next = !current || now - current.startedAt > WINDOW_MS
-    ? { startedAt: now, count: 1 }
-    : { ...current, count: current.count + 1 }
-  attempts.set(bucket, next)
-  if (attempts.size > 5000) {
-    for (const [id, item] of attempts) if (now - item.startedAt > WINDOW_MS) attempts.delete(id)
+async function consumeRateLimit(req, action, limit, reset = false) {
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return { unavailable: true, blocked: false, count: 0, retryAfterSeconds: WINDOW_SECONDS }
   }
-  return {
-    blocked: next.count > limit,
-    count: next.count,
-    retryAfterSeconds: Math.max(1, Math.ceil((next.startedAt + WINDOW_MS - now) / 1000)),
+
+  try {
+    const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/consume_shafx_auth_rate_limit`, {
+      method: 'POST',
+      headers: {
+        apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        p_bucket_id: bucketId(req, action),
+        p_limit: limit,
+        p_window_seconds: WINDOW_SECONDS,
+        p_reset: reset,
+      }),
+    })
+    if (!response.ok) return { unavailable: true, blocked: false, count: 0, retryAfterSeconds: WINDOW_SECONDS }
+    const rows = await response.json().catch(() => [])
+    const row = Array.isArray(rows) ? rows[0] : null
+    if (!row) return { unavailable: true, blocked: false, count: 0, retryAfterSeconds: WINDOW_SECONDS }
+    return {
+      unavailable: false,
+      blocked: Boolean(row.blocked),
+      count: Number.isFinite(Number(row.attempt_count)) ? Number(row.attempt_count) : 0,
+      retryAfterSeconds: Math.max(1, Number.isFinite(Number(row.retry_after_seconds)) ? Number(row.retry_after_seconds) : WINDOW_SECONDS),
+    }
+  } catch {
+    return { unavailable: true, blocked: false, count: 0, retryAfterSeconds: WINDOW_SECONDS }
   }
 }
 
-export function signupGuard(req, body) {
+const limiterUnavailable = () => ({
+  allowed: false,
+  status: 503,
+  error: 'Authentication protection is temporarily unavailable. Please try again later.',
+})
+
+export async function signupGuard(req, body) {
   const email = String(body?.email || '').trim().toLowerCase()
   const password = String(body?.password || '')
   const honeypot = String(body?.website || '').trim()
   const domain = email.split('@')[1] || ''
-  const rate = hit(bucketId(req, 'signup'), MAX_SIGNUPS)
+  const rate = await consumeRateLimit(req, 'signup', MAX_SIGNUPS)
 
+  if (rate.unavailable) return limiterUnavailable()
   if (honeypot) return { allowed: false, status: 400, error: 'Unable to create this account.' }
   if (rate.blocked) return { allowed: false, status: 429, error: 'Too many account attempts. Please try again later.', retryAfterSeconds: rate.retryAfterSeconds }
   if (DISPOSABLE_DOMAINS.has(domain)) return { allowed: false, status: 400, error: 'Please use a permanent email address.' }
@@ -66,19 +90,20 @@ export function signupGuard(req, body) {
   }
 }
 
-export function loginGuard(req) {
-  const rate = hit(bucketId(req, 'login'), MAX_LOGIN_FAILURES)
+export async function loginGuard(req) {
+  const rate = await consumeRateLimit(req, 'login', MAX_LOGIN_FAILURES)
+  if (rate.unavailable) return limiterUnavailable()
   return rate.blocked
     ? { allowed: false, status: 429, error: 'Too many login attempts. Please try again later.', retryAfterSeconds: rate.retryAfterSeconds }
     : { allowed: true }
 }
 
 export function recordLoginFailure(req) {
-  return hit(bucketId(req, 'login-failure'), MAX_LOGIN_FAILURES)
+  return consumeRateLimit(req, 'login-failure', MAX_LOGIN_FAILURES)
 }
 
 export function clearLoginFailures(req) {
-  attempts.delete(bucketId(req, 'login-failure'))
+  return consumeRateLimit(req, 'login-failure', MAX_LOGIN_FAILURES, true)
 }
 
 export function securityFingerprint(req) {

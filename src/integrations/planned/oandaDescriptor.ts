@@ -5,6 +5,7 @@ export const OANDA_PROVIDER_DESCRIPTOR: ProviderDescriptor = {
   name: 'OANDA',
   kind: 'broker',
   status: 'planned',
+  executionMode: 'external',
   authMethods: ['api_key'],
   description: 'Planned FX broker adapter. OANDA documents REST trading, account access, historical pricing and streaming prices.',
   capabilities: {
@@ -17,6 +18,8 @@ export const OANDA_PROVIDER_DESCRIPTOR: ProviderDescriptor = {
     ordersRead: false,
     orderPlacement: false,
     orderCancellation: false,
+    orderModification: false,
+    orderLookupByClientOrderId: false,
     positionClose: false,
     multipleAccounts: false,
     demoAccounts: false,

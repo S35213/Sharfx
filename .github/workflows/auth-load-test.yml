@@ -4,33 +4,32 @@ on:
   workflow_dispatch:
   repository_dispatch:
     types: [run-shafx-auth-load-test]
-  deployment_status:
 
 permissions:
   contents: read
 
+concurrency:
+  group: shafx-auth-load-test-${{ github.workflow }}
+  cancel-in-progress: true
+
 jobs:
   auth-load-test:
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'repository_dispatch' ||
-      (github.event_name == 'deployment_status' &&
-       github.event.deployment_status.state == 'success' &&
-       github.event.deployment_status.environment == 'Production')
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
+          package-manager-cache: false
       - name: Upgrade npm for Arborist compatibility
         run: npm install --global npm@11.6.0
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Run authenticated quota concurrency test
         env:
-          SHAFX_LOADTEST_URL: https://shafx.vercel.app
+          SHAFX_LOADTEST_URL: ${{ vars.SHAFX_LOADTEST_URL || 'https://shafx.vercel.app' }}
           SHAFX_TEST_EMAIL: ${{ secrets.SHAFX_TEST_EMAIL }}
           SHAFX_TEST_PASSWORD: ${{ secrets.SHAFX_TEST_PASSWORD }}
         run: node scripts/auth-load-test.mjs

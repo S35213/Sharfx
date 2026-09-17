@@ -1,4 +1,4 @@
-import { createSession, isAdminConfigured, keyMatches, setSessionCookie } from './_auth.js'
+import { createSession, isAdminConfigured, keyMatches, setSessionCookie } from '../../server/adminAuth.js'
 
 export default function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' })

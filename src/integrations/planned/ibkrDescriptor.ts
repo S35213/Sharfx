@@ -5,6 +5,7 @@ export const IBKR_PROVIDER_DESCRIPTOR: ProviderDescriptor = {
   name: 'Interactive Brokers',
   kind: 'broker',
   status: 'planned',
+  executionMode: 'external',
   authMethods: ['custom'],
   description: 'Planned IBKR adapter. The Web API has account, portfolio, trading and execution endpoints, but its session/auth lifecycle is provider-specific.',
   capabilities: {
@@ -17,6 +18,8 @@ export const IBKR_PROVIDER_DESCRIPTOR: ProviderDescriptor = {
     ordersRead: false,
     orderPlacement: false,
     orderCancellation: false,
+    orderModification: false,
+    orderLookupByClientOrderId: false,
     positionClose: false,
     multipleAccounts: false,
     demoAccounts: false,
