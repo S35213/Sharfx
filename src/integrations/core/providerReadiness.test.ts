@@ -7,6 +7,7 @@ const descriptor: ProviderDescriptor = {
   name: 'Test Provider',
   kind: 'broker',
   status: 'available',
+  executionMode: 'external',
   authMethods: ['api_key'],
   description: 'test',
   capabilities: {
@@ -19,6 +20,8 @@ const descriptor: ProviderDescriptor = {
     ordersRead: false,
     orderPlacement: false,
     orderCancellation: false,
+    orderModification: false,
+    orderLookupByClientOrderId: false,
     positionClose: false,
     multipleAccounts: false,
     demoAccounts: true,
@@ -51,7 +54,7 @@ describe('assessProviderReadiness', () => {
     expect(result.missingMethods).toEqual([])
   })
 
-  it('keeps live execution disabled even when a future adapter implements placement', () => {
+  it('keeps external live execution disabled even when an adapter implements placement', () => {
     const executionDescriptor: ProviderDescriptor = {
       ...descriptor,
       capabilities: { ...descriptor.capabilities, orderPlacement: true },
@@ -67,5 +70,26 @@ describe('assessProviderReadiness', () => {
 
     expect(result.ready).toBe(false)
     expect(result.issues).toContain('LIVE_EXECUTION_DISABLED')
+  })
+
+  it('allows the simulator execution mode to remain a local simulation', () => {
+    const simulatorDescriptor: ProviderDescriptor = {
+      ...descriptor,
+      id: 'simulator',
+      executionMode: 'simulated',
+      kind: 'other',
+      capabilities: { ...descriptor.capabilities, orderPlacement: true },
+    }
+    const adapter: ProviderAdapter = {
+      descriptor: simulatorDescriptor,
+      getAccounts: async () => [],
+      getQuote: async () => ({ symbol: 'EURUSD', bid: 1, ask: 1.1, timestamp: new Date().toISOString() }),
+      placeOrder: async () => ({ providerOrderId: 'sim-1', status: 'filled' }),
+    }
+
+    const result = assessProviderReadiness(adapter)
+
+    expect(result.ready).toBe(true)
+    expect(result.issues).not.toContain('LIVE_EXECUTION_DISABLED')
   })
 })
