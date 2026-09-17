@@ -20,13 +20,7 @@ The production deployment on Vercel is the simulator-safe `main` build. A real b
 
 ## Research conclusion
 
-The research confirms that a single mandatory "universal broker API" would be unsafe and unrealistic:
-
-- Deriv uses REST for account/authentication and WebSocket for real-time market data and trading; authenticated WebSocket access can be established through an OTP flow.
-- Binance uses signed account/trading APIs and WebSocket user-data functionality with provider-specific request weights, timestamps and API-key handling.
-- OANDA's v20 API has broker-specific instruments, order types, durations, position/trade models and pricing streams.
-- Interactive Brokers has its own session lifecycle, market-data subscriptions, contract identifiers, pacing limits and order model.
-- FIX provides an industry-standard interoperability option for firms that expose FIX, but it is not a replacement for every retail/provider-specific API.
+The research confirms that a single mandatory "universal broker API" would be unsafe and unrealistic. Deriv, Binance, OANDA and Interactive Brokers all expose materially different authentication, instruments, order models, streaming and rate-limit behavior. FIX is a useful standard adapter transport where a provider exposes it, but it is not a universal replacement for provider APIs.
 
 Therefore SHAFX uses a capability-based adapter boundary rather than pretending all providers have identical features.
 
@@ -67,7 +61,7 @@ This is necessary because a provider may offer REST polling, WebSocket streams, 
 
 A symbol string alone is not enough to safely route an order. Providers can differ in contract size, quantity rules, price increments, currencies, supported order types and time-in-force rules.
 
-`ProviderInstrument` therefore carries normalized metadata such as SHAFX symbol/provider symbol, asset class, base/quote currencies, contract size and pip size where applicable, price increment, minimum/maximum quantity, quantity step, supported order types, supported time-in-force values, and tradability.
+`ProviderInstrument` carries normalized metadata such as SHAFX symbol/provider symbol, asset class, base/quote currencies, contract size and pip size where applicable, price increment, minimum/maximum quantity, quantity step, supported order types, supported time-in-force values, and tradability.
 
 The SHAFX risk/order layer validates an order against this metadata before an adapter is allowed to send it. The adapter remains responsible for final provider-side validation because the provider is authoritative.
 
@@ -81,17 +75,13 @@ Provider-specific order fields stay inside the adapter. A provider can support r
 
 Provider credentials and authorization codes stay server-side. Browser code may start an OAuth redirect or request a short-lived server-issued session, but it must not receive long-lived provider secrets.
 
-For OAuth authorization-code flows, SHAFX should use PKCE, exact redirect URI matching, state/CSRF validation and server-side code exchange.
-
-API-key providers require the same separation: keys/signing secrets remain on the server-side provider gateway.
+For OAuth authorization-code flows, SHAFX should use PKCE, exact redirect URI matching, state/CSRF validation and server-side code exchange. API-key providers keep keys/signing secrets on the server-side provider gateway.
 
 ## Sessions and streaming
 
 A provider adapter owns its provider-specific session lifecycle. SHAFX does not assume that `connect()` means the same thing everywhere.
 
-The normalized contract supports WebSocket subscriptions, HTTP polling, server-side streaming, FIX sessions, and provider-specific session/bootstrap sequences.
-
-The adapter is responsible for reconnects, subscription cleanup, authentication refresh, stale-data detection and provider-specific heartbeat rules.
+The normalized contract supports WebSocket subscriptions, HTTP polling, server-side streaming, FIX sessions, and provider-specific session/bootstrap sequences. The adapter is responsible for reconnects, subscription cleanup, authentication refresh, stale-data detection and provider-specific heartbeat rules.
 
 ## Errors, rate limits and retries
 
