@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: shafx-auth-load-test-${{ github.workflow }}-${{ github.event.deployment.id || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   auth-load-test:
     if: >-
@@ -20,10 +24,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
       - name: Upgrade npm for Arborist compatibility
         run: npm install --global npm@11.6.0
       - name: Install dependencies
