@@ -36,6 +36,24 @@ The live market boundary validates OHLC shape and chronological ordering, suppor
 
 The live broker boundary is deliberately fail-closed. `LiveBroker` has no configured transport by default. `HttpBrokerTransport` is a gateway client using browser credentials rather than embedding broker secrets in the frontend. `executeWithPolicy` requires explicit user approval, a matching confirmation id, a live broker capable of placement, and fresh-price execution guards before submitting an order.
 
+### Provider-agnostic broker/exchange layer
+
+SHAFX now has a normalized provider contract under `src/integrations/core`. Providers declare capabilities instead of being assumed to support every feature. Trading, account data, real-time streams, deposits, and withdrawals are separate capability areas.
+
+Current catalog:
+
+- **SHAFX Simulator** — available; simulated only.
+- **Deriv** — available; current account/market integration remains intact and real execution stays disabled.
+- **Binance** — planned; adapter not implemented yet.
+- **OANDA** — planned; adapter not implemented yet.
+- **Interactive Brokers** — planned; adapter not implemented yet.
+
+See [`docs/provider-integration-architecture.md`](docs/provider-integration-architecture.md) for the researched provider matrix, security rules, and adapter implementation checklist.
+
+The important rule is that the SHAFX core never assumes a provider has the same authentication, symbols, order types, streaming model, or funding APIs as another provider. A provider adapter translates between the normalized SHAFX contract and that provider's API. OAuth authorization uses server-side token exchange and PKCE where applicable; long-lived provider credentials are never placed in client `VITE_*` variables.
+
+Funding is also separate from trading. A provider can expose deposits/withdrawals through an API, official redirect, manual process, or not at all. SHAFX must advertise only the capability actually implemented by the active adapter.
+
 The analysis stack is deterministic and simulator-safe: market structure, support/resistance, liquidity, setup detection, and the AI trading-agent layer operate on supplied candle data. The AI agent can prepare and review simulated opportunities, but execution still requires explicit user approval.
 
 ## Phase 3 acceptance
@@ -79,4 +97,5 @@ Until those external prerequisites are supplied and tested, SHAFX remains a simu
 - v0.2: backtesting, replay, journal, performance statistics — **complete**.
 - v0.3: advanced AI/trading-agent capabilities — **complete on simulator boundary**.
 - v0.4: live market/broker integration infrastructure — **complete as a provider-neutral safety boundary; external provider/broker deployment remains required**.
+- v0.5: provider-agnostic connection contracts and researched provider catalog — **implemented**; provider-specific adapters still require separate verification and enablement.
 - v1.0: production deployment, compliance, business/payment/licensing decisions, and real-money certification — **not started**.
