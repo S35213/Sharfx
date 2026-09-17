@@ -10,6 +10,8 @@ export const DEFAULT_PROVIDER_CAPABILITIES: ProviderCapabilities = {
   ordersRead: false,
   orderPlacement: false,
   orderCancellation: false,
+  orderModification: false,
+  orderLookupByClientOrderId: false,
   positionClose: false,
   multipleAccounts: false,
   demoAccounts: false,
