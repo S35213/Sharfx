@@ -205,6 +205,7 @@ export interface ProviderAdapter {
   getQuote?(connection: ProviderConnection, accountId: string | undefined, symbol: string): Promise<ProviderQuote>
   getHistoricalCandles?(connection: ProviderConnection, accountId: string | undefined, symbol: string, timeframe: string, limit?: number): Promise<ProviderCandle[]>
   subscribe?(connection: ProviderConnection, accountId: string | undefined, symbols: string[], onEvent: (event: ProviderStreamEvent) => void, timeframe?: string): Promise<ProviderStreamHandle>
+  subscribeAccount?(connection: ProviderConnection, accountId: string | undefined, onEvent: (event: ProviderStreamEvent) => void): Promise<ProviderStreamHandle>
   placeOrder?(connection: ProviderConnection, accountId: string, order: ProviderOrderRequest): Promise<ProviderOrderResult>
   cancelOrder?(connection: ProviderConnection, accountId: string, providerOrderId: string): Promise<ProviderOrderResult>
   modifyOrder?(connection: ProviderConnection, accountId: string, providerOrderId: string, order: Partial<ProviderOrderRequest>): Promise<ProviderOrderResult>

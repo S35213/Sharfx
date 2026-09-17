@@ -41,6 +41,23 @@ describe('assessProviderReadiness', () => {
     expect(result.missingMethods).toEqual(['getAccounts', 'getQuote'])
   })
 
+  it('requires a realtime account adapter method when the capability is advertised', () => {
+    const accountDescriptor: ProviderDescriptor = {
+      ...descriptor,
+      capabilities: { ...descriptor.capabilities, realtimeAccountData: true },
+    }
+    const adapter: ProviderAdapter = {
+      descriptor: accountDescriptor,
+      getAccounts: async () => [],
+      getQuote: async () => ({ symbol: 'EURUSD', bid: 1, ask: 1.1, timestamp: new Date().toISOString() }),
+    }
+
+    const result = assessProviderReadiness(adapter)
+
+    expect(result.ready).toBe(false)
+    expect(result.missingMethods).toEqual(['subscribeAccount'])
+  })
+
   it('accepts a capability-complete adapter without execution capabilities', () => {
     const adapter: ProviderAdapter = {
       descriptor,

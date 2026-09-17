@@ -15,6 +15,7 @@ const capabilityMethods: Array<[keyof ProviderCapabilities, keyof ProviderAdapte
   ['marketData', 'getQuote'],
   ['historicalCandles', 'getHistoricalCandles'],
   ['realtimeMarketData', 'subscribe'],
+  ['realtimeAccountData', 'subscribeAccount'],
   ['positionsRead', 'getPositions'],
   ['ordersRead', 'getOrders'],
   ['orderPlacement', 'placeOrder'],

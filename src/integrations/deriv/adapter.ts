@@ -1,7 +1,8 @@
 import { DerivPublicMarketFeed } from '../../data/deriv/DerivPublicMarketFeed'
 import type { Timeframe } from '../../types'
-import type { ProviderAdapter, ProviderCandle, ProviderConnection, ProviderMarketSnapshot, ProviderNormalizedError, ProviderQuote, ProviderStreamEvent, ProviderStreamHandle } from '../core/types'
+import type { ProviderAccountSnapshot, ProviderAdapter, ProviderCandle, ProviderConnection, ProviderMarketSnapshot, ProviderNormalizedError, ProviderQuote, ProviderStreamEvent, ProviderStreamHandle } from '../core/types'
 import { validateProviderConnection } from '../core/providerConnectionGuard'
+import { DerivAccountStreamTransport } from './accountStream'
 import { DERIV_PROVIDER_DESCRIPTOR } from './descriptor'
 
 const supportedTimeframes: Timeframe[] = ['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1']
@@ -57,8 +58,46 @@ const asNetworkError = (message: string): ProviderNormalizedError => ({
   retryable: true,
 })
 
+interface DerivAccountApiRow {
+  account_id?: unknown
+  balance?: unknown
+  currency?: unknown
+  account_type?: unknown
+  status?: unknown
+  group?: unknown
+}
+
+const normalizeAccountRows = (payload: unknown): ProviderAccountSnapshot[] => {
+  const data = (payload as { data?: unknown } | null)?.data ?? payload
+  const rows = Array.isArray(data) ? data : Array.isArray((data as { accounts?: unknown } | null)?.accounts) ? (data as { accounts: unknown[] }).accounts : data ? [data] : []
+  return rows.flatMap((row) => {
+    const item = row as DerivAccountApiRow
+    const accountId = typeof item.account_id === 'string' ? item.account_id.trim() : ''
+    const currency = typeof item.currency === 'string' ? item.currency.trim() : ''
+    const balance = Number(item.balance)
+    if (!accountId || !currency || !Number.isFinite(balance)) return []
+    const environment = item.account_type === 'demo' ? 'demo' : 'live'
+    const labelParts = [environment === 'demo' ? 'Demo' : 'Live', typeof item.group === 'string' ? item.group : undefined, typeof item.status === 'string' ? item.status : undefined].filter(Boolean)
+    return [{
+      accountId,
+      accountLabel: labelParts.join(' • '),
+      environment,
+      currency,
+      balance,
+    }]
+  })
+}
+
 export const DERIV_PROVIDER_ADAPTER: ProviderAdapter = {
   descriptor: DERIV_PROVIDER_DESCRIPTOR,
+
+  async getAccounts(connection: ProviderConnection): Promise<ProviderAccountSnapshot[]> {
+    assertConnection(connection)
+    const response = await fetch('/api/deriv/accounts', { credentials: 'include', cache: 'no-store' })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(typeof payload?.error === 'string' ? payload.error : 'Unable to load Deriv accounts.')
+    return normalizeAccountRows(payload)
+  },
 
   async getQuote(connection: ProviderConnection, _accountId: string | undefined, symbol: string): Promise<ProviderQuote> {
     assertConnection(connection)
@@ -134,6 +173,31 @@ export const DERIV_PROVIDER_ADAPTER: ProviderAdapter = {
         closed = true
         feed.disconnect()
       },
+    }
+  },
+
+  async subscribeAccount(connection: ProviderConnection, _accountId: string | undefined, onEvent: (event: ProviderStreamEvent) => void): Promise<ProviderStreamHandle> {
+    assertConnection(connection)
+    const transport = new DerivAccountStreamTransport({
+      accountType: connection.environment,
+      onSnapshot: (snapshot) => onEvent({
+        type: 'account',
+        account: {
+          accountId: snapshot.accountId,
+          accountLabel: snapshot.accountType === 'demo' ? 'Demo' : 'Live',
+          environment: connection.environment,
+          currency: snapshot.currency,
+          balance: snapshot.balance,
+        },
+      }),
+      onStatus: (status, message) => {
+        if (status === 'error') onEvent({ type: 'error', error: asNetworkError(message || 'Deriv account stream failed.') })
+      },
+    })
+    await transport.start()
+    return {
+      streamId: `${connection.connectionId}:${connection.accountId ?? connection.environment}:${Date.now()}`,
+      close: async () => transport.stop(),
     }
   },
 }
