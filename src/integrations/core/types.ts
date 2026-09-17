@@ -7,6 +7,7 @@ export type ProviderOrderType = 'MARKET' | 'LIMIT' | 'STOP' | 'STOP_LIMIT'
 export type TimeInForce = 'GTC' | 'IOC' | 'FOK' | 'DAY'
 export type OrderSide = 'BUY' | 'SELL'
 export type ProviderConnectionState = 'connected' | 'expired' | 'disconnected'
+export type ProviderExecutionMode = 'simulated' | 'external'
 
 export interface ProviderFundingCapabilities {
   deposit: FundingMode
@@ -37,6 +38,7 @@ export interface ProviderDescriptor {
   name: string
   kind: ProviderKind
   status: ProviderStatus
+  executionMode: ProviderExecutionMode
   authMethods: ProviderAuthMethod[]
   description: string
   capabilities: ProviderCapabilities
