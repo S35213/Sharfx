@@ -63,7 +63,7 @@ The adapter exposes only the operations that the provider actually supports and 
 
 ## Market-data contract
 
-The provider contract now includes normalized primitives for:
+The provider contract includes normalized primitives for:
 
 - instrument discovery
 - quote/snapshot retrieval
@@ -91,7 +91,7 @@ A symbol string alone is not enough to safely route an order. Providers can diff
 - supported time-in-force values
 - tradability
 
-The SHAFX risk/order layer should validate an order against this metadata before an adapter is allowed to send it. The adapter remains responsible for final provider-side validation because the provider is authoritative.
+The SHAFX risk/order layer validates an order against this metadata before an adapter is allowed to send it. The adapter remains responsible for final provider-side validation because the provider is authoritative.
 
 ## Order normalization
 
@@ -118,7 +118,7 @@ API-key providers require the same separation: keys/signing secrets remain on th
 
 ## Sessions and streaming
 
-A provider adapter must own its provider-specific session lifecycle. SHAFX should not assume that `connect()` means the same thing everywhere.
+A provider adapter owns its provider-specific session lifecycle. SHAFX does not assume that `connect()` means the same thing everywhere.
 
 The normalized contract supports a connection object plus an explicit stream handle. Providers can implement:
 
@@ -132,7 +132,7 @@ The adapter is responsible for reconnects, subscription cleanup, authentication 
 
 ## Errors, rate limits and retries
 
-Provider errors must be normalized before reaching the SHAFX UI. The contract includes a normalized error shape with:
+Provider errors are normalized before reaching the SHAFX UI. The contract includes a normalized error shape with:
 
 - stable SHAFX error code
 - human-readable message
@@ -140,7 +140,7 @@ Provider errors must be normalized before reaching the SHAFX UI. The contract in
 - provider error code when available
 - request correlation id when available
 
-Adapters must also implement provider-specific rate limiting and retry behavior. This matters because limits differ materially: IBKR documents a global 10 requests/second limit for each authenticated username plus endpoint-specific limits, while Binance exposes request weights and order-rate limits.
+Adapters must also implement provider-specific rate limiting and retry behavior. This matters because limits differ materially: IBKR documents endpoint/session limits while Binance exposes request weights and order-rate limits.
 
 SHAFX must never blindly retry an order-placement request. Order submission requires idempotency/correlation and reconciliation of the provider's actual order state before retrying.
 
@@ -160,17 +160,23 @@ A provider offering trading APIs does not automatically mean SHAFX can safely or
 | Provider | Status | Current SHAFX execution | Funding | Notes |
 | --- | --- | --- | --- | --- |
 | SHAFX Simulator | available | simulated only | unsupported | No real money |
-| Deriv | available | real execution disabled | redirect | Existing Deriv account/market gateway remains; provider-neutral contract is now separate |
+| Deriv | available | real execution disabled | redirect | Account, market-data and realtime account paths now run through the provider adapter boundary |
 | Binance | planned | not implemented | unsupported until verified | Requires server-side signed integration and product-specific symbol/order mapping |
 | OANDA | planned | not implemented | unsupported until verified | REST + pricing stream; provider-specific order and instrument rules |
 | Interactive Brokers | planned | not implemented | unsupported until verified | Provider-specific sessions, conids, market-data subscriptions and pacing rules |
 | Custom/FIX provider | planned | not implemented | provider-specific | FIX can be an adapter transport where the provider exposes it |
 
-## Current repository reality
+## Current repository/runtime reality
 
-The provider-neutral contract has been added under `src/integrations/core`, but the existing terminal still contains direct Deriv wiring. In particular, the application imports `DerivAccountStream` and the live-market UI uses `DerivLiveControl`. The current commit therefore creates the correct boundary and contracts, but it does **not** yet claim that the entire UI/runtime has been migrated behind that boundary.
+The provider-neutral runtime migration described by the earlier draft is now implemented on `main`.
 
-The next implementation step is to move those direct imports behind provider runtime/adapters without changing the simulator behavior. This is intentionally staged rather than replacing the working Deriv path blindly.
+- `App.tsx` consumes `ProviderLiveControl` rather than a Deriv-specific live-market control.
+- Account streaming is consumed through `ProviderAccountStream`.
+- Deriv-specific transport/session behavior lives under `src/integrations/deriv` and is exposed through the normalized adapter boundary.
+- `DerivAccountStream` and `DerivLiveControl` remain only as compatibility wrappers for older callers; they are not the application's provider-selection mechanism.
+- The default application remains simulator-first and real-money execution remains disabled.
+
+The production deployment on Vercel is the simulator-safe `main` build. A real broker gateway, credentials and an independently verified execution environment are still required before any live-money capability can be enabled.
 
 ## Provider implementation checklist
 
