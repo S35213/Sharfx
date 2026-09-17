@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 
 const WINDOW_SECONDS = 15 * 60
 const MAX_SIGNUPS = 5
+const MAX_SIGNUP_EMAILS = 1
 const MAX_LOGIN_FAILURES = 8
 const DISPOSABLE_DOMAINS = new Set(['mailinator.com','guerrillamail.com','10minutemail.com','tempmail.com','temp-mail.org','yopmail.com','sharklasers.com','guerrillamail.net','getnada.com','throwawaymail.com','dispostable.com'])
 
@@ -13,12 +14,13 @@ function clientIp(req) {
   return String(req.headers?.['x-forwarded-for'] || req.headers?.['x-real-ip'] || 'unknown').split(',')[0].trim()
 }
 
-function bucketId(req, action) {
+function bucketId(req, action, identity = null) {
   const secret = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SHAFX_ADMIN_KEY || 'shafx'
-  return hash(secret, `${action}:${clientIp(req)}:${req.headers?.['user-agent'] || 'unknown'}`)
+  const subject = identity === null ? `${action}:${clientIp(req)}:${req.headers?.['user-agent'] || 'unknown'}` : `${action}:${identity}`
+  return hash(secret, subject)
 }
 
-async function consumeRateLimit(req, action, limit, reset = false) {
+async function consumeRateLimit(req, action, limit, reset = false, identity = null) {
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return { unavailable: true, blocked: false, count: 0, retryAfterSeconds: WINDOW_SECONDS }
   }
@@ -32,7 +34,7 @@ async function consumeRateLimit(req, action, limit, reset = false) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        p_bucket_id: bucketId(req, action),
+        p_bucket_id: bucketId(req, action, identity),
         p_limit: limit,
         p_window_seconds: WINDOW_SECONDS,
         p_reset: reset,
@@ -70,6 +72,15 @@ export async function signupGuard(req, body) {
   if (honeypot) return { allowed: false, status: 400, error: 'Unable to create this account.' }
   if (rate.blocked) return { allowed: false, status: 429, error: 'Too many account attempts. Please try again later.', retryAfterSeconds: rate.retryAfterSeconds }
   if (DISPOSABLE_DOMAINS.has(domain)) return { allowed: false, status: 400, error: 'Please use a permanent email address.' }
+
+  const emailRate = await consumeRateLimit(req, 'signup-email', MAX_SIGNUP_EMAILS, false, email)
+  if (emailRate.unavailable) return limiterUnavailable()
+  if (emailRate.blocked) return {
+    allowed: false,
+    status: 429,
+    error: 'A verification email was recently requested for this address. Please wait before trying again.',
+    retryAfterSeconds: emailRate.retryAfterSeconds,
+  }
 
   let risk = 0
   if (!req.headers?.['user-agent']) risk += 10
