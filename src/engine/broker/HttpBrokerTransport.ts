@@ -46,7 +46,8 @@ export class HttpBrokerTransport implements LiveBrokerTransport {
       if (error instanceof Error && error.name === 'AbortError') {
         throw new Error(`Broker gateway request timed out after ${this.timeoutMs}ms.`)
       }
-      throw error instanceof Error ? error : new Error('Broker gateway request failed.')
+      if (error instanceof Error) throw error
+      throw new Error('Broker gateway request failed.')
     } finally {
       clearTimeout(timer)
     }
