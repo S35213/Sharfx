@@ -25,7 +25,7 @@ export interface ReconciliationResult {
 
 const randomClientOrderId = (): string => {
   const randomUuid = globalThis.crypto?.randomUUID?.()
-  if (randomUuid) return `shafx_${randomUuid.replaceAll('-', '')}`
+  if (randomUuid) return `shafx_${randomUuid.split('-').join('')}`
   return `shafx_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 14)}`
 }
 
