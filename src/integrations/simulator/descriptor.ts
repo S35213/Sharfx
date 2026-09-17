@@ -5,6 +5,7 @@ export const SIMULATOR_PROVIDER_DESCRIPTOR: ProviderDescriptor = {
   name: 'SHAFX Simulator',
   kind: 'other',
   status: 'available',
+  executionMode: 'simulated',
   authMethods: [],
   description: 'Local SHAFX simulation environment. It does not place real-money orders or move customer funds.',
   capabilities: {
@@ -17,6 +18,8 @@ export const SIMULATOR_PROVIDER_DESCRIPTOR: ProviderDescriptor = {
     ordersRead: true,
     orderPlacement: true,
     orderCancellation: true,
+    orderModification: true,
+    orderLookupByClientOrderId: true,
     positionClose: true,
     multipleAccounts: true,
     demoAccounts: true,
