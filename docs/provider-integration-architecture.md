@@ -6,6 +6,18 @@ SHAFX must not be structurally tied to Deriv, Binance, OANDA, Interactive Broker
 
 This does **not** mean every provider can be connected with zero provider-specific work. It means the SHAFX core does not need to be redesigned when the provider changes. Each new provider gets an adapter that translates its API into the SHAFX contract.
 
+## Current runtime status
+
+The provider-neutral runtime migration is implemented on `main`.
+
+- `App.tsx` consumes `ProviderLiveControl` rather than a Deriv-specific live-market control.
+- Account streaming is consumed through `ProviderAccountStream`.
+- Deriv-specific transport/session behavior lives under `src/integrations/deriv` and is exposed through the normalized adapter boundary.
+- `DerivAccountStream` and `DerivLiveControl` remain only as compatibility wrappers for older callers; they are not the application's provider-selection mechanism.
+- The default application remains simulator-first and real-money execution remains disabled.
+
+The production deployment on Vercel is the simulator-safe `main` build. A real broker gateway, credentials and an independently verified execution environment are still required before any live-money capability can be enabled.
+
 ## Research conclusion
 
 The research confirms that a single mandatory "universal broker API" would be unsafe and unrealistic:
@@ -13,8 +25,8 @@ The research confirms that a single mandatory "universal broker API" would be un
 - Deriv uses REST for account/authentication and WebSocket for real-time market data and trading; authenticated WebSocket access can be established through an OTP flow.
 - Binance uses signed account/trading APIs and WebSocket user-data functionality with provider-specific request weights, timestamps and API-key handling.
 - OANDA's v20 API has broker-specific instruments, order types, durations, position/trade models and pricing streams.
-- Interactive Brokers has its own session lifecycle, market-data subscriptions, contract identifiers, pacing limits and order model. Its Web API also separates trading from some account-management features.
-- FIX provides an industry-standard interoperability option for firms that expose FIX, including order handling and market-data messages, but it is not a replacement for every retail/provider-specific API.
+- Interactive Brokers has its own session lifecycle, market-data subscriptions, contract identifiers, pacing limits and order model.
+- FIX provides an industry-standard interoperability option for firms that expose FIX, but it is not a replacement for every retail/provider-specific API.
 
 Therefore SHAFX uses a capability-based adapter boundary rather than pretending all providers have identical features.
 
@@ -41,36 +53,13 @@ The core should depend only on normalized SHAFX types. It must not import a prov
 
 ## Capability model
 
-Capabilities are independent because real providers differ. The current contract separates:
-
-- account read
-- market data
-- historical candles
-- real-time market data
-- real-time account data
-- positions
-- orders
-- order placement
-- order cancellation
-- position close
-- multiple accounts
-- demo/paper accounts
-- instrument metadata
-- deposits
-- withdrawals
+Capabilities are independent because real providers differ. The current contract separates account read, market data, historical candles, real-time market data, real-time account data, positions, orders, order placement, order cancellation, position close, multiple accounts, demo/paper accounts, instrument metadata, deposits, and withdrawals.
 
 The adapter exposes only the operations that the provider actually supports and SHAFX has implemented and tested.
 
 ## Market-data contract
 
-The provider contract includes normalized primitives for:
-
-- instrument discovery
-- quote/snapshot retrieval
-- historical candles
-- real-time subscriptions
-- normalized stream events
-- explicit stream close handles
+The provider contract includes normalized primitives for instrument discovery, quote/snapshot retrieval, historical candles, real-time subscriptions, normalized stream events, and explicit stream close handles.
 
 This is necessary because a provider may offer REST polling, WebSocket streams, FIX market data, or another mechanism. SHAFX analysis consumes the normalized data instead of knowing which transport produced it.
 
@@ -78,33 +67,13 @@ This is necessary because a provider may offer REST polling, WebSocket streams, 
 
 A symbol string alone is not enough to safely route an order. Providers can differ in contract size, quantity rules, price increments, currencies, supported order types and time-in-force rules.
 
-`ProviderInstrument` therefore carries normalized metadata such as:
-
-- SHAFX symbol and provider symbol
-- asset class
-- base/quote currencies
-- contract size and pip size where applicable
-- price increment
-- minimum/maximum quantity
-- quantity step
-- supported order types
-- supported time-in-force values
-- tradability
+`ProviderInstrument` therefore carries normalized metadata such as SHAFX symbol/provider symbol, asset class, base/quote currencies, contract size and pip size where applicable, price increment, minimum/maximum quantity, quantity step, supported order types, supported time-in-force values, and tradability.
 
 The SHAFX risk/order layer validates an order against this metadata before an adapter is allowed to send it. The adapter remains responsible for final provider-side validation because the provider is authoritative.
 
 ## Order normalization
 
-The portable order request contains:
-
-- symbol
-- side
-- quantity + quantity unit
-- market/limit/stop/stop-limit type
-- optional limit/stop price
-- optional stop-loss/take-profit
-- time-in-force
-- client order id for idempotency/correlation
+The portable order request contains symbol, side, quantity + quantity unit, market/limit/stop/stop-limit type, optional limit/stop price, optional stop-loss/take-profit, time-in-force, and a client order id for idempotency/correlation.
 
 Provider-specific order fields stay inside the adapter. A provider can support richer orders without forcing every provider to implement them.
 
@@ -114,69 +83,36 @@ Provider credentials and authorization codes stay server-side. Browser code may 
 
 For OAuth authorization-code flows, SHAFX should use PKCE, exact redirect URI matching, state/CSRF validation and server-side code exchange.
 
-API-key providers require the same separation: keys/signing secrets remain on the server-side provider gateway. Binance's signed account API, for example, requires API-key and timestamp/signature handling that should never be moved into browser code.
+API-key providers require the same separation: keys/signing secrets remain on the server-side provider gateway.
 
 ## Sessions and streaming
 
 A provider adapter owns its provider-specific session lifecycle. SHAFX does not assume that `connect()` means the same thing everywhere.
 
-The normalized contract supports a connection object plus an explicit stream handle. Providers can implement:
-
-- WebSocket subscriptions
-- HTTP polling
-- server-side streaming
-- FIX sessions
-- provider-specific session/bootstrap sequences
+The normalized contract supports WebSocket subscriptions, HTTP polling, server-side streaming, FIX sessions, and provider-specific session/bootstrap sequences.
 
 The adapter is responsible for reconnects, subscription cleanup, authentication refresh, stale-data detection and provider-specific heartbeat rules.
 
 ## Errors, rate limits and retries
 
-Provider errors are normalized before reaching the SHAFX UI. The contract includes a normalized error shape with:
+Provider errors are normalized before reaching the SHAFX UI. The contract includes a stable SHAFX error code, human-readable message, retryable/non-retryable flag, provider error code when available, and request correlation id when available.
 
-- stable SHAFX error code
-- human-readable message
-- retryable/non-retryable flag
-- provider error code when available
-- request correlation id when available
-
-Adapters must also implement provider-specific rate limiting and retry behavior. This matters because limits differ materially: IBKR documents endpoint/session limits while Binance exposes request weights and order-rate limits.
-
-SHAFX must never blindly retry an order-placement request. Order submission requires idempotency/correlation and reconciliation of the provider's actual order state before retrying.
+Adapters must implement provider-specific rate limiting and retry behavior. SHAFX must never blindly retry an order-placement request. Order submission requires idempotency/correlation and reconciliation of the provider's actual order state before retrying.
 
 ## Funding
 
-Funding is deliberately independent of trading. Each provider reports one of:
-
-- `api`: SHAFX may call a verified provider funding API after provider-specific authorization and safety checks.
-- `redirect`: SHAFX sends the user to the provider's official funding/cashier flow.
-- `manual`: the provider requires a manual process/instruction.
-- `unsupported`: no funding function is exposed through the SHAFX adapter.
-
-A provider offering trading APIs does not automatically mean SHAFX can safely or legally initiate deposits/withdrawals through those APIs.
+Funding is deliberately independent of trading. Each provider reports `api`, `redirect`, `manual`, or `unsupported` funding capability. A provider offering trading APIs does not automatically mean SHAFX can safely or legally initiate deposits/withdrawals through those APIs.
 
 ## Current catalog
 
 | Provider | Status | Current SHAFX execution | Funding | Notes |
 | --- | --- | --- | --- | --- |
 | SHAFX Simulator | available | simulated only | unsupported | No real money |
-| Deriv | available | real execution disabled | redirect | Account, market-data and realtime account paths now run through the provider adapter boundary |
+| Deriv | available | real execution disabled | redirect | Account, market-data and realtime account paths run through the provider adapter boundary |
 | Binance | planned | not implemented | unsupported until verified | Requires server-side signed integration and product-specific symbol/order mapping |
 | OANDA | planned | not implemented | unsupported until verified | REST + pricing stream; provider-specific order and instrument rules |
 | Interactive Brokers | planned | not implemented | unsupported until verified | Provider-specific sessions, conids, market-data subscriptions and pacing rules |
 | Custom/FIX provider | planned | not implemented | provider-specific | FIX can be an adapter transport where the provider exposes it |
-
-## Current repository/runtime reality
-
-The provider-neutral runtime migration described by the earlier draft is now implemented on `main`.
-
-- `App.tsx` consumes `ProviderLiveControl` rather than a Deriv-specific live-market control.
-- Account streaming is consumed through `ProviderAccountStream`.
-- Deriv-specific transport/session behavior lives under `src/integrations/deriv` and is exposed through the normalized adapter boundary.
-- `DerivAccountStream` and `DerivLiveControl` remain only as compatibility wrappers for older callers; they are not the application's provider-selection mechanism.
-- The default application remains simulator-first and real-money execution remains disabled.
-
-The production deployment on Vercel is the simulator-safe `main` build. A real broker gateway, credentials and an independently verified execution environment are still required before any live-money capability can be enabled.
 
 ## Provider implementation checklist
 
@@ -202,11 +138,11 @@ A provider is promoted from `planned` to `available` only after all required pie
 
 ## Interoperability strategy
 
-SHAFX should support three integration classes rather than forcing everything through one protocol:
+SHAFX supports three integration classes rather than forcing everything through one protocol:
 
-1. **Native provider adapter** — for REST/WebSocket/OAuth/API-key APIs.
-2. **Standard protocol adapter** — for providers exposing FIX or another industry protocol.
-3. **Custom gateway adapter** — for a company with a private API or server-to-server integration.
+1. **Native provider adapter** — REST/WebSocket/OAuth/API-key APIs.
+2. **Standard protocol adapter** — providers exposing FIX or another industry protocol.
+3. **Custom gateway adapter** — a company with a private API or server-to-server integration.
 
 This gives SHAFX a realistic path to supporting many brokers and companies without pretending they all have the same API.
 
