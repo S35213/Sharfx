@@ -43,9 +43,9 @@ export const assessProviderReadiness = (adapter: ProviderAdapter): ProviderReadi
 
   const issues: ProviderReadinessIssue[] = missingMethods.length > 0 ? ['MISSING_ADAPTER_METHOD'] : []
 
-  // Real-money execution remains deliberately disabled. An adapter method alone
-  // must never make the browser capable of sending live orders.
-  if (adapter.descriptor.capabilities.orderPlacement && typeof adapter.placeOrder === 'function') {
+  // External providers stay blocked from real-money execution until SHAFX has an
+  // explicit server-side execution boundary, reconciliation, audit trail, and release gate.
+  if (adapter.descriptor.executionMode === 'external' && adapter.descriptor.capabilities.orderPlacement && typeof adapter.placeOrder === 'function') {
     issues.push('LIVE_EXECUTION_DISABLED')
   }
 
