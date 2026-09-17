@@ -179,7 +179,7 @@ export const DERIV_PROVIDER_ADAPTER: ProviderAdapter = {
   async subscribeAccount(connection: ProviderConnection, _accountId: string | undefined, onEvent: (event: ProviderStreamEvent) => void): Promise<ProviderStreamHandle> {
     assertConnection(connection)
     const transport = new DerivAccountStreamTransport({
-      accountType: connection.environment,
+      accountType: connection.environment === 'demo' ? 'demo' : 'real',
       onSnapshot: (snapshot) => onEvent({
         type: 'account',
         account: {
@@ -190,8 +190,8 @@ export const DERIV_PROVIDER_ADAPTER: ProviderAdapter = {
           balance: snapshot.balance,
         },
       }),
-      onStatus: (status, message) => {
-        if (status === 'error') onEvent({ type: 'error', error: asNetworkError(message || 'Deriv account stream failed.') })
+      onStatus: (status) => {
+        if (status === 'error') onEvent({ type: 'error', error: asNetworkError('Deriv account stream failed.') })
       },
     })
     await transport.start()
