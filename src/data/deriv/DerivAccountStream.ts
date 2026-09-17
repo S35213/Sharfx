@@ -44,11 +44,15 @@ export class DerivAccountStream {
         try {
           const message = JSON.parse(String(event.data)) as DerivMessage
           if (message.msg_type === 'balance' && typeof message.balance?.balance === 'number' && typeof message.balance.currency === 'string') this.options.onSnapshot({ balance: message.balance.balance, currency: message.balance.currency, accountId: String(data.account?.id || ''), accountType: String(data.account?.type || '') })
-        } catch {}
+        } catch {
+          this.options.onStatus?.('error')
+        }
       }
       socket.onerror = () => this.options.onStatus?.('error')
       socket.onclose = () => { if (!this.stopped) { this.options.onStatus?.('disconnected'); this.scheduleReconnect() } }
-    } catch { this.options.onStatus?.('error'); this.scheduleReconnect() }
+    } catch {
+      this.options.onStatus?.('error'); this.scheduleReconnect()
+    }
   }
   private scheduleReconnect(): void {
     if (this.stopped || this.reconnectTimer !== null) return
