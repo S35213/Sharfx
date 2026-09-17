@@ -5,6 +5,7 @@ export const BINANCE_PROVIDER_DESCRIPTOR: ProviderDescriptor = {
   name: 'Binance',
   kind: 'exchange',
   status: 'planned',
+  executionMode: 'external',
   authMethods: ['api_key', 'custom'],
   description: 'Planned exchange adapter. Requires a server-side credential vault and endpoint-specific capability checks before activation.',
   capabilities: {
@@ -17,6 +18,8 @@ export const BINANCE_PROVIDER_DESCRIPTOR: ProviderDescriptor = {
     ordersRead: false,
     orderPlacement: false,
     orderCancellation: false,
+    orderModification: false,
+    orderLookupByClientOrderId: false,
     positionClose: false,
     multipleAccounts: false,
     demoAccounts: false,
