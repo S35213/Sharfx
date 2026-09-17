@@ -23,6 +23,8 @@ export interface ProviderCapabilities {
   ordersRead: boolean
   orderPlacement: boolean
   orderCancellation: boolean
+  orderModification: boolean
+  orderLookupByClientOrderId: boolean
   positionClose: boolean
   multipleAccounts: boolean
   demoAccounts: boolean
@@ -93,6 +95,11 @@ export interface ProviderOrderRequest {
 export interface ProviderOrderResult {
   providerOrderId: string
   status: 'accepted' | 'rejected' | 'filled' | 'pending' | 'cancelled'
+  clientOrderId?: string
+  symbol?: string
+  side?: OrderSide
+  quantity?: number
+  timestamp?: string
   message?: string
   raw?: unknown
 }
@@ -136,6 +143,13 @@ export interface ProviderCandle {
   volume?: number
 }
 
+export interface ProviderMarketSnapshot {
+  symbol: string
+  timeframe: string
+  candles: ProviderCandle[]
+  quote: ProviderQuote
+}
+
 export interface ProviderFundingInstruction {
   mode: FundingMode
   providerUrl?: string
@@ -146,6 +160,7 @@ export interface ProviderFundingInstruction {
 
 export type ProviderStreamEvent =
   | { type: 'quote'; quote: ProviderQuote }
+  | { type: 'market_snapshot'; snapshot: ProviderMarketSnapshot }
   | { type: 'account'; account: ProviderAccountSnapshot }
   | { type: 'position'; position: ProviderPosition }
   | { type: 'order'; order: ProviderOrderResult }
@@ -183,6 +198,7 @@ export interface ProviderAdapter {
   getAccountSnapshot?(connection: ProviderConnection, accountId: string): Promise<ProviderAccountSnapshot>
   getPositions?(connection: ProviderConnection, accountId: string): Promise<ProviderPosition[]>
   getOrders?(connection: ProviderConnection, accountId: string): Promise<ProviderOrderResult[]>
+  getOrderByClientOrderId?(connection: ProviderConnection, accountId: string, clientOrderId: string): Promise<ProviderOrderResult | null>
   getInstruments?(connection: ProviderConnection, accountId?: string): Promise<ProviderInstrument[]>
   getQuote?(connection: ProviderConnection, accountId: string | undefined, symbol: string): Promise<ProviderQuote>
   getHistoricalCandles?(connection: ProviderConnection, accountId: string | undefined, symbol: string, timeframe: string, limit?: number): Promise<ProviderCandle[]>
