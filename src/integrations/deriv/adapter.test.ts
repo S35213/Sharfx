@@ -21,7 +21,7 @@ describe('Deriv provider adapter account discovery', () => {
         { account_id: 'real-456', balance: 250, currency: 'USD', account_type: 'real', group: 'real', status: 'active' },
         { account_id: 'bad-row', balance: 'not-a-number', currency: 'USD', account_type: 'demo' },
       ],
-    }), { status: 200, headers: { 'content-type': 'application/json' } }))
+    }), { status: 200, headers: { 'content-type': 'application/json' } })))
 
     const accounts = await DERIV_PROVIDER_ADAPTER.getAccounts!(connection)
 
