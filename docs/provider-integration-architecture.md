@@ -10,11 +10,11 @@ This does **not** mean every provider can be connected with zero provider-specif
 
 The research confirms that a single mandatory "universal broker API" would be unsafe and unrealistic:
 
-- Deriv uses REST for account/authentication and WebSocket for real-time market data and trading; authenticated WebSocket access can be established through an OTP flow. citeturn1search5turn0search3
-- Binance uses signed account/trading APIs and WebSocket user-data functionality with provider-specific request weights, timestamps and API-key handling. citeturn0search0
-- OANDA's v20 API has broker-specific instruments, order types, durations, position/trade models and pricing streams. citeturn1search1turn1search2turn1search3
-- Interactive Brokers has its own session lifecycle, market-data subscriptions, contract identifiers, pacing limits and order model. Its Web API also separates trading from some account-management features. citeturn1search0
-- FIX provides an industry-standard interoperability option for firms that expose FIX, including order handling and market-data messages, but it is not a replacement for every retail/provider-specific API. citeturn0search2turn0search5
+- Deriv uses REST for account/authentication and WebSocket for real-time market data and trading; authenticated WebSocket access can be established through an OTP flow.
+- Binance uses signed account/trading APIs and WebSocket user-data functionality with provider-specific request weights, timestamps and API-key handling.
+- OANDA's v20 API has broker-specific instruments, order types, durations, position/trade models and pricing streams.
+- Interactive Brokers has its own session lifecycle, market-data subscriptions, contract identifiers, pacing limits and order model. Its Web API also separates trading from some account-management features.
+- FIX provides an industry-standard interoperability option for firms that expose FIX, including order handling and market-data messages, but it is not a replacement for every retail/provider-specific API.
 
 Therefore SHAFX uses a capability-based adapter boundary rather than pretending all providers have identical features.
 
@@ -112,9 +112,9 @@ Provider-specific order fields stay inside the adapter. A provider can support r
 
 Provider credentials and authorization codes stay server-side. Browser code may start an OAuth redirect or request a short-lived server-issued session, but it must not receive long-lived provider secrets.
 
-For OAuth authorization-code flows, SHAFX should use PKCE, exact redirect URI matching, state/CSRF validation and server-side code exchange. Deriv's current OAuth documentation explicitly uses authorization code + PKCE and state verification. citeturn0search3
+For OAuth authorization-code flows, SHAFX should use PKCE, exact redirect URI matching, state/CSRF validation and server-side code exchange.
 
-API-key providers require the same separation: keys/signing secrets remain on the server-side provider gateway. Binance's signed account API, for example, requires API-key and timestamp/signature handling that should never be moved into browser code. citeturn0search0
+API-key providers require the same separation: keys/signing secrets remain on the server-side provider gateway. Binance's signed account API, for example, requires API-key and timestamp/signature handling that should never be moved into browser code.
 
 ## Sessions and streaming
 
@@ -140,7 +140,7 @@ Provider errors must be normalized before reaching the SHAFX UI. The contract in
 - provider error code when available
 - request correlation id when available
 
-Adapters must also implement provider-specific rate limiting and retry behavior. This matters because limits differ materially: IBKR documents a global 10 requests/second limit for each authenticated username plus endpoint-specific limits, while Binance exposes request weights and order-rate limits. citeturn1search0turn0search0
+Adapters must also implement provider-specific rate limiting and retry behavior. This matters because limits differ materially: IBKR documents a global 10 requests/second limit for each authenticated username plus endpoint-specific limits, while Binance exposes request weights and order-rate limits.
 
 SHAFX must never blindly retry an order-placement request. Order submission requires idempotency/correlation and reconciliation of the provider's actual order state before retrying.
 
