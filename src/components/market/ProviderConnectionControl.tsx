@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { Check, ChevronDown, RefreshCw } from 'lucide-react'
 import { providerCatalog } from '../../integrations/catalog'
+import { ProviderCredentialForm } from './ProviderCredentialForm'
 import {
   chooseDefaultProviderSelection,
   getProviderConnections,
@@ -70,11 +71,7 @@ export const ProviderConnectionControl: React.FC = () => {
 
   const connectDeriv = (): void => { window.location.assign('/api/deriv/login') }
 
-  const connectOanda = async (): Promise<void> => {
-    if (!oandaToken.trim()) {
-      setOandaError('Paste your OANDA Personal Access Token.')
-      return
-    }
+  const connectOanda = async (credentials: Record<string, string>): Promise<void> => {
     try {
       setOandaBusy(true)
       setOandaError(null)
@@ -82,11 +79,10 @@ export const ProviderConnectionControl: React.FC = () => {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'connect', providerId: 'oanda', token: oandaToken.trim(), environment: oandaEnvironment }),
+        body: JSON.stringify({ action: 'connect', providerId: 'oanda', credentials }),
       })
       const data = await response.json().catch(() => ({}))
       if (!response.ok || !data?.ok) throw new Error(typeof data?.error === 'string' ? data.error : 'Unable to connect OANDA.')
-      setOandaToken('')
       setOandaOpen(false)
       await refresh()
     } catch (error) {
@@ -159,17 +155,13 @@ export const ProviderConnectionControl: React.FC = () => {
             <button type="button" onClick={() => { setOandaOpen((value) => !value); setOandaError(null) }} className="min-h-10 rounded-lg border border-shafx-border bg-shafx-bg px-3 text-xs font-semibold hover:border-shafx-primary">
               Connect OANDA
             </button>
-            {oandaOpen && <div className="rounded-lg border border-shafx-border bg-shafx-bg p-3">
-              <div className="text-[10px] font-semibold">OANDA Personal Access Token</div>
-              <p className="mt-1 text-[9px] leading-relaxed text-shafx-textMuted">The token is sent to the SHAFX server and stored in Supabase Vault. It is not saved in browser storage.</p>
-              <select value={oandaEnvironment} onChange={(event) => setOandaEnvironment(event.target.value === 'live' ? 'live' : 'demo')} className="mt-2 h-9 w-full rounded border border-shafx-border bg-shafx-surface px-2 text-xs">
-                <option value="demo">Practice / Demo</option>
-                <option value="live">Live</option>
-              </select>
-              <input type="password" autoComplete="off" value={oandaToken} onChange={(event) => setOandaToken(event.target.value)} placeholder="Paste OANDA token" className="mt-2 h-10 w-full rounded border border-shafx-border bg-shafx-surface px-2 text-xs outline-none focus:border-shafx-primary" />
-              {oandaError && <div className="mt-2 rounded border border-red-500/20 bg-red-500/5 px-2 py-1.5 text-[9px] text-red-300">{oandaError}</div>}
-              <button type="button" onClick={() => void connectOanda()} disabled={oandaBusy || !oandaToken.trim()} className="mt-2 min-h-10 w-full rounded bg-shafx-primary px-3 text-xs font-semibold text-white disabled:cursor-wait disabled:opacity-60">{oandaBusy ? 'Connecting…' : 'Connect OANDA account'}</button>
-            </div>}
+            {oandaOpen && <ProviderCredentialForm
+              descriptor={providerCatalog.find((item) => item.id === 'oanda') || { id: 'oanda', name: 'OANDA', kind: 'broker', status: 'available', executionMode: 'external', authMethods: ['api_key'], description: '', capabilities: {} as never }}
+              busy={oandaBusy}
+              error={oandaError}
+              onSubmit={(credentials) => void connectOanda(credentials)}
+            />}
+
             <div className="rounded-lg border border-shafx-border px-3 py-2 text-[9px] leading-relaxed text-shafx-textMuted">
               Provider adapters use the same connection/account registry. Each adapter keeps provider-specific authentication and API behavior behind the SHAFX contract.
             </div>
