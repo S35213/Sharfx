@@ -9,7 +9,7 @@ const byId = (id: string) => {
 }
 
 describe('SHAFX provider catalog', () => {
-  it('keeps simulator and the implemented Deriv adapter available', () => {
+  it('keeps simulator, Deriv and OANDA adapters available', () => {
     expect(byId('simulator').status).toBe('available')
     expect(byId('deriv').status).toBe('available')
     expect(byId('deriv').capabilities.accountRead).toBe(true)
@@ -18,11 +18,21 @@ describe('SHAFX provider catalog', () => {
     expect(byId('deriv').capabilities.realtimeAccountData).toBe(true)
     expect(byId('deriv').capabilities.historicalCandles).toBe(true)
     expect(byId('deriv').capabilities.positionsRead).toBe(false)
+    expect(byId('oanda').status).toBe('available')
+    expect(byId('oanda').capabilities.accountRead).toBe(true)
+    expect(byId('oanda').capabilities.marketData).toBe(true)
+    expect(byId('oanda').capabilities.historicalCandles).toBe(true)
+    expect(byId('oanda').capabilities.realtimeMarketData).toBe(true)
+    expect(byId('oanda').capabilities.realtimeAccountData).toBe(true)
+    expect(byId('oanda').capabilities.positionsRead).toBe(true)
+    expect(byId('oanda').capabilities.ordersRead).toBe(true)
+    expect(byId('oanda').capabilities.symbolMetadata).toBe(true)
   })
 
   it('does not advertise real execution before an execution adapter exists', () => {
     expect(supportsOrderPlacement(byId('deriv'))).toBe(false)
     expect(supportsOrderPlacement(byId('binance'))).toBe(false)
+    expect(supportsOrderPlacement(byId('oanda'))).toBe(false)
   })
 
   it('does not conflate account/market integration with funding', () => {
@@ -36,7 +46,6 @@ describe('SHAFX provider catalog', () => {
 
   it('keeps planned providers visible without pretending they are implemented', () => {
     expect(byId('binance').status).toBe('planned')
-    expect(byId('oanda').status).toBe('planned')
     expect(byId('ibkr').status).toBe('planned')
     expect(byId('binance').capabilities.marketData).toBe(false)
     expect(byId('oanda').capabilities.orderPlacement).toBe(false)
