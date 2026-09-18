@@ -6,15 +6,15 @@ interface Props {
   price: number
   precision: number
   pipSize?: number
-  live?: boolean
+  providerDepthAvailable?: boolean
 }
 
-export const LiquidityPanel: React.FC<Props> = ({ symbol, price, precision, pipSize = 0.0001, live = false }) => {
+export const LiquidityPanel: React.FC<Props> = ({ symbol, price, precision, pipSize = 0.0001, providerDepthAvailable = false }) => {
   const rows = useMemo(() => {
     const step = pipSize
     const levels = Array.from({ length: 6 }, (_, index) => index + 1)
-    const asks = levels.map((level) => ({ price: Number((price + step * level).toFixed(precision)), size: 18 + ((level * 17) % 61), side: 'ask' as const }))
-    const bids = levels.map((level) => ({ price: Number((price - step * level).toFixed(precision)), size: 22 + ((level * 23) % 72), side: 'bid' as const }))
+    const asks = levels.map((level) => ({ price: Number((price + step * level).toFixed(precision)), size: 18 + ((level * 17) % 61) }))
+    const bids = levels.map((level) => ({ price: Number((price - step * level).toFixed(precision)), size: 22 + ((level * 23) % 72) }))
     return { asks: asks.reverse(), bids }
   }, [pipSize, precision, price])
 
@@ -27,9 +27,9 @@ export const LiquidityPanel: React.FC<Props> = ({ symbol, price, precision, pipS
     <header className="flex items-center justify-between border-b border-shafx-border px-4 py-3">
       <div className="flex items-center gap-2">
         <Layers3 className="h-4 w-4 text-shafx-accent" />
-        <div><div className="text-xs font-semibold">Liquidity ladder</div><div className="text-[9px] text-shafx-textMuted">{symbol} • {live ? 'provider stream' : 'SHAFX depth preview'}</div></div>
+        <div><div className="text-xs font-semibold">Liquidity ladder</div><div className="text-[9px] text-shafx-textMuted">{symbol} • {providerDepthAvailable ? 'provider depth' : 'SHAFX depth preview'}</div></div>
       </div>
-      <span className="inline-flex items-center gap-1 rounded-full border border-shafx-border bg-shafx-bg px-2 py-1 text-[9px] text-shafx-textMuted"><Radio className={`h-3 w-3 ${live ? 'text-shafx-success' : 'text-shafx-warning'}`} />{live ? 'LIVE' : 'PREVIEW'}</span>
+      <span className="inline-flex items-center gap-1 rounded-full border border-shafx-border bg-shafx-bg px-2 py-1 text-[9px] text-shafx-textMuted"><Radio className={`h-3 w-3 ${providerDepthAvailable ? 'text-shafx-success' : 'text-shafx-warning'}`} />{providerDepthAvailable ? 'LIVE' : 'PREVIEW'}</span>
     </header>
     <div className="grid grid-cols-[1fr_72px_1fr] border-b border-shafx-border px-3 py-2 text-[9px] uppercase tracking-[0.14em] text-shafx-textMuted"><span className="text-right">Sell</span><span className="text-center">Price</span><span>Buy</span></div>
     <div className="flex-1 overflow-auto px-2 py-2">
@@ -39,8 +39,8 @@ export const LiquidityPanel: React.FC<Props> = ({ symbol, price, precision, pipS
         <span className="text-left font-mono text-shafx-danger">{row.size}</span>
       </div>)}
       <div className="my-1 rounded-xl border border-shafx-accent/30 bg-shafx-accent/5 px-3 py-3">
-        <div className="flex items-center justify-between text-[9px] uppercase tracking-[0.14em] text-shafx-textMuted"><span>Mid</span><span>Spread</span></div>
-        <div className="mt-1 flex items-center justify-between"><strong className="font-mono text-sm">{price.toFixed(precision)}</strong><span className="font-mono text-shafx-textMuted">{(pipSize).toFixed(precision)} base</span></div>
+        <div className="flex items-center justify-between text-[9px] uppercase tracking-[0.14em] text-shafx-textMuted"><span>Mid</span><span>Step</span></div>
+        <div className="mt-1 flex items-center justify-between"><strong className="font-mono text-sm">{price.toFixed(precision)}</strong><span className="font-mono text-shafx-textMuted">{pipSize.toFixed(precision)}</span></div>
       </div>
       {rows.bids.map((row) => <div key={row.price} className="relative grid grid-cols-[1fr_72px_1fr] items-center px-1 py-2.5 text-[10px]">
         <span className="text-right font-mono text-shafx-success">{row.size}</span>
@@ -53,6 +53,6 @@ export const LiquidityPanel: React.FC<Props> = ({ symbol, price, precision, pipS
       <div className="rounded-lg border border-shafx-border bg-shafx-bg p-2"><span className="block text-shafx-textMuted">Ask depth</span><strong className="mt-1 block font-mono text-shafx-danger">{askTotal}</strong></div>
       <div className="rounded-lg border border-shafx-border bg-shafx-bg p-2"><span className="block text-shafx-textMuted">Imbalance</span><strong className={`mt-1 block font-mono ${imbalance >= 0 ? 'text-shafx-success' : 'text-shafx-danger'}`}>{imbalance >= 0 ? '+' : ''}{imbalance.toFixed(1)}%</strong></div>
     </footer>
-    <div className="border-t border-shafx-border px-4 py-2 text-[9px] leading-relaxed text-shafx-textMuted"><Waves className="mr-1 inline h-3 w-3 text-shafx-accent" />This is a depth preview until a connected provider supplies normalized depth-of-market data.</div>
+    <div className="border-t border-shafx-border px-4 py-2 text-[9px] leading-relaxed text-shafx-textMuted"><Waves className="mr-1 inline h-3 w-3 text-shafx-accent" />{providerDepthAvailable ? 'Depth is supplied by the connected provider adapter.' : 'Preview only — real depth appears when a provider adapter exposes normalized depth-of-market data.'}</div>
   </section>
 }
