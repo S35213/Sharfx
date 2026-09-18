@@ -18,8 +18,6 @@ export const ProviderConnectionControl: React.FC = () => {
   const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null)
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
   const [oandaOpen, setOandaOpen] = useState(false)
-  const [oandaToken, setOandaToken] = useState('')
-  const [oandaEnvironment, setOandaEnvironment] = useState<'demo' | 'live'>('demo')
   const [oandaBusy, setOandaBusy] = useState(false)
   const [oandaError, setOandaError] = useState<string | null>(null)
 
@@ -156,7 +154,7 @@ export const ProviderConnectionControl: React.FC = () => {
               Connect OANDA
             </button>
             {oandaOpen && <ProviderCredentialForm
-              descriptor={providerCatalog.find((item) => item.id === 'oanda') || { id: 'oanda', name: 'OANDA', kind: 'broker', status: 'available', executionMode: 'external', authMethods: ['api_key'], description: '', capabilities: {} as never }}
+              descriptor={providerCatalog.find((item) => item.id === 'oanda')!}
               busy={oandaBusy}
               error={oandaError}
               onSubmit={(credentials) => void connectOanda(credentials)}
