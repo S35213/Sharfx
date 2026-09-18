@@ -5,6 +5,7 @@ import type { ProviderAccountSnapshot, ProviderConnection, ProviderStreamHandle 
 
 interface ProviderAccountStreamOptions {
   providerId: string
+  connectionId?: string
   accountType?: 'real' | 'demo'
   accountId?: string
   onSnapshot: (snapshot: ProviderAccountSnapshot) => void
@@ -24,14 +25,14 @@ export class ProviderAccountStream {
       const adapter = providerRegistry.get(this.options.providerId)
       const readiness = assessProviderReadiness(adapter)
       if (!readiness.ready) {
-        throw new Error(`Provider ${adapter.descriptor.name} is not ready: ${readiness.missingMethods.join(', ') || readiness.issues.join(', ')}`)
+        throw new Error('Provider ' + adapter.descriptor.name + ' is not ready: ' + (readiness.missingMethods.join(', ') || readiness.issues.join(', ')))
       }
-      if (typeof adapter.subscribeAccount !== 'function') throw new Error(`${adapter.descriptor.name} does not support realtime account data.`)
+      if (typeof adapter.subscribeAccount !== 'function') throw new Error(adapter.descriptor.name + ' does not support realtime account data.')
 
       const environment = this.options.accountType === 'demo' ? 'demo' : 'live'
       const connection: ProviderConnection = {
         providerId: this.options.providerId,
-        connectionId: `account:${this.options.providerId}:${environment}`,
+        connectionId: this.options.connectionId || 'account:' + this.options.providerId + ':' + environment + ':' + (this.options.accountId || 'all'),
         accountId: this.options.accountId,
         environment,
         connectedAt: new Date().toISOString(),
