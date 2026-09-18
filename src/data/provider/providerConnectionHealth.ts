@@ -21,7 +21,7 @@ export function assessProviderConnectionRecord(
     }
   }
 
-  const lastSeen = Date.parse(connection.lastSeenAt)
+  const lastSeen = connection.lastSeenAt ? Date.parse(connection.lastSeenAt) : Number.NaN
   if (Number.isFinite(lastSeen) && nowMs - lastSeen > staleAfterMs) {
     return { status: 'degraded', reasons: ['Connection heartbeat is stale.'] }
   }
