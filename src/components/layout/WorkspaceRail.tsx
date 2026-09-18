@@ -1,0 +1,58 @@
+import React from 'react'
+import { Activity, BarChart3, BellRing, Bot, Crosshair, LayoutPanelTop, LineChart, Minus, Ruler, Settings2, WalletCards } from 'lucide-react'
+
+export type WorkspaceTool = 'cursor' | 'crosshair' | 'level' | 'measure' | 'alert'
+export type WorkspaceDock = 'insights' | 'liquidity' | 'orders' | 'agent' | 'research'
+
+interface Props {
+  tool: WorkspaceTool
+  onToolChange: (tool: WorkspaceTool) => void
+  dock: WorkspaceDock
+  onDockChange: (dock: WorkspaceDock) => void
+}
+
+const toolItems: Array<{ id: WorkspaceTool; label: string; icon: React.ElementType }> = [
+  { id: 'cursor', label: 'Pointer', icon: Activity },
+  { id: 'crosshair', label: 'Crosshair', icon: Crosshair },
+  { id: 'level', label: 'Horizontal level', icon: Minus },
+  { id: 'measure', label: 'Measure range', icon: Ruler },
+  { id: 'alert', label: 'Price alert line', icon: BellRing },
+]
+
+const dockItems: Array<{ id: WorkspaceDock; label: string; icon: React.ElementType }> = [
+  { id: 'insights', label: 'Market insight', icon: BarChart3 },
+  { id: 'liquidity', label: 'Liquidity ladder', icon: LineChart },
+  { id: 'orders', label: 'Orders & positions', icon: WalletCards },
+  { id: 'agent', label: 'SHAFX Bot', icon: Bot },
+  { id: 'research', label: 'Research tools', icon: LayoutPanelTop },
+]
+
+export const WorkspaceRail: React.FC<Props> = ({ tool, onToolChange, dock, onDockChange }) => (
+  <aside className="hidden w-14 flex-shrink-0 flex-col items-center justify-between border-r border-shafx-border bg-shafx-surface/80 py-2 lg:flex">
+    <div className="flex flex-col items-center gap-1">
+      <div className="mb-1 flex h-9 w-9 items-center justify-center rounded-xl bg-shafx-accent shadow-lg shadow-shafx-accent/10">
+        <Settings2 className="h-4 w-4 text-white" />
+      </div>
+      {toolItems.map(({ id, label, icon: Icon }) => {
+        const active = tool === id
+        return (
+          <button key={id} type="button" onClick={() => onToolChange(id)} title={label} aria-label={label} aria-pressed={active}
+            className={`flex h-10 w-10 items-center justify-center rounded-xl transition ${active ? 'bg-shafx-accent/15 text-shafx-accent ring-1 ring-inset ring-shafx-accent/20' : 'text-shafx-textMuted hover:bg-shafx-surfaceHover hover:text-shafx-text'}`}>
+            <Icon className="h-4 w-4" strokeWidth={active ? 2.3 : 1.9} />
+          </button>
+        )
+      })}
+    </div>
+    <div className="flex flex-col items-center gap-1">
+      {dockItems.map(({ id, label, icon: Icon }) => {
+        const active = dock === id
+        return (
+          <button key={id} type="button" onClick={() => onDockChange(id)} title={label} aria-label={label} aria-pressed={active}
+            className={`flex h-9 w-9 items-center justify-center rounded-xl transition ${active ? 'bg-shafx-accent text-white shadow-md shadow-shafx-accent/20' : 'text-shafx-textMuted hover:bg-shafx-surfaceHover hover:text-shafx-text'}`}>
+            <Icon className="h-4 w-4" strokeWidth={active ? 2.2 : 1.8} />
+          </button>
+        )
+      })}
+    </div>
+  </aside>
+)
