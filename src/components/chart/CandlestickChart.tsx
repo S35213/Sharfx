@@ -18,7 +18,7 @@ interface CandlestickChartProps {
   onToolNotice?: (message: string) => void
 }
 
-interface UserLevel { id: string; price: number; label: string; color: string; dashed?: boolean }
+interface UserLevel { id: string; price: number; label: string; color: string; lineWidth?: 1 | 2 | 3 | 4; dashed?: boolean }
 
 const prepareData = (data: OHLCV[]): CandlestickData[] => {
   const seen = new Set<number>()
