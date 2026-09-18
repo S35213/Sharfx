@@ -18,6 +18,30 @@ export interface ProviderGatewayContract {
   health(connectionId: string): Promise<{ ok: boolean; message?: string }>
 }
 
+export interface FixSessionSettings {
+  host: string
+  port: number
+  senderCompId: string
+  targetCompId: string
+  beginString?: string
+  heartbeatSeconds?: number
+}
+
+export interface FixGatewayContract {
+  connect(settings: FixSessionSettings): Promise<{ sessionId: string }>
+  send(message: string): Promise<void>
+  disconnect(sessionId: string): Promise<void>
+  health(sessionId: string): Promise<{ ok: boolean; message?: string }>
+}
+
+export interface CustomProviderGateway {
+  providerId: string
+  connect(input: Record<string, unknown>): Promise<{ connectionId: string; metadata?: Record<string, unknown> }>
+  disconnect(connectionId: string): Promise<void>
+  request<T = unknown>(connectionId: string, operation: string, payload?: Record<string, unknown>): Promise<T>
+  health(connectionId: string): Promise<{ ok: boolean; message?: string }>
+}
+
 export interface ConfigurableRestProvider {
   descriptor: ProviderDescriptor
   rest: ProviderRestTransport
