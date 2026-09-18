@@ -9,7 +9,7 @@ import {
   upsertProviderAccount,
 } from '../../server/providerConnections.js'
 import { connectProvider } from '../../server/providerConnectorRegistry.js'
-import { loadOandaConnection, normalizeOandaAccounts, normalizeOandaSummary, normalizeOandaPositions, normalizeOandaOrders, normalizeOandaInstruments, normalizeOandaQuote, normalizeOandaCandles, oandaRequest } from '../../server/oanda.js'
+import { loadOandaConnection, normalizeOandaAccounts, normalizeOandaSummary, normalizeOandaPositions, normalizeOandaOrders, normalizeOandaInstruments, normalizeOandaQuote, normalizeOandaCandles, oandaRequest, placeOandaDemoOrder, cancelOandaOrder, closeOandaPosition } from '../../server/oanda.js'
 import { binanceRequest, loadBinanceConnection, normalizeBinanceAccount, normalizeBinanceOrders, normalizeBinanceInstruments, normalizeBinanceQuote, normalizeBinanceCandles } from '../../server/binance.js'
 
 const json = (res, status, body) => res.status(status).json(body)
@@ -135,6 +135,28 @@ export default async function handler(req, res) {
 
       const connectionId = String(body.connectionId || '')
       if (!connectionId) return json(res, 400, { ok: false, error: 'Provider connection id is required.' })
+
+      if (body.providerId === 'oanda' && ['placeOrder', 'cancelOrder', 'closePosition'].includes(action)) {
+        const providerConnection = await getProviderConnection(user.id, connectionId, true)
+        if (!providerConnection || providerConnection.provider_id !== 'oanda') return json(res, 404, { ok: false, error: 'OANDA connection not found.' })
+        if (providerConnection.environment !== 'demo') return json(res, 403, { ok: false, error: 'SHAFX live external execution is still disabled. Use an OANDA practice account.' })
+        const { token } = await loadOandaConnection(req, connectionId)
+        const accountId = String(body.accountId || '')
+        if (!accountId) return json(res, 400, { ok: false, error: 'OANDA accountId is required.' })
+        if (action === 'placeOrder') {
+          const order = await placeOandaDemoOrder({ environment: providerConnection.environment, token, accountId, order: body.order || {} })
+          await recordProviderAudit({ userId: user.id, connectionId, eventType: 'demo_order_placed', metadata: { provider: 'oanda', accountId, providerOrderId: order.providerOrderId, symbol: order.symbol, side: order.side, quantity: order.quantity } })
+          return json(res, 200, { ok: true, order })
+        }
+        if (action === 'cancelOrder') {
+          const order = await cancelOandaOrder({ environment: providerConnection.environment, token, accountId, providerOrderId: String(body.providerOrderId || '') })
+          await recordProviderAudit({ userId: user.id, connectionId, eventType: 'demo_order_cancelled', metadata: { provider: 'oanda', accountId, providerOrderId: order.providerOrderId } })
+          return json(res, 200, { ok: true, order })
+        }
+        const order = await closeOandaPosition({ environment: providerConnection.environment, token, accountId, positionId: String(body.positionId || '') })
+        await recordProviderAudit({ userId: user.id, connectionId, eventType: 'demo_position_closed', metadata: { provider: 'oanda', accountId, positionId: body.positionId } })
+        return json(res, 200, { ok: true, order })
+      }
 
       if (action === 'disconnect') {
         await disconnectProviderConnection({ userId: user.id, connectionId })
