@@ -55,4 +55,4 @@ export const LiquidityPanel: React.FC<Props> = ({ symbol, price, precision, pipS
     </footer>
     <div className="border-t border-shafx-border px-4 py-2 text-[9px] leading-relaxed text-shafx-textMuted"><Waves className="mr-1 inline h-3 w-3 text-shafx-accent" />This is a depth preview until a connected provider supplies normalized depth-of-market data.</div>
   </section>
-)
+}
