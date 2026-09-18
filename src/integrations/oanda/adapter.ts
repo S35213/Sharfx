@@ -1,6 +1,6 @@
 import type {
   ProviderAccountSnapshot, ProviderAdapter, ProviderCandle, ProviderConnection, ProviderInstrument,
-  ProviderNormalizedError, ProviderOrderResult, ProviderPosition, ProviderQuote, ProviderStreamEvent, ProviderStreamHandle,
+  ProviderNormalizedError, ProviderOrderResult, ProviderPosition, ProviderQuote, ProviderStreamHandle,
 } from '../core/types'
 import { validateProviderConnection } from '../core/providerConnectionGuard'
 import { OANDA_PROVIDER_DESCRIPTOR } from './descriptor'
