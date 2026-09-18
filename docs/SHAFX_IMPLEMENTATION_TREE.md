@@ -92,13 +92,13 @@
 - [ ] Generic configurable WebSocket provider adapter.
 - [ ] Generic FIX gateway adapter boundary.
 - [ ] Generic custom-gateway adapter contract for proprietary broker APIs.
-- [ ] Provider credential schema and onboarding UI for non-OAuth providers.
+- [~] Provider credential schema/onboarding UI exists for implemented API-key providers; a fully generic provider-driven credential form is still pending.
 - [ ] Symbol/instrument mapping workflow across providers.
 
 ### Concrete provider adapters
 
 - [x] Deriv — implemented account/market adapter.
-- [ ] OANDA — adapter implementation.
+- [x] OANDA — implemented account/market-data adapter with server-side personal-token storage and multi-account discovery.
 - [ ] Interactive Brokers — adapter implementation.
 - [ ] Binance — adapter implementation.
 - [ ] cTrader Open API — adapter implementation.
@@ -110,7 +110,7 @@
 - [x] Stream identity can include provider + connection + account + environment.
 - [x] Account stream abstraction exists.
 - [x] Provider-specific account stream isolation exists for Deriv.
-- [ ] Persisted active connection/account selection is used by the terminal.
+- [x] Persisted active connection/account selection is used by the terminal.
 - [ ] Multiple account streams can coexist without state collision.
 - [ ] Per-account account/position/order caches.
 - [ ] Per-provider rate-limit isolation.
@@ -186,7 +186,7 @@
 - [ ] Generic provider connection flow passes in deployed production.
 - [ ] Deriv connection flow passes with a real test account.
 - [ ] Multiple Deriv accounts pass simultaneously.
-- [ ] Second provider passes a full sandbox/paper connection flow.
+- [ ] Second provider passes a full sandbox/paper connection flow (code + CI verified; real OANDA practice credentials have not yet been exercised in production).
 - [ ] Multi-provider simultaneous runtime test passes.
 - [ ] Final security/runtime diagnostic passes.
 
@@ -194,10 +194,10 @@
 
 **Last verified:** 2026-09-18
 
-**Current production commit:** `6f129b93a9915e246eb726e7d25fe22d8e7ea9e2`
+**Current production commit:** `888e8a7a5f362df757991cd0872bc2d7fa233f8f`
 
-**Current branch for continuation:** `feature/universal-provider-completion`
+**Current branch for continuation:** `feature/oanda-provider-pack`
 
-**Current state:** Foundation + Supabase registry + Deriv integration are deployed and CI-verified. The generic persisted connection/account selection is now wired into the terminal and CI-verified on this branch. Remaining unchecked gates are true multi-connection concurrency, additional provider/gateway packs, live execution release work, and production/runtime cleanup.
+**Current state:** Foundation + Supabase registry + Deriv integration are deployed on `main`. Generic persisted connection/account selection is wired and CI-verified. OANDA is implemented on the continuation branch and CI-verified; production deployment and a real OANDA practice-account connection test remain unchecked until this PR is merged and deployed.
 
 **Handoff rule:** Never replace this tree with a new checklist. Update this file in the same branch/commit chain as work progresses. Only mark an item `[x]` after verification.

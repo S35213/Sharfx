@@ -8,6 +8,7 @@ import type { ProviderConnection, ProviderStreamHandle } from '../../integration
 
 interface ProviderLiveControlProps {
   providerId: string
+  connection?: ProviderConnection
   symbol: string
   timeframe: Timeframe
   onUpdate: (candles: OHLCV[], price: number, epoch: number) => void
@@ -23,7 +24,7 @@ const toOHLCV = (time: string, open: number, high: number, low: number, close: n
   return { time: timestamp, open, high, low, close }
 }
 
-export const ProviderLiveControl: React.FC<ProviderLiveControlProps> = ({ providerId, symbol, timeframe, onUpdate, onActiveChange }) => {
+export const ProviderLiveControl: React.FC<ProviderLiveControlProps> = ({ providerId, connection: providedConnection, symbol, timeframe, onUpdate, onActiveChange }) => {
   const streamRef = useRef<ProviderStreamHandle | null>(null)
   const [enabled, setEnabled] = useState(false)
   const [status, setStatus] = useState<Status>('demo')
@@ -50,7 +51,7 @@ export const ProviderLiveControl: React.FC<ProviderLiveControlProps> = ({ provid
         const readiness = assessProviderReadiness(adapter)
         if (!readiness.ready) throw new Error(`Provider ${adapter.descriptor.name} is not ready: ${readiness.missingMethods.join(', ') || readiness.issues.join(', ')}`)
 
-        const connection: ProviderConnection = {
+        const connection: ProviderConnection = providedConnection ?? {
           providerId,
           connectionId: `public-market:${providerId}`,
           environment: 'demo',
@@ -100,7 +101,7 @@ export const ProviderLiveControl: React.FC<ProviderLiveControlProps> = ({ provid
       disposed = true
       void closeExistingStream()
     }
-  }, [enabled, onActiveChange, onUpdate, providerId, symbol, timeframe])
+  }, [enabled, onActiveChange, onUpdate, providedConnection, providerId, symbol, timeframe])
 
   const toggle = (): void => setEnabled((value) => !value)
   const label = status === 'live' ? 'Live' : status === 'connecting' ? 'Connecting' : status === 'error' ? 'Retry Live' : 'Demo'
