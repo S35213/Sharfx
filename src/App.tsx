@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, Maximize2, PanelRight, SlidersHorizontal } from 'lucide-react'
+import { Maximize2, PanelRight, SlidersHorizontal } from 'lucide-react'
 import { TerminalProvider, useTerminal } from './app/TerminalContext'
 import { ErrorBoundary } from './app/ErrorBoundary'
 import { useAuth } from './app/AuthContext'
