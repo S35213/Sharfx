@@ -6,15 +6,27 @@ const connection = { providerId: 'oanda', connectionId: 'connection-oanda-1', ac
 afterEach(() => vi.restoreAllMocks())
 
 describe('OANDA provider adapter', () => {
-  it('advertises implemented read and market-data capabilities without execution', () => {
+  it('advertises implemented read, market-data, and demo execution capabilities', () => {
     expect(OANDA_PROVIDER_DESCRIPTOR.status).toBe('available')
     expect(OANDA_PROVIDER_DESCRIPTOR.capabilities.accountRead).toBe(true)
     expect(OANDA_PROVIDER_DESCRIPTOR.capabilities.positionsRead).toBe(true)
     expect(OANDA_PROVIDER_DESCRIPTOR.capabilities.ordersRead).toBe(true)
-    expect(OANDA_PROVIDER_DESCRIPTOR.capabilities.orderPlacement).toBe(false)
+    expect(OANDA_PROVIDER_DESCRIPTOR.capabilities.orderPlacement).toBe(true)
+    expect(OANDA_PROVIDER_DESCRIPTOR.capabilities.orderCancellation).toBe(true)
+    expect(OANDA_PROVIDER_DESCRIPTOR.capabilities.orderLookupByClientOrderId).toBe(true)
+    expect(OANDA_PROVIDER_DESCRIPTOR.capabilities.positionClose).toBe(true)
     expect(typeof OANDA_PROVIDER_ADAPTER.subscribe).toBe('function')
     expect(typeof OANDA_PROVIDER_ADAPTER.subscribeAccount).toBe('function')
   })
+  it('places a normalized demo market order through the server boundary', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true, order: {
+      providerOrderId: '9001', status: 'filled', symbol: 'EUR/USD', side: 'BUY', quantity: 1000, timestamp: '2026-09-18T09:01:00.000Z'
+    } }), { status: 200, headers: { 'content-type': 'application/json' } })))
+    const result = await OANDA_PROVIDER_ADAPTER.placeOrder!(connection, connection.accountId!, { symbol: 'EUR/USD', side: 'BUY', quantity: 1000, quantityUnit: 'units', type: 'MARKET' })
+    expect(result).toMatchObject({ providerOrderId: '9001', status: 'filled', symbol: 'EUR/USD', quantity: 1000 })
+    expect(String((fetch as ReturnType<typeof vi.fn>).mock.calls[0][0])).toContain('action=placeOrder')
+  })
+
   it('normalizes accounts through the server boundary', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true, accounts: [{ accountId: '101-001', accountLabel: 'Practice • 101-001', environment: 'demo', currency: 'USD', balance: 1000, equity: 1001 }] }), { status: 200, headers: { 'content-type': 'application/json' } })))
     const accounts = await OANDA_PROVIDER_ADAPTER.getAccounts!(connection)
