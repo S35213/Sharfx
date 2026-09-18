@@ -17,7 +17,10 @@ const requireAccount = (accountId: string | undefined): string => {
   return accountId
 }
 
-const api = async (connection: ProviderConnection, accountId: string, action: string, extra: Record<string, string> = {}): Promise<any> => {
+const toObject = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+const toObjects = (value: unknown): Record<string, unknown>[] => Array.isArray(value) ? value.map(toObject) : [];
+
+const api = async (connection: ProviderConnection, accountId: string, action: string, extra: Record<string, string> = {}): Promise<Record<string, unknown>> => {
   const query = new URLSearchParams({ action, connectionId: connection.connectionId, accountId, ...extra })
   const response = await fetch('/api/oanda/data?' + query.toString(), { credentials: 'include', cache: 'no-store' })
   const payload = await response.json().catch(() => ({}))
@@ -25,23 +28,23 @@ const api = async (connection: ProviderConnection, accountId: string, action: st
   return payload
 }
 
-const normalizeAccount = (account: any): ProviderAccountSnapshot => ({
-  accountId: String(account.accountId), accountLabel: typeof account.accountLabel === 'string' ? account.accountLabel : String(account.accountId),
-  environment: account.environment === 'demo' ? 'demo' : 'live', currency: String(account.currency || ''), balance: Number(account.balance || 0),
-  equity: account.equity == null ? undefined : Number(account.equity), usedMargin: account.usedMargin == null ? undefined : Number(account.usedMargin),
-  freeMargin: account.freeMargin == null ? undefined : Number(account.freeMargin), floatingPL: account.floatingPL == null ? undefined : Number(account.floatingPL),
-})
+const normalizeAccount = (account: unknown): ProviderAccountSnapshot => { const row = toObject(account); return {
+  accountId: String(row.accountId ?? ''), accountLabel: typeof row.accountLabel === 'string' ? row.accountLabel : String(row.accountId ?? ''),
+  environment: row.environment === 'demo' ? 'demo' : 'live', currency: String(row.currency ?? ''), balance: Number(row.balance ?? 0),
+  equity: row.equity == null ? undefined : Number(row.equity), usedMargin: row.usedMargin == null ? undefined : Number(row.usedMargin),
+  freeMargin: row.freeMargin == null ? undefined : Number(row.freeMargin), floatingPL: row.floatingPL == null ? undefined : Number(row.floatingPL),
+} }
 
-const normalizeQuote = (quote: any): ProviderQuote => ({
-  symbol: String(quote.symbol), bid: quote.bid == null ? undefined : Number(quote.bid), ask: quote.ask == null ? undefined : Number(quote.ask),
-  last: quote.last == null ? undefined : Number(quote.last), timestamp: String(quote.timestamp),
-})
+const normalizeQuote = (quote: unknown): ProviderQuote => { const row = toObject(quote); return {
+  symbol: String(row.symbol ?? ''), bid: row.bid == null ? undefined : Number(row.bid), ask: row.ask == null ? undefined : Number(row.ask),
+  last: row.last == null ? undefined : Number(row.last), timestamp: String(row.timestamp ?? new Date().toISOString()),
+} }
 
-const normalizeCandle = (candle: any): ProviderCandle => ({
-  symbol: String(candle.symbol), timeframe: String(candle.timeframe), openTime: String(candle.openTime),
-  closeTime: candle.closeTime == null ? undefined : String(candle.closeTime), open: Number(candle.open), high: Number(candle.high),
-  low: Number(candle.low), close: Number(candle.close), volume: candle.volume == null ? undefined : Number(candle.volume),
-})
+const normalizeCandle = (candle: unknown): ProviderCandle => { const row = toObject(candle); return {
+  symbol: String(row.symbol ?? ''), timeframe: String(row.timeframe ?? ''), openTime: String(row.openTime ?? ''),
+  closeTime: row.closeTime == null ? undefined : String(row.closeTime), open: Number(row.open), high: Number(row.high),
+  low: Number(row.low), close: Number(row.close), volume: row.volume == null ? undefined : Number(row.volume),
+} }
 
 const networkError = (message: string): ProviderNormalizedError => ({ code: 'NETWORK_ERROR', message, retryable: true })
 
@@ -59,13 +62,26 @@ export const OANDA_PROVIDER_ADAPTER: ProviderAdapter = {
   },
   async getPositions(connection, accountId): Promise<ProviderPosition[]> {
     assertConnection(connection); const payload = await api(connection, requireAccount(accountId), 'positions')
-    return Array.isArray(payload.positions) ? payload.positions.map((position: any) => ({ ...position, quantity: Number(position.quantity), entryPrice: Number(position.entryPrice), unrealizedPL: position.unrealizedPL == null ? undefined : Number(position.unrealizedPL) })) : []
+    return toObjects(payload.positions).map((position) => ({
+      id: String(position.id ?? ''), symbol: String(position.symbol ?? ''), side: position.side === 'SELL' ? 'SELL' : 'BUY', quantity: Number(position.quantity ?? 0),
+      entryPrice: Number(position.entryPrice ?? 0), currentPrice: position.currentPrice == null ? undefined : Number(position.currentPrice),
+      stopLoss: position.stopLoss == null ? undefined : Number(position.stopLoss), takeProfit: position.takeProfit == null ? undefined : Number(position.takeProfit),
+      unrealizedPL: position.unrealizedPL == null ? undefined : Number(position.unrealizedPL), currency: position.currency == null ? undefined : String(position.currency),
+    }))
   },
   async getOrders(connection, accountId): Promise<ProviderOrderResult[]> {
-    assertConnection(connection); const payload = await api(connection, requireAccount(accountId), 'orders'); return Array.isArray(payload.orders) ? payload.orders : []
+    assertConnection(connection); const payload = await api(connection, requireAccount(accountId), 'orders'); return toObjects(payload.orders).map((order) => ({
+      providerOrderId: String(order.providerOrderId ?? ''), status: order.status === 'cancelled' ? 'cancelled' : 'pending', clientOrderId: order.clientOrderId == null ? undefined : String(order.clientOrderId),
+      symbol: order.symbol == null ? undefined : String(order.symbol), side: order.side === 'SELL' ? 'SELL' : 'BUY', quantity: Number(order.quantity ?? 0), timestamp: order.timestamp == null ? undefined : String(order.timestamp), message: order.message == null ? undefined : String(order.message),
+    }))
   },
   async getInstruments(connection, accountId): Promise<ProviderInstrument[]> {
-    assertConnection(connection); const payload = await api(connection, requireAccount(accountId), 'instruments'); return Array.isArray(payload.instruments) ? payload.instruments : []
+    assertConnection(connection); const payload = await api(connection, requireAccount(accountId), 'instruments'); return toObjects(payload.instruments).map((instrument) => ({
+      symbol: String(instrument.symbol ?? ''), providerSymbol: String(instrument.providerSymbol ?? instrument.symbol ?? ''), displayName: instrument.displayName == null ? undefined : String(instrument.displayName),
+      assetClass: instrument.assetClass == null ? undefined : String(instrument.assetClass), baseCurrency: instrument.baseCurrency == null ? undefined : String(instrument.baseCurrency), quoteCurrency: instrument.quoteCurrency == null ? undefined : String(instrument.quoteCurrency),
+      contractSize: instrument.contractSize == null ? undefined : Number(instrument.contractSize), pipSize: instrument.pipSize == null ? undefined : Number(instrument.pipSize), priceIncrement: instrument.priceIncrement == null ? undefined : Number(instrument.priceIncrement),
+      quantityMin: instrument.quantityMin == null ? undefined : Number(instrument.quantityMin), quantityMax: instrument.quantityMax == null ? undefined : Number(instrument.quantityMax), quantityStep: instrument.quantityStep == null ? undefined : Number(instrument.quantityStep), tradable: Boolean(instrument.tradable),
+    }))
   },
   async getQuote(connection, accountId, symbol): Promise<ProviderQuote> {
     assertConnection(connection); const payload = await api(connection, requireAccount(accountId), 'quote', { symbol }); return normalizeQuote(payload.quote)
@@ -73,7 +89,7 @@ export const OANDA_PROVIDER_ADAPTER: ProviderAdapter = {
   async getHistoricalCandles(connection, accountId, symbol, timeframe, limit = 200): Promise<ProviderCandle[]> {
     assertConnection(connection); if (!supportedTimeframes.has(timeframe)) throw new Error('Unsupported OANDA timeframe: ' + timeframe)
     const payload = await api(connection, requireAccount(accountId), 'candles', { symbol, timeframe, limit: String(limit) })
-    return Array.isArray(payload.candles) ? payload.candles.map(normalizeCandle) : []
+    return toObjects(payload.candles).map(normalizeCandle)
   },
   async subscribe(connection, accountId, symbols, onEvent, timeframe = 'M5'): Promise<ProviderStreamHandle> {
     assertConnection(connection); if (symbols.length !== 1) throw new Error('The current OANDA market adapter accepts exactly one symbol per stream.')
