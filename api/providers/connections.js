@@ -3,6 +3,7 @@ import {
   getShafxUser,
   listProviderConnections,
   recordProviderAudit,
+  syncProviderAccounts,
   touchProviderConnection,
 } from '../../server/providerConnections.js'
 import { connectOandaProvider, loadOandaConnection, normalizeOandaAccounts, normalizeOandaSummary, normalizeOandaPositions, normalizeOandaOrders, normalizeOandaInstruments, normalizeOandaQuote, normalizeOandaCandles, oandaRequest } from '../../server/oanda.js'
@@ -24,7 +25,6 @@ const handleOandaGet = async (req, res, user) => {
   if (action === 'accounts') {
     const payload = await oandaRequest({ environment, token, path: '/v3/accounts' })
     const accounts = normalizeOandaAccounts(payload, environment)
-    const { syncProviderAccounts } = await import('../../server/providerConnections.js')
     await syncProviderAccounts({ connectionId: connection.id, userId: user.id, providerId: 'oanda', accounts })
     return json(res, 200, { ok: true, accounts })
   }
