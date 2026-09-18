@@ -31,6 +31,7 @@ const cloneDescriptor = (descriptor: ProviderDescriptor): ProviderDescriptor => 
   ...descriptor,
   authMethods: [...descriptor.authMethods],
   capabilities: cloneCapabilities(descriptor.capabilities),
+  rateLimit: descriptor.rateLimit ? { ...descriptor.rateLimit } : undefined,
 })
 
 export class ProviderRegistry {
