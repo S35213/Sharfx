@@ -179,8 +179,8 @@
 
 ## 12. Verification Gates
 
-- [~] GitHub SHAFX CI has passed on earlier checkpoints; latest `main` verification is still running.
-- [~] Provider Architecture CI has passed on earlier checkpoints; latest `main` verification is still running.
+- [x] GitHub SHAFX CI passes on latest `main` commit `4642dcc6a73bcaf5aefd307df453cb312257b118`.
+- [x] GitHub Provider Architecture CI passes on latest `main` commit `4642dcc6a73bcaf5aefd307df453cb312257b118`.
 - [x] Supabase provider migration is applied.
 - [~] Last known production deployment is READY, but new deployments are currently blocked by the Vercel Hobby deployment-rate quota.
 - [~] Last READY production build had no build errors; current `main` build is pending CI/Vercel quota recovery.
@@ -195,10 +195,10 @@
 
 **Last verified:** 2026-09-18
 
-**Current production commit:** `c9099195dc5f5370ba0426f6591d1d6dbe89daeb` (last verified READY production deployment)
+**Current production commit:** `c9099195dc5f5370ba0426f6591d1d6dbe89daeb` (last verified READY production deployment; newer `main` commits are not yet in production because Vercel is deployment-rate limited)
 
 **Current branch for continuation:** `main`
 
-**Current state:** Provider foundation, Supabase registry, Deriv, OANDA, generic connector/onboarding primitives, Binance read-only pack, concurrent account streaming/cache/retry, health/telemetry primitives, and FIX/custom gateway boundaries are present on `main`. Remaining hard gates are latest CI verification, real external provider credentials/sandbox tests, concrete IBKR/cTrader/MT4/MT5 provider packs, production telemetry/alert delivery, and the unresolved Vercel runtime deprecation warning. New Vercel deployments are presently blocked by the Hobby deployment-rate quota.
+**Current state:** Provider foundation, Supabase registry, Deriv, OANDA, generic connector/onboarding primitives, Binance read-only pack, concurrent account streaming/cache/retry, health/telemetry primitives, funding dispatcher, and FIX/custom gateway boundaries are present on `main`. Latest SHAFX CI and Provider Architecture CI pass. Remaining hard gates are real external provider credentials/sandbox tests, concrete IBKR/cTrader/MT4/MT5 provider packs, production telemetry/alert delivery, and the unresolved Vercel runtime deprecation warning. New Vercel deployments are presently blocked by the Hobby deployment-rate quota.
 
 **Handoff rule:** Never replace this tree with a new checklist. Update this file in the same branch/commit chain as work progresses. Only mark an item `[x]` after verification.
