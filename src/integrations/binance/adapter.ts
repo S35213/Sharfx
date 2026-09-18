@@ -107,7 +107,8 @@ export const BINANCE_PROVIDER_ADAPTER: ProviderAdapter = {
     onEvent({ type: 'market_snapshot', snapshot: { symbol, timeframe, candles: currentCandles, quote: initialQuote } })
 
     if (typeof WebSocket !== 'undefined') {
-      const ws = new WebSocket('wss://stream.binance.com:9443/ws/' + providerSymbol + '@ticker')
+      const websocketBase = connection.environment === 'demo' ? 'wss://stream.testnet.binance.vision/ws/' : 'wss://stream.binance.com:9443/ws/'
+      const ws = new WebSocket(websocketBase + providerSymbol + '@ticker')
       ws.onmessage = (event) => {
         if (closed) return
         try {
@@ -147,8 +148,6 @@ export const BINANCE_PROVIDER_ADAPTER: ProviderAdapter = {
     return { streamId: connection.connectionId + ':' + symbol + ':' + timeframe + ':' + Date.now(), close: async () => { closed = true; globalThis.clearInterval(timer) } }
   },
   async subscribeAccount(connection, accountId, onEvent): Promise<ProviderStreamHandle> {
-    void connection
-    void accountId
     assertConnection(connection)
     const account = accountId || ''
     if (!account) throw new Error('A Binance account is required for account streaming.')
