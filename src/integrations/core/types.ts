@@ -42,6 +42,10 @@ export interface ProviderDescriptor {
   authMethods: ProviderAuthMethod[]
   description: string
   capabilities: ProviderCapabilities
+  rateLimit?: {
+    requestsPerSecond: number
+    scope: 'connection' | 'provider'
+  }
 }
 
 export interface ProviderConnection {
