@@ -220,6 +220,69 @@ export const normalizeOandaCandles = (payload, symbol, timeframe) => {
   })
 }
 
+const oandaExecutionResult = (payload, fallbackSymbol) => {
+  const create = payload?.orderCreateTransaction || {}
+  const fill = payload?.orderFillTransaction || {}
+  const cancel = payload?.orderCancelTransaction || {}
+  const providerOrderId = String(create.id || cancel.orderID || payload?.lastTransactionID || '')
+  const units = Number(fill.units ?? create.units)
+  const symbol = typeof (fill.instrument || create.instrument || fallbackSymbol) === 'string'
+    ? String(fill.instrument || create.instrument || fallbackSymbol).replace('_', '/')
+    : fallbackSymbol
+  const side = Number.isFinite(units) && units < 0 ? 'SELL' : 'BUY'
+  const status = cancel.id ? 'cancelled' : fill.id ? 'filled' : create.id ? 'accepted' : 'pending'
+  return {
+    providerOrderId,
+    status,
+    clientOrderId: typeof create.clientExtensions?.id === 'string' ? create.clientExtensions.id : undefined,
+    symbol,
+    side,
+    quantity: Number.isFinite(units) ? Math.abs(units) : undefined,
+    timestamp: typeof (fill.time || create.time || cancel.time) === 'string' ? (fill.time || create.time || cancel.time) : new Date().toISOString(),
+    message: typeof payload?.errorMessage === 'string' ? payload.errorMessage : undefined,
+    raw: payload,
+  }
+}
+
+export const placeOandaDemoOrder = async ({ environment, token, accountId, order }) => {
+  if (environment !== 'demo') throw Object.assign(new Error('SHAFX demo execution gate only permits OANDA practice accounts.'), { status: 403 })
+  if (order.quantityUnit !== 'units') throw Object.assign(new Error('OANDA order quantityUnit must be units.'), { status: 400 })
+  if (!Number.isFinite(Number(order.quantity)) || Number(order.quantity) <= 0) throw Object.assign(new Error('OANDA order quantity must be greater than zero.'), { status: 400 })
+  const instrument = String(order.symbol || '').trim().replace('/', '_').toUpperCase()
+  if (!instrument) throw Object.assign(new Error('OANDA order symbol is required.'), { status: 400 })
+  const units = order.side === 'SELL' ? -Math.abs(Number(order.quantity)) : Math.abs(Number(order.quantity))
+  const typeMap = { MARKET: 'MARKET', LIMIT: 'LIMIT', STOP: 'STOP' }
+  const type = typeMap[order.type]
+  if (!type) throw Object.assign(new Error('OANDA does not support this normalized order type.'), { status: 400 })
+  const body = { order: { type, instrument, units: String(units), positionFill: 'DEFAULT' } }
+  if (order.timeInForce) body.order.timeInForce = order.timeInForce
+  if (order.limitPrice !== undefined) body.order.price = String(order.limitPrice)
+  if (order.stopPrice !== undefined) body.order.price = String(order.stopPrice)
+  if (order.clientOrderId) body.order.clientExtensions = { id: order.clientOrderId, tag: 'SHAFX' }
+  if (order.stopLoss !== undefined) body.order.stopLossOnFill = { price: String(order.stopLoss), timeInForce: 'GTC' }
+  if (order.takeProfit !== undefined) body.order.takeProfitOnFill = { price: String(order.takeProfit), timeInForce: 'GTC' }
+  const payload = await oandaRequest({ environment, token, path: '/v3/accounts/' + encodeURIComponent(accountId) + '/orders', method: 'POST', body })
+  return oandaExecutionResult(payload, instrument)
+}
+
+export const cancelOandaOrder = async ({ environment, token, accountId, providerOrderId }) => {
+  if (environment !== 'demo') throw Object.assign(new Error('SHAFX demo execution gate only permits OANDA practice accounts.'), { status: 403 })
+  if (!providerOrderId) throw Object.assign(new Error('OANDA provider order id is required.'), { status: 400 })
+  const payload = await oandaRequest({ environment, token, path: '/v3/accounts/' + encodeURIComponent(accountId) + '/orders/' + encodeURIComponent(providerOrderId), method: 'PUT', body: { order: { type: 'MARKET' } } }).catch(async () =>
+    oandaRequest({ environment, token, path: '/v3/accounts/' + encodeURIComponent(accountId) + '/orders/' + encodeURIComponent(providerOrderId), method: 'DELETE' })
+  )
+  return oandaExecutionResult(payload, undefined)
+}
+
+export const closeOandaPosition = async ({ environment, token, accountId, positionId }) => {
+  if (environment !== 'demo') throw Object.assign(new Error('SHAFX demo execution gate only permits OANDA practice accounts.'), { status: 403 })
+  const [instrument, side] = String(positionId || '').split(':')
+  if (!instrument || !['long', 'short'].includes(side)) throw Object.assign(new Error('OANDA position id must be instrument:long or instrument:short.'), { status: 400 })
+  const body = { [side === 'long' ? 'longUnits' : 'shortUnits']: 'ALL' }
+  const payload = await oandaRequest({ environment, token, path: '/v3/accounts/' + encodeURIComponent(accountId) + '/positions/' + encodeURIComponent(instrument.replace('/', '_')) + '/close', method: 'PUT', body })
+  return oandaExecutionResult(payload, instrument)
+}
+
 export const connectOandaProvider = async ({ req, token, environment, label }) => {
   const user = await getShafxUser(req)
   if (!user) throw Object.assign(new Error('Sign in to SHAFX before connecting OANDA.'), { status: 401 })
