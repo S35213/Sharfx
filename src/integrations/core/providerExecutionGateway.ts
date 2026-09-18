@@ -8,17 +8,27 @@ export class ProviderExecutionDisabledError extends Error {
   }
 }
 
-export const executeProviderOrderFailClosed = async (
+export const executeProviderOrder = async (
   adapter: ProviderAdapter,
-  _connection: ProviderConnection,
-  _accountId: string,
-  _order: ProviderOrderRequest,
+  connection: ProviderConnection,
+  accountId: string,
+  order: ProviderOrderRequest,
 ): Promise<ProviderOrderResult> => {
-  if (adapter.descriptor.executionMode === 'external') {
-    throw new ProviderExecutionDisabledError()
+  if (adapter.descriptor.executionMode === 'external' && connection.environment !== 'demo') {
+    throw new ProviderExecutionDisabledError('Live external-provider execution is still disabled by the SHAFX release gate.')
   }
   if (typeof adapter.placeOrder !== 'function' || !adapter.descriptor.capabilities.orderPlacement) {
     throw new ProviderExecutionDisabledError('The provider does not expose an order-placement capability.')
   }
-  return adapter.placeOrder(_connection, _accountId, _order)
+  return adapter.placeOrder(connection, accountId, order)
+}
+
+export const executeProviderOrderFailClosed = async (
+  adapter: ProviderAdapter,
+  connection: ProviderConnection,
+  accountId: string,
+  order: ProviderOrderRequest,
+): Promise<ProviderOrderResult> => {
+  if (adapter.descriptor.executionMode === 'external') throw new ProviderExecutionDisabledError()
+  return executeProviderOrder(adapter, connection, accountId, order)
 }
