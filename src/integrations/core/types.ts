@@ -6,7 +6,7 @@ export type QuantityUnit = 'base' | 'contracts' | 'units'
 export type ProviderOrderType = 'MARKET' | 'LIMIT' | 'STOP' | 'STOP_LIMIT'
 export type TimeInForce = 'GTC' | 'IOC' | 'FOK' | 'DAY'
 export type OrderSide = 'BUY' | 'SELL'
-export type ProviderConnectionState = 'connected' | 'expired' | 'disconnected'
+export type ProviderConnectionState = 'connected' | 'expired' | 'disconnected' | 'error'
 export type ProviderExecutionMode = 'simulated' | 'external'
 
 export interface ProviderFundingCapabilities {
