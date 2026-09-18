@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ProviderAdapter, ProviderAccountSnapshot, ProviderConnection } from '../../integrations/core/types'
-import { ProviderRegistry, providerRegistry } from '../../integrations/core/providerRegistry'
+import { providerRegistry } from '../../integrations/core/providerRegistry'
 import { ProviderAccountStreamManager, providerAccountStreamKey } from './ProviderAccountStreamManager'
 
 const descriptor = {
