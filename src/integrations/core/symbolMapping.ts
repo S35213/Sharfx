@@ -11,7 +11,7 @@ export interface SymbolMappingResult {
   source: 'exact' | 'alias' | 'identity'
 }
 
-const normalize = (symbol: string): string => symbol.trim().replace(/\s+/g, '').replace('-', '/').toUpperCase()
+const normalize = (symbol: string): string => { const value = symbol.trim().replace(/\s+/g, '').replace('-', '/').toUpperCase(); return /^[A-Z]{6}$/.test(value) ? value.slice(0, 3) + '/' + value.slice(3) : value }
 
 export class SymbolMappingRegistry {
   private readonly mappings = new Map<string, ProviderSymbolMapping[]>()
