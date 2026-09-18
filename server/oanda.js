@@ -268,9 +268,7 @@ export const placeOandaDemoOrder = async ({ environment, token, accountId, order
 export const cancelOandaOrder = async ({ environment, token, accountId, providerOrderId }) => {
   if (environment !== 'demo') throw Object.assign(new Error('SHAFX demo execution gate only permits OANDA practice accounts.'), { status: 403 })
   if (!providerOrderId) throw Object.assign(new Error('OANDA provider order id is required.'), { status: 400 })
-  const payload = await oandaRequest({ environment, token, path: '/v3/accounts/' + encodeURIComponent(accountId) + '/orders/' + encodeURIComponent(providerOrderId), method: 'PUT', body: { order: { type: 'MARKET' } } }).catch(async () =>
-    oandaRequest({ environment, token, path: '/v3/accounts/' + encodeURIComponent(accountId) + '/orders/' + encodeURIComponent(providerOrderId), method: 'DELETE' })
-  )
+  const payload = await oandaRequest({ environment, token, path: '/v3/accounts/' + encodeURIComponent(accountId) + '/orders/' + encodeURIComponent(providerOrderId), method: 'DELETE' })
   return oandaExecutionResult(payload, undefined)
 }
 
