@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react'
-import { ArrowDown, ArrowUp, Layers3, Radio, Waves } from 'lucide-react'
+import { Layers3, Radio, Waves } from 'lucide-react'
 
 interface Props {
   symbol: string
