@@ -147,6 +147,8 @@ export const BINANCE_PROVIDER_ADAPTER: ProviderAdapter = {
     return { streamId: connection.connectionId + ':' + symbol + ':' + timeframe + ':' + Date.now(), close: async () => { closed = true; globalThis.clearInterval(timer) } }
   },
   async subscribeAccount(connection, accountId, onEvent): Promise<ProviderStreamHandle> {
+    void connection
+    void accountId
     assertConnection(connection)
     const account = accountId || ''
     if (!account) throw new Error('A Binance account is required for account streaming.')

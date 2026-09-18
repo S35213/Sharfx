@@ -25,7 +25,7 @@ describe('provider transport factories', () => {
   })
 
   it('creates a normalized WebSocket adapter with explicit cleanup ownership', async () => {
-    const adapter = createWebSocketProviderAdapter(descriptor, async (_symbols, _onEvent) => ({ streamId: 's1', close: async () => undefined }))
+    const adapter = createWebSocketProviderAdapter(descriptor, async (symbols, onEvent) => { void symbols; void onEvent; return { streamId: 's1', close: async () => undefined } })
     const stream = await adapter.subscribe?.({ providerId: 'test', connectionId: 'c1', environment: 'demo', connectedAt: new Date().toISOString() }, undefined, ['EUR/USD'], () => {})
     expect(stream?.streamId).toBe('s1')
     await stream?.close()
