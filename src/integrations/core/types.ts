@@ -33,6 +33,14 @@ export interface ProviderCapabilities {
   funding: ProviderFundingCapabilities
 }
 
+export interface ProviderCredentialField {
+  key: string
+  label: string
+  type: 'secret' | 'text' | 'select'
+  required: boolean
+  options?: Array<{ value: string; label: string }>
+}
+
 export interface ProviderDescriptor {
   id: string
   name: string
@@ -42,6 +50,7 @@ export interface ProviderDescriptor {
   authMethods: ProviderAuthMethod[]
   description: string
   capabilities: ProviderCapabilities
+  credentialFields?: ProviderCredentialField[]
   rateLimit?: {
     requestsPerSecond: number
     scope: 'connection' | 'provider'
