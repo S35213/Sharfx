@@ -111,7 +111,7 @@ export function chooseDefaultProviderSelection(connections: ProviderConnectionRe
       return {
         providerId: matches.providerId,
         connectionId: matches.id,
-        accountId: account.id,
+        accountId: account.providerAccountId,
         environment: account.environment,
       }
     }
