@@ -49,7 +49,7 @@ Current catalog:
 - **SHAFX Simulator** — available; simulated only.
 - **Deriv** — available; current account/market integration remains intact and real execution stays disabled.
 - **Binance** — planned; adapter not implemented yet.
-- **OANDA** — planned; adapter not implemented yet.
+- **OANDA** — available; account/position/order/instrument reads and market-data paths are implemented through the normalized adapter. Real-money execution remains disabled.
 - **Interactive Brokers** — planned; adapter not implemented yet.
 
 See [`docs/provider-integration-architecture.md`](docs/provider-integration-architecture.md) for the researched provider matrix, security rules, and adapter implementation checklist.
@@ -101,5 +101,5 @@ Until those external prerequisites are supplied and tested, SHAFX remains a simu
 - v0.2: backtesting, replay, journal, performance statistics — **complete**.
 - v0.3: advanced AI/trading-agent capabilities — **complete on simulator boundary**.
 - v0.4: live market/broker integration infrastructure — **complete as a provider-neutral safety boundary; external provider/broker deployment remains required**.
-- v0.5: provider-agnostic connection contracts and researched provider catalog — **implemented**; provider-specific adapters still require separate verification and enablement.
+- v0.5: provider-agnostic connection contracts and researched provider catalog — **implemented**; Deriv and OANDA provider packs are implemented behind the same adapter boundary, while additional providers remain separate packs.
 - v1.0: production deployment, compliance, business/payment/licensing decisions, and real-money certification — **not started**.
