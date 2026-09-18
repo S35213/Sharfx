@@ -1,5 +1,6 @@
 import type { ProviderAccountSnapshot } from '../../integrations/core/types'
 import { ProviderAccountStream } from './ProviderAccountStream'
+import { ProviderAccountCache } from './ProviderAccountCache'
 
 export interface ProviderAccountStreamSpec {
   providerId: string
@@ -23,6 +24,7 @@ export const providerAccountStreamKey = (spec: ProviderAccountStreamSpec): strin
 export class ProviderAccountStreamManager {
   private readonly streams = new Map<string, ProviderAccountStream>()
   private readonly records = new Map<string, ManagedProviderAccount>()
+  private readonly cache = new ProviderAccountCache()
 
   async start(
     spec: ProviderAccountStreamSpec,
@@ -43,6 +45,7 @@ export class ProviderAccountStreamManager {
         if (!record) return
         record.snapshot = snapshot
         record.status = 'connected'
+        this.cache.setAccount(key, snapshot)
         onSnapshot?.(snapshot)
       },
       onStatus: (status) => {
@@ -70,6 +73,7 @@ export class ProviderAccountStreamManager {
     this.streams.delete(key)
     if (stream) stream.stop()
     this.records.delete(key)
+    this.cache.invalidate(key)
   }
 
   get(key: string): ManagedProviderAccount | undefined {
@@ -82,6 +86,10 @@ export class ProviderAccountStreamManager {
       ...record,
       spec: { ...record.spec },
     }))
+  }
+
+  getCache(): ProviderAccountCache {
+    return this.cache
   }
 
   async stopAll(): Promise<void> {
