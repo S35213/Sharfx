@@ -90,6 +90,31 @@ describe('ProviderAccountStreamManager', () => {
     expect(handles.get('connection-b:acct-b')?.close).toHaveBeenCalledTimes(1)
   })
 
+  it('reconnects one failed stream with bounded backoff', async () => {
+    vi.useFakeTimers()
+    if (!providerRegistry.has(descriptor.id + '-retry')) {
+      let attempts = 0
+      providerRegistry.register({
+        ...adapter,
+        descriptor: { ...descriptor, id: descriptor.id + '-retry', name: 'Retry Test Provider' },
+        subscribeAccount: async (connection, accountId, onEvent) => {
+          attempts += 1
+          if (attempts === 1) throw new Error('transient failure')
+          onEvent({ type: 'account', account: { accountId: accountId || 'acct-retry', accountLabel: 'Retry', environment: connection.environment, currency: 'USD', balance: 300 } })
+          return { streamId: 'retry:' + attempts, close: async () => undefined }
+        },
+      })
+    }
+    const manager = new ProviderAccountStreamManager(5, 20)
+    const spec = { providerId: descriptor.id + '-retry', connectionId: 'retry-connection', accountId: 'acct-retry', accountType: 'demo' as const }
+    await expect(manager.start(spec)).rejects.toThrow('transient failure')
+    expect(manager.get(providerAccountStreamKey(spec))?.status).toBe('error')
+    await vi.advanceTimersByTimeAsync(5)
+    expect(manager.get(providerAccountStreamKey(spec))?.status).toBe('connected')
+    await manager.stopAll()
+    vi.useRealTimers()
+  })
+
   it('replaces only the same identity and preserves sibling streams', async () => {
     if (!providerRegistry.has(descriptor.id)) providerRegistry.register(adapter)
     const manager = new ProviderAccountStreamManager()
