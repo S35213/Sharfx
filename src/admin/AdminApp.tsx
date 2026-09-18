@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react'
-import { Activity, AlertTriangle, Bot, Boxes, CheckCircle2, Gauge, KeyRound, LogOut, RefreshCw, ServerCog, ShieldCheck, Users, Wifi } from 'lucide-react'
+import { Activity, Bot, Boxes, CheckCircle2, Gauge, KeyRound, LogOut, RefreshCw, ServerCog, ShieldCheck, Users, Wifi } from 'lucide-react'
 
 type ServiceState = 'online' | 'configured' | 'not-configured' | 'planned' | 'requires-approval'
 type Overview = {
