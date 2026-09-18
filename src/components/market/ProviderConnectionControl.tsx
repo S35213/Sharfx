@@ -44,7 +44,7 @@ export const ProviderConnectionControl: React.FC = () => {
     [connections],
   )
   const selectedConnection = connected.find((item) => item.id === selectedConnectionId) ?? connected[0]
-  const selectedAccount = selectedConnection?.accounts.find((item) => item.id === selectedAccountId && item.active)
+  const selectedAccount = selectedConnection?.accounts.find((item) => item.providerAccountId === selectedAccountId && item.active)
     ?? selectedConnection?.accounts.find((item) => item.active)
   const providerName = selectedConnection
     ? providerCatalog.find((item) => item.id === selectedConnection.providerId)?.name ?? selectedConnection.providerId
@@ -101,14 +101,14 @@ export const ProviderConnectionControl: React.FC = () => {
                   <button
                     key={account.id}
                     type="button"
-                    onClick={() => selectAccount(connection, account.id, account.environment)}
+                    onClick={() => selectAccount(connection, account.providerAccountId, account.environment)}
                     className="flex min-h-10 w-full items-center justify-between rounded px-2 text-left text-xs hover:bg-shafx-surfaceHover"
                   >
                     <span>
                       <span className="block font-medium">{account.label}</span>
                       <span className="block text-[9px] text-shafx-textMuted">{account.providerAccountId} • {account.environment} • {account.currency ?? '—'}</span>
                     </span>
-                    {connection.id === selectedConnectionId && account.id === selectedAccountId && <Check className="h-4 w-4 text-emerald-400" />}
+                    {connection.id === selectedConnectionId && account.providerAccountId === selectedAccountId && <Check className="h-4 w-4 text-emerald-400" />}
                   </button>
                 ))}
               </div>
