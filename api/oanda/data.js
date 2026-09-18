@@ -1,4 +1,4 @@
-import { getShafxUser, readProviderSecret, getProviderConnection, syncProviderAccounts, recordProviderAudit } from '../../server/providerConnections.js'
+import { recordProviderAudit } from '../../server/providerConnections.js'
 import {
   loadOandaConnection,
   normalizeOandaAccounts,
