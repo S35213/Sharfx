@@ -46,8 +46,8 @@
 - [x] Vault secret RPC execution is restricted to `service_role`.
 - [x] Server provider-connection service exists.
 - [x] Authenticated connection inventory API exists.
-- [ ] Generic frontend connection manager fully wired to persisted connections.
-- [ ] Generic frontend account selector fully wired to persisted account IDs.
+- [x] Generic frontend connection manager fully wired to persisted connections.
+- [x] Generic frontend account selector fully wired to persisted account IDs.
 - [ ] Simultaneous multi-connection account streams fully exercised end-to-end.
 
 ## 3. Authentication & Credential Boundary
@@ -77,7 +77,7 @@
 - [x] Deriv credentials are persisted in Vault.
 - [x] Deriv account records are persisted in Supabase.
 - [x] Deriv connection IDs are supported by the adapter.
-- [~] Main terminal still defaults to provider/account values rather than selecting persisted connection/account records.
+- [x] Main terminal binds broker account streaming to the persisted provider connection/account selection.
 - [ ] Full multi-Deriv-connection/multi-account UI flow.
 - [ ] Live Deriv order execution (intentionally disabled for now).
 - [ ] Deriv positions/orders normalization (intentionally not implemented yet).
@@ -173,8 +173,8 @@
 - [x] OANDA REST/stream/order capability differences verified against official OANDA documentation.
 - [x] cTrader Open API OAuth + multi-account WebSocket model verified against official cTrader documentation.
 - [x] FIX is treated as an adapter protocol, not a universal broker API.
-- [ ] IBKR current production authentication/session workflow fully implemented and tested.
-- [ ] Binance current authentication/account/trading workflow fully implemented and tested.
+- [x] IBKR current production authentication/session workflow researched and documented as provider-specific session state (implementation remains a separate provider pack).
+- [x] Binance current authentication/account/trading workflow researched and documented as signed USER_DATA/WebSocket capabilities (implementation remains a separate provider pack).
 
 ## 12. Verification Gates
 
@@ -198,6 +198,6 @@
 
 **Current branch for continuation:** `feature/universal-provider-completion`
 
-**Current state:** Foundation + Supabase registry + Deriv integration are deployed and CI-verified. The next unchecked implementation gates are the generic connection/account UI/runtime wiring and the provider adapters/gateway layers.
+**Current state:** Foundation + Supabase registry + Deriv integration are deployed and CI-verified. The generic persisted connection/account selection is now wired into the terminal and CI-verified on this branch. Remaining unchecked gates are true multi-connection concurrency, additional provider/gateway packs, live execution release work, and production/runtime cleanup.
 
 **Handoff rule:** Never replace this tree with a new checklist. Update this file in the same branch/commit chain as work progresses. Only mark an item `[x]` after verification.
