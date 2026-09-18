@@ -48,6 +48,21 @@ const normalizeCandle = (candle: unknown): ProviderCandle => { const row = toObj
   low: Number(row.low), close: Number(row.close), volume: row.volume == null ? undefined : Number(row.volume),
 } }
 
+const normalizeOrder = (order: unknown): ProviderOrderResult => {
+  const row = toObject(order)
+  return {
+    providerOrderId: String(row.providerOrderId ?? ''),
+    status: row.status === 'filled' ? 'filled' : row.status === 'cancelled' ? 'cancelled' : row.status === 'rejected' ? 'rejected' : row.status === 'accepted' ? 'accepted' : 'pending',
+    clientOrderId: row.clientOrderId == null ? undefined : String(row.clientOrderId),
+    symbol: row.symbol == null ? undefined : String(row.symbol),
+    side: row.side === 'SELL' ? 'SELL' : row.side === 'BUY' ? 'BUY' : undefined,
+    quantity: row.quantity == null ? undefined : Number(row.quantity),
+    timestamp: row.timestamp == null ? undefined : String(row.timestamp),
+    message: row.message == null ? undefined : String(row.message),
+    raw: row.raw,
+  }
+}
+
 const networkError = (message: string): ProviderNormalizedError => ({ code: 'NETWORK_ERROR', message, retryable: true })
 const requestLimiter = createProviderRateLimiter({ requestsPerSecond: OANDA_PROVIDER_DESCRIPTOR.rateLimit?.requestsPerSecond ?? 100 })
 
@@ -94,6 +109,39 @@ export const OANDA_PROVIDER_ADAPTER: ProviderAdapter = {
     assertConnection(connection); if (!supportedTimeframes.has(timeframe)) throw new Error('Unsupported OANDA timeframe: ' + timeframe)
     const payload = await api(connection, requireAccount(accountId), 'candles', { symbol, timeframe, limit: String(limit) })
     return toObjects(payload.candles).map(normalizeCandle)
+  },
+  async placeOrder(connection, accountId, order): Promise<ProviderOrderResult> {
+    assertConnection(connection)
+    const payload = await api(connection, requireAccount(accountId), 'placeOrder', {
+      symbol: order.symbol,
+      side: order.side,
+      quantity: String(order.quantity),
+      quantityUnit: order.quantityUnit,
+      type: order.type,
+      ...(order.limitPrice !== undefined ? { limitPrice: String(order.limitPrice) } : {}),
+      ...(order.stopPrice !== undefined ? { stopPrice: String(order.stopPrice) } : {}),
+      ...(order.stopLoss !== undefined ? { stopLoss: String(order.stopLoss) } : {}),
+      ...(order.takeProfit !== undefined ? { takeProfit: String(order.takeProfit) } : {}),
+      ...(order.timeInForce ? { timeInForce: order.timeInForce } : {}),
+      ...(order.clientOrderId ? { clientOrderId: order.clientOrderId } : {}),
+    })
+    return normalizeOrder(payload.order)
+  },
+  async cancelOrder(connection, accountId, providerOrderId): Promise<ProviderOrderResult> {
+    assertConnection(connection)
+    const payload = await api(connection, requireAccount(accountId), 'cancelOrder', { providerOrderId })
+    return normalizeOrder(payload.order)
+  },
+  async getOrderByClientOrderId(connection, accountId, clientOrderId): Promise<ProviderOrderResult | null> {
+    assertConnection(connection)
+    const payload = await api(connection, requireAccount(accountId), 'orders')
+    const match = toObjects(payload.orders).find((order) => String(order.clientOrderId ?? '') === clientOrderId)
+    return match ? normalizeOrder(match) : null
+  },
+  async closePosition(connection, accountId, positionId): Promise<ProviderOrderResult> {
+    assertConnection(connection)
+    const payload = await api(connection, requireAccount(accountId), 'closePosition', { positionId })
+    return normalizeOrder(payload.order)
   },
   async subscribe(connection, accountId, symbols, onEvent, timeframe = 'M5'): Promise<ProviderStreamHandle> {
     assertConnection(connection); if (symbols.length !== 1) throw new Error('The current OANDA market adapter accepts exactly one symbol per stream.')
