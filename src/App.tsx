@@ -23,6 +23,7 @@ import { TradesPanel } from './components/trades/TradesPanel'
 import { Toast, type ToastMessage } from './components/common/Toast'
 import { marketDataSource } from './data/createMarketDataSource'
 import { ProviderAccountStream } from './data/provider/ProviderAccountStream'
+import { chooseDefaultProviderSelection, getProviderConnections, getStoredProviderSelection, subscribeToProviderSelection, type ActiveProviderSelection } from './data/provider/providerConnections'
 import { getConversionRate } from './data/mock/symbols'
 import { applyDemoProfit, setDemoOpenPositions, setDemoTradeHistory } from './engine/simulator/accountStore'
 import { submitSimulatedOrder } from './engine/simulator/submitSimulatedOrder'
@@ -32,11 +33,52 @@ const isBrokerMode = (): boolean => typeof window !== 'undefined' && window.sess
 const isSimulatorMode = (): boolean => !isBrokerMode()
 const TerminalContent: React.FC = () => {
   const { selectedSymbol, setSelectedSymbol, timeframe, setTimeframe } = useTerminal(); const { user } = useAuth()
-  const activeProviderId = typeof window !== 'undefined' ? window.sessionStorage.getItem('shafx-provider-id') || 'deriv' : 'deriv'
+  const [activeProviderSelection, setActiveProviderSelection] = useState<ActiveProviderSelection | null>(() => getStoredProviderSelection())
   const [currentPrice, setCurrentPrice] = useState(1.08542); const [candles, setCandles] = useState<OHLCV[]>([]); const [liveCandles, setLiveCandles] = useState<OHLCV[]>([]); const [liveMarketActive, setLiveMarketActive] = useState(false); const [replayCount, setReplayCount] = useState(0); const [mobileTab, setMobileTab] = useState<MobileNavTab>('market'); const [manualTradeOpen, setManualTradeOpen] = useState(false); const [accountData, setAccountData] = useState<AccountData | null>(null); const [symbolSpec, setSymbolSpec] = useState<SymbolSpec | null>(null); const [watchlist, setWatchlist] = useState<MarketPair[]>([]); const [marketAnalysis, setMarketAnalysis] = useState<MarketAnalysis | null>(null); const [aiAnalysis, setAiAnalysis] = useState<AIAnalysis | null>(null); const [openPositions, setOpenPositions] = useState<TradeOrder[]>([]); const [pendingOrders, setPendingOrders] = useState<TradeOrder[]>([]); const [tradeHistory, setTradeHistory] = useState<TradeOrder[]>([]); const [toast, setToast] = useState<ToastMessage | null>(null)
-  const accountInitialized = useRef(false); const simulatorInitialized = useRef(false); const symbolSpecCache = useRef<Record<string, SymbolSpec>>({}); const toastId = useRef(0); const pushToast = useCallback((text: string) => { toastId.current += 1; setToast({ id: toastId.current, text }) }, [])
+  const accountInitialized = useRef(false); const simulatorInitialized = useRef(false);
+  useEffect(() => {
+    let cancelled = false
+    const refreshSelection = async (): Promise<void> => {
+      try {
+        const connections = await getProviderConnections()
+        const selected = chooseDefaultProviderSelection(connections)
+        if (!cancelled) setActiveProviderSelection(selected)
+      } catch {
+        if (!cancelled) setActiveProviderSelection(getStoredProviderSelection())
+      }
+    }
+    void refreshSelection()
+    return subscribeToProviderSelection(() => { void refreshSelection() })
+  }, []) const symbolSpecCache = useRef<Record<string, SymbolSpec>>({}); const toastId = useRef(0); const pushToast = useCallback((text: string) => { toastId.current += 1; setToast({ id: toastId.current, text }) }, [])
   useEffect(() => { let cancelled = false; const load = async (): Promise<void> => { try { const [wl, acc, spec, cands, ma, ai, positions, pending, history] = await Promise.all([marketDataSource.getWatchlist(), marketDataSource.getAccountData(), marketDataSource.getSymbolSpec(selectedSymbol), marketDataSource.getCandles(selectedSymbol, timeframe), marketDataSource.getMarketAnalysis(selectedSymbol), marketDataSource.getAIAnalysis(selectedSymbol), marketDataSource.getOpenPositions(), marketDataSource.getPendingOrders(), marketDataSource.getTradeHistory()]); if (cancelled) return; symbolSpecCache.current[selectedSymbol] = spec; setWatchlist(wl); setSymbolSpec(spec); setCandles(cands); setLiveCandles([]); setReplayCount(cands.length); setMarketAnalysis(ma); setAiAnalysis(ai); if (!accountInitialized.current) { accountInitialized.current = true; setAccountData(acc) }; if (!simulatorInitialized.current) { simulatorInitialized.current = true; setOpenPositions(positions); setPendingOrders(pending); setTradeHistory(history) }; const pair = wl.find((p) => p.symbol === selectedSymbol); if (pair) setCurrentPrice(pair.price) } catch (err) { if (!cancelled) pushToast(err instanceof Error ? err.message : 'Unable to load market data.') } }; void load(); return () => { cancelled = true } }, [pushToast, selectedSymbol, timeframe])
-  useEffect(() => { if (!accountData || !isBrokerMode()) return; const stream = new ProviderAccountStream({ providerId: activeProviderId, accountType: 'real', onSnapshot: (snapshot) => { setAccountData((prev) => { if (!prev) return prev; const equity = Number((snapshot.balance + prev.floatingPL).toFixed(2)); const freeMargin = Number((equity - prev.usedMargin).toFixed(2)); if (prev.balance === snapshot.balance && prev.currency === snapshot.currency && prev.equity === equity && prev.freeMargin === freeMargin) return prev; return { ...prev, balance: snapshot.balance, currency: snapshot.currency, equity, freeMargin } }) }, onStatus: (status) => { if (status === 'error') pushToast(`${activeProviderId} account stream interrupted — SHAFX is reconnecting.`) } }); void stream.start().catch((error) => { if (error instanceof Error) pushToast(error.message) }); return () => stream.stop() }, [accountData !== null, activeProviderId, pushToast])
+  useEffect(() => {
+    if (!accountData || !isBrokerMode()) return
+    if (!activeProviderSelection) {
+      pushToast('No connected broker account is selected.')
+      return
+    }
+    const stream = new ProviderAccountStream({
+      providerId: activeProviderSelection.providerId,
+      connectionId: activeProviderSelection.connectionId,
+      accountId: activeProviderSelection.accountId,
+      accountType: activeProviderSelection.environment === 'demo' ? 'demo' : 'real',
+      onSnapshot: (snapshot) => {
+        setAccountData((prev) => {
+          if (!prev) return prev
+          const floatingPL = prev.floatingPL
+          const equity = Number((snapshot.balance + floatingPL).toFixed(2))
+          const freeMargin = Number((equity - prev.usedMargin).toFixed(2))
+          if (prev.balance === snapshot.balance && prev.currency === snapshot.currency && prev.equity === equity && prev.freeMargin === freeMargin) return prev
+          return { ...prev, balance: snapshot.balance, currency: snapshot.currency, equity, freeMargin }
+        })
+      },
+      onStatus: (status) => {
+        if (status === 'error') pushToast(`${activeProviderSelection.providerId} account stream interrupted — SHAFX is reconnecting.`)
+      },
+    })
+    void stream.start().catch((error) => { if (error instanceof Error) pushToast(error.message) })
+    return () => stream.stop()
+  }, [accountData !== null, activeProviderSelection, pushToast])
   useEffect(() => { if (!isSimulatorMode()) return; setDemoOpenPositions(openPositions); setDemoTradeHistory(tradeHistory) }, [openPositions, tradeHistory])
   const visibleCandles = useMemo(() => replayCount > 0 && replayCount < candles.length ? candles.slice(0, replayCount) : candles, [candles, replayCount]); const chartCandles = liveMarketActive && liveCandles.length > 0 ? liveCandles : visibleCandles; const replayActive = !liveMarketActive && visibleCandles.length > 0 && visibleCandles.length < candles.length; const displayPrice = liveMarketActive && liveCandles.length > 0 ? (liveCandles[liveCandles.length - 1]?.close ?? currentPrice) : replayActive ? (visibleCandles[visibleCandles.length - 1]?.close ?? currentPrice) : currentPrice; const conversionRate = symbolSpec ? getConversionRate(symbolSpec.quoteCurrency, accountData?.currency ?? 'USD') : undefined; const chartAnnotations = useMemo(() => buildAIChartAnnotations(selectedSymbol, chartCandles), [selectedSymbol, chartCandles]); const aiSetup = useMemo(() => analyzeCurrentSetup(selectedSymbol, chartCandles)?.preferredSetup ?? null, [selectedSymbol, chartCandles])
   const reviewAISetup = useCallback((): void => { setMobileTab('market'); setManualTradeOpen(true); window.setTimeout(() => document.getElementById('manual-trade')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60) }, []); const handleLiveUpdate = useCallback((nextCandles: OHLCV[], price: number): void => { setLiveCandles(nextCandles); setCurrentPrice(price) }, []); const handleLiveActiveChange = useCallback((active: boolean): void => { setLiveMarketActive(active); if (!active) setLiveCandles([]) }, []); const handleOrderSubmit = useCallback((draft: SimulatedOrderDraft): void => { try { const order = submitSimulatedOrder(draft); setOpenPositions((prev) => [...prev, order]); pushToast(`Simulated ${order.type} ${order.lotSize.toFixed(2)} lots ${order.symbol} placed (${order.id}).`) } catch (err) { pushToast(err instanceof Error ? err.message : 'Unable to place simulated order.') } }, [pushToast]); const handleBotOrder = useCallback((order: TradeOrder): void => { setOpenPositions((prev) => prev.some((item) => item.id === order.id) ? prev : [...prev, order]); pushToast(`SHAFX Bot opened simulated ${order.type} ${order.symbol} at ${order.entryPrice}. SL ${order.stopLoss ?? '—'} • TP ${order.takeProfit ?? '—'}.`) }, [pushToast])
