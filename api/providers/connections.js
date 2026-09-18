@@ -87,7 +87,8 @@ export default async function handler(req, res) {
       const body = typeof req.body === 'object' && req.body ? req.body : {}
       const action = String(body.action || '')
       if (action === 'connect' && String(body.providerId || '') === 'oanda') {
-        const result = await connectProvider({ providerId: 'oanda', req, credentials: { token: body.token, environment: body.environment, label: body.label } })
+        const credentials = body.credentials && typeof body.credentials === 'object' ? body.credentials : { token: body.token, environment: body.environment, label: body.label }
+        const result = await connectProvider({ providerId: 'oanda', req, credentials })
         return json(res, 200, { ok: true, providerId: 'oanda', connectionId: result.connectionId, accounts: result.accounts.map((account) => ({ accountId: account.accountId, label: account.accountLabel, environment: account.environment, currency: account.currency })) })
       }
       const connectionId = String(body.connectionId || '')
