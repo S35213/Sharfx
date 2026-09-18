@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { Check, ChevronDown, RefreshCw } from 'lucide-react'
 import { providerCatalog } from '../../integrations/catalog'
 import { ProviderCredentialForm } from './ProviderCredentialForm'
+import { assessProviderConnectionRecord } from '../../data/provider/providerConnectionHealth'
 import {
   chooseDefaultProviderSelection,
   getProviderConnections,
@@ -121,7 +122,7 @@ export const ProviderConnectionControl: React.FC = () => {
           <div className="max-h-72 space-y-1 overflow-y-auto">
             {connected.map((connection) => (
               <div key={connection.id} className="rounded-lg border border-shafx-border bg-shafx-bg p-1.5">
-                <div className="px-2 py-1 text-[10px] font-semibold">{providerCatalog.find((item) => item.id === connection.providerId)?.name ?? connection.providerId} • {connection.label}</div>
+                <div className="flex items-center justify-between gap-2 px-2 py-1"><div className="text-[10px] font-semibold">{providerCatalog.find((item) => item.id === connection.providerId)?.name ?? connection.providerId} • {connection.label}</div><span className={'rounded-full px-1.5 py-0.5 text-[8px] ' + ({ healthy: 'bg-emerald-500/10 text-emerald-300', degraded: 'bg-amber-500/10 text-amber-300', expired: 'bg-red-500/10 text-red-300', offline: 'bg-red-500/10 text-red-300' } as Record<string, string>)[assessProviderConnectionRecord(connection).status]}>{assessProviderConnectionRecord(connection).status}</span></div>
                 {connection.accounts.filter((account) => account.active).map((account) => (
                   <button
                     key={account.id}
