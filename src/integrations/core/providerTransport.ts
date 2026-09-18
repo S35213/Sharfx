@@ -35,5 +35,5 @@ export const createWebSocketProviderAdapter = (
 ): ProviderAdapter => ({
   descriptor,
   ...methods,
-  subscribe,
+  subscribe: async (_connection, _accountId, symbols, onEvent) => subscribe(symbols, onEvent),
 })

@@ -23,12 +23,6 @@ type Overview = {
 
 const stateLabel: Record<ServiceState, string> = { online: 'Online', configured: 'Configured', 'not-configured': 'Not configured', planned: 'Planned', 'requires-approval': 'Requires approval' }
 
-function StatusDot({ state }: { state: ServiceState }) {
-  if (state === 'online' || state === 'configured') return <CheckCircle2 className="h-4 w-4" />
-  if (state === 'planned') return <Activity className="h-4 w-4" />
-  return <AlertTriangle className="h-4 w-4" />
-}
-
 function Card({ title, value, detail, icon: Icon }: { title: string; value: string; detail: string; icon: typeof Gauge }) {
   return <div className="min-w-[250px] snap-start rounded-2xl border border-white/10 bg-[#11161d] p-4 shadow-xl shadow-black/10 sm:min-w-0 sm:p-5"><div className="flex items-center gap-3"><span className="rounded-xl bg-white/5 p-2 text-slate-300"><Icon className="h-5 w-5" /></span><div className="min-w-0 flex-1"><div className="truncate text-sm font-medium text-slate-200">{title}</div><div className="mt-0.5 text-lg font-semibold tracking-tight text-white">{value}</div></div><span className="shrink-0 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-1.5 text-emerald-300" aria-label="Status checked"><CheckCircle2 className="h-4 w-4" /></span></div><div className="mt-3 text-xs text-slate-500">{detail}</div></div>
 }
