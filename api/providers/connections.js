@@ -5,6 +5,7 @@ import {
   recordProviderAudit,
   syncProviderAccounts,
   touchProviderConnection,
+  upsertProviderAccount,
 } from '../../server/providerConnections.js'
 import { connectOandaProvider, loadOandaConnection, normalizeOandaAccounts, normalizeOandaSummary, normalizeOandaPositions, normalizeOandaOrders, normalizeOandaInstruments, normalizeOandaQuote, normalizeOandaCandles, oandaRequest } from '../../server/oanda.js'
 
@@ -36,7 +37,7 @@ const handleOandaGet = async (req, res, user) => {
     const payload = await oandaRequest({ environment, token, path: '/v3/accounts/' + encodeURIComponent(accountId) + '/summary' })
     const account = normalizeOandaSummary(payload, environment)
     const { syncProviderAccounts } = await import('../../server/providerConnections.js')
-    await syncProviderAccounts({ connectionId: connection.id, userId: user.id, providerId: 'oanda', accounts: [account] })
+    await upsertProviderAccount({ connectionId: connection.id, userId: user.id, providerId: 'oanda', account })
     return json(res, 200, { ok: true, account })
   }
   if (action === 'positions') {
