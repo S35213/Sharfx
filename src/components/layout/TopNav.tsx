@@ -65,3 +65,4 @@ export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, t
       {TIMEFRAMES.map((tf) => <button key={tf} type="button" onClick={() => onTimeframeChange(tf)} aria-pressed={timeframe === tf} className={`min-h-8 flex-shrink-0 rounded-lg px-3 text-[9px] font-semibold transition ${timeframe === tf ? 'bg-shafx-accent text-white' : 'text-shafx-textMuted hover:bg-shafx-surfaceHover hover:text-shafx-text'}`}>{tf}</button>)}
     </div>}
   </header>
+}
