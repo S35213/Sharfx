@@ -21,10 +21,11 @@ describe('SHAFX provider catalog', () => {
     expect(byId('binance').capabilities.orderPlacement).toBe(false)
   })
 
-  it('keeps real execution fail-closed', () => {
+  it('keeps provider execution capabilities explicit', () => {
     expect(supportsOrderPlacement(byId('deriv'))).toBe(false)
     expect(supportsOrderPlacement(byId('binance'))).toBe(false)
-    expect(supportsOrderPlacement(byId('oanda'))).toBe(false)
+    expect(supportsOrderPlacement(byId('oanda'))).toBe(true)
+    expect(byId('oanda').executionMode).toBe('external')
   })
 
   it('does not conflate account/market integration with funding', () => {
