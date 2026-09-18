@@ -1,6 +1,7 @@
 import type { ProviderAccountSnapshot } from '../../integrations/core/types'
 import { ProviderAccountStream } from './ProviderAccountStream'
 import { ProviderAccountCache } from './ProviderAccountCache'
+import { providerTelemetry } from '../../integrations/core/providerTelemetry'
 
 export interface ProviderAccountStreamSpec {
   providerId: string
@@ -77,6 +78,13 @@ export class ProviderAccountStreamManager {
       connectionId: session.spec.connectionId,
       accountId: session.spec.accountId,
       accountType: session.spec.accountType,
+      onEvent: (event) => {
+        if (event.type === 'position') this.cache.setPositions(key, [...(this.cache.get(key)?.positions || []), event.position])
+        if (event.type === 'order') this.cache.setOrders(key, [...(this.cache.get(key)?.orders || []), event.order])
+        if (event.type === 'error') {
+          providerTelemetry.record(session.spec.providerId, 'account_stream_error', event.error.message)
+        }
+      },
       onSnapshot: (snapshot) => {
         const current = this.records.get(key)
         if (!current) return
@@ -91,6 +99,7 @@ export class ProviderAccountStreamManager {
         if (!current) return
         current.status = status
         session.onStatus?.(status)
+        if (status === 'error') providerTelemetry.record(session.spec.providerId, 'account_stream_error', 'Provider account stream entered error state')
         if (status === 'connected') session.retryAttempt = 0
         if (status === 'error') this.scheduleRetry(key)
       },
