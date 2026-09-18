@@ -1,6 +1,7 @@
 import {
   disconnectProviderConnection,
   getShafxUser,
+  getProviderConnection,
   listProviderConnections,
   recordProviderAudit,
   syncProviderAccounts,
@@ -83,21 +84,27 @@ const handleBinanceGet = async (req, res, user) => {
   }
 
   const symbol = String(req.query.symbol || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase()
+  const connectionIdForMarket = typeof req.query.connectionId === 'string' ? req.query.connectionId : ''
+  if (!connectionIdForMarket) return json(res, 400, { ok: false, error: 'Binance connectionId is required for market data.' })
+  const marketConnection = await getProviderConnection(user.id, connectionIdForMarket, false)
+  if (!marketConnection || marketConnection.provider_id !== 'binance') return json(res, 404, { ok: false, error: 'Binance connection not found.' })
+  if (marketConnection.state !== 'connected') return json(res, 409, { ok: false, error: 'Binance connection is ' + marketConnection.state + '.' })
+  const environment = marketConnection.environment
   if (action === 'instruments') {
-    const payload = await binanceRequest({ environment: 'live', path: '/api/v3/exchangeInfo' })
+    const payload = await binanceRequest({ environment, path: '/api/v3/exchangeInfo' })
     return json(res, 200, { ok: true, instruments: normalizeBinanceInstruments(payload) })
   }
   if (action === 'quote') {
     if (!symbol) return json(res, 400, { ok: false, error: 'Binance symbol is required.' })
-    const payload = await binanceRequest({ environment: 'live', path: '/api/v3/ticker/bookTicker', query: { symbol } })
-    const ticker = await binanceRequest({ environment: 'live', path: '/api/v3/ticker/price', query: { symbol } })
+    const payload = await binanceRequest({ environment, path: '/api/v3/ticker/bookTicker', query: { symbol } })
+    const ticker = await binanceRequest({ environment, path: '/api/v3/ticker/price', query: { symbol } })
     return json(res, 200, { ok: true, quote: normalizeBinanceQuote({ ...payload, lastPrice: ticker?.price }, String(req.query.displaySymbol || symbol)) })
   }
   if (action === 'candles') {
     if (!symbol) return json(res, 400, { ok: false, error: 'Binance symbol is required.' })
     const interval = String(req.query.interval || '5m')
     const limit = Math.max(1, Math.min(1500, Math.trunc(Number(req.query.limit) || 200)))
-    const payload = await binanceRequest({ environment: 'live', path: '/api/v3/klines', query: { symbol, interval, limit } })
+    const payload = await binanceRequest({ environment, path: '/api/v3/klines', query: { symbol, interval, limit } })
     return json(res, 200, { ok: true, candles: normalizeBinanceCandles(payload, String(req.query.displaySymbol || symbol), String(req.query.timeframe || 'M5')) })
   }
   return json(res, 400, { ok: false, error: 'Unsupported Binance data action.' })
