@@ -14,6 +14,21 @@
 - [x] CI runs build, lint, tests and high-severity dependency audit.
 - [x] Production deployment is linked to the GitHub repository.
 
+## 1. UI/UX Workspace & Product Shell
+
+- [x] SHAFX authentication/welcome screen redesigned as a professional responsive workspace entry.
+- [x] Provider-neutral terminal shell is separated from provider-specific connection state.
+- [x] Obsidian/violet/mint visual system and refreshed SHAFX brand mark are implemented.
+- [x] Responsive workspace rail exists for chart tools and workspace panels.
+- [x] Chart tools include pointer, crosshair, horizontal levels, measurement and alert lines.
+- [x] Mobile chart-tool strip provides the same core chart interactions on smaller screens.
+- [x] Adaptive workspace dock contains market intelligence, liquidity, orders, bot and research modes.
+- [x] Provider capability map surfaces account, market-data, position and execution capabilities without pretending unsupported actions are universal.
+- [x] Watchlist-derived FX move matrix is available without introducing a fake external currency-strength feed.
+- [x] Liquidity ladder is explicitly labeled as a preview until a provider supplies normalized depth-of-market data.
+- [x] Existing simulator, risk, replay, backtest, journal, bot, account and provider-connection workflows remain wired into the redesigned shell.
+- [x] Main UI overhaul PR #9 and follow-up UI polish PR #10 passed SHAFX CI and Provider Architecture CI before merge.
+
 ## 1. Core Provider Architecture
 
 - [x] Provider-neutral `ProviderAdapter` contract exists.
@@ -159,8 +174,8 @@
 - [x] Audit-event schema exists.
 - [x] Auth rate limits exist.
 - [x] Build/lint/test/audit CI exists.
-- [x] Production Vercel deployment is READY.
-- [x] OANDA's initial Vercel Hobby 12-function deployment limit was fixed by consolidating its routes into the generic provider endpoint; subsequent production deployments are READY and the production load test passes.
+- [~] Production Vercel deployment remains on the last READY main deployment while newer UI commits wait for Vercel deployment quota recovery.
+- [x] OANDA's initial Vercel Hobby 12-function deployment limit was fixed by consolidating its routes into the generic provider endpoint; the last READY production deployment and preview deployments were verified through Vercel. Newer main deployments are currently rate-limited by the Hobby plan.
 - [!] Node DEP0169 deprecation warning persists in production `/api/auth` runtime logs. Direct repository search finds no `url.parse`; Node 24 is pinned in `package.json`, and Vercel documents Node 24 as supported, so the remaining warning has not been traced to SHAFX source and is not safe to suppress blindly.
 - [x] Private owner console includes live provider connection health, account inventory and recent audit events.
 - [~] Connection expiry/health state is stored and surfaced; generic session refresh helper exists but automation remains provider-specific.
@@ -179,8 +194,8 @@
 
 ## 12. Verification Gates
 
-- [x] GitHub SHAFX CI passes on latest `main` commit `4642dcc6a73bcaf5aefd307df453cb312257b118`.
-- [x] GitHub Provider Architecture CI passes on latest `main` commit `4642dcc6a73bcaf5aefd307df453cb312257b118`.
+- [x] GitHub SHAFX CI passes on the merged UI overhaul PR heads #9 and #10.
+- [x] GitHub Provider Architecture CI passes on the merged UI overhaul PR heads #9 and #10.
 - [x] Supabase provider migration is applied.
 - [~] Last known production deployment is READY, but new deployments are currently blocked by the Vercel Hobby deployment-rate quota.
 - [~] Last READY production build had no build errors; current `main` build is pending CI/Vercel quota recovery.
@@ -195,7 +210,7 @@
 
 **Last verified:** 2026-09-18
 
-**Current production commit:** `c9099195dc5f5370ba0426f6591d1d6dbe89daeb` (last verified READY production deployment; newer `main` commits are not yet in production because Vercel is deployment-rate limited)
+**Current main:** `1054e1789bf4a3fa3ed15c351a4c3ff57ee93191` (UI overhaul + final UI polish merged). The last verified READY production deployment still points to an older main commit because new Vercel deployments are currently rate-limited on the Hobby plan.
 
 **Current branch for continuation:** `main`
 
