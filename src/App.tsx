@@ -1,13 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, Maximize2, PanelRight, SlidersHorizontal } from 'lucide-react'
 import { TerminalProvider, useTerminal } from './app/TerminalContext'
 import { ErrorBoundary } from './app/ErrorBoundary'
 import { useAuth } from './app/AuthContext'
 import { TopNav } from './components/layout/TopNav'
 import { MobileNav, type MobileNavTab } from './components/layout/MobileNav'
+import { WorkspaceRail, type WorkspaceDock, type WorkspaceTool } from './components/layout/WorkspaceRail'
+import { WorkspaceStatus } from './components/layout/WorkspaceStatus'
 import { ProviderLiveControl } from './components/market/ProviderLiveControl'
 import { DerivCashierLinks } from './components/market/DerivCashierLinks'
-import { CandlestickChart } from './components/chart/CandlestickChart'
+import { LiquidityPanel } from './components/market/LiquidityPanel'
+import { CandlestickChart, type ChartToolMode } from './components/chart/CandlestickChart'
 import { analyzeCurrentSetup, buildAIChartAnnotations } from './components/chart/buildAIChartAnnotations'
 import { Watchlist } from './components/watchlist/Watchlist'
 import { MarketAnalysisPanel } from './components/analysis/MarketAnalysis'
@@ -28,14 +31,46 @@ import { getConversionRate } from './data/mock/symbols'
 import { applyDemoProfit, setDemoOpenPositions, setDemoTradeHistory } from './engine/simulator/accountStore'
 import { submitSimulatedOrder } from './engine/simulator/submitSimulatedOrder'
 import { closeSimulatedPosition, markSimulatedPosition } from './engine/simulator/positionManager'
+import { providerCatalog } from './integrations/catalog'
 import type { AccountData, AIAnalysis, MarketAnalysis, MarketPair, OHLCV, SimulatedOrderDraft, SymbolSpec, TradeOrder } from './types'
+
 const isBrokerMode = (): boolean => typeof window !== 'undefined' && window.sessionStorage.getItem('shafx-trading-mode') === 'broker'
 const isSimulatorMode = (): boolean => !isBrokerMode()
+
 const TerminalContent: React.FC = () => {
-  const { selectedSymbol, setSelectedSymbol, timeframe, setTimeframe } = useTerminal(); const { user } = useAuth()
+  const { selectedSymbol, setSelectedSymbol, timeframe, setTimeframe } = useTerminal()
+  const { user } = useAuth()
   const [activeProviderSelection, setActiveProviderSelection] = useState<ActiveProviderSelection | null>(() => getStoredProviderSelection())
-  const [currentPrice, setCurrentPrice] = useState(1.08542); const [candles, setCandles] = useState<OHLCV[]>([]); const [liveCandles, setLiveCandles] = useState<OHLCV[]>([]); const [liveMarketActive, setLiveMarketActive] = useState(false); const [replayCount, setReplayCount] = useState(0); const [mobileTab, setMobileTab] = useState<MobileNavTab>('market'); const [manualTradeOpen, setManualTradeOpen] = useState(false); const [accountData, setAccountData] = useState<AccountData | null>(null); const [symbolSpec, setSymbolSpec] = useState<SymbolSpec | null>(null); const [watchlist, setWatchlist] = useState<MarketPair[]>([]); const [marketAnalysis, setMarketAnalysis] = useState<MarketAnalysis | null>(null); const [aiAnalysis, setAiAnalysis] = useState<AIAnalysis | null>(null); const [openPositions, setOpenPositions] = useState<TradeOrder[]>([]); const [pendingOrders, setPendingOrders] = useState<TradeOrder[]>([]); const [tradeHistory, setTradeHistory] = useState<TradeOrder[]>([]); const [toast, setToast] = useState<ToastMessage | null>(null)
-  const accountInitialized = useRef(false); const simulatorInitialized = useRef(false); const accountStreamManager = useRef(new ProviderAccountStreamManager());
+  const [currentPrice, setCurrentPrice] = useState(1.08542)
+  const [candles, setCandles] = useState<OHLCV[]>([])
+  const [liveCandles, setLiveCandles] = useState<OHLCV[]>([])
+  const [liveMarketActive, setLiveMarketActive] = useState(false)
+  const [replayCount, setReplayCount] = useState(0)
+  const [mobileTab, setMobileTab] = useState<MobileNavTab>('market')
+  const [manualTradeOpen, setManualTradeOpen] = useState(false)
+  const [accountData, setAccountData] = useState<AccountData | null>(null)
+  const [symbolSpec, setSymbolSpec] = useState<SymbolSpec | null>(null)
+  const [watchlist, setWatchlist] = useState<MarketPair[]>([])
+  const [marketAnalysis, setMarketAnalysis] = useState<MarketAnalysis | null>(null)
+  const [aiAnalysis, setAiAnalysis] = useState<AIAnalysis | null>(null)
+  const [openPositions, setOpenPositions] = useState<TradeOrder[]>([])
+  const [pendingOrders, setPendingOrders] = useState<TradeOrder[]>([])
+  const [tradeHistory, setTradeHistory] = useState<TradeOrder[]>([])
+  const [toast, setToast] = useState<ToastMessage | null>(null)
+  const [chartTool, setChartTool] = useState<WorkspaceTool>('cursor')
+  const [dock, setDock] = useState<WorkspaceDock>('insights')
+
+  const accountInitialized = useRef(false)
+  const simulatorInitialized = useRef(false)
+  const accountStreamManager = useRef(new ProviderAccountStreamManager())
+  const symbolSpecCache = useRef<Record<string, SymbolSpec>>({})
+  const toastId = useRef(0)
+
+  const pushToast = useCallback((text: string) => {
+    toastId.current += 1
+    setToast({ id: toastId.current, text })
+  }, [])
+
   useEffect(() => {
     let cancelled = false
     const refreshSelection = async (): Promise<void> => {
@@ -51,8 +86,43 @@ const TerminalContent: React.FC = () => {
     const unsubscribe = subscribeToProviderSelection(() => { void refreshSelection() })
     return () => { cancelled = true; unsubscribe() }
   }, [])
-  const symbolSpecCache = useRef<Record<string, SymbolSpec>>({}); const toastId = useRef(0); const pushToast = useCallback((text: string) => { toastId.current += 1; setToast({ id: toastId.current, text }) }, [])
-  useEffect(() => { let cancelled = false; const load = async (): Promise<void> => { try { const [wl, acc, spec, cands, ma, ai, positions, pending, history] = await Promise.all([marketDataSource.getWatchlist(), marketDataSource.getAccountData(), marketDataSource.getSymbolSpec(selectedSymbol), marketDataSource.getCandles(selectedSymbol, timeframe), marketDataSource.getMarketAnalysis(selectedSymbol), marketDataSource.getAIAnalysis(selectedSymbol), marketDataSource.getOpenPositions(), marketDataSource.getPendingOrders(), marketDataSource.getTradeHistory()]); if (cancelled) return; symbolSpecCache.current[selectedSymbol] = spec; setWatchlist(wl); setSymbolSpec(spec); setCandles(cands); setLiveCandles([]); setReplayCount(cands.length); setMarketAnalysis(ma); setAiAnalysis(ai); if (!accountInitialized.current) { accountInitialized.current = true; setAccountData(acc) }; if (!simulatorInitialized.current) { simulatorInitialized.current = true; setOpenPositions(positions); setPendingOrders(pending); setTradeHistory(history) }; const pair = wl.find((p) => p.symbol === selectedSymbol); if (pair) setCurrentPrice(pair.price) } catch (err) { if (!cancelled) pushToast(err instanceof Error ? err.message : 'Unable to load market data.') } }; void load(); return () => { cancelled = true } }, [pushToast, selectedSymbol, timeframe])
+
+  useEffect(() => {
+    let cancelled = false
+    const load = async (): Promise<void> => {
+      try {
+        const [wl, acc, spec, cands, ma, ai, positions, pending, history] = await Promise.all([
+          marketDataSource.getWatchlist(),
+          marketDataSource.getAccountData(),
+          marketDataSource.getSymbolSpec(selectedSymbol),
+          marketDataSource.getCandles(selectedSymbol, timeframe),
+          marketDataSource.getMarketAnalysis(selectedSymbol),
+          marketDataSource.getAIAnalysis(selectedSymbol),
+          marketDataSource.getOpenPositions(),
+          marketDataSource.getPendingOrders(),
+          marketDataSource.getTradeHistory(),
+        ])
+        if (cancelled) return
+        symbolSpecCache.current[selectedSymbol] = spec
+        setWatchlist(wl)
+        setSymbolSpec(spec)
+        setCandles(cands)
+        setLiveCandles([])
+        setReplayCount(cands.length)
+        setMarketAnalysis(ma)
+        setAiAnalysis(ai)
+        if (!accountInitialized.current) { accountInitialized.current = true; setAccountData(acc) }
+        if (!simulatorInitialized.current) { simulatorInitialized.current = true; setOpenPositions(positions); setPendingOrders(pending); setTradeHistory(history) }
+        const pair = wl.find((p) => p.symbol === selectedSymbol)
+        if (pair) setCurrentPrice(pair.price)
+      } catch (err) {
+        if (!cancelled) pushToast(err instanceof Error ? err.message : 'Unable to load market data.')
+      }
+    }
+    void load()
+    return () => { cancelled = true }
+  }, [pushToast, selectedSymbol, timeframe])
+
   const activeSelectionKey = activeProviderSelection
     ? providerAccountStreamKey({
         providerId: activeProviderSelection.providerId,
@@ -61,13 +131,11 @@ const TerminalContent: React.FC = () => {
         accountType: activeProviderSelection.environment === 'demo' ? 'demo' : 'real',
       })
     : ''
+
   useEffect(() => {
     const brokerMode = isBrokerMode()
     const manager = accountStreamManager.current
-    if (!brokerMode) {
-      void manager.stopAll()
-      return
-    }
+    if (!brokerMode) { void manager.stopAll(); return }
 
     let cancelled = false
     const startAll = async (): Promise<void> => {
@@ -76,20 +144,15 @@ const TerminalContent: React.FC = () => {
         if (cancelled) return
         const specs = connections
           .filter((connection) => connection.state === 'connected')
-          .flatMap((connection) =>
-            connection.accounts
-              .filter((account) => account.active)
-              .map((account) => ({
-                providerId: connection.providerId,
-                connectionId: connection.id,
-                accountId: account.providerAccountId,
-                accountType: account.environment === 'demo' ? 'demo' as const : 'real' as const,
-              })),
-          )
-        if (!specs.length) {
-          pushToast('No connected broker accounts are available.')
-          return
-        }
+          .flatMap((connection) => connection.accounts
+            .filter((account) => account.active)
+            .map((account) => ({
+              providerId: connection.providerId,
+              connectionId: connection.id,
+              accountId: account.providerAccountId,
+              accountType: account.environment === 'demo' ? 'demo' as const : 'real' as const,
+            })))
+        if (!specs.length) { pushToast('No connected provider accounts are available.'); return }
 
         await Promise.all(specs.map(async (spec) => {
           const key = providerAccountStreamKey(spec)
@@ -106,32 +169,205 @@ const TerminalContent: React.FC = () => {
                 return { ...prev, balance: snapshot.balance, currency: snapshot.currency, equity, freeMargin }
               })
             },
-            (status) => {
-              if (key === activeSelectionKey && status === 'error') {
-                pushToast(spec.providerId + ' account stream interrupted — SHAFX is reconnecting.')
-              }
-            },
+            (status) => { if (key === activeSelectionKey && status === 'error') pushToast(spec.providerId + ' account stream interrupted — SHAFX is reconnecting.') },
           )
         }))
       } catch (error) {
-        if (!cancelled) pushToast(error instanceof Error ? error.message : 'Unable to start broker account streams.')
+        if (!cancelled) pushToast(error instanceof Error ? error.message : 'Unable to start provider account streams.')
       }
     }
 
     void manager.stopAll().then(startAll)
-    return () => {
-      cancelled = true
-      void manager.stopAll()
-    }
+    return () => { cancelled = true; void manager.stopAll() }
   }, [activeSelectionKey, pushToast])
-  useEffect(() => { if (!isSimulatorMode()) return; setDemoOpenPositions(openPositions); setDemoTradeHistory(tradeHistory) }, [openPositions, tradeHistory])
-  const visibleCandles = useMemo(() => replayCount > 0 && replayCount < candles.length ? candles.slice(0, replayCount) : candles, [candles, replayCount]); const chartCandles = liveMarketActive && liveCandles.length > 0 ? liveCandles : visibleCandles; const replayActive = !liveMarketActive && visibleCandles.length > 0 && visibleCandles.length < candles.length; const displayPrice = liveMarketActive && liveCandles.length > 0 ? (liveCandles[liveCandles.length - 1]?.close ?? currentPrice) : replayActive ? (visibleCandles[visibleCandles.length - 1]?.close ?? currentPrice) : currentPrice; const conversionRate = symbolSpec ? getConversionRate(symbolSpec.quoteCurrency, accountData?.currency ?? 'USD') : undefined; const chartAnnotations = useMemo(() => buildAIChartAnnotations(selectedSymbol, chartCandles), [selectedSymbol, chartCandles]); const aiSetup = useMemo(() => analyzeCurrentSetup(selectedSymbol, chartCandles)?.preferredSetup ?? null, [selectedSymbol, chartCandles])
-  const reviewAISetup = useCallback((): void => { setMobileTab('market'); setManualTradeOpen(true); window.setTimeout(() => document.getElementById('manual-trade')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60) }, []); const handleLiveUpdate = useCallback((nextCandles: OHLCV[], price: number): void => { setLiveCandles(nextCandles); setCurrentPrice(price) }, []); const handleLiveActiveChange = useCallback((active: boolean): void => { setLiveMarketActive(active); if (!active) setLiveCandles([]) }, []); const handleOrderSubmit = useCallback((draft: SimulatedOrderDraft): void => { try { const order = submitSimulatedOrder(draft); setOpenPositions((prev) => [...prev, order]); pushToast(`Simulated ${order.type} ${order.lotSize.toFixed(2)} lots ${order.symbol} placed (${order.id}).`) } catch (err) { pushToast(err instanceof Error ? err.message : 'Unable to place simulated order.') } }, [pushToast]); const handleBotOrder = useCallback((order: TradeOrder): void => { setOpenPositions((prev) => prev.some((item) => item.id === order.id) ? prev : [...prev, order]); pushToast(`SHAFX Bot opened simulated ${order.type} ${order.symbol} at ${order.entryPrice}. SL ${order.stopLoss ?? '—'} • TP ${order.takeProfit ?? '—'}.`) }, [pushToast])
-  const handleClosePosition = useCallback(async (id: string): Promise<void> => { const order = openPositions.find((item) => item.id === id); if (!order || !accountData) return; try { const [spec, wl] = await Promise.all([marketDataSource.getSymbolSpec(order.symbol), marketDataSource.getWatchlist()]); const pair = wl.find((item) => item.symbol === order.symbol); const exitPrice = order.symbol === selectedSymbol ? displayPrice : pair?.price; if (!exitPrice) throw new Error('No simulated market price is available for this position.'); const rate = getConversionRate(spec.quoteCurrency, accountData.currency); const closed = closeSimulatedPosition(order, { exitPrice, conversionRate: rate }, spec); const realized = closed.profit ?? 0; if (isSimulatorMode()) applyDemoProfit(realized); setOpenPositions((prev) => prev.filter((item) => item.id !== id)); setTradeHistory((prev) => [closed, ...prev]); setAccountData((prev) => { if (!prev) return prev; const balance = Number((prev.balance + realized).toFixed(2)); const floatingPL = openPositions.filter((item) => item.id !== id && item.status === 'open').reduce((sum, item) => sum + (item.profit ?? 0), 0); const equity = Number((balance + floatingPL).toFixed(2)); return { ...prev, balance, equity, floatingPL, freeMargin: Number((equity - prev.usedMargin).toFixed(2)) } }); pushToast(`Simulated ${closed.type} ${closed.symbol} closed at ${exitPrice.toFixed(spec.pricePrecision)} (${closed.profit !== undefined && closed.profit >= 0 ? '+' : ''}${closed.profit?.toFixed(2)} ${accountData.currency}).`) } catch (err) { pushToast(err instanceof Error ? err.message : 'Unable to close simulated position.') } }, [accountData, displayPrice, openPositions, pushToast, selectedSymbol])
-  useEffect(() => { if (!accountData || openPositions.length === 0) return; let cancelled = false; const refreshPositions = async (): Promise<void> => { try { const prices = new Map(watchlist.map((pair) => [pair.symbol, pair.price])); prices.set(selectedSymbol, currentPrice); const uniqueSymbols = [...new Set(openPositions.map((position) => position.symbol))]; const specs = await Promise.all(uniqueSymbols.map(async (symbol) => { if (symbol === selectedSymbol && symbolSpec) return [symbol, symbolSpec] as const; if (symbolSpecCache.current[symbol]) return [symbol, symbolSpecCache.current[symbol]] as const; const spec = await marketDataSource.getSymbolSpec(symbol); symbolSpecCache.current[symbol] = spec; return [symbol, spec] as const })); if (cancelled) return; const specMap = new Map(specs); const updated = openPositions.map((position) => { const spec = specMap.get(position.symbol); const price = prices.get(position.symbol); if (!spec || !price) return position; const rate = getConversionRate(spec.quoteCurrency, accountData.currency); return markSimulatedPosition(position, { currentPrice: price, symbolSpec: spec, conversionRate: rate }) }); const newlyClosed = updated.filter((position, index) => openPositions[index].status === 'open' && position.status === 'closed'); const stillOpen = updated.filter((position) => position.status === 'open'); const realized = newlyClosed.reduce((sum, position) => sum + (position.profit ?? 0), 0); if (newlyClosed.length > 0) { if (isSimulatorMode()) applyDemoProfit(realized); setOpenPositions(stillOpen); setTradeHistory((prev) => [...newlyClosed, ...prev]); newlyClosed.forEach((position) => pushToast(`Simulated ${position.type} ${position.symbol} closed automatically at its ${position.profit !== undefined && position.profit >= 0 ? 'target' : 'stop'}.`)) } else if (updated.some((position, index) => position.profit !== openPositions[index].profit)) setOpenPositions(updated); const floatingPL = stillOpen.reduce((sum, position) => sum + (position.profit ?? 0), 0); setAccountData((prev) => { if (!prev) return prev; const balance = newlyClosed.length > 0 && isSimulatorMode() ? Number((prev.balance + realized).toFixed(2)) : prev.balance; const equity = Number((balance + floatingPL).toFixed(2)); const freeMargin = Number((equity - prev.usedMargin).toFixed(2)); if (prev.balance === balance && prev.equity === equity && prev.floatingPL === floatingPL && prev.freeMargin === freeMargin) return prev; return { ...prev, balance, equity, floatingPL, freeMargin } }) } catch (err) { if (!cancelled) pushToast(err instanceof Error ? err.message : 'Unable to update open position values.') } }; void refreshPositions(); return () => { cancelled = true } }, [accountData?.currency, currentPrice, openPositions, pushToast, selectedSymbol, symbolSpec, watchlist])
-  if (!accountData || !symbolSpec || !marketAnalysis || !aiAnalysis) return <div className="flex h-full items-center justify-center bg-shafx-bg text-shafx-text">Loading SHAFX Terminal...</div>
-  const brokerMode = isBrokerMode(); const activeProviderId = activeProviderSelection?.providerId ?? 'deriv'; const activeMarketConnection = brokerMode && activeProviderSelection ? { providerId: activeProviderSelection.providerId, connectionId: activeProviderSelection.connectionId, accountId: activeProviderSelection.accountId, environment: activeProviderSelection.environment, state: 'connected' as const, connectedAt: new Date().toISOString() } : undefined; const activePosition = openPositions.find((position) => position.symbol === selectedSymbol && position.status === 'open') ?? null; const showMarket = mobileTab === 'market'; const showAgent = mobileTab === 'agent'; const showHistory = mobileTab === 'history'; const showAccount = mobileTab === 'account'; const liveControl = <ProviderLiveControl providerId={activeProviderId} connection={activeMarketConnection} symbol={selectedSymbol} timeframe={timeframe} onUpdate={handleLiveUpdate} onActiveChange={handleLiveActiveChange} />; const botProps = { symbol: selectedSymbol, timeframe, candles: chartCandles, currentPrice: displayPrice, activePosition, tradeHistory, accountBalance: accountData.balance, accountCurrency: accountData.currency, symbolSpec, conversionRate, botPlan: user?.botPlan ?? 'FREE' as const, onBotOrder: handleBotOrder, onReviewSetup: reviewAISetup }
-  return <div className="flex h-full flex-col overflow-hidden bg-shafx-bg text-shafx-text"><TopNav symbol={selectedSymbol} price={displayPrice} pricePrecision={symbolSpec.pricePrecision} timeframe={timeframe} onTimeframeChange={setTimeframe} pairs={watchlist} onSelectPair={setSelectedSymbol} view={mobileTab} /><main className="flex flex-1 flex-col overflow-y-auto pb-16 lg:flex-row lg:overflow-hidden lg:pb-0"><aside className="hidden w-56 flex-shrink-0 flex-col gap-4 border-r border-shafx-border p-3 lg:flex lg:overflow-y-auto"><div className="h-72 flex-shrink-0"><Watchlist pairs={watchlist} selectedPair={selectedSymbol} onSelectPair={setSelectedSymbol} /></div><AccountPanel account={accountData} />{brokerMode && <DerivCashierLinks />}</aside><section className={`${showMarket ? '' : 'hidden'} flex min-w-0 flex-1 flex-col lg:flex`}><div className="flex h-11 flex-shrink-0 items-center justify-between gap-3 border-b border-shafx-border px-3 sm:px-4"><span className="text-[11px] text-shafx-textMuted">{liveMarketActive ? `Live market feed • ${activeProviderId}` : brokerMode ? 'Broker-connected account • market analysis' : 'Demo market feed'}</span>{liveControl}</div><div className="min-h-[500px] flex-1 p-2 sm:min-h-[560px] sm:p-3 lg:min-h-[620px]"><CandlestickChart data={chartCandles} symbol={selectedSymbol} timeframe={timeframe} currentPrice={displayPrice} annotations={chartAnnotations} /></div><div className="space-y-3 p-3 sm:p-4"><MarketAnalysisPanel analysis={marketAnalysis} pricePrecision={symbolSpec.pricePrecision} /><div id="manual-trade" className="rounded-xl border border-shafx-border bg-shafx-surface p-3"><button type="button" onClick={() => setManualTradeOpen((open) => !open)} className="flex min-h-12 w-full items-center justify-between text-left"><span><span className="block text-[10px] uppercase tracking-wider text-shafx-textMuted">Manual trading</span><strong className="block text-sm">Place your own trade</strong></span><ChevronDown className={`h-5 w-5 text-shafx-textMuted transition-transform ${manualTradeOpen ? 'rotate-180' : ''}`} /></button>{manualTradeOpen && <div className="mt-2"><OrderPanel symbol={selectedSymbol} currentPrice={displayPrice} accountBalance={accountData.balance} accountCurrency={accountData.currency} symbolSpec={symbolSpec} conversionRate={conversionRate} onSubmitOrder={handleOrderSubmit} aiSetup={aiSetup} /></div>}</div></div></section><aside className={`${showAgent ? '' : 'hidden'} flex w-full flex-shrink-0 flex-col gap-4 p-3 sm:p-4 lg:hidden`}><TradingAgentPanel {...botProps} />{brokerMode && <DerivCashierLinks />}</aside><aside className={`${showHistory ? '' : 'hidden'} flex w-full flex-shrink-0 flex-col gap-4 p-3 sm:p-4 lg:hidden`}><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /><TradingJournalPanel tradeHistory={tradeHistory} currency={accountData.currency} /></aside><aside className={`${showAccount ? '' : 'hidden'} flex w-full flex-shrink-0 flex-col gap-4 p-3 sm:p-4 lg:hidden`}><AccountPanel account={accountData} />{brokerMode && <DerivCashierLinks />}</aside><aside className="hidden w-72 flex-shrink-0 flex-col gap-4 border-l border-shafx-border p-3 lg:flex lg:overflow-y-auto"><MarketAnalysisPanel analysis={marketAnalysis} pricePrecision={symbolSpec.pricePrecision} /><TradingAgentPanel {...botProps} /><AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={chartCandles} setup={aiSetup} onReviewSetup={reviewAISetup} /><ReplayPanel candles={candles} replayCount={replayCount || candles.length} onReplayCountChange={setReplayCount} /><BacktestPanel symbol={selectedSymbol} candles={candles} symbolSpec={symbolSpec} initialBalance={accountData.balance} accountCurrency={accountData.currency} conversionRate={conversionRate} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /><TradingJournalPanel tradeHistory={tradeHistory} currency={accountData.currency} /><div id="order-ticket"><OrderPanel symbol={selectedSymbol} currentPrice={displayPrice} accountBalance={accountData.balance} accountCurrency={accountData.currency} symbolSpec={symbolSpec} conversionRate={conversionRate} onSubmitOrder={handleOrderSubmit} aiSetup={aiSetup} /></div></aside></main><MobileNav activeTab={mobileTab} onChange={setMobileTab} /><footer className="hidden items-center justify-between border-t border-shafx-border bg-shafx-surface px-4 py-1.5 text-[10px] text-shafx-textMuted lg:flex"><span>SHAFX Terminal v0.1.0 • {brokerMode ? 'Broker-connected view • Real execution disabled' : 'Simulator Mode • No real money trading'}</span><span className="hidden sm:inline">{replayActive ? 'Visual replay — simulated candles only' : brokerMode ? 'Broker balance is read from the connected account' : 'Demo data only — not financial advice'}</span></footer><Toast toast={toast} onDismiss={() => setToast(null)} /></div>
+
+  useEffect(() => {
+    if (!isSimulatorMode()) return
+    setDemoOpenPositions(openPositions)
+    setDemoTradeHistory(tradeHistory)
+  }, [openPositions, tradeHistory])
+
+  const visibleCandles = useMemo(() => replayCount > 0 && replayCount < candles.length ? candles.slice(0, replayCount) : candles, [candles, replayCount])
+  const chartCandles = liveMarketActive && liveCandles.length > 0 ? liveCandles : visibleCandles
+  const replayActive = !liveMarketActive && visibleCandles.length > 0 && visibleCandles.length < candles.length
+  const displayPrice = liveMarketActive && liveCandles.length > 0 ? (liveCandles[liveCandles.length - 1]?.close ?? currentPrice) : replayActive ? (visibleCandles[visibleCandles.length - 1]?.close ?? currentPrice) : currentPrice
+  const conversionRate = symbolSpec ? getConversionRate(symbolSpec.quoteCurrency, accountData?.currency ?? 'USD') : undefined
+  const chartAnnotations = useMemo(() => buildAIChartAnnotations(selectedSymbol, chartCandles), [selectedSymbol, chartCandles])
+  const aiSetup = useMemo(() => analyzeCurrentSetup(selectedSymbol, chartCandles)?.preferredSetup ?? null, [selectedSymbol, chartCandles])
+  const activeProviderId = activeProviderSelection?.providerId ?? 'simulator'
+  const activeProviderName = providerCatalog.find((item) => item.id === activeProviderId)?.name ?? (activeProviderId === 'simulator' ? 'SHAFX Simulator' : activeProviderId)
+  const chartToolMode: ChartToolMode = chartTool
+  const brokerMode = isBrokerMode()
+  const activeMarketConnection = brokerMode && activeProviderSelection ? {
+    providerId: activeProviderSelection.providerId,
+    connectionId: activeProviderSelection.connectionId,
+    accountId: activeProviderSelection.accountId,
+    environment: activeProviderSelection.environment,
+    state: 'connected' as const,
+    connectedAt: new Date().toISOString(),
+  } : undefined
+
+  const reviewAISetup = useCallback((): void => {
+    setMobileTab('market')
+    setDock('orders')
+    setManualTradeOpen(true)
+    window.setTimeout(() => document.getElementById('manual-trade')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60)
+  }, [])
+
+  const handleLiveUpdate = useCallback((nextCandles: OHLCV[], price: number): void => { setLiveCandles(nextCandles); setCurrentPrice(price) }, [])
+  const handleLiveActiveChange = useCallback((active: boolean): void => { setLiveMarketActive(active); if (!active) setLiveCandles([]) }, [])
+  const handleOrderSubmit = useCallback((draft: SimulatedOrderDraft): void => {
+    try {
+      const order = submitSimulatedOrder(draft)
+      setOpenPositions((prev) => [...prev, order])
+      pushToast(`Simulated ${order.type} ${order.lotSize.toFixed(2)} lots ${order.symbol} placed.`)
+    } catch (err) { pushToast(err instanceof Error ? err.message : 'Unable to place simulated order.') }
+  }, [pushToast])
+  const handleBotOrder = useCallback((order: TradeOrder): void => {
+    setOpenPositions((prev) => prev.some((item) => item.id === order.id) ? prev : [...prev, order])
+    pushToast(`SHAFX Bot opened simulated ${order.type} ${order.symbol}.`)
+  }, [pushToast])
+
+  const handleClosePosition = useCallback(async (id: string): Promise<void> => {
+    const order = openPositions.find((item) => item.id === id)
+    if (!order || !accountData) return
+    try {
+      const [spec, wl] = await Promise.all([marketDataSource.getSymbolSpec(order.symbol), marketDataSource.getWatchlist()])
+      const pair = wl.find((item) => item.symbol === order.symbol)
+      const exitPrice = order.symbol === selectedSymbol ? displayPrice : pair?.price
+      if (!exitPrice) throw new Error('No simulated market price is available for this position.')
+      const rate = getConversionRate(spec.quoteCurrency, accountData.currency)
+      const closed = closeSimulatedPosition(order, { exitPrice, conversionRate: rate }, spec)
+      const realized = closed.profit ?? 0
+      if (isSimulatorMode()) applyDemoProfit(realized)
+      setOpenPositions((prev) => prev.filter((item) => item.id !== id))
+      setTradeHistory((prev) => [closed, ...prev])
+      setAccountData((prev) => {
+        if (!prev) return prev
+        const balance = Number((prev.balance + realized).toFixed(2))
+        const floatingPL = openPositions.filter((item) => item.id !== id && item.status === 'open').reduce((sum, item) => sum + (item.profit ?? 0), 0)
+        const equity = Number((balance + floatingPL).toFixed(2))
+        return { ...prev, balance, equity, floatingPL, freeMargin: Number((equity - prev.usedMargin).toFixed(2)) }
+      })
+      pushToast(`Simulated ${closed.type} ${closed.symbol} closed at ${exitPrice.toFixed(spec.pricePrecision)}.`)
+    } catch (err) { pushToast(err instanceof Error ? err.message : 'Unable to close simulated position.') }
+  }, [accountData, displayPrice, openPositions, pushToast, selectedSymbol])
+
+  useEffect(() => {
+    if (!accountData || openPositions.length === 0) return
+    let cancelled = false
+    const refreshPositions = async (): Promise<void> => {
+      try {
+        const prices = new Map(watchlist.map((pair) => [pair.symbol, pair.price]))
+        prices.set(selectedSymbol, currentPrice)
+        const uniqueSymbols = [...new Set(openPositions.map((position) => position.symbol))]
+        const specs = await Promise.all(uniqueSymbols.map(async (symbol) => {
+          if (symbol === selectedSymbol && symbolSpec) return [symbol, symbolSpec] as const
+          if (symbolSpecCache.current[symbol]) return [symbol, symbolSpecCache.current[symbol]] as const
+          const spec = await marketDataSource.getSymbolSpec(symbol)
+          symbolSpecCache.current[symbol] = spec
+          return [symbol, spec] as const
+        }))
+        if (cancelled) return
+        const specMap = new Map(specs)
+        const updated = openPositions.map((position) => {
+          const spec = specMap.get(position.symbol)
+          const price = prices.get(position.symbol)
+          if (!spec || !price) return position
+          const rate = getConversionRate(spec.quoteCurrency, accountData.currency)
+          return markSimulatedPosition(position, { currentPrice: price, symbolSpec: spec, conversionRate: rate })
+        })
+        const newlyClosed = updated.filter((position, index) => openPositions[index].status === 'open' && position.status === 'closed')
+        const stillOpen = updated.filter((position) => position.status === 'open')
+        const realized = newlyClosed.reduce((sum, position) => sum + (position.profit ?? 0), 0)
+        if (newlyClosed.length > 0) {
+          if (isSimulatorMode()) applyDemoProfit(realized)
+          setOpenPositions(stillOpen)
+          setTradeHistory((prev) => [...newlyClosed, ...prev])
+          newlyClosed.forEach((position) => pushToast(`Simulated ${position.type} ${position.symbol} closed automatically.`))
+        } else if (updated.some((position, index) => position.profit !== openPositions[index].profit)) setOpenPositions(updated)
+        const floatingPL = stillOpen.reduce((sum, position) => sum + (position.profit ?? 0), 0)
+        setAccountData((prev) => {
+          if (!prev) return prev
+          const balance = newlyClosed.length > 0 && isSimulatorMode() ? Number((prev.balance + realized).toFixed(2)) : prev.balance
+          const equity = Number((balance + floatingPL).toFixed(2))
+          const freeMargin = Number((equity - prev.usedMargin).toFixed(2))
+          if (prev.balance === balance && prev.equity === equity && prev.floatingPL === floatingPL && prev.freeMargin === freeMargin) return prev
+          return { ...prev, balance, equity, floatingPL, freeMargin }
+        })
+      } catch (err) {
+        if (!cancelled) pushToast(err instanceof Error ? err.message : 'Unable to update open positions.')
+      }
+    }
+    void refreshPositions()
+    return () => { cancelled = true }
+  }, [accountData?.currency, currentPrice, openPositions, pushToast, selectedSymbol, symbolSpec, watchlist])
+
+  if (!accountData || !symbolSpec || !marketAnalysis || !aiAnalysis) return <div className="flex h-full items-center justify-center bg-shafx-bg text-shafx-text">Preparing SHAFX workspace…</div>
+
+  const activePosition = openPositions.find((position) => position.symbol === selectedSymbol && position.status === 'open') ?? null
+  const showMarket = mobileTab === 'market'
+  const showAgent = mobileTab === 'agent'
+  const showHistory = mobileTab === 'history'
+  const showAccount = mobileTab === 'account'
+  const liveControl = <ProviderLiveControl providerId={activeProviderId} connection={activeMarketConnection} symbol={selectedSymbol} timeframe={timeframe} onUpdate={handleLiveUpdate} onActiveChange={handleLiveActiveChange} />
+  const botProps = { symbol: selectedSymbol, timeframe, candles: chartCandles, currentPrice: displayPrice, activePosition, tradeHistory, accountBalance: accountData.balance, accountCurrency: accountData.currency, symbolSpec, conversionRate, botPlan: user?.botPlan ?? 'FREE' as const, onBotOrder: handleBotOrder, onReviewSetup: reviewAISetup }
+
+  const dockContent = {
+    insights: <div className="space-y-3"><MarketAnalysisPanel analysis={marketAnalysis} pricePrecision={symbolSpec.pricePrecision} /><AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={chartCandles} setup={aiSetup} onReviewSetup={reviewAISetup} /></div>,
+    liquidity: <LiquidityPanel symbol={selectedSymbol} price={displayPrice} precision={symbolSpec.pricePrecision} pipSize={symbolSpec.pipSize} live={liveMarketActive} />,
+    orders: <div className="space-y-3"><OrderPanel symbol={selectedSymbol} currentPrice={displayPrice} accountBalance={accountData.balance} accountCurrency={accountData.currency} symbolSpec={symbolSpec} conversionRate={conversionRate} onSubmitOrder={handleOrderSubmit} aiSetup={aiSetup} /><div className="min-h-[280px]"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} /></div></div>,
+    agent: <div className="space-y-3"><TradingAgentPanel {...botProps} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /></div>,
+    research: <div className="space-y-3"><ReplayPanel candles={candles} replayCount={replayCount || candles.length} onReplayCountChange={setReplayCount} /><BacktestPanel symbol={selectedSymbol} candles={candles} symbolSpec={symbolSpec} initialBalance={accountData.balance} accountCurrency={accountData.currency} conversionRate={conversionRate} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /><TradingJournalPanel tradeHistory={tradeHistory} currency={accountData.currency} /></div>,
+  }[dock]
+
+  return <div className="flex h-[calc(100vh-28px)] flex-col overflow-hidden bg-shafx-bg text-shafx-text">
+    <TopNav symbol={selectedSymbol} price={displayPrice} pricePrecision={symbolSpec.pricePrecision} timeframe={timeframe} onTimeframeChange={setTimeframe} pairs={watchlist} onSelectPair={setSelectedSymbol} view={mobileTab} />
+    <main className="flex min-h-0 flex-1 overflow-hidden">
+      <WorkspaceRail tool={chartTool} onToolChange={(next) => setChartTool(next)} dock={dock} onDockChange={setDock} />
+
+      <aside className="hidden w-60 flex-shrink-0 flex-col gap-3 border-r border-shafx-border bg-shafx-surface/40 p-3 lg:flex lg:overflow-y-auto">
+        <Watchlist pairs={watchlist} selectedPair={selectedSymbol} onSelectPair={setSelectedSymbol} />
+        <AccountPanel account={accountData} />
+        {brokerMode && activeProviderId === 'deriv' && <DerivCashierLinks />}
+      </aside>
+
+      <section className={`flex min-w-0 flex-1 flex-col overflow-hidden ${showMarket ? '' : 'hidden'} lg:flex`}>
+        <WorkspaceStatus provider={activeProviderName} mode={brokerMode ? 'broker' : 'demo'} symbol={selectedSymbol} price={displayPrice} precision={symbolSpec.pricePrecision} live={liveMarketActive} />
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="flex min-h-10 flex-shrink-0 items-center justify-between gap-2 border-b border-shafx-border bg-shafx-surface/45 px-3 sm:px-4">
+            <div className="flex min-w-0 items-center gap-2"><span className="truncate text-xs font-semibold">{selectedSymbol}</span><span className="rounded-md border border-shafx-border bg-shafx-bg px-2 py-1 text-[9px] text-shafx-textMuted">{liveMarketActive ? `LIVE • ${activeProviderName}` : 'SIMULATED MARKET'}</span></div>
+            <div className="flex items-center gap-1.5"><span className="hidden text-[9px] uppercase tracking-[0.15em] text-shafx-textMuted sm:block">Feed</span>{liveControl}<button type="button" onClick={() => setDock(dock === 'orders' ? 'insights' : 'orders')} className="flex min-h-10 items-center gap-1.5 rounded-xl border border-shafx-border bg-shafx-bg px-2.5 text-[9px] font-semibold hover:border-shafx-accent/40"><SlidersHorizontal className="h-3.5 w-3.5 text-shafx-accent" />Trade</button></div>
+          </div>
+          <div className="relative min-h-[420px] flex-1 p-2 sm:p-3">
+            <CandlestickChart data={chartCandles} timeframe={timeframe} annotations={chartAnnotations} currentPrice={displayPrice} toolMode={chartToolMode} pipSize={symbolSpec.pipSize} onToolNotice={pushToast} />
+            <div className="pointer-events-none absolute bottom-5 right-5 z-10 hidden items-center gap-1.5 rounded-xl border border-shafx-border bg-shafx-surface/90 px-2.5 py-1.5 text-[9px] text-shafx-textMuted backdrop-blur sm:flex"><Maximize2 className="h-3 w-3 text-shafx-accent" />Scroll / pinch to navigate</div>
+          </div>
+          <div className="grid grid-cols-2 gap-2 border-t border-shafx-border bg-shafx-surface/55 p-2 sm:grid-cols-4">
+            <button type="button" onClick={() => setDock('insights')} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Structure</span><div className="mt-1 text-xs font-semibold">{marketAnalysis.bias} • {marketAnalysis.structure.type}</div></button>
+            <button type="button" onClick={() => setDock('liquidity')} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Liquidity</span><div className="mt-1 text-xs font-semibold">Prev H {marketAnalysis.liquidity.previousHigh?.toFixed(symbolSpec.pricePrecision) ?? '—'}</div></button>
+            <button type="button" onClick={() => { setDock('orders'); setManualTradeOpen(true) }} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Risk</span><div className="mt-1 text-xs font-semibold">Open trade workspace</div></button>
+            <button type="button" onClick={() => setDock('research')} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Research</span><div className="mt-1 text-xs font-semibold">Replay • Backtest</div></button>
+          </div>
+          <div className="hidden h-56 flex-shrink-0 border-t border-shafx-border bg-shafx-surface/25 p-2 lg:block"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} /></div>
+          {manualTradeOpen && <div className="p-3 lg:hidden"><OrderPanel symbol={selectedSymbol} currentPrice={displayPrice} accountBalance={accountData.balance} accountCurrency={accountData.currency} symbolSpec={symbolSpec} conversionRate={conversionRate} onSubmitOrder={handleOrderSubmit} aiSetup={aiSetup} /></div>}
+        </div>
+      </section>
+
+      <aside className={`${showAgent ? '' : 'hidden'} w-full flex-shrink-0 overflow-y-auto p-3 lg:hidden`}><TradingAgentPanel {...botProps} />{brokerMode && activeProviderId === 'deriv' && <div className="mt-3"><DerivCashierLinks /></div>}</aside>
+      <aside className={`${showHistory ? '' : 'hidden'} w-full flex-shrink-0 overflow-y-auto p-3 lg:hidden`}><div className="space-y-3"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /><TradingJournalPanel tradeHistory={tradeHistory} currency={accountData.currency} /></div></aside>
+      <aside className={`${showAccount ? '' : 'hidden'} w-full flex-shrink-0 overflow-y-auto p-3 lg:hidden`}><div className="space-y-3"><AccountPanel account={accountData} />{brokerMode && activeProviderId === 'deriv' && <DerivCashierLinks />}</div></aside>
+
+      <aside className="hidden w-[360px] flex-shrink-0 flex-col overflow-hidden border-l border-shafx-border bg-shafx-surface/50 lg:flex">
+        <div className="flex h-12 flex-shrink-0 items-center justify-between border-b border-shafx-border px-3"><div><div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Workspace panel</div><div className="text-sm font-semibold">{dock === 'insights' ? 'Market intelligence' : dock === 'liquidity' ? 'Liquidity & depth' : dock === 'orders' ? 'Orders & positions' : dock === 'agent' ? 'SHAFX Bot' : 'Research lab'}</div></div><PanelRight className="h-4 w-4 text-shafx-textMuted" /></div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">{dockContent}</div>
+      </aside>
+    </main>
+    <MobileNav activeTab={mobileTab} onChange={setMobileTab} />
+    <footer className="hidden h-7 items-center justify-between border-t border-shafx-border bg-[#080B10] px-4 text-[9px] text-shafx-textMuted lg:flex"><span>SHAFX • {brokerMode ? `Provider workspace • ${activeProviderName}` : 'Simulator workspace'}</span><span>{replayActive ? 'Visual replay active' : liveMarketActive ? 'Provider market stream active' : 'Demo market data'}</span></footer>
+    <Toast toast={toast} onDismiss={() => setToast(null)} />
+  </div>
 }
+
 const App: React.FC = () => <ErrorBoundary><TerminalProvider><TerminalContent /></TerminalProvider></ErrorBoundary>
 export default App
