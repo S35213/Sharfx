@@ -6,6 +6,8 @@ export interface DerivAccountSnapshot {
 }
 
 interface StreamOptions {
+  connectionId?: string
+  accountId?: string
   accountType?: 'real' | 'demo'
   onSnapshot: (snapshot: DerivAccountSnapshot) => void
   onStatus?: (status: 'connecting' | 'connected' | 'disconnected' | 'error') => void
@@ -43,7 +45,10 @@ export class DerivAccountStreamTransport {
     this.options.onStatus?.('connecting')
     try {
       const accountType = this.options.accountType ?? 'real'
-      const response = await fetch(`/api/deriv/stream?accountType=${accountType}`, {
+      const query = new URLSearchParams({ accountType })
+      if (this.options.connectionId) query.set('connectionId', this.options.connectionId)
+      if (this.options.accountId) query.set('accountId', this.options.accountId)
+      const response = await fetch('/api/deriv/stream?' + query.toString(), {
         credentials: 'include',
         cache: 'no-store',
       })
