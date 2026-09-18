@@ -59,9 +59,9 @@
 - [x] PKCE exists for Deriv OAuth.
 - [x] Provider access tokens are stored server-side in Vault.
 - [x] Legacy Deriv session fallback remains for compatibility.
-- [~] Provider-session refresh lifecycle is not yet generic across providers.
-- [ ] Generic OAuth 2 authorization framework for arbitrary providers.
-- [ ] Generic API-key/PAT credential onboarding flow.
+- [~] Generic provider-session refresh helper exists, but provider-specific refresh persistence/callback wiring remains adapter-owned.
+- [~] Generic OAuth 2 + PKCE helpers exist; arbitrary-provider state storage/callback routing still requires provider-specific wiring.
+- [~] Descriptor-driven API-key/PAT credential onboarding and generic connector dispatch exist; arbitrary connector discovery remains explicit.
 
 ## 4. Deriv Adapter
 
@@ -78,7 +78,7 @@
 - [x] Deriv account records are persisted in Supabase.
 - [x] Deriv connection IDs are supported by the adapter.
 - [x] Main terminal binds broker account streaming to the persisted provider connection/account selection.
-- [ ] Full multi-Deriv-connection/multi-account UI flow.
+- [~] Multi-connection account selector and concurrent stream runtime exist; a dedicated Deriv-only multi-connection UX is not separately branded.
 - [ ] Live Deriv order execution (intentionally disabled for now).
 - [ ] Deriv positions/orders normalization (intentionally not implemented yet).
 
@@ -88,19 +88,19 @@
 - [x] Architecture supports provider-specific OAuth/API-key/PAT/custom auth methods.
 - [x] Architecture supports standard-protocol adapters such as FIX.
 - [x] Architecture documents that there is no single universal broker API.
-- [ ] Generic configurable REST provider adapter.
-- [ ] Generic configurable WebSocket provider adapter.
-- [ ] Generic FIX gateway adapter boundary.
-- [ ] Generic custom-gateway adapter contract for proprietary broker APIs.
-- [~] Provider credential schema/onboarding is partially generic; OANDA API-key/PAT onboarding is implemented, while provider-specific server connector registration and fully dynamic credential rendering remain.
+- [x] Generic configurable REST provider adapter boundary exists.
+- [x] Generic configurable WebSocket provider adapter boundary exists.
+- [x] Generic FIX gateway session boundary exists.
+- [x] Generic proprietary/custom gateway contract exists.
+- [~] Provider credential schema/onboarding is descriptor-driven and server-dispatched; provider connector registration remains explicit for security.
 - [x] Symbol/instrument mapping workflow primitive exists with normalized symbols, provider symbols, aliases and ambiguity protection.
 
 ### Concrete provider adapters
 
 - [x] Deriv — implemented account/market adapter.
 - [x] OANDA — implemented account/market-data adapter with server-side personal-token storage and multi-account discovery.
-- [ ] Interactive Brokers — adapter implementation.
-- [ ] Binance — adapter implementation.
+- [ ] Interactive Brokers — concrete adapter implementation; provider-specific session/Gateway requirements remain.
+- [~] Binance — read-only Spot account/market-data adapter implemented; provider sandbox credentials have not yet been exercised.
 - [ ] cTrader Open API — adapter implementation.
 - [ ] MT4/MT5 bridge/gateway adapter — architecture only; broker terminal bridge still required.
 - [ ] Additional broker-specific adapters as needed.
@@ -112,10 +112,10 @@
 - [x] Provider-specific account stream isolation exists for Deriv.
 - [x] Persisted active connection/account selection is used by the terminal.
 - [x] Multiple account streams can coexist without state collision; identity-isolated stream manager tests and production concurrency tests pass.
-- [ ] Per-account account/position/order caches.
+- [x] Per-account account/position/order cache is wired into managed account streams.
 - [~] Per-provider/connection rate limiting exists and is active for OANDA; additional provider adapters must adopt the shared limiter.
-- [ ] Per-connection reconnect/backoff state.
-- [ ] Cross-provider normalization dashboard.
+- [x] Per-connection/account reconnect/backoff state is maintained by the stream manager.
+- [~] Owner console surfaces cross-provider connection health/account inventory; normalized market-data dashboards remain pending.
 
 ## 7. Market Data
 
@@ -126,9 +126,9 @@
 - [x] Live polling/stream cleanup exists.
 - [x] Provider/account selection is user-driven and the selected connection feeds the live market control.
 - [x] Multi-provider symbol mapping registry exists and isolates mappings by provider.
-- [ ] Market-data source failover policy.
-- [~] Shared provider rate limiter exists; provider-specific policies are currently defined for OANDA and can be extended per adapter.
-- [ ] Data quality telemetry.
+- [~] Provider market-data failover helper exists with provider telemetry; UI/runtime routing still uses the selected source as primary.
+- [x] Shared provider rate limiter exists and is active for OANDA and Binance connection-scoped traffic.
+- [~] Provider telemetry tracks quote success/failure, stream errors and stale-data events; production export/retention is not yet wired.
 
 ## 8. Trading Execution Safety Boundary
 
@@ -139,7 +139,7 @@
 - [x] Order reconciliation contract exists.
 - [x] Client-order correlation/idempotency field exists.
 - [x] Live execution remains fail-closed.
-- [ ] Server-side execution gateway.
+- [x] Server-side execution gateway exists and is fail-closed for external providers.
 - [ ] Provider-specific order adapters.
 - [ ] End-to-end demo/paper execution validation.
 - [ ] Live execution certification/release gate.
@@ -149,7 +149,7 @@
 - [x] Funding is separate from trading in the capability model.
 - [x] Unsupported funding is explicitly advertised for unimplemented providers.
 - [x] Deriv cashier is external rather than SHAFX-held funds.
-- [ ] Generic provider funding capability handlers.
+- [x] Generic provider funding dispatcher validates advertised capabilities and adapter handlers.
 - [ ] Provider-specific funding verification where officially supported.
 
 ## 10. Security & Operations
@@ -161,10 +161,10 @@
 - [x] Build/lint/test/audit CI exists.
 - [x] Production Vercel deployment is READY.
 - [x] OANDA's initial Vercel Hobby 12-function deployment limit was fixed by consolidating its routes into the generic provider endpoint; subsequent production deployments are READY and the production load test passes.
-- [!] Node DEP0169 deprecation warning persists in production `/api/auth` runtime logs. Direct repository search finds no `url.parse`; Node 24 is pinned in `package.json`, so the remaining warning appears to originate from the Vercel/serverless runtime path or an external runtime dependency and is not yet safe to mark fixed.
-- [ ] Provider-health dashboard.
-- [~] Connection expiry/health state is stored and surfaced through provider records; generic token refresh automation remains pending.
-- [ ] Alerting and operational runbooks.
+- [!] Node DEP0169 deprecation warning persists in production `/api/auth` runtime logs. Direct repository search finds no `url.parse`; Node 24 is pinned in `package.json`, and Vercel documents Node 24 as supported, so the remaining warning has not been traced to SHAFX source and is not safe to suppress blindly.
+- [x] Private owner console includes live provider connection health, account inventory and recent audit events.
+- [~] Connection expiry/health state is stored and surfaced; generic session refresh helper exists but automation remains provider-specific.
+- [~] Provider health alert evaluator and operations runbook exist; external notification delivery is not wired.
 - [ ] External integration end-to-end tests with provider sandboxes.
 
 ## 11. Research-Verified Integration Constraints
@@ -179,11 +179,11 @@
 
 ## 12. Verification Gates
 
-- [x] GitHub SHAFX CI passes.
-- [x] GitHub Provider Architecture CI passes.
+- [~] GitHub SHAFX CI has passed on earlier checkpoints; latest `main` verification is still running.
+- [~] Provider Architecture CI has passed on earlier checkpoints; latest `main` verification is still running.
 - [x] Supabase provider migration is applied.
-- [x] Vercel production deployment is READY.
-- [x] Vercel build has no current build errors.
+- [~] Last known production deployment is READY, but new deployments are currently blocked by the Vercel Hobby deployment-rate quota.
+- [~] Last READY production build had no build errors; current `main` build is pending CI/Vercel quota recovery.
 - [~] Public/protected production paths and concurrency behavior are verified; authenticated connection flow still requires a real SHAFX user session.
 - [ ] Deriv connection flow passes with a real test account.
 - [ ] Multiple Deriv accounts pass simultaneously.
@@ -195,10 +195,10 @@
 
 **Last verified:** 2026-09-18
 
-**Current production commit:** `3c0b9fcda799a0310d499824bf2d8e00cac0e522`
+**Current production commit:** `c9099195dc5f5370ba0426f6591d1d6dbe89daeb` (last verified READY production deployment)
 
 **Current branch for continuation:** `main`
 
-**Current state:** Foundation + Supabase registry + Deriv + OANDA are deployed on `main`; concurrent account streaming, symbol mapping, rate limiting, CI and production concurrency load tests are green. Remaining gates are mainly provider-specific external credentials, generic connector/auth frameworks, operations/telemetry, additional concrete adapters, and the unresolved Vercel runtime deprecation warning.
+**Current state:** Provider foundation, Supabase registry, Deriv, OANDA, generic connector/onboarding primitives, Binance read-only pack, concurrent account streaming/cache/retry, health/telemetry primitives, and FIX/custom gateway boundaries are present on `main`. Remaining hard gates are latest CI verification, real external provider credentials/sandbox tests, concrete IBKR/cTrader/MT4/MT5 provider packs, production telemetry/alert delivery, and the unresolved Vercel runtime deprecation warning. New Vercel deployments are presently blocked by the Hobby deployment-rate quota.
 
 **Handoff rule:** Never replace this tree with a new checklist. Update this file in the same branch/commit chain as work progresses. Only mark an item `[x]` after verification.
