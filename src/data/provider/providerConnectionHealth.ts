@@ -26,7 +26,7 @@ export function assessProviderConnectionRecord(
     return { status: 'degraded', reasons: ['Connection heartbeat is stale.'] }
   }
 
-  if (connection.state === ('error' as ProviderConnectionRecord['state'])) {
+  if (connection.state === 'error') {
     return { status: 'degraded', reasons: ['Provider reported an error state.'] }
   }
 
