@@ -160,6 +160,7 @@
 - [x] Auth rate limits exist.
 - [x] Build/lint/test/audit CI exists.
 - [x] Production Vercel deployment is READY.
+- [!] The first OANDA production merge temporarily exceeded Vercel Hobby's 12-Serverless-Function deployment limit; dedicated OANDA route functions were removed and consolidated into the existing generic provider endpoint. Final redeploy verification is still pending.
 - [!] Node DEP0169 deprecation warning is occurring in production logs and should be traced/removed.
 - [ ] Provider-health dashboard.
 - [ ] Connection expiry/refresh monitoring.
