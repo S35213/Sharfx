@@ -4,6 +4,7 @@ import type {
 } from '../core/types'
 import { validateProviderConnection } from '../core/providerConnectionGuard'
 import { OANDA_PROVIDER_DESCRIPTOR } from './descriptor'
+import { createProviderRateLimiter } from '../core/providerRateLimiter'
 
 const supportedTimeframes = new Set(['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1'])
 
@@ -22,6 +23,7 @@ const toObjects = (value: unknown): Record<string, unknown>[] => Array.isArray(v
 
 const api = async (connection: ProviderConnection, accountId: string, action: string, extra: Record<string, string> = {}): Promise<Record<string, unknown>> => {
   const query = new URLSearchParams({ action, connectionId: connection.connectionId, accountId, ...extra })
+  await requestLimiter.acquire('oanda:' + connection.connectionId)
   const response = await fetch('/api/providers/connections?providerId=oanda&' + query.toString(), { credentials: 'include', cache: 'no-store' })
   const payload = await response.json().catch(() => ({}))
   if (!response.ok || !payload?.ok) throw new Error(typeof payload?.error === 'string' ? payload.error : 'OANDA provider request failed.')
@@ -47,11 +49,13 @@ const normalizeCandle = (candle: unknown): ProviderCandle => { const row = toObj
 } }
 
 const networkError = (message: string): ProviderNormalizedError => ({ code: 'NETWORK_ERROR', message, retryable: true })
+const requestLimiter = createProviderRateLimiter({ requestsPerSecond: OANDA_PROVIDER_DESCRIPTOR.rateLimit?.requestsPerSecond ?? 100 })
 
 export const OANDA_PROVIDER_ADAPTER: ProviderAdapter = {
   descriptor: OANDA_PROVIDER_DESCRIPTOR,
   async getAccounts(connection): Promise<ProviderAccountSnapshot[]> {
     assertConnection(connection)
+    await requestLimiter.acquire('oanda:' + connection.connectionId)
     const response = await fetch('/api/providers/connections?providerId=oanda&action=accounts&connectionId=' + encodeURIComponent(connection.connectionId), { credentials: 'include', cache: 'no-store' })
     const payload = await response.json().catch(() => ({}))
     if (!response.ok || !payload?.ok) throw new Error(typeof payload?.error === 'string' ? payload.error : 'Unable to load OANDA accounts.')
