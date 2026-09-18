@@ -8,6 +8,7 @@ export const OANDA_PROVIDER_DESCRIPTOR: ProviderDescriptor = {
   executionMode: 'external',
   authMethods: ['api_key'],
   description: 'OANDA v20 account and market-data adapter using server-side personal access tokens. Real-money execution remains intentionally disabled.',
+  rateLimit: { requestsPerSecond: 100, scope: 'connection' },
   capabilities: {
     accountRead: true,
     marketData: true,
