@@ -6,6 +6,7 @@ import { useAuth } from './app/AuthContext'
 import { TopNav } from './components/layout/TopNav'
 import { MobileNav, type MobileNavTab } from './components/layout/MobileNav'
 import { WorkspaceRail, type WorkspaceDock, type WorkspaceTool } from './components/layout/WorkspaceRail'
+import { MobileChartTools } from './components/layout/MobileChartTools'
 import { WorkspaceStatus } from './components/layout/WorkspaceStatus'
 import { ProviderLiveControl } from './components/market/ProviderLiveControl'
 import { DerivCashierLinks } from './components/market/DerivCashierLinks'
@@ -315,7 +316,7 @@ const TerminalContent: React.FC = () => {
 
   const dockContent = {
     insights: <div className="space-y-3"><MarketAnalysisPanel analysis={marketAnalysis} pricePrecision={symbolSpec.pricePrecision} /><AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={chartCandles} setup={aiSetup} onReviewSetup={reviewAISetup} /></div>,
-    liquidity: <LiquidityPanel symbol={selectedSymbol} price={displayPrice} precision={symbolSpec.pricePrecision} pipSize={symbolSpec.pipSize} live={liveMarketActive} />,
+    liquidity: <LiquidityPanel symbol={selectedSymbol} price={displayPrice} precision={symbolSpec.pricePrecision} pipSize={symbolSpec.pipSize} />,
     orders: <div className="space-y-3"><OrderPanel symbol={selectedSymbol} currentPrice={displayPrice} accountBalance={accountData.balance} accountCurrency={accountData.currency} symbolSpec={symbolSpec} conversionRate={conversionRate} onSubmitOrder={handleOrderSubmit} aiSetup={aiSetup} /><div className="min-h-[280px]"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} /></div></div>,
     agent: <div className="space-y-3"><TradingAgentPanel {...botProps} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /></div>,
     research: <div className="space-y-3"><ReplayPanel candles={candles} replayCount={replayCount || candles.length} onReplayCountChange={setReplayCount} /><BacktestPanel symbol={selectedSymbol} candles={candles} symbolSpec={symbolSpec} initialBalance={accountData.balance} accountCurrency={accountData.currency} conversionRate={conversionRate} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /><TradingJournalPanel tradeHistory={tradeHistory} currency={accountData.currency} /></div>,
@@ -339,6 +340,7 @@ const TerminalContent: React.FC = () => {
             <div className="flex min-w-0 items-center gap-2"><span className="truncate text-xs font-semibold">{selectedSymbol}</span><span className="rounded-md border border-shafx-border bg-shafx-bg px-2 py-1 text-[9px] text-shafx-textMuted">{liveMarketActive ? `LIVE • ${activeProviderName}` : 'SIMULATED MARKET'}</span></div>
             <div className="flex items-center gap-1.5"><span className="hidden text-[9px] uppercase tracking-[0.15em] text-shafx-textMuted sm:block">Feed</span>{liveControl}<button type="button" onClick={() => setDock(dock === 'orders' ? 'insights' : 'orders')} className="flex min-h-10 items-center gap-1.5 rounded-xl border border-shafx-border bg-shafx-bg px-2.5 text-[9px] font-semibold hover:border-shafx-accent/40"><SlidersHorizontal className="h-3.5 w-3.5 text-shafx-accent" />Trade</button></div>
           </div>
+          <MobileChartTools tool={chartTool} onToolChange={setChartTool} />
           <div className="relative min-h-[420px] flex-1 p-2 sm:p-3">
             <CandlestickChart data={chartCandles} timeframe={timeframe} annotations={chartAnnotations} currentPrice={displayPrice} toolMode={chartToolMode} pipSize={symbolSpec.pipSize} onToolNotice={pushToast} />
             <div className="pointer-events-none absolute bottom-5 right-5 z-10 hidden items-center gap-1.5 rounded-xl border border-shafx-border bg-shafx-surface/90 px-2.5 py-1.5 text-[9px] text-shafx-textMuted backdrop-blur sm:flex"><Maximize2 className="h-3 w-3 text-shafx-accent" />Scroll / pinch to navigate</div>
