@@ -47,3 +47,4 @@ export const ProviderCapabilityPanel: React.FC<Props> = ({ descriptor, environme
       <div className="flex items-center gap-2 rounded-xl border border-shafx-border bg-shafx-bg p-2.5 text-shafx-textMuted"><ArrowUpFromLine className="h-3.5 w-3.5 text-shafx-success" /><ArrowDownToLine className="h-3.5 w-3.5 text-shafx-danger" />Provider actions</div>
     </footer>
   </section>
+}
