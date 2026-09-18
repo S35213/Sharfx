@@ -2,7 +2,7 @@ import type { ProviderAdapter, ProviderDescriptor } from './core/types'
 import { providerRegistry } from './core/providerRegistry'
 import { DERIV_PROVIDER_ADAPTER } from './deriv/adapter'
 import { SIMULATOR_PROVIDER_DESCRIPTOR } from './simulator/descriptor'
-import { BINANCE_PROVIDER_DESCRIPTOR } from './planned/binanceDescriptor'
+import { BINANCE_PROVIDER_ADAPTER } from './binance/adapter'
 import { OANDA_PROVIDER_ADAPTER } from './oanda/adapter'
 import { IBKR_PROVIDER_DESCRIPTOR } from './planned/ibkrDescriptor'
 
@@ -11,7 +11,7 @@ const descriptorAdapter = (descriptor: ProviderDescriptor): ProviderAdapter => (
 const adapters: ProviderAdapter[] = [
   DERIV_PROVIDER_ADAPTER,
   descriptorAdapter(SIMULATOR_PROVIDER_DESCRIPTOR),
-  descriptorAdapter(BINANCE_PROVIDER_DESCRIPTOR),
+  BINANCE_PROVIDER_ADAPTER,
   OANDA_PROVIDER_ADAPTER,
   descriptorAdapter(IBKR_PROVIDER_DESCRIPTOR),
 ]

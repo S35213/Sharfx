@@ -1,4 +1,5 @@
 import type { ProviderAdapter, ProviderConnection, ProviderQuote } from './types'
+import { providerTelemetry } from './providerTelemetry'
 
 export interface ProviderMarketCandidate {
   adapter: ProviderAdapter
@@ -13,10 +14,7 @@ export interface ProviderMarketFailoverResult {
   attemptedProviderIds: string[]
 }
 
-export async function getQuoteWithFailover(
-  candidates: ProviderMarketCandidate[],
-  symbol: string,
-): Promise<ProviderMarketFailoverResult> {
+export async function getQuoteWithFailover(candidates: ProviderMarketCandidate[], symbol: string): Promise<ProviderMarketFailoverResult> {
   const errors: string[] = []
   const attemptedProviderIds: string[] = []
 
@@ -24,19 +22,17 @@ export async function getQuoteWithFailover(
     attemptedProviderIds.push(candidate.adapter.descriptor.id)
     if (!candidate.adapter.descriptor.capabilities.marketData || typeof candidate.adapter.getQuote !== 'function') {
       errors.push(candidate.adapter.descriptor.id + ':market-data-not-supported')
+      providerTelemetry.record(candidate.adapter.descriptor.id, 'quote_failure', 'market-data-not-supported')
       continue
     }
-
     try {
       const quote = await candidate.adapter.getQuote(candidate.connection, candidate.accountId, symbol)
-      return {
-        quote,
-        providerId: candidate.adapter.descriptor.id,
-        connectionId: candidate.connection.connectionId,
-        attemptedProviderIds,
-      }
+      providerTelemetry.record(candidate.adapter.descriptor.id, 'quote_success')
+      return { quote, providerId: candidate.adapter.descriptor.id, connectionId: candidate.connection.connectionId, attemptedProviderIds }
     } catch (error) {
-      errors.push(candidate.adapter.descriptor.id + ':' + (error instanceof Error ? error.message : 'unknown-error'))
+      const message = error instanceof Error ? error.message : 'unknown-error'
+      errors.push(candidate.adapter.descriptor.id + ':' + message)
+      providerTelemetry.record(candidate.adapter.descriptor.id, 'quote_failure', message)
     }
   }
 

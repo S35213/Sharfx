@@ -9,9 +9,9 @@ import {
 } from '../../server/providerConnections.js'
 import { connectProvider } from '../../server/providerConnectorRegistry.js'
 import { loadOandaConnection, normalizeOandaAccounts, normalizeOandaSummary, normalizeOandaPositions, normalizeOandaOrders, normalizeOandaInstruments, normalizeOandaQuote, normalizeOandaCandles, oandaRequest } from '../../server/oanda.js'
+import { binanceRequest, loadBinanceConnection, normalizeBinanceAccount, normalizeBinanceOrders, normalizeBinanceInstruments, normalizeBinanceQuote, normalizeBinanceCandles } from '../../server/binance.js'
 
 const json = (res, status, body) => res.status(status).json(body)
-
 const timeframeMap = { M1: 'M1', M5: 'M5', M15: 'M15', M30: 'M30', H1: 'H1', H4: 'H4', D1: 'D' }
 const instrumentOf = (value) => String(value || '').trim().replace('/', '_').toUpperCase()
 
@@ -19,40 +19,24 @@ const handleOandaGet = async (req, res, user) => {
   const action = String(req.query.action || '')
   const connectionId = typeof req.query.connectionId === 'string' ? req.query.connectionId : ''
   if (!connectionId) return json(res, 400, { ok: false, error: 'OANDA connectionId is required.' })
-  const loaded = await loadOandaConnection(req, connectionId)
-  const { connection, token } = loaded
+  const { connection, token } = await loadOandaConnection(req, connectionId)
   const environment = connection.environment
   if (connection.user_id !== user.id) return json(res, 403, { ok: false, error: 'Provider connection does not belong to this user.' })
-
   if (action === 'accounts') {
-    const payload = await oandaRequest({ environment, token, path: '/v3/accounts' })
-    const accounts = normalizeOandaAccounts(payload, environment)
+    const accounts = normalizeOandaAccounts(await oandaRequest({ environment, token, path: '/v3/accounts' }), environment)
     await syncProviderAccounts({ connectionId: connection.id, userId: user.id, providerId: 'oanda', accounts })
     return json(res, 200, { ok: true, accounts })
   }
-
   const accountId = typeof req.query.accountId === 'string' ? req.query.accountId : ''
   if (!accountId) return json(res, 400, { ok: false, error: 'OANDA accountId is required.' })
-
   if (action === 'account') {
-    const payload = await oandaRequest({ environment, token, path: '/v3/accounts/' + encodeURIComponent(accountId) + '/summary' })
-    const account = normalizeOandaSummary(payload, environment)
-    const { syncProviderAccounts } = await import('../../server/providerConnections.js')
+    const account = normalizeOandaSummary(await oandaRequest({ environment, token, path: '/v3/accounts/' + encodeURIComponent(accountId) + '/summary' }), environment)
     await upsertProviderAccount({ connectionId: connection.id, userId: user.id, providerId: 'oanda', account })
     return json(res, 200, { ok: true, account })
   }
-  if (action === 'positions') {
-    const payload = await oandaRequest({ environment, token, path: '/v3/accounts/' + encodeURIComponent(accountId) + '/positions' })
-    return json(res, 200, { ok: true, positions: normalizeOandaPositions(payload) })
-  }
-  if (action === 'orders') {
-    const payload = await oandaRequest({ environment, token, path: '/v3/accounts/' + encodeURIComponent(accountId) + '/pendingOrders' })
-    return json(res, 200, { ok: true, orders: normalizeOandaOrders(payload) })
-  }
-  if (action === 'instruments') {
-    const payload = await oandaRequest({ environment, token, path: '/v3/accounts/' + encodeURIComponent(accountId) + '/instruments' })
-    return json(res, 200, { ok: true, instruments: normalizeOandaInstruments(payload) })
-  }
+  if (action === 'positions') return json(res, 200, { ok: true, positions: normalizeOandaPositions(await oandaRequest({ environment, token, path: '/v3/accounts/' + encodeURIComponent(accountId) + '/positions' })) })
+  if (action === 'orders') return json(res, 200, { ok: true, orders: normalizeOandaOrders(await oandaRequest({ environment, token, path: '/v3/accounts/' + encodeURIComponent(accountId) + '/pendingOrders' })) })
+  if (action === 'instruments') return json(res, 200, { ok: true, instruments: normalizeOandaInstruments(await oandaRequest({ environment, token, path: '/v3/accounts/' + encodeURIComponent(accountId) + '/instruments' })) })
   if (action === 'quote') {
     const symbol = instrumentOf(req.query.symbol)
     if (!symbol) return json(res, 400, { ok: false, error: 'OANDA symbol is required.' })
@@ -71,6 +55,53 @@ const handleOandaGet = async (req, res, user) => {
   return json(res, 400, { ok: false, error: 'Unsupported OANDA data action.' })
 }
 
+const handleBinanceGet = async (req, res, user) => {
+  const action = String(req.query.action || '')
+  const connectionId = typeof req.query.connectionId === 'string' ? req.query.connectionId : ''
+  const connectionActions = new Set(['accounts', 'account', 'orders'])
+  if (connectionActions.has(action)) {
+    if (!connectionId) return json(res, 400, { ok: false, error: 'Binance connectionId is required.' })
+    const { connection, credentials } = await loadBinanceConnection(req, connectionId)
+    const environment = connection.environment
+    if (action === 'accounts') {
+      const account = normalizeBinanceAccount(await binanceRequest({ environment, apiKey: credentials.apiKey, apiSecret: credentials.apiSecret, path: '/api/v3/account', signed: true }), environment)
+      await syncProviderAccounts({ connectionId: connection.id, userId: user.id, providerId: 'binance', accounts: [account] })
+      return json(res, 200, { ok: true, accounts: [account] })
+    }
+    const accountId = typeof req.query.accountId === 'string' ? req.query.accountId : ''
+    if (!accountId) return json(res, 400, { ok: false, error: 'Binance accountId is required.' })
+    if (action === 'account') {
+      const account = normalizeBinanceAccount(await binanceRequest({ environment, apiKey: credentials.apiKey, apiSecret: credentials.apiSecret, path: '/api/v3/account', signed: true }), environment)
+      await upsertProviderAccount({ connectionId: connection.id, userId: user.id, providerId: 'binance', account })
+      return json(res, 200, { ok: true, account })
+    }
+    if (action === 'orders') {
+      const symbol = String(req.query.symbol || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase()
+      const payload = await binanceRequest({ environment, apiKey: credentials.apiKey, apiSecret: credentials.apiSecret, path: '/api/v3/openOrders', query: symbol ? { symbol } : {}, signed: true })
+      return json(res, 200, { ok: true, orders: normalizeBinanceOrders(payload) })
+    }
+  }
+
+  const symbol = String(req.query.symbol || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase()
+  if (action === 'instruments') {
+    const payload = await binanceRequest({ environment: 'live', path: '/api/v3/exchangeInfo' })
+    return json(res, 200, { ok: true, instruments: normalizeBinanceInstruments(payload) })
+  }
+  if (action === 'quote') {
+    if (!symbol) return json(res, 400, { ok: false, error: 'Binance symbol is required.' })
+    const payload = await binanceRequest({ environment: 'live', path: '/api/v3/ticker/bookTicker', query: { symbol } })
+    const ticker = await binanceRequest({ environment: 'live', path: '/api/v3/ticker/price', query: { symbol } })
+    return json(res, 200, { ok: true, quote: normalizeBinanceQuote({ ...payload, lastPrice: ticker?.price }, String(req.query.displaySymbol || symbol)) })
+  }
+  if (action === 'candles') {
+    if (!symbol) return json(res, 400, { ok: false, error: 'Binance symbol is required.' })
+    const interval = String(req.query.interval || '5m')
+    const limit = Math.max(1, Math.min(1500, Math.trunc(Number(req.query.limit) || 200)))
+    const payload = await binanceRequest({ environment: 'live', path: '/api/v3/klines', query: { symbol, interval, limit } })
+    return json(res, 200, { ok: true, candles: normalizeBinanceCandles(payload, String(req.query.displaySymbol || symbol), String(req.query.timeframe || 'M5')) })
+  }
+  return json(res, 400, { ok: false, error: 'Unsupported Binance data action.' })
+}
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store')
@@ -80,36 +111,33 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET') {
       if (req.query.providerId === 'oanda' && req.query.action) return await handleOandaGet(req, res, user)
+      if (req.query.providerId === 'binance' && req.query.action) return await handleBinanceGet(req, res, user)
       return json(res, 200, { ok: true, connections: await listProviderConnections(user.id) })
     }
 
     if (req.method === 'POST') {
       const body = typeof req.body === 'object' && req.body ? req.body : {}
       const action = String(body.action || '')
-      if (action === 'connect' && String(body.providerId || '') === 'oanda') {
-        const credentials = body.credentials && typeof body.credentials === 'object' ? body.credentials : { token: body.token, environment: body.environment, label: body.label }
-        const result = await connectProvider({ providerId: 'oanda', req, credentials })
-        return json(res, 200, { ok: true, providerId: 'oanda', connectionId: result.connectionId, accounts: result.accounts.map((account) => ({ accountId: account.accountId, label: account.accountLabel, environment: account.environment, currency: account.currency })) })
+      if (action === 'connect') {
+        const providerId = String(body.providerId || '')
+        const credentials = body.credentials && typeof body.credentials === 'object' ? body.credentials : body
+        if (!providerId) return json(res, 400, { ok: false, error: 'Provider id is required.' })
+        const result = await connectProvider({ providerId, req, credentials })
+        return json(res, 200, { ok: true, providerId, connectionId: result.connectionId, accounts: result.accounts.map((account) => ({ accountId: account.accountId, label: account.accountLabel, environment: account.environment, currency: account.currency })) })
       }
+
       const connectionId = String(body.connectionId || '')
       if (!connectionId) return json(res, 400, { ok: false, error: 'Provider connection id is required.' })
 
       if (action === 'disconnect') {
         await disconnectProviderConnection({ userId: user.id, connectionId })
-        await recordProviderAudit({
-          userId: user.id,
-          connectionId,
-          eventType: 'connection_disconnected',
-          metadata: { source: 'user' },
-        })
+        await recordProviderAudit({ userId: user.id, connectionId, eventType: 'connection_disconnected', metadata: { source: 'user' } })
         return json(res, 200, { ok: true })
       }
-
       if (action === 'touch') {
         await touchProviderConnection({ userId: user.id, connectionId })
         return json(res, 200, { ok: true })
       }
-
       return json(res, 400, { ok: false, error: 'Unsupported provider connection action.' })
     }
 
