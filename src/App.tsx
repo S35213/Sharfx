@@ -11,6 +11,8 @@ import { WorkspaceStatus } from './components/layout/WorkspaceStatus'
 import { ProviderLiveControl } from './components/market/ProviderLiveControl'
 import { DerivCashierLinks } from './components/market/DerivCashierLinks'
 import { LiquidityPanel } from './components/market/LiquidityPanel'
+import { ProviderCapabilityPanel } from './components/market/ProviderCapabilityPanel'
+import { FXMoveMatrix } from './components/market/FXMoveMatrix'
 import { CandlestickChart, type ChartToolMode } from './components/chart/CandlestickChart'
 import { analyzeCurrentSetup, buildAIChartAnnotations } from './components/chart/buildAIChartAnnotations'
 import { Watchlist } from './components/watchlist/Watchlist'
@@ -196,7 +198,8 @@ const TerminalContent: React.FC = () => {
   const chartAnnotations = useMemo(() => buildAIChartAnnotations(selectedSymbol, chartCandles), [selectedSymbol, chartCandles])
   const aiSetup = useMemo(() => analyzeCurrentSetup(selectedSymbol, chartCandles)?.preferredSetup ?? null, [selectedSymbol, chartCandles])
   const activeProviderId = activeProviderSelection?.providerId ?? 'simulator'
-  const activeProviderName = providerCatalog.find((item) => item.id === activeProviderId)?.name ?? (activeProviderId === 'simulator' ? 'SHAFX Simulator' : activeProviderId)
+  const activeProviderDescriptor = providerCatalog.find((item) => item.id === activeProviderId) ?? providerCatalog.find((item) => item.id === 'simulator')
+  const activeProviderName = activeProviderDescriptor?.name ?? (activeProviderId === 'simulator' ? 'SHAFX Simulator' : activeProviderId)
   const chartToolMode: ChartToolMode = chartTool
   const brokerMode = isBrokerMode()
   const activeMarketConnection = brokerMode && activeProviderSelection ? {
@@ -315,9 +318,9 @@ const TerminalContent: React.FC = () => {
   const botProps = { symbol: selectedSymbol, timeframe, candles: chartCandles, currentPrice: displayPrice, activePosition, tradeHistory, accountBalance: accountData.balance, accountCurrency: accountData.currency, symbolSpec, conversionRate, botPlan: user?.botPlan ?? 'FREE' as const, onBotOrder: handleBotOrder, onReviewSetup: reviewAISetup }
 
   const dockContent = {
-    insights: <div className="space-y-3"><MarketAnalysisPanel analysis={marketAnalysis} pricePrecision={symbolSpec.pricePrecision} /><AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={chartCandles} setup={aiSetup} onReviewSetup={reviewAISetup} /></div>,
+    insights: <div className="space-y-3"><FXMoveMatrix pairs={watchlist} /><MarketAnalysisPanel analysis={marketAnalysis} pricePrecision={symbolSpec.pricePrecision} /><AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={chartCandles} setup={aiSetup} onReviewSetup={reviewAISetup} /></div>,
     liquidity: <LiquidityPanel symbol={selectedSymbol} price={displayPrice} precision={symbolSpec.pricePrecision} pipSize={symbolSpec.pipSize} />,
-    orders: <div className="space-y-3"><OrderPanel symbol={selectedSymbol} currentPrice={displayPrice} accountBalance={accountData.balance} accountCurrency={accountData.currency} symbolSpec={symbolSpec} conversionRate={conversionRate} onSubmitOrder={handleOrderSubmit} aiSetup={aiSetup} /><div className="min-h-[280px]"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} /></div></div>,
+    orders: <div className="space-y-3">{brokerMode && activeProviderDescriptor ? <ProviderCapabilityPanel descriptor={activeProviderDescriptor} environment={activeProviderSelection?.environment ?? 'demo'} /> : <OrderPanel symbol={selectedSymbol} currentPrice={displayPrice} accountBalance={accountData.balance} accountCurrency={accountData.currency} symbolSpec={symbolSpec} conversionRate={conversionRate} onSubmitOrder={handleOrderSubmit} aiSetup={aiSetup} />}<div className="min-h-[280px]"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} /></div></div>,
     agent: <div className="space-y-3"><TradingAgentPanel {...botProps} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /></div>,
     research: <div className="space-y-3"><ReplayPanel candles={candles} replayCount={replayCount || candles.length} onReplayCountChange={setReplayCount} /><BacktestPanel symbol={selectedSymbol} candles={candles} symbolSpec={symbolSpec} initialBalance={accountData.balance} accountCurrency={accountData.currency} conversionRate={conversionRate} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /><TradingJournalPanel tradeHistory={tradeHistory} currency={accountData.currency} /></div>,
   }[dock]
