@@ -31,6 +31,7 @@ const cloneDescriptor = (descriptor: ProviderDescriptor): ProviderDescriptor => 
   ...descriptor,
   authMethods: [...descriptor.authMethods],
   capabilities: cloneCapabilities(descriptor.capabilities),
+  credentialFields: descriptor.credentialFields?.map((field) => ({ ...field, options: field.options ? field.options.map((option) => ({ ...option })) : undefined })),
   rateLimit: descriptor.rateLimit ? { ...descriptor.rateLimit } : undefined,
 })
 
