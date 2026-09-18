@@ -93,7 +93,9 @@ export const DERIV_PROVIDER_ADAPTER: ProviderAdapter = {
 
   async getAccounts(connection: ProviderConnection): Promise<ProviderAccountSnapshot[]> {
     assertConnection(connection)
-    const response = await fetch('/api/deriv/accounts?connectionId=' + encodeURIComponent(connection.connectionId), { credentials: 'include', cache: 'no-store' })
+    const persistedConnection = !connection.connectionId.startsWith('account:')
+    const endpoint = persistedConnection ? '/api/deriv/accounts?connectionId=' + encodeURIComponent(connection.connectionId) : '/api/deriv/accounts'
+    const response = await fetch(endpoint, { credentials: 'include', cache: 'no-store' })
     const payload = await response.json().catch(() => ({}))
     if (!response.ok) throw new Error(typeof payload?.error === 'string' ? payload.error : 'Unable to load Deriv accounts.')
     return normalizeAccountRows(payload)
@@ -178,9 +180,10 @@ export const DERIV_PROVIDER_ADAPTER: ProviderAdapter = {
 
   async subscribeAccount(connection: ProviderConnection, _accountId: string | undefined, onEvent: (event: ProviderStreamEvent) => void): Promise<ProviderStreamHandle> {
     assertConnection(connection)
+    const persistedConnection = !connection.connectionId.startsWith('account:')
     const transport = new DerivAccountStreamTransport({
-      connectionId: connection.connectionId,
-      accountId: connection.accountId,
+      connectionId: persistedConnection ? connection.connectionId : undefined,
+      accountId: persistedConnection ? connection.accountId : undefined,
       accountType: connection.environment === 'demo' ? 'demo' : 'real',
       onSnapshot: (snapshot) => onEvent({
         type: 'account',
