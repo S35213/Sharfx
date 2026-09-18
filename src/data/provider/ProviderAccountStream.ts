@@ -1,7 +1,7 @@
 import { assessProviderReadiness } from '../../integrations/core/providerReadiness'
 import { providerRegistry } from '../../integrations/core/providerRegistry'
 import { validateProviderConnection } from '../../integrations/core/providerConnectionGuard'
-import type { ProviderAccountSnapshot, ProviderConnection, ProviderStreamHandle } from '../../integrations/core/types'
+import type { ProviderAccountSnapshot, ProviderConnection, ProviderStreamEvent, ProviderStreamHandle } from '../../integrations/core/types'
 
 interface ProviderAccountStreamOptions {
   providerId: string
@@ -9,6 +9,7 @@ interface ProviderAccountStreamOptions {
   accountType?: 'real' | 'demo'
   accountId?: string
   onSnapshot: (snapshot: ProviderAccountSnapshot) => void
+  onEvent?: (event: ProviderStreamEvent) => void
   onStatus?: (status: 'connecting' | 'connected' | 'disconnected' | 'error') => void
 }
 
@@ -43,6 +44,7 @@ export class ProviderAccountStream {
 
       const handle = await adapter.subscribeAccount(connection, this.options.accountId, (event) => {
         if (this.stopped) return
+        this.options.onEvent?.(event)
         if (event.type === 'account') {
           this.options.onSnapshot(event.account)
           this.options.onStatus?.('connected')
