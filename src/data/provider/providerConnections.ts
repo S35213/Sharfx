@@ -32,6 +32,7 @@ export interface ProviderConnectionRecord {
 export interface ActiveProviderSelection {
   providerId: string
   connectionId: string
+  /** Provider-native account identifier, not the Supabase row UUID. */
   accountId: string | undefined
   environment: 'demo' | 'live'
 }
@@ -104,7 +105,7 @@ export function chooseDefaultProviderSelection(connections: ProviderConnectionRe
   )
   if (matches) {
     const account = stored?.accountId
-      ? matches.accounts.find((item) => item.id === stored.accountId && item.active)
+      ? matches.accounts.find((item) => item.providerAccountId === stored.accountId && item.active)
       : matches.accounts.find((item) => item.active)
     if (account) {
       return {
