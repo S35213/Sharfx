@@ -2,6 +2,10 @@
 
 SHAFX is an original Forex analysis terminal prototype with a **simulator-first safety boundary**.
 
+## Persistent implementation tree
+
+The project maintains a checked handoff tree at [`docs/SHAFX_IMPLEMENTATION_TREE.md`](docs/SHAFX_IMPLEMENTATION_TREE.md). It is the source of truth for implementation progress. Future agents must continue from the first unchecked/failed gate and must not restart the audit from zero.
+
 ## Safety boundary
 
 **SIMULATED — NOT FINANCIAL ADVICE.** The default application remains simulator mode. No real-money order is submitted unless an explicit live broker gateway is configured, live execution is approved, and every execution safety gate passes.
