@@ -57,6 +57,14 @@ const EntryGate = () => {
   const { user } = useAuth()
   const [mode, setMode] = useState<TradingMode | null>(null)
 
+  const previewMode = new URLSearchParams(window.location.search).get('preview') === '1'
+
+  if (previewMode) return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-[#070A0F] text-sm text-[#8A93A3]">Loading SHAFX workspace…</div>}>
+      <App />
+    </Suspense>
+  )
+
   useEffect(() => {
     if (!user) {
       clearSessionTradingMode()
