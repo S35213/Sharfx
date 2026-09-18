@@ -145,6 +145,34 @@ export const syncProviderAccounts = async ({ connectionId, userId, providerId, a
   return Array.isArray(payload) ? payload : []
 }
 
+export const upsertProviderAccount = async ({ connectionId, userId, providerId, account }) => {
+  const row = {
+    connection_id: connectionId,
+    user_id: userId,
+    provider_id: providerId,
+    provider_account_id: account.accountId,
+    label: account.accountLabel || account.accountId,
+    environment: account.environment,
+    currency: account.currency || null,
+    balance: Number.isFinite(account.balance) ? account.balance : null,
+    equity: Number.isFinite(account.equity) ? account.equity : null,
+    used_margin: Number.isFinite(account.usedMargin) ? account.usedMargin : null,
+    free_margin: Number.isFinite(account.freeMargin) ? account.freeMargin : null,
+    floating_pl: Number.isFinite(account.floatingPL) ? account.floatingPL : null,
+    active: true,
+    last_synced_at: new Date().toISOString(),
+    metadata: account.metadata || {},
+  }
+  const response = await rest('/shafx_provider_accounts?on_conflict=user_id,provider_id,provider_account_id,environment', {
+    method: 'POST',
+    headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
+    body: JSON.stringify([row]),
+  })
+  const payload = await decodeJson(response, null)
+  if (!response.ok) throw new Error(payload?.message || 'Unable to update provider account.')
+  return Array.isArray(payload) ? payload[0] || null : payload
+}
+
 export const touchProviderConnection = async ({ userId, connectionId, state = 'connected' }) => {
   const response = await rest('/shafx_provider_connections?id=eq.' + encodeURIComponent(connectionId) + '&user_id=eq.' + encodeURIComponent(userId), {
     method: 'PATCH',

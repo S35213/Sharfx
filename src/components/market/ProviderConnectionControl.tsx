@@ -78,11 +78,11 @@ export const ProviderConnectionControl: React.FC = () => {
     try {
       setOandaBusy(true)
       setOandaError(null)
-      const response = await fetch('/api/oanda/connect', {
+      const response = await fetch('/api/providers/connections', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: oandaToken.trim(), environment: oandaEnvironment }),
+        body: JSON.stringify({ action: 'connect', providerId: 'oanda', token: oandaToken.trim(), environment: oandaEnvironment }),
       })
       const data = await response.json().catch(() => ({}))
       if (!response.ok || !data?.ok) throw new Error(typeof data?.error === 'string' ? data.error : 'Unable to connect OANDA.')

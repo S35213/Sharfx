@@ -22,7 +22,7 @@ const toObjects = (value: unknown): Record<string, unknown>[] => Array.isArray(v
 
 const api = async (connection: ProviderConnection, accountId: string, action: string, extra: Record<string, string> = {}): Promise<Record<string, unknown>> => {
   const query = new URLSearchParams({ action, connectionId: connection.connectionId, accountId, ...extra })
-  const response = await fetch('/api/oanda/data?' + query.toString(), { credentials: 'include', cache: 'no-store' })
+  const response = await fetch('/api/providers/connections?providerId=oanda&' + query.toString(), { credentials: 'include', cache: 'no-store' })
   const payload = await response.json().catch(() => ({}))
   if (!response.ok || !payload?.ok) throw new Error(typeof payload?.error === 'string' ? payload.error : 'OANDA provider request failed.')
   return payload
@@ -52,7 +52,7 @@ export const OANDA_PROVIDER_ADAPTER: ProviderAdapter = {
   descriptor: OANDA_PROVIDER_DESCRIPTOR,
   async getAccounts(connection): Promise<ProviderAccountSnapshot[]> {
     assertConnection(connection)
-    const response = await fetch('/api/oanda/data?action=accounts&connectionId=' + encodeURIComponent(connection.connectionId), { credentials: 'include', cache: 'no-store' })
+    const response = await fetch('/api/providers/connections?providerId=oanda&action=accounts&connectionId=' + encodeURIComponent(connection.connectionId), { credentials: 'include', cache: 'no-store' })
     const payload = await response.json().catch(() => ({}))
     if (!response.ok || !payload?.ok) throw new Error(typeof payload?.error === 'string' ? payload.error : 'Unable to load OANDA accounts.')
     return Array.isArray(payload.accounts) ? payload.accounts.map(normalizeAccount) : []
