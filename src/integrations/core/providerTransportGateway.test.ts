@@ -18,7 +18,7 @@ describe('provider gateway contracts', () => {
       providerId: 'custom',
       connect: async () => ({ connectionId: 'c1' }),
       disconnect: async () => undefined,
-      request: async () => ({ ok: true }),
+      request: async <T>() => ({ ok: true } as T),
       health: async () => ({ ok: true }),
     }
     await expect(gateway.health('c1')).resolves.toEqual({ ok: true })
