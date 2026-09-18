@@ -79,11 +79,22 @@ export class ProviderAccountStreamManager {
       accountId: session.spec.accountId,
       accountType: session.spec.accountType,
       onEvent: (event) => {
-        if (event.type === 'position') this.cache.setPositions(key, [...(this.cache.get(key)?.positions || []), event.position])
-        if (event.type === 'order') this.cache.setOrders(key, [...(this.cache.get(key)?.orders || []), event.order])
-        if (event.type === 'error') {
-          providerTelemetry.record(session.spec.providerId, 'account_stream_error', event.error.message)
+        const cached = this.cache.get(key)
+        if (event.type === 'position') {
+          const positions = [...(cached?.positions || [])]
+          const index = positions.findIndex((position) => position.id === event.position.id)
+          if (index >= 0) positions[index] = event.position
+          else positions.push(event.position)
+          this.cache.setPositions(key, positions)
         }
+        if (event.type === 'order') {
+          const orders = [...(cached?.orders || [])]
+          const index = orders.findIndex((order) => order.providerOrderId === event.order.providerOrderId)
+          if (index >= 0) orders[index] = event.order
+          else orders.push(event.order)
+          this.cache.setOrders(key, orders)
+        }
+        if (event.type === 'error') providerTelemetry.record(session.spec.providerId, 'account_stream_error', event.error.message)
       },
       onSnapshot: (snapshot) => {
         const current = this.records.get(key)
