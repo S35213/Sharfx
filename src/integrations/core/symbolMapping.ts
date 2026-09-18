@@ -11,7 +11,8 @@ export interface SymbolMappingResult {
   source: 'exact' | 'alias' | 'identity'
 }
 
-const normalize = (symbol: string): string => { const value = symbol.trim().replace(/\s+/g, '').replace('-', '/').toUpperCase(); return /^[A-Z]{6}$/.test(value) ? value.slice(0, 3) + '/' + value.slice(3) : value }
+const compact = (symbol: string): string => symbol.trim().replace(/\s+/g, '').replace('-', '/').toUpperCase()
+const normalize = (symbol: string): string => { const value = compact(symbol); return /^[A-Z]{6}$/.test(value) ? value.slice(0, 3) + '/' + value.slice(3) : value }
 
 export class SymbolMappingRegistry {
   private readonly mappings = new Map<string, ProviderSymbolMapping[]>()
@@ -26,18 +27,19 @@ export class SymbolMappingRegistry {
     const duplicate = list.find((item) => normalize(item.normalizedSymbol) === normalizedSymbol)
     if (duplicate) throw new Error('A normalized symbol mapping already exists for ' + providerId + ': ' + normalizedSymbol)
 
-    list.push({ ...mapping, providerId, normalizedSymbol, providerSymbol, aliases: (mapping.aliases || []).map(normalize) })
+    list.push({ ...mapping, providerId, normalizedSymbol, providerSymbol, aliases: (mapping.aliases || []).map(compact) })
     this.mappings.set(providerId, list)
   }
 
   mapToProvider(providerId: string, symbol: string): SymbolMappingResult | null {
+    const raw = compact(symbol)
     const normalized = normalize(symbol)
     const list = this.mappings.get(providerId) || []
+    const alias = list.find((item) => item.aliases?.includes(raw))
+    if (alias) return { normalizedSymbol: alias.normalizedSymbol, providerSymbol: alias.providerSymbol, source: 'alias' }
+
     const exact = list.find((item) => normalize(item.normalizedSymbol) === normalized)
     if (exact) return { normalizedSymbol: exact.normalizedSymbol, providerSymbol: exact.providerSymbol, source: 'exact' }
-
-    const alias = list.find((item) => item.aliases?.includes(normalized))
-    if (alias) return { normalizedSymbol: alias.normalizedSymbol, providerSymbol: alias.providerSymbol, source: 'alias' }
 
     return null
   }
