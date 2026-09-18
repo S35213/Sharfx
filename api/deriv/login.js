@@ -1,7 +1,9 @@
 import { getOrigin, createPkce, serializeStateCookie, setCookie, STATE_COOKIE, createAuthorizationUrl } from '../../lib/deriv/oauth.js'
+import { getShafxUser } from '../../server/providerConnections.js'
 
-export default function handler(req, res) {
+export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
+  if (!await getShafxUser(req)) return res.status(401).json({ error: 'Sign in to SHAFX before connecting a broker.' })
   const clientId = process.env.DERIV_CLIENT_ID
   if (!clientId) return res.status(500).json({ error: 'DERIV_CLIENT_ID is not configured' })
   try {
