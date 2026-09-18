@@ -96,7 +96,7 @@ describe('ProviderAccountStreamManager', () => {
     const first = { providerId: descriptor.id, connectionId: 'connection-a', accountId: 'acct-a', accountType: 'demo' as const }
     const sibling = { providerId: descriptor.id, connectionId: 'connection-b', accountId: 'acct-b', accountType: 'demo' as const }
 
-    await manager.start(first)
+    const firstKey = await manager.start(first)
     const firstHandle = handles.get('connection-a:acct-a')?.close
     await manager.start(sibling)
     await manager.start(first)
