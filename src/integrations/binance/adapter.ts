@@ -73,7 +73,7 @@ export const BINANCE_PROVIDER_ADAPTER: ProviderAdapter = {
     const payload = await api(connection, accountId, 'orders')
     return Array.isArray(payload.orders) ? payload.orders as ProviderOrderResult[] : []
   },
-  async getPositions(_connection, _accountId): Promise<ProviderPosition[]> { return [] },
+  async getPositions(connection): Promise<ProviderPosition[]> { assertConnection(connection); return [] },
   async getInstruments(connection): Promise<ProviderInstrument[]> {
     assertConnection(connection)
     const payload = await api(connection, undefined, 'instruments')
