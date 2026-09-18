@@ -11,6 +11,15 @@ export interface ProviderAccountStreamSpec {
 
 export type ManagedProviderStreamStatus = 'connecting' | 'connected' | 'disconnected' | 'error'
 
+export interface ManagedStreamSession {
+  spec: ProviderAccountStreamSpec
+  onSnapshot?: (snapshot: ProviderAccountSnapshot) => void
+  onStatus?: (status: ManagedProviderStreamStatus) => void
+  retryAttempt: number
+  retryTimer?: ReturnType<typeof setTimeout>
+  stopped: boolean
+}
+
 export interface ManagedProviderAccount {
   key: string
   spec: ProviderAccountStreamSpec
@@ -24,7 +33,10 @@ export const providerAccountStreamKey = (spec: ProviderAccountStreamSpec): strin
 export class ProviderAccountStreamManager {
   private readonly streams = new Map<string, ProviderAccountStream>()
   private readonly records = new Map<string, ManagedProviderAccount>()
+  private readonly sessions = new Map<string, ManagedStreamSession>()
   private readonly cache = new ProviderAccountCache()
+
+  constructor(private readonly retryBaseMs = 500, private readonly retryMaxMs = 30_000) {}
 
   async start(
     spec: ProviderAccountStreamSpec,
@@ -34,36 +46,65 @@ export class ProviderAccountStreamManager {
     const key = providerAccountStreamKey(spec)
     await this.stop(key)
     this.records.set(key, { key, spec, snapshot: null, status: 'connecting' })
+    this.sessions.set(key, { spec, onSnapshot, onStatus, retryAttempt: 0, stopped: false })
+    await this.launch(key)
+    return key
+  }
+
+  private scheduleRetry(key: string): void {
+    const session = this.sessions.get(key)
+    if (!session || session.stopped || session.retryTimer) return
+    session.retryAttempt += 1
+    const delay = Math.min(this.retryMaxMs, this.retryBaseMs * (2 ** Math.max(0, session.retryAttempt - 1)))
+    session.retryTimer = globalThis.setTimeout(() => {
+      session.retryTimer = undefined
+      void this.launch(key).catch(() => undefined)
+    }, delay)
+  }
+
+  private async launch(key: string): Promise<void> {
+    const session = this.sessions.get(key)
+    const record = this.records.get(key)
+    if (!session || session.stopped || !record) return
+
+    const previous = this.streams.get(key)
+    this.streams.delete(key)
+    if (previous) previous.stop()
+    record.status = 'connecting'
 
     const stream = new ProviderAccountStream({
-      providerId: spec.providerId,
-      connectionId: spec.connectionId,
-      accountId: spec.accountId,
-      accountType: spec.accountType,
+      providerId: session.spec.providerId,
+      connectionId: session.spec.connectionId,
+      accountId: session.spec.accountId,
+      accountType: session.spec.accountType,
       onSnapshot: (snapshot) => {
-        const record = this.records.get(key)
-        if (!record) return
-        record.snapshot = snapshot
-        record.status = 'connected'
+        const current = this.records.get(key)
+        if (!current) return
+        current.snapshot = snapshot
+        current.status = 'connected'
         this.cache.setAccount(key, snapshot)
-        onSnapshot?.(snapshot)
+        session.retryAttempt = 0
+        session.onSnapshot?.(snapshot)
       },
       onStatus: (status) => {
-        const record = this.records.get(key)
-        if (!record) return
-        record.status = status
-        onStatus?.(status)
+        const current = this.records.get(key)
+        if (!current) return
+        current.status = status
+        session.onStatus?.(status)
+        if (status === 'connected') session.retryAttempt = 0
+        if (status === 'error') this.scheduleRetry(key)
       },
     })
 
     this.streams.set(key, stream)
     try {
       await stream.start()
-      return key
+      session.retryAttempt = 0
     } catch (error) {
       this.streams.delete(key)
-      const record = this.records.get(key)
-      if (record) record.status = 'error'
+      const current = this.records.get(key)
+      if (current) current.status = 'error'
+      this.scheduleRetry(key)
       throw error
     }
   }
@@ -72,6 +113,12 @@ export class ProviderAccountStreamManager {
     const stream = this.streams.get(key)
     this.streams.delete(key)
     if (stream) stream.stop()
+    const session = this.sessions.get(key)
+    if (session) {
+      session.stopped = true
+      if (session.retryTimer) globalThis.clearTimeout(session.retryTimer)
+    }
+    this.sessions.delete(key)
     this.records.delete(key)
     this.cache.invalidate(key)
   }
