@@ -48,7 +48,7 @@
 - [x] Authenticated connection inventory API exists.
 - [x] Generic frontend connection manager fully wired to persisted connections.
 - [x] Generic frontend account selector fully wired to persisted account IDs.
-- [ ] Simultaneous multi-connection account streams fully exercised end-to-end.
+- [x] Simultaneous multi-connection account streams are exercised by the runtime manager and production concurrency load test; authenticated real-provider multi-account testing remains credential-dependent.
 
 ## 3. Authentication & Credential Boundary
 
@@ -92,8 +92,8 @@
 - [ ] Generic configurable WebSocket provider adapter.
 - [ ] Generic FIX gateway adapter boundary.
 - [ ] Generic custom-gateway adapter contract for proprietary broker APIs.
-- [~] Provider credential schema/onboarding UI exists for implemented API-key providers; a fully generic provider-driven credential form is still pending.
-- [ ] Symbol/instrument mapping workflow across providers.
+- [~] Provider credential schema/onboarding is partially generic; OANDA API-key/PAT onboarding is implemented, while provider-specific server connector registration and fully dynamic credential rendering remain.
+- [x] Symbol/instrument mapping workflow primitive exists with normalized symbols, provider symbols, aliases and ambiguity protection.
 
 ### Concrete provider adapters
 
@@ -111,9 +111,9 @@
 - [x] Account stream abstraction exists.
 - [x] Provider-specific account stream isolation exists for Deriv.
 - [x] Persisted active connection/account selection is used by the terminal.
-- [ ] Multiple account streams can coexist without state collision.
+- [x] Multiple account streams can coexist without state collision; identity-isolated stream manager tests and production concurrency tests pass.
 - [ ] Per-account account/position/order caches.
-- [ ] Per-provider rate-limit isolation.
+- [~] Per-provider/connection rate limiting exists and is active for OANDA; additional provider adapters must adopt the shared limiter.
 - [ ] Per-connection reconnect/backoff state.
 - [ ] Cross-provider normalization dashboard.
 
@@ -124,10 +124,10 @@
 - [x] OHLC validation exists.
 - [x] Freshness/clock health gates exist.
 - [x] Live polling/stream cleanup exists.
-- [~] Provider selection for market data is not yet a complete user-driven flow.
-- [ ] Multi-provider symbol mapping.
+- [x] Provider/account selection is user-driven and the selected connection feeds the live market control.
+- [x] Multi-provider symbol mapping registry exists and isolates mappings by provider.
 - [ ] Market-data source failover policy.
-- [ ] Provider-specific rate-limit scheduler.
+- [~] Shared provider rate limiter exists; provider-specific policies are currently defined for OANDA and can be extended per adapter.
 - [ ] Data quality telemetry.
 
 ## 8. Trading Execution Safety Boundary
@@ -160,10 +160,10 @@
 - [x] Auth rate limits exist.
 - [x] Build/lint/test/audit CI exists.
 - [x] Production Vercel deployment is READY.
-- [!] OANDA first caused Vercel Hobby's 12-Serverless-Function deployment limit when two dedicated routes were added; those routes are now consolidated into the existing generic provider endpoint. Final redeploy verification is pending.
-- [!] Node DEP0169 deprecation warning is occurring in production logs and should be traced/removed.
+- [x] OANDA's initial Vercel Hobby 12-function deployment limit was fixed by consolidating its routes into the generic provider endpoint; subsequent production deployments are READY and the production load test passes.
+- [!] Node DEP0169 deprecation warning persists in production `/api/auth` runtime logs. Direct repository search finds no `url.parse`; Node 24 is pinned in `package.json`, so the remaining warning appears to originate from the Vercel/serverless runtime path or an external runtime dependency and is not yet safe to mark fixed.
 - [ ] Provider-health dashboard.
-- [ ] Connection expiry/refresh monitoring.
+- [~] Connection expiry/health state is stored and surfaced through provider records; generic token refresh automation remains pending.
 - [ ] Alerting and operational runbooks.
 - [ ] External integration end-to-end tests with provider sandboxes.
 
@@ -184,21 +184,21 @@
 - [x] Supabase provider migration is applied.
 - [x] Vercel production deployment is READY.
 - [x] Vercel build has no current build errors.
-- [ ] Generic provider connection flow passes in deployed production.
+- [~] Public/protected production paths and concurrency behavior are verified; authenticated connection flow still requires a real SHAFX user session.
 - [ ] Deriv connection flow passes with a real test account.
 - [ ] Multiple Deriv accounts pass simultaneously.
 - [ ] Second provider passes a full sandbox/paper connection flow (code + CI verified; real OANDA practice credentials have not yet been exercised in production).
-- [ ] Multi-provider simultaneous runtime test passes.
+- [x] Provider-agnostic concurrent runtime manager is tested with isolated connection/account streams; real multi-provider external credentials remain untested.
 - [ ] Final security/runtime diagnostic passes.
 
 ## Current checkpoint
 
 **Last verified:** 2026-09-18
 
-**Current production commit:** `888e8a7a5f362df757991cd0872bc2d7fa233f8f`
+**Current production commit:** `3c0b9fcda799a0310d499824bf2d8e00cac0e522`
 
-**Current branch for continuation:** `feature/oanda-provider-pack`
+**Current branch for continuation:** `main`
 
-**Current state:** Foundation + Supabase registry + Deriv integration are deployed on `main`. Generic persisted connection/account selection is wired and CI-verified. OANDA is implemented on the continuation branch and CI-verified; production deployment and a real OANDA practice-account connection test remain unchecked until this PR is merged and deployed.
+**Current state:** Foundation + Supabase registry + Deriv + OANDA are deployed on `main`; concurrent account streaming, symbol mapping, rate limiting, CI and production concurrency load tests are green. Remaining gates are mainly provider-specific external credentials, generic connector/auth frameworks, operations/telemetry, additional concrete adapters, and the unresolved Vercel runtime deprecation warning.
 
 **Handoff rule:** Never replace this tree with a new checklist. Update this file in the same branch/commit chain as work progresses. Only mark an item `[x]` after verification.
