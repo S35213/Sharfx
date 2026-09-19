@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { Activity, ChevronDown, Command, MoreVertical, Search, Settings2, ShieldCheck, Wifi } from 'lucide-react'
 import type { MarketPair, Timeframe } from '../../types'
 import { TIMEFRAMES } from '../../types'
@@ -16,6 +16,11 @@ export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, t
   const [moreOpen, setMoreOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [query, setQuery] = useState('')
+  const [quoteTick, setQuoteTick] = useState(0)
+  useEffect(() => {
+    const timer = window.setInterval(() => setQuoteTick((value) => value + 1), 900)
+    return () => window.clearInterval(timer)
+  }, [])
   const instruments = useMemo(() => Array.from(new Set(pairs.map((pair) => pair.symbol))), [pairs])
   const filtered = instruments.filter((item) => item.toLowerCase().includes(query.trim().toLowerCase()))
   const simulatedQuote = (item: string, index: number) => {
@@ -23,7 +28,7 @@ export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, t
     const precision = item === symbol ? pricePrecision : item.includes('JPY') ? 3 : item.includes('XAU') ? 2 : item.includes('BTC') ? 2 : 5
     const base = item === symbol ? price : pair?.price ?? 0
     const step = item.includes('JPY') ? 0.004 : item.includes('XAU') ? 0.06 : item.includes('BTC') ? 3 : 0.00002
-    const wave = Math.sin(Date.now() / 1200 + index * 1.37)
+    const wave = Math.sin(quoteTick * 0.9 + index * 1.37)
     const mid = Number(Math.max(step, base + step * wave).toFixed(precision))
     const spread = item.includes('JPY') ? 0.006 : item.includes('XAU') ? 0.08 : item.includes('BTC') ? 4 : 0.00008
     return { pair, precision, bid: Number((mid - spread / 2).toFixed(precision)), ask: Number((mid + spread / 2).toFixed(precision)), mid }
