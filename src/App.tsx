@@ -50,6 +50,8 @@ const TerminalContent: React.FC = () => {
   const [currentPrice, setCurrentPrice] = useState(1.08542)
   const [candles, setCandles] = useState<OHLCV[]>([])
   const [liveCandles, setLiveCandles] = useState<OHLCV[]>([])
+  const [simulatedCandles, setSimulatedCandles] = useState<OHLCV[]>([])
+  const simulatedPriceRef = useRef(1.08542)
   const [liveMarketActive, setLiveMarketActive] = useState(false)
   const [replayCount, setReplayCount] = useState(0)
   const [mobileTab, setMobileTab] = useState<MobileNavTab>('market')
@@ -126,6 +128,8 @@ const TerminalContent: React.FC = () => {
         setWatchlist(wl)
         setSymbolSpec(spec)
         setCandles(cands)
+        setSimulatedCandles(cands)
+        simulatedPriceRef.current = cands[cands.length - 1]?.close ?? pair?.price ?? acc.balance
         setLiveCandles([])
         setReplayCount(cands.length)
         setMarketAnalysis(ma)
@@ -207,7 +211,35 @@ const TerminalContent: React.FC = () => {
   }, [openPositions, tradeHistory])
 
   const visibleCandles = useMemo(() => replayCount > 0 && replayCount < candles.length ? candles.slice(0, replayCount) : candles, [candles, replayCount])
-  const chartCandles = liveMarketActive && liveCandles.length > 0 ? liveCandles : visibleCandles
+  useEffect(() => {
+    if (isBrokerMode() || simulatedCandles.length === 0 || !symbolSpec) return
+    const intervalSeconds: Record<string, number> = { M1: 60, M5: 300, M15: 900, M30: 1800, H1: 3600, H4: 14400, D1: 86400 }
+    const interval = intervalSeconds[timeframe] ?? 60
+    let tick = 0
+    const timer = window.setInterval(() => {
+      tick += 1
+      const pip = symbolSpec.pipSize
+      const previous = simulatedPriceRef.current
+      const direction = Math.sin(tick * 0.91 + selectedSymbol.length) >= 0 ? 1 : -1
+      const magnitude = pip * (0.18 + Math.abs(Math.sin(tick * 0.37)) * 0.82)
+      const nextPrice = Math.max(pip / 10, Number((previous + direction * magnitude).toFixed(symbolSpec.pricePrecision)))
+      simulatedPriceRef.current = nextPrice
+      const now = Math.floor(Date.now() / 1000)
+      const bucket = Math.floor(now / interval) * interval
+      setSimulatedCandles((previousCandles) => {
+        if (previousCandles.length === 0) return previousCandles
+        const last = previousCandles[previousCandles.length - 1]
+        const next = last.time < bucket
+          ? { time: bucket, open: last.close, high: Math.max(last.close, nextPrice), low: Math.min(last.close, nextPrice), close: nextPrice, volume: 1 }
+          : { ...last, high: Math.max(last.high, nextPrice), low: Math.min(last.low, nextPrice), close: nextPrice, volume: (last.volume ?? 0) + 1 }
+        return [...previousCandles.slice(-999), next]
+      })
+      setCurrentPrice(nextPrice)
+    }, 1500)
+    return () => window.clearInterval(timer)
+  }, [selectedSymbol, simulatedCandles.length, symbolSpec, timeframe])
+
+  const chartCandles = liveMarketActive && liveCandles.length > 0 ? liveCandles : (isSimulatorMode() && simulatedCandles.length > 0 ? simulatedCandles : visibleCandles)
   const replayActive = !liveMarketActive && visibleCandles.length > 0 && visibleCandles.length < candles.length
   const displayPrice = liveMarketActive && liveCandles.length > 0 ? (liveCandles[liveCandles.length - 1]?.close ?? currentPrice) : replayActive ? (visibleCandles[visibleCandles.length - 1]?.close ?? currentPrice) : currentPrice
   const conversionRate = symbolSpec ? getConversionRate(symbolSpec.quoteCurrency, accountData?.currency ?? 'USD') : undefined
