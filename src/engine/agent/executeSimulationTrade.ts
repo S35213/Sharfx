@@ -11,6 +11,7 @@ export interface ExecuteSimulationTradeInput {
   riskPercent: number
   symbolSpec: SymbolSpec
   conversionRate?: number
+  lotSize?: number
 }
 
 export interface ExecuteSimulationTradeResult {
@@ -37,16 +38,25 @@ export const executeSimulationTrade = (input: ExecuteSimulationTradeInput): Exec
   })
   if (!plan.isValid) return { decision, plan, order: null }
 
+  const lotSize = input.lotSize ?? plan.lotSize
+  const lotStepValid = Math.abs((lotSize / input.symbolSpec.lotStep) - Math.round(lotSize / input.symbolSpec.lotStep)) < 1e-8
+  if (!Number.isFinite(lotSize) || lotSize < input.symbolSpec.minLotSize || lotSize > input.symbolSpec.maxLotSize || !lotStepValid) {
+    return { decision, plan: { ...plan, isValid: false, summary: `Lot size must be between ${input.symbolSpec.minLotSize} and ${input.symbolSpec.maxLotSize} using step ${input.symbolSpec.lotStep}.` }, order: null }
+  }
+
+  const lotMultiplier = plan.lotSize > 0 ? lotSize / plan.lotSize : 1
+  const estimatedLoss = Number((plan.estimatedLoss * lotMultiplier).toFixed(2))
+  const estimatedReward = Number((plan.estimatedReward * lotMultiplier).toFixed(2))
   const draft: SimulatedOrderDraft = {
     symbol: input.symbolSpec.symbol,
     type: decision.setup.direction,
-    lotSize: plan.lotSize,
+    lotSize,
     entryPrice: decision.setup.entryPrice,
     stopLoss: decision.setup.stopLoss,
     takeProfit: decision.setup.takeProfit,
     riskPercent: plan.riskPercent,
-    riskAmount: plan.estimatedLoss,
-    rewardAmount: plan.estimatedReward,
+    riskAmount: estimatedLoss,
+    rewardAmount: estimatedReward,
     riskRewardRatio: plan.risk.riskRewardRatio,
   }
 
