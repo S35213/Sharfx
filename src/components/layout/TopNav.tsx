@@ -1,10 +1,11 @@
 import React, { useMemo, useState } from 'react'
-import { Activity, ChevronDown, Command, Search, ShieldCheck, Wifi } from 'lucide-react'
+import { Activity, ChevronDown, Command, MoreVertical, Search, Settings2, ShieldCheck, Wifi } from 'lucide-react'
 import type { MarketPair, Timeframe } from '../../types'
 import { TIMEFRAMES } from '../../types'
 import { formatPrice } from '../../lib/format'
 import { ProviderConnectionControl } from '../market/ProviderConnectionControl'
 import { setStoredTradingMode } from '../../app/tradingMode'
+import { ChartSettingsSheet } from './ChartSettingsSheet'
 
 type TerminalView = 'market' | 'agent' | 'history' | 'account'
 interface TopNavProps { symbol: string; price: number; pricePrecision: number; timeframe: Timeframe; onTimeframeChange: (tf: Timeframe) => void; pairs: MarketPair[]; onSelectPair: (symbol: string) => void; view?: TerminalView }
@@ -12,6 +13,8 @@ interface TopNavProps { symbol: string; price: number; pricePrecision: number; t
 export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, timeframe, onTimeframeChange, pairs, onSelectPair, view = 'market' }) => {
   const [marketOpen, setMarketOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [query, setQuery] = useState('')
   const instruments = useMemo(() => Array.from(new Set(pairs.map((pair) => pair.symbol))), [pairs])
   const filtered = instruments.filter((item) => item.toLowerCase().includes(query.trim().toLowerCase()))
@@ -59,7 +62,25 @@ export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, t
           </div>}
         </div>
         <div className="hidden md:block"><span className="rounded-xl border border-shafx-border bg-shafx-surface px-3 py-2 text-[9px] font-semibold text-shafx-textMuted">{TIMEFRAMES.includes(timeframe) ? timeframe : '—'}</span></div>
+        <div className="relative">
+          <button type="button" onClick={() => setMoreOpen((open) => !open)} aria-expanded={moreOpen} aria-label="Open SHAFX menu" className="flex h-12 w-12 items-center justify-center rounded-xl border border-shafx-border bg-shafx-surface text-shafx-textMuted active:bg-shafx-surfaceHover">
+            <MoreVertical className="h-5 w-5" />
+          </button>
+          {moreOpen && <div className="absolute right-0 top-[calc(100%+8px)] z-[100] w-64 rounded-2xl border border-shafx-border bg-shafx-surface p-2 shadow-2xl">
+            <button type="button" onClick={() => { setMoreOpen(false); setSettingsOpen(true) }} className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left hover:bg-shafx-surfaceHover">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-shafx-accent/10 text-shafx-accent"><Settings2 className="h-4 w-4" /></span>
+              <span><span className="block text-xs font-semibold">Settings</span><span className="mt-0.5 block text-[9px] text-shafx-textMuted">Chart, navigation and display</span></span>
+            </button>
+            <div className="my-1 border-t border-shafx-border" />
+            <div className="px-3 py-2 text-[9px] leading-4 text-shafx-textMuted">Provider-neutral workspace. Changes here affect this device only.</div>
+          </div>}
+        </div>
       </div>
+    </div>
+    {view === 'market' && <div className="flex gap-1 overflow-x-auto border-t border-shafx-border/70 px-3 py-1.5 sm:px-4 lg:px-5">
+      {TIMEFRAMES.map((tf) => <button key={tf} type="button" onClick={() => onTimeframeChange(tf)} aria-pressed={timeframe === tf} className={`min-h-10 flex-shrink-0 rounded-lg px-3 text-[9px] font-semibold transition ${timeframe === tf ? 'bg-shafx-accent text-white' : 'text-shafx-textMuted hover:bg-shafx-surfaceHover hover:text-shafx-text'}`}>{tf}</button>)}
+    </div>}
+    <ChartSettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
     {view === 'market' && <div className="flex gap-1 overflow-x-auto border-t border-shafx-border/70 px-3 py-1.5 sm:px-4 lg:px-5">
       {TIMEFRAMES.map((tf) => <button key={tf} type="button" onClick={() => onTimeframeChange(tf)} aria-pressed={timeframe === tf} className={`min-h-10 flex-shrink-0 rounded-lg px-3 text-[9px] font-semibold transition ${timeframe === tf ? 'bg-shafx-accent text-white' : 'text-shafx-textMuted hover:bg-shafx-surfaceHover hover:text-shafx-text'}`}>{tf}</button>)}
