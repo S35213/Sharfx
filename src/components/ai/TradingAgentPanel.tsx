@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Activity, Bot, ChevronDown, Play, RefreshCw, ShieldCheck, Sparkles, Wallet } from 'lucide-react'
+import { Activity, Bot, ChevronDown, RefreshCw, ShieldCheck, Sparkles, Wallet } from 'lucide-react'
 import { analyzeLiquidity } from '../../engine/liquidity'
 import { analyzeMarketStructure, findSwingPoints } from '../../engine/marketStructure'
 import { analyzeSetup } from '../../engine/setup'
@@ -239,30 +239,6 @@ export function TradingAgentPanel({
     onBotRunningChange?.(false)
   }, [onBotRunningChange])
 
-  const startBot = (): void => {
-    const freshRun = crypto.randomUUID()
-    setRunId(freshRun)
-    setCycles(0)
-    setLastResult(null)
-    setScanNonce((value) => value + 1)
-    if (cycleSeconds > plan.maxCycleSeconds) {
-      setStatus(plan.label + ' allows up to ' + plan.maxCycleSeconds + 's scan cycles.')
-      return
-    }
-    if (!activePosition) {
-      setBotPositionId(null)
-      processedHistory.current.clear()
-    }
-    if (losses >= 2) setLosses(0)
-    setPhase('ANALYZING')
-    setStatus('Refreshing market analysis… Daily allowance: ' + allowanceLabel + '.')
-    if (analysisTimer.current) window.clearTimeout(analysisTimer.current)
-    analysisTimer.current = window.setTimeout(() => {
-      setPhase('RUNNING')
-      setStatus(bias + ' market read complete. Executing the first simulator cycle.')
-    }, 850)
-  }
-
   const rescanBot = (): void => {
     if (analysisTimer.current) window.clearTimeout(analysisTimer.current)
     setLastResult(null)
@@ -270,14 +246,9 @@ export function TradingAgentPanel({
     setPhase('ANALYZING')
     setStatus(activePosition ? 'Refreshing market structure, liquidity and setup while monitoring the existing simulated position.' : 'Refreshing market structure, liquidity and setup…')
     analysisTimer.current = window.setTimeout(() => {
-      setPhase('READY')
-      setStatus(activePosition ? 'Analysis refreshed. Existing simulated position remains under management.' : 'Analysis refreshed. Bot is ready for the next scan.')
+      setPhase('RUNNING')
+      setStatus(activePosition ? 'Analysis refreshed. Monitoring the existing simulated position.' : 'Analysis refreshed. Bot is monitoring for the next valid setup.')
     }, 650)
-  }
-
-  const stopBot = (): void => {
-    setPhase('READY')
-    setStatus(activePosition ? 'Bot paused — existing simulated position is still managed by SHAFX' : 'Bot paused')
   }
 
   return (
