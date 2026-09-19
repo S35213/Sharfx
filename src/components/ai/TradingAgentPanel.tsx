@@ -8,26 +8,319 @@ import { buildTradingContext } from '../../engine/ai/context'
 import { analyzeMultiTimeframeBias, buildAgentResearch, executeSimulationTrade, learnFromTrades, useMultiTimeframeCandles } from '../../engine/agent'
 import { BOT_PLANS, cycleUnitsForSeconds, type BotPlan } from '../../engine/agent/botPlans'
 import type { OHLCV, SymbolSpec, Timeframe, TradeOrder } from '../../types'
-interface Props { symbol: string; timeframe: Timeframe; candles: OHLCV[]; currentPrice: number; activePosition: TradeOrder | null; tradeHistory: TradeOrder[]; accountBalance?: number; accountCurrency?: string; symbolSpec?: SymbolSpec | null; conversionRate?: number; botPlan?: BotPlan; onBotOrder?: (order: TradeOrder) => void; onReviewSetup?: () => void }
+
+interface Props {
+  symbol: string
+  timeframe: Timeframe
+  candles: OHLCV[]
+  currentPrice: number
+  activePosition: TradeOrder | null
+  tradeHistory: TradeOrder[]
+  accountBalance?: number
+  accountCurrency?: string
+  symbolSpec?: SymbolSpec | null
+  conversionRate?: number
+  botPlan?: BotPlan
+  onBotOrder?: (order: TradeOrder) => void
+  onBotRunningChange?: (running: boolean) => void
+  onReviewSetup?: () => void
+}
+
 type RiskMode = 'SAFE' | 'NORMAL' | 'RISK'
-const riskModes: Record<RiskMode, { label: string; percent: number; description: string }> = { SAFE: { label: 'Safe', percent: 0.25, description: 'Smallest simulated risk' }, NORMAL: { label: 'Normal', percent: 0.5, description: 'Balanced simulated risk' }, RISK: { label: 'Risk', percent: 1, description: 'Higher simulated risk' } }
+const riskModes: Record<RiskMode, { label: string; percent: number; description: string }> = {
+  SAFE: { label: 'Safe', percent: 0.25, description: 'Smallest simulated risk' },
+  NORMAL: { label: 'Normal', percent: 0.5, description: 'Balanced simulated risk' },
+  RISK: { label: 'Risk', percent: 1, description: 'Higher simulated risk' },
+}
 type Phase = 'READY' | 'ANALYZING' | 'RUNNING'
-export function TradingAgentPanel({ symbol, timeframe, candles, currentPrice, activePosition, tradeHistory, accountBalance = 10000, accountCurrency = 'USD', symbolSpec = null, conversionRate, botPlan = 'FREE', onBotOrder, onReviewSetup }: Props) {
+
+export function TradingAgentPanel({
+  symbol,
+  timeframe,
+  candles,
+  currentPrice,
+  activePosition,
+  tradeHistory,
+  accountBalance = 10000,
+  accountCurrency = 'USD',
+  symbolSpec = null,
+  conversionRate,
+  botPlan = 'FREE',
+  onBotOrder,
+  onBotRunningChange,
+  onReviewSetup,
+}: Props) {
   const plan = BOT_PLANS[botPlan]
-  const [riskMode, setRiskMode] = useState<RiskMode>('SAFE'); const [cycleSeconds, setCycleSeconds] = useState<5 | 10>(5); const [phase, setPhase] = useState<Phase>('READY'); const [, setWins] = useState(0); const [losses, setLosses] = useState(0); const [cycles, setCycles] = useState(0); const [cycleUnits, setCycleUnits] = useState(0); const [lastResult, setLastResult] = useState<'WIN' | 'LOSS' | 'WAIT' | null>(null); const [status, setStatus] = useState('Ready to scan'); const [bias, setBias] = useState('Neutral'); const [detailsOpen, setDetailsOpen] = useState(false); const [botPositionId, setBotPositionId] = useState<string | null>(null); const [runId, setRunId] = useState<string | null>(null)
-  const processedHistory = useRef(new Set<string>()); const analysisTimer = useRef<number | null>(null)
-  const tradingContext = useMemo(() => { const swings = findSwingPoints(candles, 2); const structure = analyzeMarketStructure(candles, 2); const tolerance = symbol.includes('JPY') ? 0.1 : 0.001; const supportResistance = analyzeSupportResistance(candles, tolerance, swings); const liquidity = analyzeLiquidity(candles, swings, tolerance); const setup = analyzeSetup({ currentPrice: candles[candles.length - 1]?.close ?? currentPrice, structure, supportResistance, liquidity }); return buildTradingContext(symbol, timeframe, candles, structure, supportResistance, liquidity, setup) }, [candles, currentPrice, symbol, timeframe])
+  const [riskMode, setRiskMode] = useState<RiskMode>('SAFE')
+  const [cycleSeconds, setCycleSeconds] = useState<5 | 10>(5)
+  const [phase, setPhase] = useState<Phase>('READY')
+  const [, setWins] = useState(0)
+  const [losses, setLosses] = useState(0)
+  const [cycles, setCycles] = useState(0)
+  const [cycleUnits, setCycleUnits] = useState(0)
+  const [lastResult, setLastResult] = useState<'WIN' | 'LOSS' | 'WAIT' | null>(null)
+  const [status, setStatus] = useState('Ready to scan')
+  const [bias, setBias] = useState('Neutral')
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const [botPositionId, setBotPositionId] = useState<string | null>(null)
+  const [runId, setRunId] = useState<string | null>(null)
+  const processedHistory = useRef(new Set<string>())
+  const analysisTimer = useRef<number | null>(null)
+
+  const tradingContext = useMemo(() => {
+    const swings = findSwingPoints(candles, 2)
+    const structure = analyzeMarketStructure(candles, 2)
+    const tolerance = symbol.includes('JPY') ? 0.1 : 0.001
+    const supportResistance = analyzeSupportResistance(candles, tolerance, swings)
+    const liquidity = analyzeLiquidity(candles, swings, tolerance)
+    const setup = analyzeSetup({ currentPrice: candles[candles.length - 1]?.close ?? currentPrice, structure, supportResistance, liquidity })
+    return buildTradingContext(symbol, timeframe, candles, structure, supportResistance, liquidity, setup)
+  }, [candles, currentPrice, symbol, timeframe])
+
   const timeframeFrames = useMultiTimeframeCandles(symbol, timeframe, candles)
   const multiTimeframe = useMemo(() => analyzeMultiTimeframeBias(timeframeFrames), [timeframeFrames])
   const learning = useMemo(() => learnFromTrades(tradeHistory.filter((trade) => trade.status === 'closed').map((trade) => ({ symbol: trade.symbol, direction: trade.type, profit: trade.profit, riskRewardRatio: trade.riskRewardRatio }))), [tradeHistory])
-  const research = useMemo(() => buildAgentResearch({ context: tradingContext, learning, multiTimeframe }), [learning, multiTimeframe, tradingContext]); const setup = tradingContext.setup.preferredSetup; const riskAmount = accountBalance * (riskModes[riskMode].percent / 100)
-  const allowanceLabel = plan.maxDailyCycleUnits === null ? 'Unlimited' : `${plan.maxDailyCycleUnits} units/day`
-  useEffect(() => { setBias(multiTimeframe.dominantBias ?? (setup?.direction === 'BUY' ? 'Bullish' : setup?.direction === 'SELL' ? 'Bearish' : 'Neutral')) }, [multiTimeframe.dominantBias, setup?.direction])
-  useEffect(() => { let cancelled = false; const loadUsage = async () => { try { const response = await fetch('/api/bot/usage', { credentials: 'same-origin' }); if (!response.ok) return; const data = await response.json(); if (!cancelled) { setCycleUnits(Number(data.usedCycleUnits) || 0); if (data.runId) setRunId(String(data.runId)); if (data.plan && data.plan !== botPlan) setStatus(`${String(data.plan)} bot entitlement is active.`) } } catch { if (!cancelled) setStatus('Unable to load bot allowance.') } }; void loadUsage(); return () => { cancelled = true } }, [botPlan])
-  useEffect(() => { if (!botPositionId) return; const closed = tradeHistory.find((trade) => trade.id === botPositionId && trade.status === 'closed'); if (!closed || processedHistory.current.has(closed.id)) return; processedHistory.current.add(closed.id); setBotPositionId(null); const profit = closed.profit ?? 0; if (profit >= 0) { setWins((v) => v + 1); setLastResult('WIN'); setStatus('Simulated profit — bot will analyze again on the next cycle') } else setLosses((v) => { const next = v + 1; setLastResult('LOSS'); if (next >= 2) { setPhase('READY'); setStatus('Stopped after 2 real simulated losses — review the strategy') } else setStatus('Simulated loss — bot will re-check the market before the next trade'); return next }) }, [botPositionId, tradeHistory])
-  useEffect(() => { if (phase !== 'RUNNING') return; const timer = window.setInterval(async () => { const units = cycleUnitsForSeconds(cycleSeconds); try { const response = await fetch('/api/bot/usage', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ runId: runId ?? crypto.randomUUID(), units }) }); const data = await response.json().catch(() => ({})); if (!response.ok || !data.ok) { setPhase('READY'); setCycleUnits(Number(data.usedCycleUnits) || cycleUnits); setStatus(data.error || 'Bot daily allowance reached.'); return } if (!runId && data.runId) setRunId(data.runId); setCycleUnits(Number(data.usedCycleUnits) || 0); setCycles((v) => v + 1); if (losses >= 2) return; if (activePosition || botPositionId) { setStatus(`Monitoring ${activePosition?.type ?? 'simulated'} position — waiting for its stop or target`); return } if (!symbolSpec || !onBotOrder) { setStatus('Simulation engine is not ready for this market'); return } setStatus(`Analyzing ${symbol}…`); const result = executeSimulationTrade({ context: { tradingContext, preferredSetup: setup, hasOpenPosition: false, permission: 'AUTONOMOUS_SIMULATION', multiTimeframe, learning, research }, accountBalance, accountCurrency, riskPercent: riskModes[riskMode].percent, symbolSpec, conversionRate }); if (!result.order) { setLastResult('WAIT'); setStatus(`${bias}: ${result.decision.rationale}`); return } setBotPositionId(result.order.id); setLastResult(null); setStatus(`${result.order.type} ${symbol} simulated at ${result.order.entryPrice} — monitoring SL/TP`); onBotOrder(result.order) } catch { setPhase('READY'); setStatus('Unable to verify bot cycle allowance. Try again.') } }, cycleSeconds * 1000); return () => window.clearInterval(timer) }, [accountBalance, accountCurrency, activePosition, bias, botPlan, botPositionId, conversionRate, cycleSeconds, cycleUnits, learning, losses, multiTimeframe, onBotOrder, phase, research, riskMode, runId, setup, symbol, symbolSpec, tradingContext])
-  useEffect(() => () => { if (analysisTimer.current) window.clearTimeout(analysisTimer.current) }, [])
-  const startBot = (): void => { const freshRun = crypto.randomUUID(); setRunId(freshRun); setCycles(0); if (cycleSeconds > plan.maxCycleSeconds) { setStatus(`${plan.label} allows up to ${plan.maxCycleSeconds}s scan cycles.`); return } if (losses >= 2) { setLosses(0); setWins(0); setLastResult(null); setBotPositionId(null) } setPhase('ANALYZING'); setStatus(`Starting ${plan.label}. Daily allowance: ${allowanceLabel}.`); analysisTimer.current = window.setTimeout(() => { setPhase('RUNNING'); setStatus(`${bias} market detected. Bot is now watching for a valid setup.`) }, 800) }
-  const stopBot = (): void => { setPhase('READY'); setStatus(activePosition ? 'Bot paused — existing simulated position is still managed by SHAFX' : 'Bot paused') }
-  return <div className="space-y-3 rounded-lg border border-shafx-border bg-shafx-surface p-3 text-sm shadow-sm"><div className="flex items-start justify-between gap-3"><div><h3 className="flex items-center gap-2 font-semibold"><Bot className="h-4 w-4 text-shafx-primary" />{plan.label}</h3><p className="mt-1 text-[11px] leading-relaxed text-shafx-textMuted">SHAFX analyzes structure, liquidity, setup, risk and simulator history. It never sends a broker order.</p></div><span className="flex items-center gap-1 rounded border border-shafx-border px-2 py-1 text-[10px]"><Activity className="h-3 w-3" />{phase === 'ANALYZING' ? 'Analyzing' : phase === 'RUNNING' ? 'Running' : 'Ready'}</span></div><div className="rounded-md border border-shafx-border bg-shafx-bg p-3"><div className="mb-2 text-[10px] uppercase tracking-wider text-shafx-textMuted">1. Intelligence</div><div className="flex items-center justify-between gap-3"><div><div className="text-base font-semibold">{phase === 'ANALYZING' ? 'Analyzing…' : bias}</div><div className="mt-1 text-xs text-shafx-textMuted">{multiTimeframe.dominantBias ? `${multiTimeframe.dominantBias} bias` : 'Neutral bias'} • {research.agreement.toFixed(0)}% evidence agreement</div></div><span className="rounded border border-shafx-primary/20 px-2 py-1 text-[10px] text-shafx-primary">{timeframe}</span></div><p className="mt-2 text-xs leading-relaxed text-shafx-textMuted">{setup ? `Candidate ${setup.direction} around ${setup.entryPrice}. ${setup.rationale.join(' ')}` : 'No clean setup is available. The bot will wait rather than force a trade.'}</p></div><div className="rounded-md border border-shafx-primary/30 bg-shafx-primary/5 p-3"><div className="mb-2 flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-shafx-primary" /><div><div className="text-[10px] uppercase tracking-wider text-shafx-textMuted">2. Risk gate</div><div className="font-semibold">{riskModes[riskMode].label} mode</div></div></div><div className="grid grid-cols-3 gap-1">{(Object.keys(riskModes) as RiskMode[]).map((mode) => <button key={mode} type="button" onClick={() => setRiskMode(mode)} className={`min-h-10 rounded px-1 text-[10px] font-semibold ${riskMode === mode ? 'bg-shafx-primary text-white' : 'border border-shafx-border text-shafx-textMuted'}`}>{riskModes[mode].label}<span className="block opacity-70">{riskModes[mode].percent}%</span></button>)}</div><div className="mt-2 flex items-center justify-between text-xs"><span className="text-shafx-textMuted">Account balance</span><span className="font-mono">${accountBalance.toFixed(2)}</span></div><div className="flex items-center justify-between text-xs"><span className="text-shafx-textMuted">Max simulated risk</span><span className="font-mono text-shafx-danger">${riskAmount.toFixed(2)}</span></div></div><div className="rounded-md border border-shafx-border bg-shafx-bg p-3"><div className="mb-2 flex items-center justify-between"><div><div className="text-[10px] uppercase tracking-wider text-shafx-textMuted">3. Bot daily allowance</div><div className="font-semibold">{cycleSeconds}-second scan</div></div><Wallet className="h-4 w-4 text-shafx-primary" /></div><div className="grid grid-cols-2 gap-2">{([5, 10] as const).map((seconds) => <button key={seconds} type="button" disabled={seconds > plan.maxCycleSeconds} onClick={() => setCycleSeconds(seconds)} className={`min-h-10 rounded border text-xs disabled:cursor-not-allowed disabled:opacity-30 ${cycleSeconds === seconds ? 'border-shafx-primary bg-shafx-primary/10 text-shafx-primary' : 'border-shafx-border text-shafx-textMuted'}`}>{seconds}s = {cycleUnitsForSeconds(seconds)} unit{cycleUnitsForSeconds(seconds) > 1 ? 's' : ''}</button>)}</div><div className="mt-2 grid grid-cols-2 gap-2"><button type="button" disabled={phase !== 'READY' || !symbolSpec} onClick={startBot} className="flex min-h-11 items-center justify-center gap-2 rounded bg-shafx-success px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"><Play className="h-4 w-4" />Start bot</button><button type="button" disabled={phase === 'READY'} onClick={stopBot} className="flex min-h-11 items-center justify-center gap-2 rounded border border-shafx-danger/30 text-xs font-semibold text-shafx-danger disabled:opacity-40"><CircleStop className="h-4 w-4" />Stop</button></div><div className="mt-3 rounded border border-shafx-border p-2 text-xs"><div className="font-medium">{status}</div><div className="mt-1 flex justify-between text-[10px] text-shafx-textMuted"><span>Scans today {cycles}</span><span>Units today {cycleUnits}{plan.maxDailyCycleUnits === null ? ' / Unlimited' : ` / ${plan.maxDailyCycleUnits}`}</span></div><div className="mt-1 text-[10px] text-shafx-textMuted">{plan.features.join(' • ')}</div>{lastResult && <div className={`mt-1 text-[10px] ${lastResult === 'WIN' ? 'text-shafx-success' : lastResult === 'LOSS' ? 'text-shafx-danger' : 'text-shafx-textMuted'}`}>{lastResult === 'WIN' ? 'Profit → analyze again' : lastResult === 'LOSS' ? 'Loss → re-check strategy' : 'Waiting for a valid setup'}</div>}</div></div><div className="rounded-md border border-shafx-border bg-shafx-bg p-3"><div className="text-[10px] uppercase tracking-wider text-shafx-textMuted">How it works</div><div className="mt-2 grid gap-2 text-xs text-shafx-textMuted"><div>1. Structure, liquidity, support/resistance and setup analysis.</div><div>2. Real M1–D1 candle datasets are loaded for multi-timeframe evidence.</div><div>3. Server-authorized daily bot allowance resets automatically each UTC day.</div><div>4. Real simulated position management closes at SL/TP.</div><div>5. No broker order execution.</div></div></div><div className="rounded-md border border-shafx-border bg-shafx-bg p-3"><div className="flex items-center justify-between gap-3"><div><div className="text-[10px] uppercase tracking-wider text-shafx-textMuted">Manual trade</div><div className="font-semibold">Trade yourself</div><p className="mt-1 text-[11px] text-shafx-textMuted">Manual orders stay in Market.</p></div><Sparkles className="h-4 w-4 text-shafx-primary" /></div><div className="mt-2 grid grid-cols-2 gap-2"><button type="button" onClick={onReviewSetup} className="min-h-11 rounded bg-shafx-success px-3 text-xs font-semibold text-white">BUY {symbol}</button><button type="button" onClick={onReviewSetup} className="min-h-11 rounded bg-shafx-danger px-3 text-xs font-semibold text-white">SELL {symbol}</button></div></div><button type="button" onClick={() => setDetailsOpen((open) => !open)} className="flex min-h-10 w-full items-center justify-between rounded border border-shafx-border px-3 text-xs text-shafx-textMuted"><span>Advanced analysis</span><ChevronDown className={`h-4 w-4 transition-transform ${detailsOpen ? 'rotate-180' : ''}`} /></button>{detailsOpen && <div className="space-y-2 rounded-md border border-shafx-border bg-shafx-bg p-3 text-[10px] text-shafx-textMuted"><div>Learning: {learning.summary}</div><div>Research: {research.agreement.toFixed(0)}% agreement.</div><div>Current price: {currentPrice}</div><div>{riskModes[riskMode].description}.</div></div>}<p className="text-[10px] leading-relaxed text-shafx-textMuted">SIMULATED — NOT FINANCIAL ADVICE. This bot only creates SHAFX simulator positions and cannot send broker orders.</p></div>
+  const research = useMemo(() => buildAgentResearch({ context: tradingContext, learning, multiTimeframe }), [learning, multiTimeframe, tradingContext])
+  const setup = tradingContext.setup.preferredSetup
+  const riskAmount = accountBalance * (riskModes[riskMode].percent / 100)
+  const allowanceLabel = plan.maxDailyCycleUnits === null ? 'Unlimited' : String(plan.maxDailyCycleUnits) + ' units/day'
+
+  useEffect(() => {
+    setBias(multiTimeframe.dominantBias ?? (setup?.direction === 'BUY' ? 'Bullish' : setup?.direction === 'SELL' ? 'Bearish' : 'Neutral'))
+  }, [multiTimeframe.dominantBias, setup?.direction])
+
+  useEffect(() => {
+    onBotRunningChange?.(phase === 'RUNNING' || phase === 'ANALYZING')
+  }, [onBotRunningChange, phase])
+
+  useEffect(() => {
+    let cancelled = false
+    const loadUsage = async () => {
+      try {
+        const response = await fetch('/api/bot/usage', { credentials: 'same-origin' })
+        if (!response.ok) return
+        const data = await response.json()
+        if (!cancelled) {
+          setCycleUnits(Number(data.usedCycleUnits) || 0)
+          if (data.runId) setRunId(String(data.runId))
+          if (data.plan && data.plan !== botPlan) setStatus(String(data.plan) + ' bot entitlement is active.')
+        }
+      } catch {
+        if (!cancelled) setStatus('Unable to load bot allowance.')
+      }
+    }
+    void loadUsage()
+    return () => { cancelled = true }
+  }, [botPlan])
+
+  useEffect(() => {
+    if (!botPositionId) return
+    const closed = tradeHistory.find((trade) => trade.id === botPositionId && trade.status === 'closed')
+    if (!closed || processedHistory.current.has(closed.id)) return
+    processedHistory.current.add(closed.id)
+    setBotPositionId(null)
+    const profit = closed.profit ?? 0
+    if (profit >= 0) {
+      setWins((v) => v + 1)
+      setLastResult('WIN')
+      setStatus('Simulated profit — bot will analyze again on the next cycle')
+    } else {
+      setLosses((v) => {
+        const next = v + 1
+        setLastResult('LOSS')
+        if (next >= 2) {
+          setPhase('READY')
+          setStatus('Stopped after 2 simulated losses — review the strategy')
+        } else {
+          setStatus('Simulated loss — bot will re-check the market before the next trade')
+        }
+        return next
+      })
+    }
+  }, [botPositionId, tradeHistory])
+
+  useEffect(() => {
+    if (phase !== 'RUNNING') return
+    const timer = window.setInterval(async () => {
+      const units = cycleUnitsForSeconds(cycleSeconds)
+      try {
+        const response = await fetch('/api/bot/usage', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ runId: runId ?? crypto.randomUUID(), units }),
+        })
+        const data = await response.json().catch(() => ({}))
+        if (!response.ok || !data.ok) {
+          setPhase('READY')
+          setCycleUnits(Number(data.usedCycleUnits) || cycleUnits)
+          setStatus(data.error || 'Bot daily allowance reached.')
+          return
+        }
+        if (!runId && data.runId) setRunId(data.runId)
+        setCycleUnits(Number(data.usedCycleUnits) || 0)
+        setCycles((v) => v + 1)
+        if (losses >= 2) return
+        if (activePosition || botPositionId) {
+          setStatus('Monitoring ' + (activePosition?.type ?? 'simulated') + ' position — waiting for its stop or target')
+          return
+        }
+        if (!symbolSpec || !onBotOrder) {
+          setStatus('Simulation engine is not ready for this market')
+          return
+        }
+        setStatus('Analyzing ' + symbol + '…')
+        const result = executeSimulationTrade({
+          context: { tradingContext, preferredSetup: setup, hasOpenPosition: false, permission: 'AUTONOMOUS_SIMULATION', multiTimeframe, learning, research },
+          accountBalance,
+          accountCurrency,
+          riskPercent: riskModes[riskMode].percent,
+          symbolSpec,
+          conversionRate,
+        })
+        if (!result.order) {
+          setLastResult('WAIT')
+          setStatus(bias + ': ' + result.decision.rationale)
+          return
+        }
+        setBotPositionId(result.order.id)
+        setLastResult(null)
+        setStatus(result.order.type + ' ' + symbol + ' simulated at ' + result.order.entryPrice + ' — monitoring SL/TP')
+        onBotOrder(result.order)
+      } catch {
+        setPhase('READY')
+        setStatus('Unable to verify bot cycle allowance. Try again.')
+      }
+    }, cycleSeconds * 1000)
+    return () => window.clearInterval(timer)
+  }, [accountBalance, accountCurrency, activePosition, bias, botPlan, botPositionId, conversionRate, cycleSeconds, cycleUnits, learning, losses, multiTimeframe, onBotOrder, phase, research, riskMode, runId, setup, symbol, symbolSpec, tradingContext])
+
+  useEffect(() => () => {
+    if (analysisTimer.current) window.clearTimeout(analysisTimer.current)
+    onBotRunningChange?.(false)
+  }, [onBotRunningChange])
+
+  const startBot = (): void => {
+    const freshRun = crypto.randomUUID()
+    setRunId(freshRun)
+    setCycles(0)
+    if (cycleSeconds > plan.maxCycleSeconds) {
+      setStatus(plan.label + ' allows up to ' + plan.maxCycleSeconds + 's scan cycles.')
+      return
+    }
+    if (losses >= 2) {
+      setLosses(0)
+      setWins(0)
+      setLastResult(null)
+      setBotPositionId(null)
+    }
+    setPhase('ANALYZING')
+    setStatus('Starting ' + plan.label + '. Daily allowance: ' + allowanceLabel + '.')
+    analysisTimer.current = window.setTimeout(() => {
+      setPhase('RUNNING')
+      setStatus(bias + ' market detected. Bot is now watching for a valid setup.')
+    }, 650)
+  }
+
+  const stopBot = (): void => {
+    setPhase('READY')
+    setStatus(activePosition ? 'Bot paused — existing simulated position is still managed by SHAFX' : 'Bot paused')
+  }
+
+  return (
+    <section className="rounded-2xl border border-shafx-border bg-shafx-surface p-3.5 text-sm shadow-[0_14px_36px_rgba(0,0,0,.22)] sm:p-4">
+      <header className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-shafx-accent/10 text-shafx-accent"><Bot className="h-5 w-5" /></div>
+          <div className="min-w-0">
+            <h2 className="truncate text-base font-semibold">{plan.label}</h2>
+            <p className="mt-0.5 text-[10px] leading-4 text-shafx-textMuted">Structure, liquidity, setup and risk analysis. Simulator-only execution.</p>
+          </div>
+        </div>
+        <span className={phase === 'RUNNING' ? 'flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border border-shafx-success/20 bg-shafx-success/5 px-2.5 text-[9px] font-semibold text-shafx-success' : 'flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border border-shafx-border bg-shafx-bg px-2.5 text-[9px] font-semibold text-shafx-textMuted'}>
+          <Activity className="h-3 w-3" />
+          {phase === 'ANALYZING' ? 'Analyzing' : phase === 'RUNNING' ? 'Running' : 'Ready'}
+        </span>
+      </header>
+
+      <div className="mt-3 rounded-xl border border-shafx-border bg-shafx-bg p-3.5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Market read</div>
+            <div className="mt-1.5 flex flex-wrap items-center gap-2">
+              <div className="text-xl font-semibold">{phase === 'ANALYZING' ? 'Analyzing…' : bias}</div>
+              <span className="rounded-lg border border-shafx-accent/20 bg-shafx-accent/5 px-2.5 py-1 text-[9px] font-semibold text-shafx-accent">{timeframe}</span>
+              <span className="rounded-lg border border-shafx-border px-2.5 py-1 text-[9px] text-shafx-textMuted">{research.agreement.toFixed(0)}% evidence agreement</span>
+            </div>
+          </div>
+          <Sparkles className="h-5 w-5 shrink-0 text-shafx-accent" />
+        </div>
+        <p className="mt-2 text-[11px] leading-5 text-shafx-textMuted">{setup ? 'Candidate ' + setup.direction + ' around ' + setup.entryPrice + '. ' + setup.rationale.join(' ') : 'No clean setup is available. The bot will wait rather than force a trade.'}</p>
+        {onReviewSetup && <button type="button" onClick={onReviewSetup} className="mt-3 min-h-11 w-full rounded-xl border border-shafx-accent/25 bg-shafx-accent/5 px-3 text-[10px] font-semibold text-shafx-accent active:bg-shafx-accent/10">Review setup in Market</button>}
+      </div>
+
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <section className="rounded-xl border border-shafx-accent/25 bg-shafx-accent/[0.045] p-3.5">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-shafx-accent" />
+            <div><div className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">Risk gate</div><div className="text-sm font-semibold">{riskModes[riskMode].label} mode</div></div>
+          </div>
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            {(Object.keys(riskModes) as RiskMode[]).map((mode) => (
+              <button key={mode} type="button" onClick={() => setRiskMode(mode)} className={riskMode === mode ? 'min-h-12 rounded-xl bg-shafx-accent px-1 text-[10px] font-semibold text-white' : 'min-h-12 rounded-xl border border-shafx-border bg-shafx-bg px-1 text-[10px] font-semibold text-shafx-textMuted'}>
+                {riskModes[mode].label}<span className="mt-0.5 block opacity-80">{riskModes[mode].percent}%</span>
+              </button>
+            ))}
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2 text-[10px]">
+            <div className="rounded-lg border border-shafx-border bg-shafx-bg px-2.5 py-2"><span className="text-shafx-textMuted">Balance</span><div className="mt-0.5 font-mono text-xs">${accountBalance.toFixed(2)}</div></div>
+            <div className="rounded-lg border border-shafx-border bg-shafx-bg px-2.5 py-2"><span className="text-shafx-textMuted">Max risk</span><div className="mt-0.5 font-mono text-xs text-shafx-danger">${riskAmount.toFixed(2)}</div></div>
+          </div>
+        </section>
+
+        <section className="rounded-xl border border-shafx-border bg-shafx-bg p-3.5">
+          <div className="flex items-center justify-between gap-3">
+            <div><div className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">Scan speed</div><div className="mt-1 text-sm font-semibold">{cycleSeconds}s cycle</div></div>
+            <Wallet className="h-4 w-4 text-shafx-accent" />
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            {([5, 10] as const).map((seconds) => (
+              <button key={seconds} type="button" disabled={seconds > plan.maxCycleSeconds} onClick={() => setCycleSeconds(seconds)} className={cycleSeconds === seconds ? 'min-h-12 rounded-xl border border-shafx-accent/40 bg-shafx-accent/10 text-[10px] font-semibold text-shafx-accent' : 'min-h-12 rounded-xl border border-shafx-border bg-shafx-surface text-[10px] font-semibold text-shafx-textMuted disabled:cursor-not-allowed disabled:opacity-35'}>
+                <span className="block">{seconds}s scan</span><span className="mt-0.5 block text-[9px] opacity-75">{cycleUnitsForSeconds(seconds)} unit{cycleUnitsForSeconds(seconds) > 1 ? 's' : ''}</span>
+              </button>
+            ))}
+          </div>
+          <div className="mt-3 rounded-lg border border-shafx-border px-2.5 py-2 text-[10px] text-shafx-textMuted"><span>Allowance</span><span className="float-right font-mono text-shafx-text">{cycleUnits}{plan.maxDailyCycleUnits === null ? ' / ∞' : ' / ' + plan.maxDailyCycleUnits}</span></div>
+        </section>
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2.5">
+        <button type="button" disabled={phase !== 'READY' || !symbolSpec} onClick={startBot} className="flex min-h-14 items-center justify-center gap-2 rounded-xl bg-shafx-success px-3 text-xs font-semibold text-white shadow-lg shadow-shafx-success/10 disabled:cursor-not-allowed disabled:opacity-35"><Play className="h-4 w-4" />Start bot</button>
+        <button type="button" disabled={phase === 'READY'} onClick={stopBot} className="flex min-h-14 items-center justify-center gap-2 rounded-xl border border-shafx-danger/30 bg-shafx-danger/5 px-3 text-xs font-semibold text-shafx-danger disabled:cursor-not-allowed disabled:opacity-35"><CircleStop className="h-4 w-4" />Stop</button>
+      </div>
+
+      <div className="mt-3 rounded-xl border border-shafx-border bg-shafx-bg p-3">
+        <div className="flex items-center justify-between gap-3"><span className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">Current status</span><span className="text-[9px] text-shafx-textMuted">Scans {cycles}</span></div>
+        <p className="mt-1.5 text-[11px] leading-5 text-shafx-text">{status}</p>
+        {lastResult && <div className={lastResult === 'WIN' ? 'mt-2 text-[10px] text-shafx-success' : lastResult === 'LOSS' ? 'mt-2 text-[10px] text-shafx-danger' : 'mt-2 text-[10px] text-shafx-textMuted'}>{lastResult === 'WIN' ? 'Profit → analyze again' : lastResult === 'LOSS' ? 'Loss → re-check strategy' : 'Waiting for a valid setup'}</div>}
+      </div>
+
+      <button type="button" onClick={() => setDetailsOpen((open) => !open)} className="mt-3 flex min-h-12 w-full items-center justify-between rounded-xl border border-shafx-border bg-shafx-bg px-3 text-xs text-shafx-textMuted">
+        <span>Advanced analysis</span>
+        <ChevronDown className={detailsOpen ? 'h-4 w-4 rotate-180 transition-transform' : 'h-4 w-4 transition-transform'} />
+      </button>
+
+      {detailsOpen && <div className="mt-2 space-y-2 rounded-xl border border-shafx-border bg-shafx-bg p-3 text-[10px] text-shafx-textMuted">
+        <div>Learning: {learning.summary}</div>
+        <div>Research agreement: {research.agreement.toFixed(0)}%.</div>
+        <div>Current price: {currentPrice}</div>
+        <div>{riskModes[riskMode].description}.</div>
+        <div>Multi-timeframe context is used before a simulated order is considered.</div>
+      </div>}
+
+      <div className="mt-3 rounded-xl border border-shafx-warning/15 bg-shafx-warning/[0.035] p-3 text-[9px] leading-4 text-shafx-textMuted">
+        <strong className="text-shafx-warning">Simulator only.</strong> This bot never sends broker orders. It creates SHAFX simulated positions and is not financial advice.
+      </div>
+    </section>
+  )
 }

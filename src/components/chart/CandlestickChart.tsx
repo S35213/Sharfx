@@ -111,7 +111,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
 
     annotations.forEach(addLine)
     userLevels.forEach(addLine)
-    if (Number.isFinite(lastClose) && lastClose > 0) lines.push(series.createPriceLine({ price: lastClose, color: '#6B7688', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: 'Last' }))
+    if (Number.isFinite(lastClose) && lastClose > 0) lines.push(series.createPriceLine({ price: lastClose, color: '#6B7688', lineWidth: 1, lineStyle: 2, axisLabelVisible: !compact, title: compact ? '' : 'Last' }))
     return () => { lines.forEach((line) => series.removePriceLine(line)) }
   }, [annotations, lastClose, userLevels])
 
