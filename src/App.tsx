@@ -244,7 +244,7 @@ const TerminalContent: React.FC = () => {
   const displayPrice = replayActive ? (visibleCandles[visibleCandles.length - 1]?.close ?? currentPrice) : liveMarketActive && liveCandles.length > 0 ? (liveCandles[liveCandles.length - 1]?.close ?? currentPrice) : isSimulatorMode() && simulatedCandles.length > 0 ? (simulatedCandles[simulatedCandles.length - 1]?.close ?? currentPrice) : currentPrice
   const conversionRate = symbolSpec ? getConversionRate(symbolSpec.quoteCurrency, accountData?.currency ?? 'USD') : undefined
   const chartAnnotations = useMemo(() => buildAIChartAnnotations(selectedSymbol, chartCandles), [selectedSymbol, chartCandles])
-  const multiTimeframeCandles = useMultiTimeframeCandles(selectedSymbol, timeframe, chartCandles)
+  const multiTimeframeCandles = useMultiTimeframeCandles(selectedSymbol, timeframe, candles)
   const higherTimeframeAnnotations = useMemo(() => {
     const frames = timeframe === 'D1' ? ['H4'] as const : ['H4', 'D1'] as const
     return frames.flatMap((frame) => {
