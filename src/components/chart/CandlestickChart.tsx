@@ -12,7 +12,6 @@ interface CandlestickChartProps {
   annotations?: ChartAnnotation[]
   timeframe?: Timeframe
   symbol?: string
-  currentPrice?: number
   toolMode?: ChartToolMode
   pipSize?: number
   onToolNotice?: (message: string) => void
@@ -208,7 +207,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       }))
     }
     return () => { lines.forEach((line) => series.removePriceLine(line)) }
-  }, [annotations, armedAlerts, askPrice, bidPrice, currentPrice, lastClose, showPriceLabels, tradeLines, userLevels])
+  }, [annotations, armedAlerts, askPrice, bidPrice, lastClose, showPriceLabels, tradeLines, userLevels])
 
   useEffect(() => {
     const chart = chartRef.current
