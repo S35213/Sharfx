@@ -22,7 +22,8 @@ interface TapeTick {
 
 const formatExactTime = (timestamp: number): string => {
   const date = new Date(timestamp)
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 })
+  const pad = (number: number, width = 2): string => String(number).padStart(width, '0')
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${pad(date.getMilliseconds(), 3)}`
 }
 
 const seedTape = (candles: OHLCV[], precision: number): TapeTick[] => candles.slice(-10).flatMap((candle, index) => {
