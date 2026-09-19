@@ -3,7 +3,7 @@ import type { TradeOrder } from '../../types'
 export interface SimulationFlowPoint {
   id: string
   time: string
-  price: number
+  price: number | null
   side: 'BUY' | 'SELL'
   kind: 'OPEN' | 'CLOSE'
   profit: number
@@ -21,7 +21,7 @@ export function buildSimulationFlow(openPositions: TradeOrder[], tradeHistory: T
   const closed = tradeHistory.map((trade) => ({
     id: trade.id + '-close',
     time: trade.closeTime ?? trade.openTime,
-    price: trade.profit !== undefined && trade.profit !== 0 ? (trade.type === 'BUY' ? trade.entryPrice + trade.profit : trade.entryPrice - trade.profit) : trade.entryPrice,
+    price: null,
     side: trade.type,
     kind: 'CLOSE' as const,
     profit: trade.profit ?? 0,
