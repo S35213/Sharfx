@@ -5,6 +5,11 @@ import { buildSimulationFlow } from './simulationFlow'
 
 interface Props { openPositions: TradeOrder[]; tradeHistory: TradeOrder[] }
 
+const formatExactTime = (date: Date): string => {
+  const pad = (value: number, width = 2): string => String(value).padStart(width, '0')
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${pad(date.getMilliseconds(), 3)}`
+}
+
 export const SimulationFlowChart: React.FC<Props> = ({ openPositions, tradeHistory }) => {
   const points = useMemo(() => buildSimulationFlow(openPositions, tradeHistory), [openPositions, tradeHistory])
   const closes = points.filter((point) => point.kind === 'CLOSE')
@@ -62,7 +67,7 @@ export const SimulationFlowChart: React.FC<Props> = ({ openPositions, tradeHisto
               </span>
               <span className="text-right text-[9px] tabular text-shafx-textMuted">
                 {point.kind === 'CLOSE' ? ((point.profit ?? 0) >= 0 ? <ArrowUpRight className="inline h-3 w-3 text-shafx-success" /> : <ArrowDownRight className="inline h-3 w-3 text-shafx-danger" />) : ''}
-                {new Date(point.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 })}
+                {formatExactTime(new Date(point.time))}
               </span>
             </div>
           )
