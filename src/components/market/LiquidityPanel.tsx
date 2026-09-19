@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { Activity, Layers3, Radio, Waves } from 'lucide-react'
 import type { OHLCV } from '../../types'
 
@@ -38,15 +38,8 @@ const seedTape = (candles: OHLCV[], precision: number): TapeTick[] => candles.sl
 }).sort((a, b) => b.time - a.time).slice(0, 18)
 
 export const LiquidityPanel: React.FC<Props> = ({ symbol, price, precision, pipSize = 0.0001, providerDepthAvailable = false, candles = [] }) => {
-  const priceRef = useRef(price)
   const [tape, setTape] = useState<TapeTick[]>(() => seedTape(candles, precision))
   const [tick, setTick] = useState(0)
-  priceRef.current = price
-
-  useEffect(() => {
-    setTape(seedTape(candles, precision))
-  }, [symbol])
-
   useEffect(() => {
     let sequence = 0
     const timer = window.setInterval(() => {
@@ -59,14 +52,14 @@ export const LiquidityPanel: React.FC<Props> = ({ symbol, price, precision, pipS
         const wave = Math.sin(sequence * 1.21 + symbol.length)
         const side: TapeSide = sequence % 4 === 0 ? (lastSide === 'BUY' ? 'SELL' : 'BUY') : wave >= 0 ? 'BUY' : 'SELL'
         const drift = pipSize * (0.28 * Math.sin(sequence * 0.91) + 0.12 * Math.cos(sequence * 0.37))
-        const nextPrice = Number((Math.max(pipSize / 10, priceRef.current + drift)).toFixed(precision))
+        const nextPrice = Number((Math.max(pipSize / 10, price + drift)).toFixed(precision))
         const lots = Number((0.05 + ((sequence * 13) % 85) / 100).toFixed(2))
         const next: TapeTick = { id: `live-${symbol}-${now}-${sequence}`, time: now, side, lots, price: nextPrice }
         return [next, ...previous].slice(0, 18)
       })
     }, 850)
     return () => window.clearInterval(timer)
-  }, [pipSize, precision, symbol])
+  }, [pipSize, precision, price, symbol])
 
   const rows = useMemo(() => {
     const step = pipSize
