@@ -33,7 +33,7 @@ export const calculatePositionProfit = (order: TradeOrder, exitPrice: number, sp
 export const closeSimulatedPosition = (order: TradeOrder, input: PositionCloseInput, spec: SymbolSpec): TradeOrder => {
   if (order.status !== 'open') throw new Error('Only open positions can be closed.')
   const profit = calculatePositionProfit(order, input.exitPrice, spec, input.conversionRate)
-  return { ...order, status: 'closed', closeTime: input.closeTime ?? new Date().toISOString(), profit }
+  return { ...order, status: 'closed', closeTime: input.closeTime ?? new Date().toISOString(), exitPrice: Number(input.exitPrice.toFixed(spec.pricePrecision)), profit }
 }
 
 export const markSimulatedPosition = (order: TradeOrder, input: PositionMarkInput): TradeOrder => {
