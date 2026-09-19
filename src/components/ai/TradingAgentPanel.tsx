@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Activity, Bot, ChevronDown, CircleStop, Play, ShieldCheck, Sparkles, Wallet } from 'lucide-react'
+import { Activity, Bot, ChevronDown, Play, RefreshCw, ShieldCheck, Sparkles, Wallet } from 'lucide-react'
 import { analyzeLiquidity } from '../../engine/liquidity'
 import { analyzeMarketStructure, findSwingPoints } from '../../engine/marketStructure'
 import { analyzeSetup } from '../../engine/setup'
@@ -265,10 +265,14 @@ export function TradingAgentPanel({
 
   const rescanBot = (): void => {
     if (analysisTimer.current) window.clearTimeout(analysisTimer.current)
-    setPhase('READY')
     setLastResult(null)
     setScanNonce((value) => value + 1)
-    setStatus(activePosition ? 'Refreshing analysis while the existing simulated position is monitored.' : 'Market analysis refreshed. Ready for a fresh scan.')
+    setPhase('ANALYZING')
+    setStatus(activePosition ? 'Refreshing market structure, liquidity and setup while monitoring the existing simulated position.' : 'Refreshing market structure, liquidity and setup…')
+    analysisTimer.current = window.setTimeout(() => {
+      setPhase('READY')
+      setStatus(activePosition ? 'Analysis refreshed. Existing simulated position remains under management.' : 'Analysis refreshed. Bot is ready for the next scan.')
+    }, 650)
   }
 
   const stopBot = (): void => {
@@ -305,25 +309,17 @@ export function TradingAgentPanel({
           <Sparkles className="h-5 w-5 shrink-0 text-shafx-accent" />
         </div>
         <p className="mt-2 text-[11px] leading-5 text-shafx-textMuted">{setup ? 'Candidate ' + setup.direction + ' around ' + setup.entryPrice + '. ' + setup.rationale.join(' ') : 'No clean setup is available. The bot will wait rather than force a trade.'}</p>
-        <div className="mt-3 grid grid-cols-2 gap-2">
+        <div className="mt-3 flex items-center gap-2">
           <button
             type="button"
-            disabled={!symbolSpec}
-            onClick={phase === 'RUNNING' || phase === 'ANALYZING' ? rescanBot : startBot}
-            className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-shafx-accent px-2.5 text-[10px] font-semibold text-white shadow-lg shadow-shafx-accent/10 disabled:cursor-not-allowed disabled:opacity-35"
+            disabled={!symbolSpec || phase === 'ANALYZING'}
+            onClick={rescanBot}
+            className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-shafx-accent/35 bg-shafx-accent/10 px-3 text-[10px] font-semibold text-shafx-accent active:bg-shafx-accent/20 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <Play className="h-3.5 w-3.5" />
-            {phase === 'RUNNING' || phase === 'ANALYZING' ? 'Fresh scan' : lastResult ? 'Fresh scan' : 'Start scan'}
+            <RefreshCw className={phase === 'ANALYZING' ? 'h-3.5 w-3.5 animate-spin' : 'h-3.5 w-3.5'} />
+            {phase === 'ANALYZING' ? 'Refreshing analysis…' : 'Refresh analysis'}
           </button>
-          <button
-            type="button"
-            disabled={phase === 'READY'}
-            onClick={stopBot}
-            className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-shafx-danger/30 bg-shafx-danger/5 px-2.5 text-[10px] font-semibold text-shafx-danger disabled:cursor-not-allowed disabled:opacity-35"
-          >
-            <CircleStop className="h-3.5 w-3.5" />
-            Stop
-          </button>
+          {phase === 'RUNNING' && <span className="rounded-xl border border-shafx-success/20 bg-shafx-success/5 px-2.5 py-2 text-[9px] font-semibold text-shafx-success">Auto scan ON</span>}
         </div>
         {onReviewSetup && <button type="button" onClick={onReviewSetup} className="mt-2 min-h-10 w-full rounded-xl border border-shafx-border bg-shafx-surface px-3 text-[10px] font-semibold text-shafx-textMuted active:bg-shafx-accent/10">Review setup in Market</button>}
       </div>
