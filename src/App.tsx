@@ -242,6 +242,14 @@ const TerminalContent: React.FC = () => {
   const replayActive = !liveMarketActive && visibleCandles.length > 0 && visibleCandles.length < candles.length
   const chartCandles = replayActive ? visibleCandles : liveMarketActive && liveCandles.length > 0 ? liveCandles : (isSimulatorMode() && simulatedCandles.length > 0 ? simulatedCandles : visibleCandles)
   const displayPrice = replayActive ? (visibleCandles[visibleCandles.length - 1]?.close ?? currentPrice) : liveMarketActive && liveCandles.length > 0 ? (liveCandles[liveCandles.length - 1]?.close ?? currentPrice) : isSimulatorMode() && simulatedCandles.length > 0 ? (simulatedCandles[simulatedCandles.length - 1]?.close ?? currentPrice) : currentPrice
+  const chartPriceBounds = useMemo(() => {
+    const prices = chartCandles.flatMap((candle) => [candle.high, candle.low]).filter((value) => Number.isFinite(value))
+    const low = Math.min(...prices, displayPrice)
+    const high = Math.max(...prices, displayPrice)
+    const range = Math.max(high - low, symbolSpec?.pipSize ?? 0.0001)
+    const position = Math.max(6, Math.min(94, ((high - displayPrice) / range) * 100))
+    return { position }
+  }, [chartCandles, displayPrice, symbolSpec?.pipSize])
   const conversionRate = symbolSpec ? getConversionRate(symbolSpec.quoteCurrency, accountData?.currency ?? 'USD') : undefined
   const chartAnnotations = useMemo(() => buildAIChartAnnotations(selectedSymbol, chartCandles), [selectedSymbol, chartCandles])
   const multiTimeframeCandles = useMultiTimeframeCandles(selectedSymbol, timeframe, candles)
@@ -427,6 +435,7 @@ const TerminalContent: React.FC = () => {
           <MobileChartTools tool={chartTool} onToolChange={setChartTool} />
           <div className="relative h-[48vh] min-h-[320px] p-2 sm:p-3 lg:h-auto lg:min-h-[420px] lg:flex-1">
             <CandlestickChart data={chartCandles} timeframe={timeframe} annotations={[...chartAnnotations, ...higherTimeframeAnnotations]} tradeLines={tradeLines} currentPrice={displayPrice} bidPrice={displayPrice - symbolSpec.pipSize * 0.4} askPrice={displayPrice + symbolSpec.pipSize * 0.4} toolMode={chartToolMode} pipSize={symbolSpec.pipSize} onToolNotice={pushToast} showGrid={chartSettings.showGrid} showPriceLabels={chartSettings.showPriceLabels} />
+            {chartSettings.showPriceLabels && Number.isFinite(displayPrice) && <div className="pointer-events-none absolute right-[5.8rem] z-20 -translate-y-1/2 rounded-md border border-shafx-accent/50 bg-shafx-accent px-1.5 py-1 font-mono text-[9px] font-bold text-white shadow-lg sm:right-[6.2rem]" style={{ top: `${chartPriceBounds.position}%` }}>{displayPrice.toFixed(symbolSpec.pricePrecision)}</div>}
             <div className="pointer-events-none absolute bottom-5 right-5 z-10 hidden items-center gap-1.5 rounded-xl border border-shafx-border bg-shafx-surface/90 px-2.5 py-1.5 text-[9px] text-shafx-textMuted backdrop-blur sm:flex"><Maximize2 className="h-3 w-3 text-shafx-accent" />Scroll / pinch to navigate</div>
           </div>
           <div className="grid grid-cols-2 gap-2 border-t border-shafx-border bg-shafx-surface/55 p-2 sm:grid-cols-4">
