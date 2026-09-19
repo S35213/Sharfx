@@ -81,6 +81,16 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   }, [])
 
   useEffect(() => {
+    const chart = chartRef.current
+    if (!chart) return
+    chart.applyOptions({
+      grid: showGrid
+        ? { vertLines: { color: '#131A23' }, horzLines: { color: '#131A23' } }
+        : { vertLines: { color: 'transparent' }, horzLines: { color: 'transparent' } },
+    })
+  }, [showGrid])
+
+  useEffect(() => {
     const series = seriesRef.current
     const chart = chartRef.current
     if (!series || !chart) return
