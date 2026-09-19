@@ -266,7 +266,7 @@ const TerminalContent: React.FC = () => {
       const lines: ChartAnnotation[] = [
         { id: `trade-${trade.id}-entry`, price: trade.entryPrice, label: `${trade.type} Entry • ${trade.lotSize.toFixed(2)} lots`, color: trade.type === 'BUY' ? '#22D3A5' : '#FF5C75', lineWidth: 3 },
       ]
-      if (Number.isFinite(trade.stopLoss)) lines.push({ id: `trade-${trade.id}-sl`, price: trade.stopLoss, label: `${trade.type} SL`, color: '#F5B84B', lineWidth: 2 })
+      if (Number.isFinite(Number(trade.stopLoss))) lines.push({ id: `trade-${trade.id}-sl`, price: Number(trade.stopLoss), label: `${trade.type} SL`, color: '#F5B84B', lineWidth: 2 })
       if (Number.isFinite(trade.takeProfit)) lines.push({ id: `trade-${trade.id}-tp`, price: trade.takeProfit, label: `${trade.type} TP`, color: '#7C5CFC', lineWidth: 2 })
       return lines
     }), [openPositions, selectedSymbol])
