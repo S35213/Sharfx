@@ -10,13 +10,29 @@ const emptyResult: RiskCalculationResult = { isValid: false, riskAmount: 0, stop
 
 export const OrderPanel: React.FC<Props> = ({ symbol, currentPrice, accountBalance, accountCurrency, symbolSpec, conversionRate, onSubmitOrder, aiSetup }) => {
   const [orderType, setOrderType] = useState<'BUY' | 'SELL'>('BUY')
-  const [lotSize, setLotSize] = useState('0.10')
+  const readStoredLotSize = (): string => typeof window !== 'undefined' ? window.sessionStorage.getItem('shafx-simulator-lot-size') || '0.10' : '0.10'
+  const [lotSize, setLotSize] = useState(readStoredLotSize)
   const [entryPrice, setEntryPrice] = useState(formatPrice(currentPrice, symbolSpec.pricePrecision))
   const [stopLoss, setStopLoss] = useState('')
   const [takeProfit, setTakeProfit] = useState('')
   const [riskPercent, setRiskPercent] = useState('1.0')
 
   useEffect(() => { setEntryPrice(currentPrice.toFixed(symbolSpec.pricePrecision)); setStopLoss(''); setTakeProfit('') }, [symbol, currentPrice, symbolSpec.pricePrecision])
+
+  useEffect(() => {
+    const onLotSize = (event: Event): void => {
+      const detail = (event as CustomEvent<string>).detail
+      if (detail) setLotSize(detail)
+    }
+    window.addEventListener('shafx-lot-size', onLotSize)
+    return () => window.removeEventListener('shafx-lot-size', onLotSize)
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !lotSize.trim()) return
+    window.sessionStorage.setItem('shafx-simulator-lot-size', lotSize)
+    window.dispatchEvent(new CustomEvent<string>('shafx-lot-size', { detail: lotSize }))
+  }, [lotSize])
 
   const applyAISetup = (): void => {
     if (!aiSetup) return
