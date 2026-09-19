@@ -21,7 +21,7 @@ export function buildSimulationFlow(openPositions: TradeOrder[], tradeHistory: T
   const closed = tradeHistory.map((trade) => ({
     id: trade.id + '-close',
     time: trade.closeTime ?? trade.openTime,
-    price: null,
+    price: trade.exitPrice ?? null,
     side: trade.type,
     kind: 'CLOSE' as const,
     profit: trade.profit ?? 0,
