@@ -239,9 +239,9 @@ const TerminalContent: React.FC = () => {
     return () => window.clearInterval(timer)
   }, [selectedSymbol, simulatedCandles.length, symbolSpec, timeframe])
 
-  const chartCandles = liveMarketActive && liveCandles.length > 0 ? liveCandles : (isSimulatorMode() && simulatedCandles.length > 0 ? simulatedCandles : visibleCandles)
   const replayActive = !liveMarketActive && visibleCandles.length > 0 && visibleCandles.length < candles.length
-  const displayPrice = liveMarketActive && liveCandles.length > 0 ? (liveCandles[liveCandles.length - 1]?.close ?? currentPrice) : replayActive ? (visibleCandles[visibleCandles.length - 1]?.close ?? currentPrice) : currentPrice
+  const chartCandles = replayActive ? visibleCandles : liveMarketActive && liveCandles.length > 0 ? liveCandles : (isSimulatorMode() && simulatedCandles.length > 0 ? simulatedCandles : visibleCandles)
+  const displayPrice = replayActive ? (visibleCandles[visibleCandles.length - 1]?.close ?? currentPrice) : liveMarketActive && liveCandles.length > 0 ? (liveCandles[liveCandles.length - 1]?.close ?? currentPrice) : isSimulatorMode() && simulatedCandles.length > 0 ? (simulatedCandles[simulatedCandles.length - 1]?.close ?? currentPrice) : currentPrice
   const conversionRate = symbolSpec ? getConversionRate(symbolSpec.quoteCurrency, accountData?.currency ?? 'USD') : undefined
   const chartAnnotations = useMemo(() => buildAIChartAnnotations(selectedSymbol, chartCandles), [selectedSymbol, chartCandles])
   const aiSetup = useMemo(() => analyzeCurrentSetup(selectedSymbol, chartCandles)?.preferredSetup ?? null, [selectedSymbol, chartCandles])
