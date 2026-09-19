@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Activity, Layers3, Radio, Waves } from 'lucide-react'
 import type { OHLCV } from '../../types'
 
@@ -11,7 +11,62 @@ interface Props {
   candles?: OHLCV[]
 }
 
+type TapeSide = 'BUY' | 'SELL'
+interface TapeTick {
+  id: string
+  time: number
+  side: TapeSide
+  lots: number
+  price: number
+}
+
+const formatExactTime = (timestamp: number): string => {
+  const date = new Date(timestamp)
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 })
+}
+
+const seedTape = (candles: OHLCV[], precision: number): TapeTick[] => candles.slice(-10).flatMap((candle, index) => {
+  const span = Math.max(Math.abs(candle.close - candle.open), Number.EPSILON)
+  const primarySide: TapeSide = candle.close >= candle.open ? 'BUY' : 'SELL'
+  const secondarySide: TapeSide = primarySide === 'BUY' ? 'SELL' : 'BUY'
+  const baseLots = 0.08 + ((index * 17) % 48) / 100
+  return [
+    { id: `seed-${candle.time}-a`, time: candle.time * 1000 + 120, side: primarySide, lots: Number(baseLots.toFixed(2)), price: Number((candle.open + (candle.close - candle.open) * 0.35).toFixed(precision)) },
+    { id: `seed-${candle.time}-b`, time: candle.time * 1000 + 520, side: secondarySide, lots: Number((baseLots * (0.7 + span / Math.max(span, 0.0000001) * 0.3)).toFixed(2)), price: Number((candle.close - (candle.close - candle.open) * 0.15).toFixed(precision)) },
+  ]
+}).sort((a, b) => b.time - a.time).slice(0, 18)
+
 export const LiquidityPanel: React.FC<Props> = ({ symbol, price, precision, pipSize = 0.0001, providerDepthAvailable = false, candles = [] }) => {
+  const priceRef = useRef(price)
+  const [tape, setTape] = useState<TapeTick[]>(() => seedTape(candles, precision))
+  const [tick, setTick] = useState(0)
+  priceRef.current = price
+
+  useEffect(() => {
+    setTape(seedTape(candles, precision))
+  }, [symbol])
+
+  useEffect(() => {
+    let sequence = 0
+    const timer = window.setInterval(() => {
+      sequence += 1
+      setTick((value) => value + 1)
+      setTape((previous) => {
+        const now = Date.now()
+        const last = previous[0]
+        const lastSide = last?.side ?? 'SELL'
+        const wave = Math.sin(sequence * 1.21 + symbol.length)
+        const side: TapeSide = sequence % 4 === 0 ? (lastSide === 'BUY' ? 'SELL' : 'BUY') : wave >= 0 ? 'BUY' : 'SELL'
+        const drift = pipSize * (0.28 * Math.sin(sequence * 0.91) + 0.12 * Math.cos(sequence * 0.37))
+        const nextPrice = Number((Math.max(pipSize / 10, priceRef.current + drift)).toFixed(precision))
+        const lots = Number((0.05 + ((sequence * 13) % 85) / 100).toFixed(2))
+        const next: TapeTick = { id: `live-${symbol}-${now}-${sequence}`, time: now, side, lots, price: nextPrice }
+        return [next, ...previous].slice(0, 18)
+      })
+    }, 850)
+    return () => window.clearInterval(timer)
+  }, [pipSize, precision, symbol])
+
   const rows = useMemo(() => {
     const step = pipSize
     const levels = Array.from({ length: 6 }, (_, index) => index + 1)
@@ -19,14 +74,6 @@ export const LiquidityPanel: React.FC<Props> = ({ symbol, price, precision, pipS
     const bids = levels.map((level) => ({ price: Number((price - step * level).toFixed(precision)), size: 22 + ((level * 23) % 72) }))
     return { asks: asks.reverse(), bids }
   }, [pipSize, precision, price])
-
-  const tape = useMemo(() => candles.slice(-8).map((candle, index) => ({
-    time: new Date(candle.time * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-    side: candle.close >= candle.open ? 'BUY' as const : 'SELL' as const,
-    lots: Number((0.12 + ((candle.volume ?? 100) % 88) / 100).toFixed(2)),
-    price: candle.close,
-    key: `${candle.time}-${index}`,
-  })).reverse(), [candles])
 
   const spark = useMemo(() => {
     const values = candles.slice(-36).map((c) => c.close)
@@ -44,6 +91,10 @@ export const LiquidityPanel: React.FC<Props> = ({ symbol, price, precision, pipS
   const max = Math.max(...rows.asks.map((row) => row.size), ...rows.bids.map((row) => row.size))
   const askTotal = rows.asks.reduce((sum, row) => sum + row.size, 0)
   const bidTotal = rows.bids.reduce((sum, row) => sum + row.size, 0)
+  const tapeBuyLots = tape.filter((tick) => tick.side === 'BUY').reduce((sum, event) => sum + event.lots, 0)
+  const tapeSellLots = tape.filter((tick) => tick.side === 'SELL').reduce((sum, event) => sum + event.lots, 0)
+  const tapeBuyCount = tape.filter((tick) => tick.side === 'BUY').length
+  const tapeSellCount = tape.filter((tick) => tick.side === 'SELL').length
   const imbalance = ((bidTotal - askTotal) / Math.max(1, bidTotal + askTotal)) * 100
   const spread = pipSize * 0.8
   const bid = price - spread / 2
@@ -53,9 +104,9 @@ export const LiquidityPanel: React.FC<Props> = ({ symbol, price, precision, pipS
     <header className="flex items-center justify-between border-b border-shafx-border px-4 py-3">
       <div className="flex items-center gap-2">
         <Layers3 className="h-4 w-4 text-shafx-accent" />
-        <div><div className="text-xs font-semibold">Market flow & liquidity</div><div className="text-[9px] text-shafx-textMuted">{symbol} • {providerDepthAvailable ? 'provider depth' : 'SHAFX simulation'}</div></div>
+        <div><div className="text-xs font-semibold">Market flow & liquidity</div><div className="text-[9px] text-shafx-textMuted">{symbol} • {providerDepthAvailable ? 'provider depth' : 'SHAFX simulated market'}</div></div>
       </div>
-      <span className="inline-flex items-center gap-1 rounded-full border border-shafx-border bg-shafx-bg px-2 py-1 text-[9px] text-shafx-textMuted"><Radio className={providerDepthAvailable ? 'h-3 w-3 text-shafx-success' : 'h-3 w-3 text-shafx-warning'} />{providerDepthAvailable ? 'LIVE' : 'SIMULATED'}</span>
+      <span className="inline-flex items-center gap-1 rounded-full border border-shafx-border bg-shafx-bg px-2 py-1 text-[9px] text-shafx-textMuted"><Radio className={providerDepthAvailable ? 'h-3 w-3 text-shafx-success' : 'h-3 w-3 text-shafx-warning'} />{providerDepthAvailable ? 'LIVE' : 'LIVE SIM'}</span>
     </header>
 
     <div className="border-b border-shafx-border p-3">
@@ -69,7 +120,7 @@ export const LiquidityPanel: React.FC<Props> = ({ symbol, price, precision, pipS
     </div>
 
     <div className="grid grid-cols-[1fr_74px_1fr] border-b border-shafx-border px-3 py-2 text-[9px] uppercase tracking-[0.14em] text-shafx-textMuted"><span className="text-right">Sell depth</span><span className="text-center">Price</span><span>Buy depth</span></div>
-    <div className="max-h-[360px] flex-1 overflow-auto px-2 py-2">
+    <div className="max-h-[320px] flex-1 overflow-auto px-2 py-2">
       {rows.asks.map((row) => <div key={row.price} className="relative grid grid-cols-[1fr_74px_1fr] items-center px-1 py-2 text-[10px]">
         <div className="flex justify-end pr-2"><div className="relative h-5 w-[88%] overflow-hidden rounded bg-shafx-danger/5"><div className="absolute inset-y-0 right-0 rounded bg-shafx-danger/20" style={{ width: `${Math.round(row.size / max * 100)}%` }} /></div></div>
         <span className="z-10 text-center font-mono text-shafx-text">{row.price.toFixed(precision)}</span>
@@ -87,14 +138,22 @@ export const LiquidityPanel: React.FC<Props> = ({ symbol, price, precision, pipS
     </div>
 
     <div className="border-t border-shafx-border">
-      <div className="flex items-center gap-2 px-3 py-2.5"><Activity className="h-3.5 w-3.5 text-shafx-accent" /><div><div className="text-[10px] font-semibold">Time & sales preview</div><div className="text-[8px] text-shafx-textMuted">Derived from simulated candle flow until a provider supplies real tick trades.</div></div></div>
+      <div className="flex items-center justify-between gap-2 px-3 py-2.5">
+        <div className="flex items-center gap-2"><Activity className="h-3.5 w-3.5 text-shafx-accent" /><div><div className="text-[10px] font-semibold">Time & sales</div><div className="text-[8px] text-shafx-textMuted">Synthetic tick stream • exact simulated execution time</div></div></div>
+        <span className="text-[8px] font-semibold text-shafx-success">TICK {tick}</span>
+      </div>
+      <div className="grid grid-cols-2 gap-2 px-3 pb-2 text-[9px]">
+        <div className="rounded-lg border border-shafx-success/20 bg-shafx-success/5 p-2"><span className="block text-shafx-textMuted">Buy orders</span><strong className="mt-0.5 block font-mono text-shafx-success">{tapeBuyCount} • {tapeBuyLots.toFixed(2)} lots</strong></div>
+        <div className="rounded-lg border border-shafx-danger/20 bg-shafx-danger/5 p-2"><span className="block text-shafx-textMuted">Sell orders</span><strong className="mt-0.5 block font-mono text-shafx-danger">{tapeSellCount} • {tapeSellLots.toFixed(2)} lots</strong></div>
+      </div>
       <div className="space-y-1 px-3 pb-3">
-        {tape.length ? tape.map((tick) => <div key={tick.key} className="grid grid-cols-[58px_46px_1fr_72px] items-center gap-1 rounded-lg border border-shafx-border/70 bg-shafx-bg px-2 py-1.5 text-[9px]">
-          <span className="font-mono text-shafx-textMuted">{tick.time}</span>
-          <span className={tick.side === 'BUY' ? 'font-semibold text-shafx-success' : 'font-semibold text-shafx-danger'}>{tick.side}</span>
-          <span className="font-mono tabular">{tick.lots.toFixed(2)} lots</span>
-          <span className={tick.side === 'BUY' ? 'text-right font-mono text-shafx-success' : 'text-right font-mono text-shafx-danger'}>{tick.price.toFixed(precision)}</span>
-        </div>) : <div className="rounded-lg border border-dashed border-shafx-border p-3 text-[9px] text-shafx-textMuted">No simulated tape events yet.</div>}
+        <div className="grid grid-cols-[76px_46px_1fr_84px] gap-1 px-2 text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted"><span>Time</span><span>Side</span><span>Volume</span><span className="text-right">Price</span></div>
+        {tape.map((entry) => <div key={entry.id} className="grid grid-cols-[76px_46px_1fr_84px] items-center gap-1 rounded-lg border border-shafx-border/70 bg-shafx-bg px-2 py-1.5 text-[9px]">
+          <span className="font-mono tabular text-shafx-textMuted">{formatExactTime(entry.time)}</span>
+          <span className={entry.side === 'BUY' ? 'font-semibold text-shafx-success' : 'font-semibold text-shafx-danger'}>{entry.side}</span>
+          <span className="font-mono tabular">{entry.lots.toFixed(2)} lots</span>
+          <span className={entry.side === 'BUY' ? 'text-right font-mono text-shafx-success' : 'text-right font-mono text-shafx-danger'}>{entry.price.toFixed(precision)}</span>
+        </div>)}
       </div>
     </div>
 
@@ -103,6 +162,6 @@ export const LiquidityPanel: React.FC<Props> = ({ symbol, price, precision, pipS
       <div className="rounded-lg border border-shafx-border bg-shafx-bg p-2"><span className="block text-shafx-textMuted">Ask depth</span><strong className="mt-1 block font-mono text-shafx-danger">{askTotal}</strong></div>
       <div className="rounded-lg border border-shafx-border bg-shafx-bg p-2"><span className="block text-shafx-textMuted">Imbalance</span><strong className={`mt-1 block font-mono ${imbalance >= 0 ? 'text-shafx-success' : 'text-shafx-danger'}`}>{imbalance >= 0 ? '+' : ''}{imbalance.toFixed(1)}%</strong></div>
     </footer>
-    <div className="border-t border-shafx-border px-4 py-2 text-[9px] leading-relaxed text-shafx-textMuted"><Waves className="mr-1 inline h-3 w-3 text-shafx-accent" />{providerDepthAvailable ? 'Depth is supplied by the connected provider adapter.' : 'Simulation preview only — real depth and real Time & Sales appear when a provider adapter exposes normalized market-depth/tick data.'}</div>
+    <div className="border-t border-shafx-border px-4 py-2 text-[9px] leading-relaxed text-shafx-textMuted"><Waves className="mr-1 inline h-3 w-3 text-shafx-accent" />{providerDepthAvailable ? 'Depth is supplied by the connected provider adapter.' : 'All tick, volume and participant-side activity above is synthetic simulator data; real Time & Sales and real depth require normalized provider tick/depth data.'}</div>
   </section>
 }
