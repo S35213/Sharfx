@@ -13,8 +13,9 @@ import { DerivCashierLinks } from './components/market/DerivCashierLinks'
 import { LiquidityPanel } from './components/market/LiquidityPanel'
 import { ProviderCapabilityPanel } from './components/market/ProviderCapabilityPanel'
 import { FXMoveMatrix } from './components/market/FXMoveMatrix'
-import { CandlestickChart, type ChartToolMode } from './components/chart/CandlestickChart'
+import { CandlestickChart, type ChartAnnotation, type ChartToolMode } from './components/chart/CandlestickChart'
 import { analyzeCurrentSetup, buildAIChartAnnotations } from './components/chart/buildAIChartAnnotations'
+import { useMultiTimeframeCandles } from './engine/agent/loadMultiTimeframe'
 import { Watchlist } from './components/watchlist/Watchlist'
 import { MarketAnalysisPanel } from './components/analysis/MarketAnalysis'
 import { AIAssistantPanel } from './components/ai/AIAssistantPanel'
@@ -243,6 +244,33 @@ const TerminalContent: React.FC = () => {
   const displayPrice = replayActive ? (visibleCandles[visibleCandles.length - 1]?.close ?? currentPrice) : liveMarketActive && liveCandles.length > 0 ? (liveCandles[liveCandles.length - 1]?.close ?? currentPrice) : isSimulatorMode() && simulatedCandles.length > 0 ? (simulatedCandles[simulatedCandles.length - 1]?.close ?? currentPrice) : currentPrice
   const conversionRate = symbolSpec ? getConversionRate(symbolSpec.quoteCurrency, accountData?.currency ?? 'USD') : undefined
   const chartAnnotations = useMemo(() => buildAIChartAnnotations(selectedSymbol, chartCandles), [selectedSymbol, chartCandles])
+  const multiTimeframeCandles = useMultiTimeframeCandles(selectedSymbol, timeframe, chartCandles)
+  const higherTimeframeAnnotations = useMemo(() => {
+    const frames = timeframe === 'D1' ? ['H4'] as const : ['H4', 'D1'] as const
+    return frames.flatMap((frame) => {
+      const frameCandles = multiTimeframeCandles[frame] ?? []
+      return buildAIChartAnnotations(selectedSymbol, frameCandles)
+        .filter((annotation) => annotation.id === 'support' || annotation.id === 'resistance')
+        .map((annotation) => ({
+          ...annotation,
+          id: `htf-${frame}-${annotation.id}`,
+          label: `${frame} ${annotation.label}`,
+          lineWidth: 1 as const,
+        }))
+    })
+  }, [multiTimeframeCandles, selectedSymbol, timeframe])
+
+  const tradeLines = useMemo<ChartAnnotation[]>(() => openPositions
+    .filter((trade) => trade.symbol === selectedSymbol && trade.status === 'open')
+    .flatMap((trade) => {
+      const lines: ChartAnnotation[] = [
+        { id: `trade-${trade.id}-entry`, price: trade.entryPrice, label: `${trade.type} Entry • ${trade.lotSize.toFixed(2)} lots`, color: trade.type === 'BUY' ? '#22D3A5' : '#FF5C75', lineWidth: 3 },
+      ]
+      if (Number.isFinite(trade.stopLoss)) lines.push({ id: `trade-${trade.id}-sl`, price: trade.stopLoss, label: `${trade.type} SL`, color: '#F5B84B', lineWidth: 2 })
+      if (Number.isFinite(trade.takeProfit)) lines.push({ id: `trade-${trade.id}-tp`, price: trade.takeProfit, label: `${trade.type} TP`, color: '#7C5CFC', lineWidth: 2 })
+      return lines
+    }), [openPositions, selectedSymbol])
+
   const aiSetup = useMemo(() => analyzeCurrentSetup(selectedSymbol, chartCandles)?.preferredSetup ?? null, [selectedSymbol, chartCandles])
   const activeProviderId = activeProviderSelection?.providerId ?? 'simulator'
   const activeProviderDescriptor = providerCatalog.find((item) => item.id === activeProviderId) ?? providerCatalog.find((item) => item.id === 'simulator')
@@ -398,7 +426,7 @@ const TerminalContent: React.FC = () => {
           </div>
           <MobileChartTools tool={chartTool} onToolChange={setChartTool} />
           <div className="relative h-[48vh] min-h-[320px] p-2 sm:p-3 lg:h-auto lg:min-h-[420px] lg:flex-1">
-            <CandlestickChart data={chartCandles} timeframe={timeframe} annotations={chartAnnotations} currentPrice={displayPrice} toolMode={chartToolMode} pipSize={symbolSpec.pipSize} onToolNotice={pushToast} showGrid={chartSettings.showGrid} showPriceLabels={chartSettings.showPriceLabels} />
+            <CandlestickChart data={chartCandles} timeframe={timeframe} annotations={[...chartAnnotations, ...higherTimeframeAnnotations]} tradeLines={tradeLines} currentPrice={displayPrice} bidPrice={displayPrice - symbolSpec.pipSize * 0.4} askPrice={displayPrice + symbolSpec.pipSize * 0.4} toolMode={chartToolMode} pipSize={symbolSpec.pipSize} onToolNotice={pushToast} showGrid={chartSettings.showGrid} showPriceLabels={chartSettings.showPriceLabels} />
             <div className="pointer-events-none absolute bottom-5 right-5 z-10 hidden items-center gap-1.5 rounded-xl border border-shafx-border bg-shafx-surface/90 px-2.5 py-1.5 text-[9px] text-shafx-textMuted backdrop-blur sm:flex"><Maximize2 className="h-3 w-3 text-shafx-accent" />Scroll / pinch to navigate</div>
           </div>
           <div className="grid grid-cols-2 gap-2 border-t border-shafx-border bg-shafx-surface/55 p-2 sm:grid-cols-4">
