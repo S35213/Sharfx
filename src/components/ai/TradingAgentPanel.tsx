@@ -201,7 +201,7 @@ export function TradingAgentPanel({
       }
     }, cycleSeconds * 1000)
     return () => window.clearInterval(timer)
-  }, [accountBalance, accountCurrency, activePosition, bias, botPlan, botPositionId, conversionRate, cycleSeconds, cycleUnits, learning, losses, multiTimeframe, onBotOrder, phase, research, riskMode, runId, setup, symbol, symbolSpec, tradingContext])
+  }, [accountBalance, accountCurrency, activePosition, bias, botPlan, botPositionId, conversionRate, cycleSeconds, cycleUnits, learning, losses, multiTimeframe, onBotOrder, phase, research, riskMode, runId, setup, symbol, symbolSpec, tradingContext, lotSize, lotSizeValid, parsedLotSize])
 
   useEffect(() => () => {
     if (analysisTimer.current) window.clearTimeout(analysisTimer.current)
