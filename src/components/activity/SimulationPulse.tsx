@@ -13,7 +13,8 @@ interface Props {
 const formatTime = (value: string): string => {
   const date = new Date(value)
   if (!Number.isFinite(date.getTime())) return '—'
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 })
+  const pad = (number: number, width = 2): string => String(number).padStart(width, '0')
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${pad(date.getMilliseconds(), 3)}`
 }
 
 type MarketTick = { id: string; time: number; side: 'BUY' | 'SELL'; lots: number; price: number }
