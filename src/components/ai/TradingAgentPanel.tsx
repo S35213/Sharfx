@@ -89,7 +89,6 @@ export function TradingAgentPanel({
   const riskAmount = accountBalance * (riskModes[riskMode].percent / 100)
   const parsedLotSize = Number(lotSize)
   const lotSizeValid = symbolSpec ? Number.isFinite(parsedLotSize) && parsedLotSize >= symbolSpec.minLotSize && parsedLotSize <= symbolSpec.maxLotSize && Math.abs((parsedLotSize / symbolSpec.lotStep) - Math.round(parsedLotSize / symbolSpec.lotStep)) < 1e-8 : false
-  const allowanceLabel = plan.maxDailyCycleUnits === null ? 'Unlimited' : String(plan.maxDailyCycleUnits) + ' units/day'
 
   useEffect(() => {
     const onLotSize = (event: Event): void => {
