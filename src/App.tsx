@@ -55,7 +55,6 @@ const TerminalContent: React.FC = () => {
   const [liveMarketActive, setLiveMarketActive] = useState(false)
   const [replayCount, setReplayCount] = useState(0)
   const [mobileTab, setMobileTab] = useState<MobileNavTab>('market')
-  const [manualTradeOpen, setManualTradeOpen] = useState(false)
   const [mobileDockOpen, setMobileDockOpen] = useState(false)
   const [accountData, setAccountData] = useState<AccountData | null>(null)
   const [symbolSpec, setSymbolSpec] = useState<SymbolSpec | null>(null)
@@ -262,8 +261,8 @@ const TerminalContent: React.FC = () => {
   const reviewAISetup = useCallback((): void => {
     setMobileTab('market')
     setDock('orders')
-    setManualTradeOpen(true)
-    window.setTimeout(() => document.getElementById('manual-trade')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60)
+    setMobileDockOpen(true)
+    window.setTimeout(() => document.getElementById('mobile-market-workspace')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60)
   }, [])
 
   const handleLiveUpdate = useCallback((nextCandles: OHLCV[], price: number): void => { setLiveCandles(nextCandles); setCurrentPrice(price) }, [])
@@ -366,7 +365,10 @@ const TerminalContent: React.FC = () => {
   const liveControl = <ProviderLiveControl providerId={activeProviderId} connection={activeMarketConnection} symbol={selectedSymbol} timeframe={timeframe} onUpdate={handleLiveUpdate} onActiveChange={handleLiveActiveChange} />
   const botProps = { symbol: selectedSymbol, timeframe, candles: chartCandles, currentPrice: displayPrice, activePosition, tradeHistory, accountBalance: accountData.balance, accountCurrency: accountData.currency, symbolSpec, conversionRate, botPlan: user?.botPlan ?? 'FREE' as const, onBotOrder: handleBotOrder, onBotRunningChange: setBotRunning, onReviewSetup: reviewAISetup }
 
-  const openMobileDock = (next: WorkspaceDock): void => { setDock(next); setMobileDockOpen(true) }
+  const openMobileDock = (next: WorkspaceDock): void => {
+    setMobileDockOpen((open) => dock === next ? !open : true)
+    setDock(next)
+  }
 
   const dockContent = {
     insights: <div className="space-y-3"><FXMoveMatrix pairs={watchlist} /><MarketAnalysisPanel analysis={marketAnalysis} pricePrecision={symbolSpec.pricePrecision} /><AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={chartCandles} setup={aiSetup} onReviewSetup={reviewAISetup} /></div>,
@@ -402,12 +404,12 @@ const TerminalContent: React.FC = () => {
           <div className="grid grid-cols-2 gap-2 border-t border-shafx-border bg-shafx-surface/55 p-2 sm:grid-cols-4">
             <button type="button" onClick={() => openMobileDock('insights')} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Structure</span><div className="mt-1 text-xs font-semibold">{marketAnalysis.bias} • {marketAnalysis.structure.type}</div></button>
             <button type="button" onClick={() => openMobileDock('liquidity')} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Liquidity</span><div className="mt-1 text-xs font-semibold">Prev H {marketAnalysis.liquidity.previousHigh?.toFixed(symbolSpec.pricePrecision) ?? '—'}</div></button>
-            <button type="button" onClick={() => { openMobileDock('orders'); setManualTradeOpen(true) }} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Risk</span><div className="mt-1 text-xs font-semibold">Open trade workspace</div></button>
+            <button type="button" onClick={() => openMobileDock('orders')} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Risk</span><div className="mt-1 text-xs font-semibold">Open trade workspace</div></button>
             <button type="button" onClick={() => openMobileDock('research')} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Research</span><div className="mt-1 text-xs font-semibold">Replay • Backtest</div></button>
           </div>
           <div className="hidden h-56 flex-shrink-0 border-t border-shafx-border bg-shafx-surface/25 p-2 lg:block"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} /></div>
-          {manualTradeOpen && <div id="manual-trade" className="p-3 lg:hidden"><OrderPanel symbol={selectedSymbol} currentPrice={displayPrice} accountBalance={accountData.balance} accountCurrency={accountData.currency} symbolSpec={symbolSpec} conversionRate={conversionRate} onSubmitOrder={handleOrderSubmit} aiSetup={aiSetup} /></div>}
-          {mobileDockOpen && <div className="border-t border-shafx-border bg-shafx-surface p-3 lg:hidden">
+
+          {mobileDockOpen && <div id="mobile-market-workspace" className="border-t border-shafx-border bg-shafx-surface p-3 lg:hidden">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div><div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Market workspace</div><div className="text-sm font-semibold">{dock === 'insights' ? 'Structure & AI' : dock === 'liquidity' ? 'Liquidity' : dock === 'orders' ? 'Risk & trade ticket' : 'Research tools'}</div></div>
               <button type="button" onClick={() => setMobileDockOpen(false)} className="min-h-10 rounded-xl border border-shafx-border px-3 text-[10px] font-semibold text-shafx-textMuted">Close</button>
