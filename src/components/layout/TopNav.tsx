@@ -28,7 +28,7 @@ export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, t
       <div className="hidden h-8 w-px bg-shafx-border sm:block" />
 
       {view === 'market' ? <div className="relative min-w-0 flex-1 md:flex-none">
-        <button type="button" onClick={() => setMarketOpen((open) => !open)} className="flex min-h-11 w-full min-w-0 items-center gap-3 rounded-xl border border-shafx-border bg-shafx-surface px-3 text-left transition hover:border-shafx-accent/40 md:w-[260px]" aria-expanded={marketOpen} aria-label="Choose trading instrument">
+        <button type="button" onClick={() => setMarketOpen((open) => !open)} className="flex min-h-12 w-full min-w-0 items-center gap-3 rounded-xl border border-shafx-border bg-shafx-surface px-3 text-left transition hover:border-shafx-accent/40 md:w-[260px]" aria-expanded={marketOpen} aria-label="Choose trading instrument">
           <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-shafx-bg text-[10px] font-bold text-shafx-textMuted">FX</div>
           <div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold">{symbol}</div><div className="mt-0.5 hidden text-[9px] text-shafx-textMuted sm:block">Market • {formatPrice(price, pricePrecision)}</div></div>
           <ChevronDown className={`h-4 w-4 flex-shrink-0 text-shafx-textMuted transition-transform ${marketOpen ? 'rotate-180' : ''}`} />
@@ -46,7 +46,7 @@ export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, t
         <div className="hidden items-center gap-1 rounded-xl border border-shafx-border bg-shafx-surface px-2.5 py-2 text-[9px] text-shafx-textMuted 2xl:flex"><Command className="h-3 w-3" />Search</div>
         <div className="hidden sm:block"><ProviderConnectionControl /></div>
         <div className="relative">
-          <button type="button" onClick={() => setAccountOpen((open) => !open)} className="flex min-h-11 items-center gap-2 rounded-xl border border-shafx-border bg-shafx-surface px-3 text-left" aria-expanded={accountOpen} aria-label="Change trading environment">
+          <button type="button" onClick={() => setAccountOpen((open) => !open)} className="flex min-h-12 items-center gap-2 rounded-xl border border-shafx-border bg-shafx-surface px-3 text-left" aria-expanded={accountOpen} aria-label="Change trading environment">
             <span className={`h-2 w-2 rounded-full ${currentMode === 'broker' ? 'bg-shafx-accent' : 'bg-shafx-success'}`} />
             <span className="hidden text-[10px] font-semibold sm:block">{currentMode === 'broker' ? 'Provider' : 'Demo'}</span>
             <ChevronDown className="h-3.5 w-3.5 text-shafx-textMuted" />
@@ -62,7 +62,7 @@ export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, t
       </div>
     </div>
     {view === 'market' && <div className="flex gap-1 overflow-x-auto border-t border-shafx-border/70 px-3 py-1.5 sm:px-4 lg:px-5">
-      {TIMEFRAMES.map((tf) => <button key={tf} type="button" onClick={() => onTimeframeChange(tf)} aria-pressed={timeframe === tf} className={`min-h-8 flex-shrink-0 rounded-lg px-3 text-[9px] font-semibold transition ${timeframe === tf ? 'bg-shafx-accent text-white' : 'text-shafx-textMuted hover:bg-shafx-surfaceHover hover:text-shafx-text'}`}>{tf}</button>)}
+      {TIMEFRAMES.map((tf) => <button key={tf} type="button" onClick={() => onTimeframeChange(tf)} aria-pressed={timeframe === tf} className={`min-h-10 flex-shrink-0 rounded-lg px-3 text-[9px] font-semibold transition ${timeframe === tf ? 'bg-shafx-accent text-white' : 'text-shafx-textMuted hover:bg-shafx-surfaceHover hover:text-shafx-text'}`}>{tf}</button>)}
     </div>}
   </header>
 }
