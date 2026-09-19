@@ -44,7 +44,7 @@ const timeframeMeta = (timeframe?: Timeframe, data: CandlestickData[] = []): { l
   return known[seconds] ?? { label: 'Custom', interval: `${Math.round(seconds / 60)}m` }
 }
 
-export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, currentPrice, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [] }) => {
+export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, symbol, currentPrice, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [] }) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
@@ -56,6 +56,11 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const [measureEnd, setMeasureEnd] = useState<number | null>(null)
   const [alertCandidate, setAlertCandidate] = useState<number | null>(null)
   const [armedAlerts, setArmedAlerts] = useState<UserLevel[]>([])
+  const viewInitializedRef = useRef(false)
+  const previousSymbolRef = useRef<string | undefined>(symbol)
+  const previousTimeframeRef = useRef<Timeframe | undefined>(timeframe)
+  const renderedFirstTimeRef = useRef<number | null>(null)
+  const renderedLastTimeRef = useRef<number | null>(null)
   const [crosshairInfo, setCrosshairInfo] = useState<{ price: number; time: string } | null>(null)
 
   useEffect(() => {
@@ -97,15 +102,42 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   useEffect(() => {
     const series = seriesRef.current
     const chart = chartRef.current
-    if (!series || !chart) return
-    series.setData(chartData)
-    if (!chartData.length) return
-    const width = containerRef.current?.clientWidth ?? 1000
-    const visibleBars = width < 640 ? 58 : 92
-    const lastIndex = chartData.length - 1
-    chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, lastIndex - visibleBars + 1), to: lastIndex + 2 })
-    chart.timeScale().scrollToRealTime()
-  }, [chartData, timeframe])
+    if (!series || !chart || !chartData.length) return
+
+    const firstTime = Number(chartData[0].time)
+    const lastTime = Number(chartData[chartData.length - 1].time)
+    const symbolChanged = previousSymbolRef.current !== symbol
+    const timeframeChanged = previousTimeframeRef.current !== timeframe
+    const rangeNeedsReset = !viewInitializedRef.current || symbolChanged || timeframeChanged
+
+    // Realtime ticks update only the latest bar. Replacing the whole series and
+    // calling scrollToRealTime on every tick was resetting the user's pinch zoom
+    // and horizontal position after their finger was released.
+    const canUpdateLatestBar =
+      renderedFirstTimeRef.current === firstTime &&
+      renderedLastTimeRef.current !== null &&
+      lastTime >= renderedLastTimeRef.current
+
+    if (canUpdateLatestBar) {
+      series.update(chartData[chartData.length - 1])
+    } else {
+      series.setData(chartData)
+    }
+
+    if (rangeNeedsReset) {
+      const width = containerRef.current?.clientWidth ?? 1000
+      const visibleBars = width < 640 ? 58 : 92
+      const lastIndex = chartData.length - 1
+      chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, lastIndex - visibleBars + 1), to: lastIndex + 2 })
+      chart.timeScale().scrollToRealTime()
+    }
+
+    viewInitializedRef.current = true
+    previousSymbolRef.current = symbol
+    previousTimeframeRef.current = timeframe
+    renderedFirstTimeRef.current = firstTime
+    renderedLastTimeRef.current = lastTime
+  }, [chartData, symbol, timeframe])
 
   useEffect(() => {
     const series = seriesRef.current
@@ -113,10 +145,9 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     const lines: IPriceLine[] = []
     const seen = new Set<string>()
     const compact = (containerRef.current?.clientWidth ?? 1000) < 640
-    // Mobile price scales become visually noisy when the series' own last-value
-    // badge competes with support/resistance and trade levels. Keep the line,
-    // but let the explicit SHAFX annotations own the compact axis labels.
-    series.applyOptions({ lastValueVisible: !compact })
+    // Keep the latest-price label visible on mobile. It is tied to the chart's
+    // price scale, so it follows the latest candle instead of floating beside it.
+    series.applyOptions({ lastValueVisible: showPriceLabels })
 
     const addLine = (annotation: ChartAnnotation | UserLevel): void => {
       if (!annotation.id || seen.has(annotation.id) || !Number.isFinite(annotation.price) || annotation.price <= 0) return
@@ -155,8 +186,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         color: '#2962FF',
         lineWidth: 2,
         lineStyle: 0,
-        axisLabelVisible: showPriceLabels && !compact,
-        title: compact ? '' : 'Current',
+        axisLabelVisible: showPriceLabels,
+        title: compact ? 'LAST' : 'Current',
       }))
     }
     if (Number.isFinite(bidPrice) && Number(bidPrice) > 0) {
@@ -165,8 +196,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         color: '#22D3A5',
         lineWidth: 1,
         lineStyle: 2,
-        axisLabelVisible: false,
-        title: compact ? '' : 'Bid',
+        axisLabelVisible: showPriceLabels,
+        title: compact ? 'SELL' : 'Bid',
       }))
     }
     if (Number.isFinite(askPrice) && Number(askPrice) > 0) {
@@ -175,8 +206,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         color: '#FF5C75',
         lineWidth: 1,
         lineStyle: 2,
-        axisLabelVisible: false,
-        title: compact ? '' : 'Ask',
+        axisLabelVisible: showPriceLabels,
+        title: compact ? 'BUY' : 'Ask',
       }))
     }
     return () => { lines.forEach((line) => series.removePriceLine(line)) }
