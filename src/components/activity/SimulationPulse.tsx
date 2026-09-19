@@ -13,7 +13,7 @@ interface Props {
 const formatTime = (value: string): string => {
   const date = new Date(value)
   if (!Number.isFinite(date.getTime())) return '—'
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 })
 }
 
 export const SimulationPulse: React.FC<Props> = ({ openPositions, tradeHistory, botOrderIds, botRunning }) => {
@@ -58,14 +58,14 @@ export const SimulationPulse: React.FC<Props> = ({ openPositions, tradeHistory, 
             <div key={trade.id} className="flex items-center gap-2 rounded-lg border border-shafx-border/80 bg-shafx-surface/60 px-2.5 py-2">
               <span className={state === 'OPEN' ? 'rounded-md bg-shafx-success/10 px-1.5 py-1 text-[8px] font-bold text-shafx-success' : 'rounded-md bg-shafx-accent/10 px-1.5 py-1 text-[8px] font-bold text-shafx-accent'}>{state}</span>
               <span className={trade.type === 'BUY' ? 'text-[9px] font-semibold text-shafx-success' : 'text-[9px] font-semibold text-shafx-danger'}>{trade.type}</span>
-              <span className="min-w-0 flex-1 truncate text-[10px] text-shafx-text">{trade.symbol} • {trade.lotSize.toFixed(2)} lots</span>
-              <span className="text-[9px] tabular text-shafx-textMuted">{formatTime(time)}</span>
+              <span className="min-w-0 flex-1 truncate text-[10px] text-shafx-text">{trade.symbol} • {trade.lotSize.toFixed(2)} lots • {state === 'OPEN' ? 'Entry ' + trade.entryPrice : 'Exit ' + (trade.exitPrice ?? '—')}</span>
+              <span className="text-right text-[8px] tabular leading-3 text-shafx-textMuted">{state === 'OPEN' ? 'Opened ' : 'Closed '}{formatTime(time)}{state === 'CLOSED' && <><br /><span className="text-shafx-textMuted">Open {formatTime(trade.openTime)}</span></>}</span>
             </div>
           ))}
         </div>
       </div>
 
-      <p className="mt-3 text-[9px] leading-4 text-shafx-textMuted">The session counter is real for this signed-in simulator session. A cross-user SHAFX network presence count is not fabricated and can be connected later to a shared presence service.</p>
+      <p className="mt-3 text-[9px] leading-4 text-shafx-textMuted">The order feed above shows actual SHAFX simulator events for this session, including side, lot size, entry/exit price and exact open/close time. It does not represent real people or a cross-user trading population.</p>
     </section>
   )
 }
