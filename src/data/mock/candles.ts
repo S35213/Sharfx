@@ -12,7 +12,7 @@ const rng = (seed: number): (() => number) => { let state = seed >>> 0; return (
 
 const generateBaseM1 = (symbol: string, startPrice: number, pipSize: number, precision: number): OHLCV[] => {
   const random = rng(hash(symbol + '|coherent-m1-v2'))
-  const endSec = 1779181200 - (1779181200 % 60)
+  const endSec = Math.floor(Date.now() / 60000) * 60
   const startSec = endSec - (BASE_M1_COUNT - 1) * 60
   const volatility = startPrice > 100 ? pipSize * 2.8 : pipSize * 1.35
   let price = startPrice
