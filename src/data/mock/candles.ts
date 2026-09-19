@@ -20,12 +20,17 @@ const generateBaseM1 = (symbol: string, startPrice: number, pipSize: number, pre
   for (let i = 0; i < BASE_M1_COUNT; i += 1) {
     const time = startSec + i * 60
     const shock = (random() - 0.5) * volatility
-    const momentum = i > 0 ? (price - raw[raw.length - 1].open) * 0.035 : 0
+    const momentum = i > 0 ? (price - raw[raw.length - 1].close) * 0.12 : 0
     const open = price
     const close = Math.max(pipSize / 10, open + shock + momentum)
-    const wick = Math.abs(shock) * (1.2 + random() * 2.2) + pipSize * (0.5 + random() * 1.5)
-    const high = Math.max(open, close) + wick
-    const low = Math.max(pipSize / 10, Math.min(open, close) - wick * (0.7 + random() * 0.5))
+
+    // Keep candle bodies and wicks independent. The old generator reused the
+    // large price shock to size both wicks, making almost every candle a long-wick bar.
+    const body = Math.abs(close - open)
+    const upperWick = random() < 0.18 ? 0 : pipSize * (0.05 + random() * 0.45) + body * random() * 0.25
+    const lowerWick = random() < 0.18 ? 0 : pipSize * (0.05 + random() * 0.45) + body * random() * 0.25
+    const high = Math.max(open, close) + upperWick
+    const low = Math.max(pipSize / 10, Math.min(open, close) - lowerWick)
     raw.push({ time, open, high, low, close, volume: Math.floor(100 + random() * 900) })
     price = close
   }
