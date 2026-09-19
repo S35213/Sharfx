@@ -113,6 +113,10 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     const lines: IPriceLine[] = []
     const seen = new Set<string>()
     const compact = (containerRef.current?.clientWidth ?? 1000) < 640
+    // Mobile price scales become visually noisy when the series' own last-value
+    // badge competes with support/resistance and trade levels. Keep the line,
+    // but let the explicit SHAFX annotations own the compact axis labels.
+    series.applyOptions({ lastValueVisible: !compact })
 
     const addLine = (annotation: ChartAnnotation | UserLevel): void => {
       if (!annotation.id || seen.has(annotation.id) || !Number.isFinite(annotation.price) || annotation.price <= 0) return
