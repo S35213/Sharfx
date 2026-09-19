@@ -129,7 +129,7 @@ const TerminalContent: React.FC = () => {
         setSymbolSpec(spec)
         setCandles(cands)
         setSimulatedCandles(cands)
-        simulatedPriceRef.current = cands[cands.length - 1]?.close ?? pair?.price ?? acc.balance
+        simulatedPriceRef.current = cands[cands.length - 1]?.close ?? acc.balance
         setLiveCandles([])
         setReplayCount(cands.length)
         setMarketAnalysis(ma)
