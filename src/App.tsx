@@ -27,6 +27,7 @@ import { OrderPanel } from './components/order/OrderPanel'
 import { AccountPanel } from './components/account/AccountPanel'
 import { TradesPanel } from './components/trades/TradesPanel'
 import { Toast, type ToastMessage } from './components/common/Toast'
+import { SimulationPulse } from './components/activity/SimulationPulse'
 import { marketDataSource } from './data/createMarketDataSource'
 import { ProviderAccountStreamManager, providerAccountStreamKey } from './data/provider/ProviderAccountStreamManager'
 import { chooseDefaultProviderSelection, getProviderConnections, getStoredProviderSelection, subscribeToProviderSelection, type ActiveProviderSelection } from './data/provider/providerConnections'
@@ -59,6 +60,8 @@ const TerminalContent: React.FC = () => {
   const [openPositions, setOpenPositions] = useState<TradeOrder[]>([])
   const [pendingOrders, setPendingOrders] = useState<TradeOrder[]>([])
   const [tradeHistory, setTradeHistory] = useState<TradeOrder[]>([])
+  const [botOrderIds, setBotOrderIds] = useState<string[]>([])
+  const [botRunning, setBotRunning] = useState(false)
   const [toast, setToast] = useState<ToastMessage | null>(null)
   const [chartTool, setChartTool] = useState<WorkspaceTool>('cursor')
   const [dock, setDock] = useState<WorkspaceDock>('insights')
@@ -228,6 +231,7 @@ const TerminalContent: React.FC = () => {
     } catch (err) { pushToast(err instanceof Error ? err.message : 'Unable to place simulated order.') }
   }, [pushToast])
   const handleBotOrder = useCallback((order: TradeOrder): void => {
+    setBotOrderIds((prev) => prev.includes(order.id) ? prev : [...prev, order.id])
     setOpenPositions((prev) => prev.some((item) => item.id === order.id) ? prev : [...prev, order])
     pushToast(`SHAFX Bot opened simulated ${order.type} ${order.symbol}.`)
   }, [pushToast])
@@ -315,19 +319,19 @@ const TerminalContent: React.FC = () => {
   const showHistory = mobileTab === 'history'
   const showAccount = mobileTab === 'account'
   const liveControl = <ProviderLiveControl providerId={activeProviderId} connection={activeMarketConnection} symbol={selectedSymbol} timeframe={timeframe} onUpdate={handleLiveUpdate} onActiveChange={handleLiveActiveChange} />
-  const botProps = { symbol: selectedSymbol, timeframe, candles: chartCandles, currentPrice: displayPrice, activePosition, tradeHistory, accountBalance: accountData.balance, accountCurrency: accountData.currency, symbolSpec, conversionRate, botPlan: user?.botPlan ?? 'FREE' as const, onBotOrder: handleBotOrder, onReviewSetup: reviewAISetup }
+  const botProps = { symbol: selectedSymbol, timeframe, candles: chartCandles, currentPrice: displayPrice, activePosition, tradeHistory, accountBalance: accountData.balance, accountCurrency: accountData.currency, symbolSpec, conversionRate, botPlan: user?.botPlan ?? 'FREE' as const, onBotOrder: handleBotOrder, onBotRunningChange: setBotRunning, onReviewSetup: reviewAISetup }
 
   const dockContent = {
     insights: <div className="space-y-3"><FXMoveMatrix pairs={watchlist} /><MarketAnalysisPanel analysis={marketAnalysis} pricePrecision={symbolSpec.pricePrecision} /><AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={chartCandles} setup={aiSetup} onReviewSetup={reviewAISetup} /></div>,
     liquidity: <LiquidityPanel symbol={selectedSymbol} price={displayPrice} precision={symbolSpec.pricePrecision} pipSize={symbolSpec.pipSize} />,
     orders: <div className="space-y-3">{brokerMode && activeProviderDescriptor ? <ProviderCapabilityPanel descriptor={activeProviderDescriptor} environment={activeProviderSelection?.environment ?? 'demo'} /> : <OrderPanel symbol={selectedSymbol} currentPrice={displayPrice} accountBalance={accountData.balance} accountCurrency={accountData.currency} symbolSpec={symbolSpec} conversionRate={conversionRate} onSubmitOrder={handleOrderSubmit} aiSetup={aiSetup} />}<div className="min-h-[280px]"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} /></div></div>,
-    agent: <div className="space-y-3"><TradingAgentPanel {...botProps} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /></div>,
+    agent: <div className="space-y-3"><SimulationPulse openPositions={openPositions} tradeHistory={tradeHistory} botOrderIds={botOrderIds} botRunning={botRunning} /><TradingAgentPanel {...botProps} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /></div>,
     research: <div className="space-y-3"><ReplayPanel candles={candles} replayCount={replayCount || candles.length} onReplayCountChange={setReplayCount} /><BacktestPanel symbol={selectedSymbol} candles={candles} symbolSpec={symbolSpec} initialBalance={accountData.balance} accountCurrency={accountData.currency} conversionRate={conversionRate} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /><TradingJournalPanel tradeHistory={tradeHistory} currency={accountData.currency} /></div>,
   }[dock]
 
-  return <div className="flex h-[calc(100vh-28px)] flex-col overflow-hidden bg-shafx-bg text-shafx-text">
+  return <div className="min-h-screen bg-shafx-bg text-shafx-text lg:flex lg:h-[calc(100vh-28px)] lg:flex-col lg:overflow-hidden">
     <TopNav symbol={selectedSymbol} price={displayPrice} pricePrecision={symbolSpec.pricePrecision} timeframe={timeframe} onTimeframeChange={setTimeframe} pairs={watchlist} onSelectPair={setSelectedSymbol} view={mobileTab} />
-    <main className="flex min-h-0 flex-1 overflow-hidden">
+    <main className="flex min-h-0 flex-1 flex-col overflow-visible lg:flex-row lg:overflow-hidden">
       <WorkspaceRail tool={chartTool} onToolChange={(next) => setChartTool(next)} dock={dock} onDockChange={setDock} />
 
       <aside className="hidden w-60 flex-shrink-0 flex-col gap-3 border-r border-shafx-border bg-shafx-surface/40 p-3 lg:flex lg:overflow-y-auto">
@@ -336,15 +340,15 @@ const TerminalContent: React.FC = () => {
         {brokerMode && activeProviderId === 'deriv' && <DerivCashierLinks />}
       </aside>
 
-      <section className={`flex min-w-0 flex-1 flex-col overflow-hidden ${showMarket ? '' : 'hidden'} lg:flex`}>
+      <section className={`${showMarket ? '' : 'hidden'} min-w-0 flex-1 flex-col overflow-visible lg:flex lg:overflow-hidden`}>
         <WorkspaceStatus provider={activeProviderName} mode={brokerMode ? 'broker' : 'demo'} symbol={selectedSymbol} price={displayPrice} precision={symbolSpec.pricePrecision} live={liveMarketActive} />
-        <div className="flex min-h-0 flex-1 flex-col">
+        <div className="flex min-h-0 flex-1 flex-col overflow-visible">
           <div className="flex min-h-10 flex-shrink-0 items-center justify-between gap-2 border-b border-shafx-border bg-shafx-surface/45 px-3 sm:px-4">
             <div className="flex min-w-0 items-center gap-2"><span className="truncate text-xs font-semibold">{selectedSymbol}</span><span className="rounded-md border border-shafx-border bg-shafx-bg px-2 py-1 text-[9px] text-shafx-textMuted">{liveMarketActive ? `LIVE • ${activeProviderName}` : 'SIMULATED MARKET'}</span></div>
             <div className="flex items-center gap-1.5"><span className="hidden text-[9px] uppercase tracking-[0.15em] text-shafx-textMuted sm:block">Feed</span>{liveControl}<button type="button" onClick={() => setDock(dock === 'orders' ? 'insights' : 'orders')} className="flex min-h-10 items-center gap-1.5 rounded-xl border border-shafx-border bg-shafx-bg px-2.5 text-[9px] font-semibold hover:border-shafx-accent/40"><SlidersHorizontal className="h-3.5 w-3.5 text-shafx-accent" />Trade</button></div>
           </div>
           <MobileChartTools tool={chartTool} onToolChange={setChartTool} />
-          <div className="relative min-h-[420px] flex-1 p-2 sm:p-3">
+          <div className="relative h-[48vh] min-h-[320px] p-2 sm:p-3 lg:h-auto lg:min-h-[420px] lg:flex-1">
             <CandlestickChart data={chartCandles} timeframe={timeframe} annotations={chartAnnotations} currentPrice={displayPrice} toolMode={chartToolMode} pipSize={symbolSpec.pipSize} onToolNotice={pushToast} />
             <div className="pointer-events-none absolute bottom-5 right-5 z-10 hidden items-center gap-1.5 rounded-xl border border-shafx-border bg-shafx-surface/90 px-2.5 py-1.5 text-[9px] text-shafx-textMuted backdrop-blur sm:flex"><Maximize2 className="h-3 w-3 text-shafx-accent" />Scroll / pinch to navigate</div>
           </div>
@@ -359,9 +363,9 @@ const TerminalContent: React.FC = () => {
         </div>
       </section>
 
-      <aside className={`${showAgent ? '' : 'hidden'} w-full flex-shrink-0 overflow-y-auto p-3 lg:hidden`}><TradingAgentPanel {...botProps} />{brokerMode && activeProviderId === 'deriv' && <div className="mt-3"><DerivCashierLinks /></div>}</aside>
-      <aside className={`${showHistory ? '' : 'hidden'} w-full flex-shrink-0 overflow-y-auto p-3 lg:hidden`}><div className="space-y-3"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /><TradingJournalPanel tradeHistory={tradeHistory} currency={accountData.currency} /></div></aside>
-      <aside className={`${showAccount ? '' : 'hidden'} w-full flex-shrink-0 overflow-y-auto p-3 lg:hidden`}><div className="space-y-3"><AccountPanel account={accountData} />{brokerMode && activeProviderId === 'deriv' && <DerivCashierLinks />}</div></aside>
+      <aside className={`${showAgent ? '' : 'hidden'} w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden`}><SimulationPulse openPositions={openPositions} tradeHistory={tradeHistory} botOrderIds={botOrderIds} botRunning={botRunning} /><div className="mt-3"><TradingAgentPanel {...botProps} />{brokerMode && activeProviderId === 'deriv' && <div className="mt-3"><DerivCashierLinks /></div>}</div></aside>
+      <aside className={`${showHistory ? '' : 'hidden'} w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden`}><div className="space-y-3"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /><TradingJournalPanel tradeHistory={tradeHistory} currency={accountData.currency} /></div></aside>
+      <aside className={`${showAccount ? '' : 'hidden'} w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden`}><div className="space-y-3"><AccountPanel account={accountData} />{brokerMode && activeProviderId === 'deriv' && <DerivCashierLinks />}</div></aside>
 
       <aside className="hidden w-[360px] flex-shrink-0 flex-col overflow-hidden border-l border-shafx-border bg-shafx-surface/50 lg:flex">
         <div className="flex h-12 flex-shrink-0 items-center justify-between border-b border-shafx-border px-3"><div><div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Workspace panel</div><div className="text-sm font-semibold">{dock === 'insights' ? 'Market intelligence' : dock === 'liquidity' ? 'Liquidity & depth' : dock === 'orders' ? 'Orders & positions' : dock === 'agent' ? 'SHAFX Bot' : 'Research lab'}</div></div><PanelRight className="h-4 w-4 text-shafx-textMuted" /></div>
