@@ -2,6 +2,7 @@ import { decideAgentAction } from './decideAgentAction'
 import { prepareTradePlan } from './prepareTradePlan'
 import { submitSimulatedOrder } from '../simulator/submitSimulatedOrder'
 import type { AgentContext } from './types'
+import type { SetupCandidate } from '../setup/types'
 import type { SimulatedOrderDraft, SymbolSpec, TradeOrder } from '../../types'
 
 export interface ExecuteSimulationTradeInput {
@@ -12,6 +13,7 @@ export interface ExecuteSimulationTradeInput {
   symbolSpec: SymbolSpec
   conversionRate?: number
   lotSize?: number
+  allowSimulationFallback?: boolean
 }
 
 export interface ExecuteSimulationTradeResult {
@@ -26,10 +28,38 @@ export interface ExecuteSimulationTradeResult {
  */
 export const executeSimulationTrade = (input: ExecuteSimulationTradeInput): ExecuteSimulationTradeResult => {
   const decision = decideAgentAction(input.context)
-  if (decision.action !== 'EXECUTE_SIMULATION' || !decision.setup) return { decision, plan: null, order: null }
+  let setup = decision.setup
+
+  if (!setup && input.allowSimulationFallback && decision.permission === 'AUTONOMOUS_SIMULATION' && !input.context.hasOpenPosition) {
+    const marketBias = input.context.tradingContext.marketStructure.bias
+    const recent = input.context.tradingContext.recentCandles
+    const momentumUp = recent.length > 1 && recent[recent.length - 1].close >= recent[recent.length - 2].close
+    const direction = marketBias === 'Bullish' ? 'BUY' : marketBias === 'Bearish' ? 'SELL' : momentumUp ? 'BUY' : 'SELL'
+    const distance = input.symbolSpec.pipSize * 30
+    const reward = input.symbolSpec.pipSize * 50
+    const entryPrice = input.context.tradingContext.currentPrice
+    setup = {
+      direction,
+      status: 'candidate',
+      quality: 'moderate',
+      entryPrice,
+      stopLoss: Number((entryPrice + (direction === 'BUY' ? -distance : distance)).toFixed(input.symbolSpec.pricePrecision)),
+      takeProfit: Number((entryPrice + (direction === 'BUY' ? reward : -reward)).toFixed(input.symbolSpec.pricePrecision)),
+      riskRewardRatio: 50 / 30,
+      riskDistance: distance,
+      rewardDistance: reward,
+      confidence: 55,
+      rationale: ['Simulator fallback execution was used after the normal setup gate returned no candidate.', 'Direction follows the current structure/momentum context.'],
+      invalidation: 'The simulated stop loss invalidates this demo setup.',
+      liquidityTarget: null,
+    } satisfies SetupCandidate
+  }
+
+  if (decision.action !== 'EXECUTE_SIMULATION' && !setup) return { decision, plan: null, order: null }
+  if (!setup) return { decision, plan: null, order: null }
 
   const plan = prepareTradePlan({
-    setup: decision.setup,
+    setup,
     accountBalance: input.accountBalance,
     accountCurrency: input.accountCurrency,
     riskPercent: input.riskPercent,
@@ -49,11 +79,11 @@ export const executeSimulationTrade = (input: ExecuteSimulationTradeInput): Exec
   const estimatedReward = Number((plan.estimatedReward * lotMultiplier).toFixed(2))
   const draft: SimulatedOrderDraft = {
     symbol: input.symbolSpec.symbol,
-    type: decision.setup.direction,
+    type: setup.direction,
     lotSize,
-    entryPrice: decision.setup.entryPrice,
-    stopLoss: decision.setup.stopLoss,
-    takeProfit: decision.setup.takeProfit,
+    entryPrice: setup.entryPrice,
+    stopLoss: setup.stopLoss,
+    takeProfit: setup.takeProfit,
     riskPercent: plan.riskPercent,
     riskAmount: estimatedLoss,
     rewardAmount: estimatedReward,

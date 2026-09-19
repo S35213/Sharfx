@@ -60,6 +60,7 @@ export function TradingAgentPanel({
   const [losses, setLosses] = useState(0)
   const [cycles, setCycles] = useState(0)
   const [cycleUnits, setCycleUnits] = useState(0)
+  const [scanNonce, setScanNonce] = useState(0)
   const [lastResult, setLastResult] = useState<'WIN' | 'LOSS' | 'WAIT' | null>(null)
   const [status, setStatus] = useState('Ready to scan')
   const [bias, setBias] = useState('Neutral')
@@ -78,7 +79,7 @@ export function TradingAgentPanel({
     const liquidity = analyzeLiquidity(candles, swings, tolerance)
     const setup = analyzeSetup({ currentPrice: candles[candles.length - 1]?.close ?? currentPrice, structure, supportResistance, liquidity })
     return buildTradingContext(symbol, timeframe, candles, structure, supportResistance, liquidity, setup)
-  }, [candles, currentPrice, symbol, timeframe])
+  }, [candles, currentPrice, symbol, timeframe, scanNonce])
 
   const timeframeFrames = useMultiTimeframeCandles(symbol, timeframe, candles)
   const multiTimeframe = useMemo(() => analyzeMultiTimeframeBias(timeframeFrames), [timeframeFrames])
@@ -203,6 +204,7 @@ export function TradingAgentPanel({
         symbolSpec,
         conversionRate,
         lotSize: parsedLotSize,
+        allowSimulationFallback: true,
       })
       if (!result.order) {
         setLastResult('WAIT')
@@ -241,22 +243,32 @@ export function TradingAgentPanel({
     const freshRun = crypto.randomUUID()
     setRunId(freshRun)
     setCycles(0)
+    setLastResult(null)
+    setScanNonce((value) => value + 1)
     if (cycleSeconds > plan.maxCycleSeconds) {
       setStatus(plan.label + ' allows up to ' + plan.maxCycleSeconds + 's scan cycles.')
       return
     }
-    if (losses >= 2) {
-      setLosses(0)
-      setWins(0)
-      setLastResult(null)
+    if (!activePosition) {
       setBotPositionId(null)
+      processedHistory.current.clear()
     }
+    if (losses >= 2) setLosses(0)
     setPhase('ANALYZING')
-    setStatus('Starting ' + plan.label + '. Daily allowance: ' + allowanceLabel + '.')
+    setStatus('Refreshing market analysis… Daily allowance: ' + allowanceLabel + '.')
+    if (analysisTimer.current) window.clearTimeout(analysisTimer.current)
     analysisTimer.current = window.setTimeout(() => {
       setPhase('RUNNING')
-      setStatus(bias + ' market detected. Bot is scanning the first setup now.')
+      setStatus(bias + ' market read complete. Executing the first simulator cycle.')
     }, 850)
+  }
+
+  const rescanBot = (): void => {
+    if (analysisTimer.current) window.clearTimeout(analysisTimer.current)
+    setPhase('READY')
+    setLastResult(null)
+    setScanNonce((value) => value + 1)
+    setStatus(activePosition ? 'Refreshing analysis while the existing simulated position is monitored.' : 'Market analysis refreshed. Ready for a fresh scan.')
   }
 
   const stopBot = (): void => {
@@ -339,14 +351,15 @@ export function TradingAgentPanel({
         </section>
       </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-2.5">
-        <button type="button" disabled={phase !== 'READY' || !symbolSpec} onClick={startBot} className="flex min-h-14 items-center justify-center gap-2 rounded-xl bg-shafx-success px-3 text-xs font-semibold text-white shadow-lg shadow-shafx-success/10 disabled:cursor-not-allowed disabled:opacity-35"><Play className="h-4 w-4" />Start bot</button>
-        <button type="button" disabled={phase === 'READY'} onClick={stopBot} className="flex min-h-14 items-center justify-center gap-2 rounded-xl border border-shafx-danger/30 bg-shafx-danger/5 px-3 text-xs font-semibold text-shafx-danger disabled:cursor-not-allowed disabled:opacity-35"><CircleStop className="h-4 w-4" />Stop</button>
+      <div className="mt-3 grid grid-cols-3 gap-2.5">
+        <button type="button" disabled={phase !== 'READY' || !symbolSpec} onClick={startBot} className="flex min-h-14 items-center justify-center gap-2 rounded-xl bg-shafx-success px-2 text-[10px] font-semibold text-white shadow-lg shadow-shafx-success/10 disabled:cursor-not-allowed disabled:opacity-35"><Play className="h-4 w-4" />Start bot</button>
+        <button type="button" disabled={!symbolSpec} onClick={rescanBot} className="flex min-h-14 items-center justify-center gap-2 rounded-xl border border-shafx-accent/25 bg-shafx-accent/5 px-2 text-[10px] font-semibold text-shafx-accent disabled:cursor-not-allowed disabled:opacity-35">↻ Rescan</button>
+        <button type="button" disabled={phase === 'READY'} onClick={stopBot} className="flex min-h-14 items-center justify-center gap-2 rounded-xl border border-shafx-danger/30 bg-shafx-danger/5 px-2 text-[10px] font-semibold text-shafx-danger disabled:cursor-not-allowed disabled:opacity-35"><CircleStop className="h-4 w-4" />Stop</button>
       </div>
 
       <div className="mt-3 rounded-xl border border-shafx-border bg-shafx-bg p-3">
         <div className="flex items-center justify-between gap-3"><span className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">Current status</span><span className="text-[9px] text-shafx-textMuted">Scans {cycles}</span></div>
-        <p className="mt-1.5 text-[11px] leading-5 text-shafx-text">{status}</p>
+        <p className="mt-1.5 text-[11px] leading-5 text-shafx-text">{status}</p><p className="mt-1 text-[9px] text-shafx-textMuted">Each Start or Rescan uses the latest simulator candles and creates a fresh analysis pass.</p>
         {lastResult && <div className={lastResult === 'WIN' ? 'mt-2 text-[10px] text-shafx-success' : lastResult === 'LOSS' ? 'mt-2 text-[10px] text-shafx-danger' : 'mt-2 text-[10px] text-shafx-textMuted'}>{lastResult === 'WIN' ? 'Profit → analyze again' : lastResult === 'LOSS' ? 'Loss → re-check strategy' : 'Waiting for a valid setup'}</div>}
       </div>
 

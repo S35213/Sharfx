@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Activity, Bot, Radio, TrendingDown, TrendingUp } from 'lucide-react'
 import type { TradeOrder } from '../../types'
 import { buildSimulationPulseStats } from './simulationPulse'
@@ -22,10 +22,12 @@ type MarketTick = { id: string; time: number; side: 'BUY' | 'SELL'; lots: number
 
 export const SimulationPulse: React.FC<Props> = ({ openPositions, tradeHistory, botOrderIds, botRunning }) => {
   const stats = buildSimulationPulseStats({ openPositions, tradeHistory, botOrderIds, botRunning })
+  const tapeScrollRef = useRef<HTMLDivElement | null>(null)
+  const autoScrollTapeRef = useRef(true)
   const initialPrice = openPositions[0]?.entryPrice ?? tradeHistory[0]?.exitPrice ?? tradeHistory[0]?.entryPrice ?? 1.085
   const [marketTicks, setMarketTicks] = useState<MarketTick[]>(() => Array.from({ length: 8 }, (_, index) => ({
     id: 'seed-' + index,
-    time: Date.now() - index * 1100,
+    time: Date.now() - (7 - index) * 1100,
     side: index % 4 < 2 ? 'BUY' : 'SELL',
     lots: Number((0.05 + ((index * 17) % 70) / 100).toFixed(2)),
     price: Number((initialPrice + Math.sin(index * 0.9) * 0.00012).toFixed(5)),
@@ -35,17 +37,25 @@ export const SimulationPulse: React.FC<Props> = ({ openPositions, tradeHistory, 
     let sequence = 0
     const timer = window.setInterval(() => {
       sequence += 1
+      const tapeElement = tapeScrollRef.current
+      autoScrollTapeRef.current = !tapeElement || tapeElement.scrollHeight - tapeElement.scrollTop - tapeElement.clientHeight < 28
       setMarketTicks((previous) => {
-        const last = previous[0]
+        const last = previous[previous.length - 1]
         const side = sequence % 4 < 2 ? 'BUY' as const : 'SELL' as const
         const base = last?.price ?? initialPrice
         const price = Number((base + Math.sin(sequence * 0.8) * 0.00006).toFixed(5))
         const lots = Number((0.05 + ((sequence * 19) % 90) / 100).toFixed(2))
-        return [{ id: 'tick-' + Date.now() + '-' + sequence, time: Date.now(), side, lots, price }, ...previous].slice(0, 8)
+        return [...previous, { id: 'tick-' + Date.now() + '-' + sequence, time: Date.now(), side, lots, price }].slice(-8)
       })
     }, 950)
     return () => window.clearInterval(timer)
   }, [initialPrice])
+
+  useEffect(() => {
+    if (!autoScrollTapeRef.current) return
+    const element = tapeScrollRef.current
+    if (element) element.scrollTop = element.scrollHeight
+  }, [marketTicks])
   const ids = new Set(botOrderIds)
   const activity = [
     ...openPositions.filter((trade) => ids.has(trade.id)).map((trade) => ({ trade, state: 'OPEN' as const, time: trade.openTime })),
@@ -105,7 +115,7 @@ export const SimulationPulse: React.FC<Props> = ({ openPositions, tradeHistory, 
           <div className="rounded-lg border border-shafx-success/20 bg-shafx-success/5 p-2"><span className="block text-[8px] text-shafx-textMuted">BUY</span><strong className="font-mono text-xs text-shafx-success">{marketTicks.filter((tick) => tick.side === 'BUY').length} orders • {marketTicks.filter((tick) => tick.side === 'BUY').reduce((sum, tick) => sum + tick.lots, 0).toFixed(2)} lots</strong></div>
           <div className="rounded-lg border border-shafx-danger/20 bg-shafx-danger/5 p-2"><span className="block text-[8px] text-shafx-textMuted">SELL</span><strong className="font-mono text-xs text-shafx-danger">{marketTicks.filter((tick) => tick.side === 'SELL').length} orders • {marketTicks.filter((tick) => tick.side === 'SELL').reduce((sum, tick) => sum + tick.lots, 0).toFixed(2)} lots</strong></div>
         </div>
-        <div className="mt-2 space-y-1">
+        <div ref={tapeScrollRef} className="mt-2 max-h-[250px] space-y-1 overflow-y-auto">
           {marketTicks.map((tick) => <div key={tick.id} className="grid grid-cols-[76px_46px_1fr_74px] items-center gap-1 rounded-lg border border-shafx-border/70 bg-shafx-surface/60 px-2 py-1.5 text-[9px]">
             <span className="font-mono tabular text-shafx-textMuted">{formatTime(new Date(tick.time).toISOString())}</span>
             <span className={tick.side === 'BUY' ? 'font-semibold text-shafx-success' : 'font-semibold text-shafx-danger'}>{tick.side}</span>

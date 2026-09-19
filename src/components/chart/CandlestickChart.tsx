@@ -18,6 +18,9 @@ interface CandlestickChartProps {
   onToolNotice?: (message: string) => void
   showGrid?: boolean
   showPriceLabels?: boolean
+  bidPrice?: number
+  askPrice?: number
+  tradeLines?: ChartAnnotation[]
 }
 
 interface UserLevel { id: string; price: number; label: string; color: string; lineWidth?: 1 | 2 | 3 | 4; dashed?: boolean; armed?: boolean }
@@ -41,7 +44,7 @@ const timeframeMeta = (timeframe?: Timeframe, data: CandlestickData[] = []): { l
   return known[seconds] ?? { label: 'Custom', interval: `${Math.round(seconds / 60)}m` }
 }
 
-export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true }) => {
+export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, currentPrice, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [] }) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
@@ -65,7 +68,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       height: Math.max(280, el.clientHeight),
       crosshair: { mode: 1, vertLine: { color: '#667285', width: 1, style: 2, labelBackgroundColor: '#202A38' }, horzLine: { color: '#667285', width: 1, style: 2, labelBackgroundColor: '#202A38' } },
       rightPriceScale: { borderColor: '#202A38', minimumWidth: 92, scaleMargins: { top: 0.08, bottom: 0.08 } },
-      timeScale: { borderColor: '#202A38', timeVisible: true, secondsVisible: false, rightOffset: 5, barSpacing: 8, minBarSpacing: 3 },
+      timeScale: { borderColor: '#202A38', timeVisible: true, secondsVisible: true, rightOffset: 5, barSpacing: 8, minBarSpacing: 3 },
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
       handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true },
     })
@@ -127,9 +130,53 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     annotations.forEach(addLine)
     userLevels.forEach(addLine)
     armedAlerts.forEach(addLine)
-    if (Number.isFinite(lastClose) && lastClose > 0) lines.push(series.createPriceLine({ price: lastClose, color: '#6B7688', lineWidth: 1, lineStyle: 2, axisLabelVisible: !compact, title: compact ? '' : 'Last' }))
+
+    tradeLines.forEach((annotation) => {
+      if (!Number.isFinite(annotation.price) || annotation.price <= 0 || seen.has(annotation.id)) return
+      seen.add(annotation.id)
+      lines.push(series.createPriceLine({
+        price: annotation.price,
+        color: annotation.color,
+        lineWidth: annotation.lineWidth ?? 2,
+        lineStyle: 0,
+        axisLabelVisible: !compact && annotation.id.endsWith('-entry'),
+        title: compact ? '' : annotation.label,
+      }))
+    })
+
+    const livePrice = Number.isFinite(currentPrice) && Number(currentPrice) > 0 ? Number(currentPrice) : lastClose
+    if (Number.isFinite(livePrice) && livePrice > 0) {
+      lines.push(series.createPriceLine({
+        price: livePrice,
+        color: '#2962FF',
+        lineWidth: 2,
+        lineStyle: 0,
+        axisLabelVisible: true,
+        title: 'Current',
+      }))
+    }
+    if (Number.isFinite(bidPrice) && Number(bidPrice) > 0) {
+      lines.push(series.createPriceLine({
+        price: Number(bidPrice),
+        color: '#22D3A5',
+        lineWidth: 1,
+        lineStyle: 2,
+        axisLabelVisible: false,
+        title: compact ? '' : 'Bid',
+      }))
+    }
+    if (Number.isFinite(askPrice) && Number(askPrice) > 0) {
+      lines.push(series.createPriceLine({
+        price: Number(askPrice),
+        color: '#FF5C75',
+        lineWidth: 1,
+        lineStyle: 2,
+        axisLabelVisible: false,
+        title: compact ? '' : 'Ask',
+      }))
+    }
     return () => { lines.forEach((line) => series.removePriceLine(line)) }
-  }, [annotations, armedAlerts, lastClose, showPriceLabels, userLevels])
+  }, [annotations, armedAlerts, askPrice, bidPrice, currentPrice, lastClose, showPriceLabels, tradeLines, userLevels])
 
   useEffect(() => {
     const chart = chartRef.current

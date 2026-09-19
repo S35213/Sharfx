@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Activity, Layers3, Radio, Waves } from 'lucide-react'
 import type { OHLCV } from '../../types'
 
@@ -26,25 +26,33 @@ const formatExactTime = (timestamp: number): string => {
   return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${pad(date.getMilliseconds(), 3)}`
 }
 
-const seedTape = (candles: OHLCV[], precision: number): TapeTick[] => candles.slice(-10).flatMap((candle, index) => {
-  const span = Math.max(Math.abs(candle.close - candle.open), Number.EPSILON)
-  const primarySide: TapeSide = candle.close >= candle.open ? 'BUY' : 'SELL'
-  const secondarySide: TapeSide = primarySide === 'BUY' ? 'SELL' : 'BUY'
-  const baseLots = 0.08 + ((index * 17) % 48) / 100
-  return [
-    { id: `seed-${candle.time}-a`, time: candle.time * 1000 + 120, side: primarySide, lots: Number(baseLots.toFixed(2)), price: Number((candle.open + (candle.close - candle.open) * 0.35).toFixed(precision)) },
-    { id: `seed-${candle.time}-b`, time: candle.time * 1000 + 520, side: secondarySide, lots: Number((baseLots * (0.7 + span / Math.max(span, 0.0000001) * 0.3)).toFixed(2)), price: Number((candle.close - (candle.close - candle.open) * 0.15).toFixed(precision)) },
-  ]
-}).sort((a, b) => b.time - a.time).slice(0, 18)
+const seedTape = (candles: OHLCV[], precision: number): TapeTick[] => {
+  const latest = Date.now()
+  return candles.slice(-9).flatMap((candle, index) => {
+    const span = Math.max(Math.abs(candle.close - candle.open), Number.EPSILON)
+    const primarySide: TapeSide = candle.close >= candle.open ? 'BUY' : 'SELL'
+    const secondarySide: TapeSide = primarySide === 'BUY' ? 'SELL' : 'BUY'
+    const baseLots = 0.08 + ((index * 17) % 48) / 100
+    const baseTime = latest - (8 - index) * 1100
+    return [
+      { id: `seed-${candle.time}-a`, time: baseTime, side: primarySide, lots: Number(baseLots.toFixed(2)), price: Number((candle.open + (candle.close - candle.open) * 0.35).toFixed(precision)) },
+      { id: `seed-${candle.time}-b`, time: baseTime + 500, side: secondarySide, lots: Number((baseLots * (0.7 + span / Math.max(span, 0.0000001) * 0.3)).toFixed(2)), price: Number((candle.close - (candle.close - candle.open) * 0.15).toFixed(precision)) },
+    ]
+  }).sort((a, b) => a.time - b.time).slice(-18)
+}
 
 export const LiquidityPanel: React.FC<Props> = ({ symbol, price, precision, pipSize = 0.0001, providerDepthAvailable = false, candles = [] }) => {
   const [tape, setTape] = useState<TapeTick[]>(() => seedTape(candles, precision))
   const [tick, setTick] = useState(0)
+  const tapeScrollRef = useRef<HTMLDivElement | null>(null)
+  const autoScrollTapeRef = useRef(true)
   useEffect(() => {
     let sequence = 0
     const timer = window.setInterval(() => {
       sequence += 1
       setTick((value) => value + 1)
+      const tapeElement = tapeScrollRef.current
+      autoScrollTapeRef.current = !tapeElement || tapeElement.scrollHeight - tapeElement.scrollTop - tapeElement.clientHeight < 28
       setTape((previous) => {
         const now = Date.now()
         const last = previous[0]
@@ -55,11 +63,17 @@ export const LiquidityPanel: React.FC<Props> = ({ symbol, price, precision, pipS
         const nextPrice = Number((Math.max(pipSize / 10, price + drift)).toFixed(precision))
         const lots = Number((0.05 + ((sequence * 13) % 85) / 100).toFixed(2))
         const next: TapeTick = { id: `live-${symbol}-${now}-${sequence}`, time: now, side, lots, price: nextPrice }
-        return [next, ...previous].slice(0, 18)
+        return [...previous, next].slice(-18)
       })
     }, 850)
     return () => window.clearInterval(timer)
   }, [pipSize, precision, price, symbol])
+
+  useEffect(() => {
+    if (!autoScrollTapeRef.current) return
+    const element = tapeScrollRef.current
+    if (element) element.scrollTop = element.scrollHeight
+  }, [tape])
 
   const rows = useMemo(() => {
     const step = pipSize
@@ -140,7 +154,7 @@ export const LiquidityPanel: React.FC<Props> = ({ symbol, price, precision, pipS
         <div className="rounded-lg border border-shafx-success/20 bg-shafx-success/5 p-2"><span className="block text-shafx-textMuted">Buy orders</span><strong className="mt-0.5 block font-mono text-shafx-success">{tapeBuyCount} • {tapeBuyLots.toFixed(2)} lots</strong></div>
         <div className="rounded-lg border border-shafx-danger/20 bg-shafx-danger/5 p-2"><span className="block text-shafx-textMuted">Sell orders</span><strong className="mt-0.5 block font-mono text-shafx-danger">{tapeSellCount} • {tapeSellLots.toFixed(2)} lots</strong></div>
       </div>
-      <div className="space-y-1 px-3 pb-3">
+      <div ref={tapeScrollRef} className="max-h-[250px] space-y-1 overflow-y-auto px-3 pb-3">
         <div className="grid grid-cols-[76px_46px_1fr_84px] gap-1 px-2 text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted"><span>Time</span><span>Side</span><span>Volume</span><span className="text-right">Price</span></div>
         {tape.map((entry) => <div key={entry.id} className="grid grid-cols-[76px_46px_1fr_84px] items-center gap-1 rounded-lg border border-shafx-border/70 bg-shafx-bg px-2 py-1.5 text-[9px]">
           <span className="font-mono tabular text-shafx-textMuted">{formatExactTime(entry.time)}</span>
