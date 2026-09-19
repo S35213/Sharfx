@@ -17,7 +17,7 @@ export const OrderPanel: React.FC<Props> = ({ symbol, currentPrice, accountBalan
   const [takeProfit, setTakeProfit] = useState('')
   const [riskPercent, setRiskPercent] = useState('1.0')
 
-  useEffect(() => { setEntryPrice(currentPrice.toFixed(symbolSpec.pricePrecision)); setStopLoss(''); setTakeProfit('') }, [symbol, currentPrice, symbolSpec.pricePrecision])
+  useEffect(() => { setEntryPrice(currentPrice.toFixed(symbolSpec.pricePrecision)); setStopLoss(''); setTakeProfit('') }, [symbol, symbolSpec.pricePrecision])
 
   useEffect(() => {
     const onLotSize = (event: Event): void => {
