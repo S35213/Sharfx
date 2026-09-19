@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Activity, ChevronDown, Command, MoreVertical, Search, Settings2, ShieldCheck, Wifi } from 'lucide-react'
 import type { MarketPair, Timeframe } from '../../types'
 import { TIMEFRAMES } from '../../types'
@@ -17,9 +17,32 @@ export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, t
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [quoteTick, setQuoteTick] = useState(0)
+  const navRef = useRef<HTMLElement | null>(null)
   useEffect(() => {
     const timer = window.setInterval(() => setQuoteTick((value) => value + 1), 900)
     return () => window.clearInterval(timer)
+  }, [])
+  useEffect(() => {
+    const onPointerDown = (event: PointerEvent): void => {
+      const target = event.target
+      if (target instanceof Node && navRef.current?.contains(target)) return
+      setMarketOpen(false)
+      setAccountOpen(false)
+      setMoreOpen(false)
+    }
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        setMarketOpen(false)
+        setAccountOpen(false)
+        setMoreOpen(false)
+      }
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
   }, [])
   const instruments = useMemo(() => Array.from(new Set(pairs.map((pair) => pair.symbol))), [pairs])
   const filtered = instruments.filter((item) => item.toLowerCase().includes(query.trim().toLowerCase()))
@@ -36,7 +59,15 @@ export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, t
   const currentMode = typeof window !== 'undefined' && sessionStorage.getItem('shafx-trading-mode') === 'broker' ? 'broker' : 'simulator'
   const switchMode = (mode: 'simulator' | 'broker') => { setStoredTradingMode(mode, sessionStorage.getItem('shafx-simulator-account-id') || undefined); window.location.assign(`/?account=${mode === 'broker' ? 'broker' : 'demo'}`) }
 
-  return <header className="sticky top-0 z-50 border-b border-shafx-border bg-[#080C12]/95 shadow-[0_8px_30px_rgba(0,0,0,.24)] backdrop-blur-xl">
+  const selectFirstMatch = (): void => {
+    const first = filtered[0]
+    if (!first) return
+    onSelectPair(first)
+    setMarketOpen(false)
+    setQuery('')
+  }
+
+  return <header ref={navRef} className="sticky top-0 z-50 border-b border-shafx-border bg-[#080C12]/95 shadow-[0_8px_30px_rgba(0,0,0,.24)] backdrop-blur-xl">
     <div className="flex min-h-[68px] items-center gap-2 px-3 sm:gap-3 sm:px-4 lg:px-5">
       <div className="flex flex-shrink-0 items-center gap-2.5">
         <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-shafx-accent/30 bg-shafx-accent/10 text-shafx-accent"><Activity className="h-4.5 w-4.5" /></div>
@@ -52,7 +83,7 @@ export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, t
           <ChevronDown className={`h-4 w-4 flex-shrink-0 text-shafx-textMuted transition-transform ${marketOpen ? 'rotate-180' : ''}`} />
         </button>
         {marketOpen && <div className="absolute left-0 top-[calc(100%+8px)] z-[80] w-[min(92vw,360px)] rounded-2xl border border-shafx-border bg-shafx-surface p-2 shadow-2xl">
-          <div className="mb-2 flex items-center gap-2 rounded-xl border border-shafx-border bg-shafx-bg px-3"><Search className="h-4 w-4 text-shafx-textMuted" /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search symbol…" className="h-10 w-full bg-transparent text-sm outline-none" /><kbd className="hidden rounded border border-shafx-border px-1.5 py-0.5 text-[8px] text-shafx-textMuted sm:block">⌘K</kbd></div>
+          <div className="mb-2 flex items-center gap-2 rounded-xl border border-shafx-border bg-shafx-bg px-3"><Search className="h-4 w-4 text-shafx-textMuted" /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') { setMarketOpen(false); setQuery('') } else if (event.key === 'Enter') selectFirstMatch() }} placeholder="Search symbol…" className="h-10 w-full bg-transparent text-sm outline-none" aria-label="Search trading symbols" /><kbd className="hidden rounded border border-shafx-border px-1.5 py-0.5 text-[8px] text-shafx-textMuted sm:block">⌘K</kbd></div>
           <div className="mb-1 flex items-center justify-between px-2"><div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Market Watch</div><span className="rounded-full border border-shafx-warning/20 bg-shafx-warning/5 px-1.5 py-0.5 text-[8px] text-shafx-warning">SIMULATED</span></div>
           <div className="mb-2 grid grid-cols-[1fr_82px_70px] gap-2 px-2 text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted"><span>Instrument</span><span className="text-right">Bid / Ask</span><span className="text-right">Move</span></div>
           <div className="max-h-80 space-y-1 overflow-y-auto">{filtered.map((item, index) => {
