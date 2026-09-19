@@ -22,6 +22,7 @@ const featureCopy = [
   ['Provider-neutral design', 'Connect supported providers while SHAFX keeps its own interface and adapts to available capabilities.'],
 ]
 
+// CI verification: keep public welcome mounted outside the terminal until authentication.
 export const PublicWelcome: React.FC = () => {
   const [showAuth, setShowAuth] = useState(false)
   const [formMode, setFormMode] = useState<FormMode>('signin')
