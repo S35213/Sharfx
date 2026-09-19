@@ -79,6 +79,7 @@ export interface TradeOrder {
   status: 'open' | 'pending' | 'closed'
   openTime: string
   closeTime?: string
+  exitPrice?: number
   profit?: number
 }
 
