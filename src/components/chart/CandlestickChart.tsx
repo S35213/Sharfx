@@ -151,8 +151,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         color: '#2962FF',
         lineWidth: 2,
         lineStyle: 0,
-        axisLabelVisible: true,
-        title: 'Current',
+        axisLabelVisible: showPriceLabels && !compact,
+        title: compact ? '' : 'Current',
       }))
     }
     if (Number.isFinite(bidPrice) && Number(bidPrice) > 0) {
