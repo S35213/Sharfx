@@ -114,6 +114,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     // calling scrollToRealTime on every tick was resetting the user's pinch zoom
     // and horizontal position after their finger was released.
     const canUpdateLatestBar =
+      !symbolChanged &&
+      !timeframeChanged &&
       renderedFirstTimeRef.current === firstTime &&
       renderedLastTimeRef.current !== null &&
       lastTime >= renderedLastTimeRef.current
