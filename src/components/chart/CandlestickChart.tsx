@@ -116,7 +116,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     // Mobile price scales become visually noisy when the series' own last-value
     // badge competes with support/resistance and trade levels. Keep the line,
     // but let the explicit SHAFX annotations own the compact axis labels.
-    series.applyOptions({ lastValueVisible: !compact })
+    series.applyOptions({ lastValueVisible: showPriceLabels })
 
     const addLine = (annotation: ChartAnnotation | UserLevel): void => {
       if (!annotation.id || seen.has(annotation.id) || !Number.isFinite(annotation.price) || annotation.price <= 0) return
@@ -155,8 +155,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         color: '#2962FF',
         lineWidth: 2,
         lineStyle: 0,
-        axisLabelVisible: showPriceLabels && !compact,
-        title: compact ? '' : 'Current',
+        axisLabelVisible: showPriceLabels,
+        title: compact ? 'NOW' : 'Current',
       }))
     }
     if (Number.isFinite(bidPrice) && Number(bidPrice) > 0) {
@@ -263,9 +263,12 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
 
   const cancelAlert = (): void => setAlertCandidate(null)
 
+  const livePriceForBadge = Number.isFinite(currentPrice) && currentPrice > 0 ? currentPrice : lastClose
+
   return <div ref={containerRef} onPointerDown={placeTool} className={`shafx-chart-shell relative w-full overflow-hidden border border-shafx-border bg-shafx-bg ${['level', 'alert', 'measure'].includes(toolMode) ? 'cursor-crosshair' : ''}`} style={{ height, minHeight: 280 }}>
     <div className="pointer-events-none absolute left-3 top-3 z-10 flex items-center gap-2 rounded-xl border border-shafx-border bg-shafx-bg/90 px-2.5 py-1.5 text-[9px] font-semibold backdrop-blur"><span className="text-shafx-accent">SHAFX</span><span className="text-shafx-textMuted">•</span><span className="text-shafx-textMuted">{timeframe ?? 'PRICE'} workspace</span></div>
     <div className="pointer-events-none absolute right-3 top-3 z-10 rounded-xl border border-shafx-border bg-shafx-bg/90 px-2.5 py-1.5 text-[9px] font-semibold text-shafx-text backdrop-blur">{meta.label} <span className="font-normal text-shafx-textMuted">• {meta.interval}</span></div>
+    {showPriceLabels && Number.isFinite(livePriceForBadge) && livePriceForBadge > 0 && <div className="pointer-events-none absolute right-2 top-1/2 z-20 -translate-y-1/2 rounded-lg border border-shafx-accent/40 bg-shafx-accent px-2 py-1 font-mono text-[10px] font-bold tabular-nums text-white shadow-lg sm:hidden">{livePriceForBadge.toFixed(Math.max(2, Math.round(Math.log10(1 / Math.max(pipSize, 0.00001)))))}</div>}
     {toolMode === 'crosshair' && crosshairInfo && <div className="pointer-events-none absolute left-3 bottom-3 z-20 rounded-xl border border-shafx-accent/25 bg-shafx-surface/95 px-3 py-2 text-[9px] shadow-xl"><span className="text-shafx-textMuted">Crosshair</span><strong className="ml-2 font-mono text-shafx-text">{crosshairInfo.price.toFixed(5)}</strong><span className="ml-2 text-shafx-textMuted">{crosshairInfo.time}</span></div>}
     {(toolMode === 'level' || toolMode === 'alert' || toolMode === 'measure') && <div className="pointer-events-none absolute bottom-3 left-3 z-10 flex items-center gap-2 rounded-xl border border-shafx-border bg-shafx-surface/95 px-3 py-2 text-[9px] text-shafx-textMuted shadow-xl"><Crosshair className="h-3.5 w-3.5 text-shafx-accent" />{toolMode === 'level' ? 'Tap chart to place a price level' : toolMode === 'alert' ? 'Tap chart, then confirm the alert price' : measureStart === null ? 'Tap first point to measure' : measureEnd === null ? 'Tap second point to finish' : 'Measure complete'}</div>}
     {alertCandidate !== null && <div className="absolute bottom-3 left-1/2 z-30 -translate-x-1/2 rounded-2xl border border-shafx-warning/30 bg-shafx-surface/98 px-3 py-3 shadow-2xl backdrop-blur"><div className="text-[9px] uppercase tracking-[0.14em] text-shafx-textMuted">Price alert</div><div className="mt-1 font-mono text-sm font-semibold text-shafx-text">{alertCandidate.toFixed(5)}</div><div className="mt-2 flex gap-2"><button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={armAlert} className="min-h-10 rounded-xl bg-shafx-warning px-3 text-[10px] font-semibold text-black">Arm alert</button><button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={cancelAlert} className="min-h-10 rounded-xl border border-shafx-border px-3 text-[10px] text-shafx-textMuted">Cancel</button></div></div>}
