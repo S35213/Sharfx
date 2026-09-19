@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react'
+import React, { useEffect, useMemo, useRef } from 'react'
 import { ArrowDownRight, ArrowUpRight, Radio, TrendingUp } from 'lucide-react'
 import type { TradeOrder } from '../../types'
 import { buildSimulationFlow } from './simulationFlow'
@@ -12,6 +12,11 @@ const formatExactTime = (date: Date): string => {
 
 export const SimulationFlowChart: React.FC<Props> = ({ openPositions, tradeHistory }) => {
   const points = useMemo(() => buildSimulationFlow(openPositions, tradeHistory), [openPositions, tradeHistory])
+  const eventScrollRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    const element = eventScrollRef.current
+    if (element) element.scrollTop = element.scrollHeight
+  }, [points.length])
   const closes = points.filter((point) => point.kind === 'CLOSE')
   const cumulative: number[] = []
   closes.forEach((point, index) => { cumulative[index] = point.profit + (cumulative[index - 1] ?? 0) })
@@ -52,8 +57,8 @@ export const SimulationFlowChart: React.FC<Props> = ({ openPositions, tradeHisto
         </svg>
       </div>
 
-      <div className="mt-3 space-y-1.5">
-        {points.slice(-6).reverse().map((point) => {
+      <div ref={eventScrollRef} className="mt-3 max-h-[260px] space-y-1.5 overflow-y-auto">
+        {points.slice(-12).map((point) => {
           const trade = [...openPositions, ...tradeHistory].find((item) => point.id.startsWith(item.id + '-'))
           const lotText = trade ? `${trade.lotSize.toFixed(2)} lots` : ''
           return (
