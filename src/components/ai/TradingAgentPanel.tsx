@@ -217,7 +217,10 @@ export function TradingAgentPanel({
       setPhase('READY')
       setStatus('Unable to verify bot cycle allowance. Try again.')
     }
-  }
+    }
+
+    return () => { runBotCycleRef.current = null }
+  }, [accountBalance, accountCurrency, activePosition, bias, botPositionId, conversionRate, cycleSeconds, learning, losses, lotSizeValid, multiTimeframe, onBotOrder, parsedLotSize, research, riskMode, runId, setup, symbol, symbolSpec, tradingContext])
 
   useEffect(() => {
     if (phase !== 'RUNNING') return
