@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { Grid2x2, Info } from 'lucide-react'
 import type { MarketPair } from '../../types'
 
@@ -21,20 +21,32 @@ const tone = (value: number): string => {
 }
 
 export const FXMoveMatrix: React.FC<Props> = ({ pairs }) => {
+  const [tick, setTick] = useState(0)
+  useEffect(() => {
+    const timer = window.setInterval(() => setTick((value) => value + 1), 900)
+    return () => window.clearInterval(timer)
+  }, [])
+
   const matrix = useMemo(() => {
     const source = new Map<string, number>()
     pairs.forEach((pair) => {
       const split = splitPair(pair.symbol)
       if (split) source.set(`${split[0]}/${split[1]}`, pair.changePercent)
     })
-    return currencies.map((row) => currencies.map((column) => row === column ? null : source.get(`${row}/${column}`) ?? (source.has(`${column}/${row}`) ? -(source.get(`${column}/${row}`) ?? 0) : null)))
-  }, [pairs])
+    return currencies.map((row, rowIndex) => currencies.map((column, columnIndex) => {
+      if (row === column) return null
+      const base = source.get(`${row}/${column}`) ?? (source.has(`${column}/${row}`) ? -(source.get(`${column}/${row}`) ?? 0) : null)
+      if (base === null) return null
+      const drift = Math.sin(tick * 0.72 + rowIndex * 0.63 + columnIndex * 0.41) * 0.06
+      return Number((base + drift).toFixed(2))
+    }))
+  }, [pairs, tick])
 
   const covered = matrix.flat().filter((value): value is number => value !== null).length
 
   return <section className="rounded-2xl border border-shafx-border bg-shafx-surface">
     <header className="flex items-start justify-between gap-3 border-b border-shafx-border px-4 py-3">
-      <div className="flex items-center gap-2"><Grid2x2 className="h-4 w-4 text-shafx-accent" /><div><div className="text-xs font-semibold">FX move matrix</div><div className="text-[9px] text-shafx-textMuted">Watchlist-derived pair moves • {covered} populated cells</div></div></div>
+      <div className="flex items-center gap-2"><Grid2x2 className="h-4 w-4 text-shafx-accent" /><div><div className="flex items-center gap-2 text-xs font-semibold">FX move matrix <span className="inline-flex items-center gap-1 rounded-full border border-shafx-success/20 bg-shafx-success/5 px-1.5 py-0.5 text-[8px] font-semibold text-shafx-success"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-shafx-success" />LIVE SIM</span></div><div className="text-[9px] text-shafx-textMuted">Watchlist-derived pair moves • updating every ~1s • {covered} populated cells</div></div></div>
       <Info className="h-3.5 w-3.5 text-shafx-textMuted" />
     </header>
     <div className="overflow-auto p-3">
@@ -52,6 +64,6 @@ export const FXMoveMatrix: React.FC<Props> = ({ pairs }) => {
         </React.Fragment>)}
       </div>
     </div>
-    <div className="flex items-start gap-2 border-t border-shafx-border px-4 py-2.5 text-[9px] leading-4 text-shafx-textMuted"><Info className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-shafx-accent" />This is a derived view of the currently loaded pair returns, not an independent economic “currency strength” feed.</div>
+    <div className="flex items-start gap-2 border-t border-shafx-border px-4 py-2.5 text-[9px] leading-4 text-shafx-textMuted"><Info className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-shafx-accent" />This is a simulated live view derived from the loaded pair returns. It is not an independent economic “currency strength” feed.</div>
   </section>
 }
