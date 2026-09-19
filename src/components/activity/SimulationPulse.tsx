@@ -112,7 +112,6 @@ export const SimulationPulse: React.FC<Props> = ({ openPositions, tradeHistory, 
             <span className={tick.side === 'BUY' ? 'text-right font-mono text-shafx-success' : 'text-right font-mono text-shafx-danger'}>{tick.price.toFixed(5)}</span>
           </div>)}
         </div>
-      </div></div>
       </div>
 
       <p className="mt-3 text-[9px] leading-4 text-shafx-textMuted">Bot events above are real for this SHAFX simulator session. The market order tape is synthetic and is not a count of real people or a cross-user trading population.</p>
