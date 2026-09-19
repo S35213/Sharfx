@@ -1,5 +1,5 @@
 import React from 'react'
-import { Activity, Circle, ShieldCheck, WalletCards } from 'lucide-react'
+import { Activity, Circle, ShieldCheck } from 'lucide-react'
 
 interface Props { provider: string; mode: 'demo' | 'broker'; price: number; symbol: string; precision: number; live: boolean }
 
