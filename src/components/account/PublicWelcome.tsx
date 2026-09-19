@@ -16,12 +16,6 @@ async function publicAuthRequest(action: string, body: Record<string, unknown>) 
   return data
 }
 
-const featureCopy = [
-  ['AI-assisted analysis', 'Use SHAFX intelligence and agents to help turn market information into a clearer trading workflow.'],
-  ['Professional workspace', 'Charts, structure, liquidity, risk, replay and research stay together in one focused interface.'],
-  ['Provider-neutral design', 'Connect supported providers while SHAFX keeps its own interface and adapts to available capabilities.'],
-]
-
 export const PublicWelcome: React.FC = () => {
   const [showAuth, setShowAuth] = useState(false)
   const [formMode, setFormMode] = useState<FormMode>('signin')
