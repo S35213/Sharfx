@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Activity, ArrowRight, Bot, BrainCircuit, KeyRound, LockKeyhole, LogIn, ShieldCheck, Sparkles, UserPlus } from 'lucide-react'
+import { Activity, ArrowRight, Bot, KeyRound, LockKeyhole, LogIn, ShieldCheck, Sparkles, UserPlus } from 'lucide-react'
 import { useAuth } from '../../app/AuthContext'
 
 type FormMode = 'signin' | 'signup'
@@ -146,7 +146,7 @@ export const PublicWelcome: React.FC = () => {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
-            <div className="rounded-3xl border border-shafx-border bg-shafx-surface/75 p-5 backdrop-blur-sm lg:p-6"><div className="flex h-10 w-10 items-center justify-center rounded-xl bg-shafx-accent/10 text-shafx-accent"><BrainCircuit className="h-5 w-5" /></div><div className="mt-4 text-sm font-semibold">AI market intelligence</div><p className="mt-2 text-xs leading-5 text-shafx-textMuted">Use SHAFX analysis and agents alongside your own decisions, with structure, liquidity and risk context in one place.</p></div>
+            <div className="rounded-3xl border border-shafx-border bg-shafx-surface/75 p-5 backdrop-blur-sm lg:p-6"><div className="flex h-10 w-10 items-center justify-center rounded-xl bg-shafx-accent/10 text-shafx-accent"><Sparkles className="h-5 w-5" /></div><div className="mt-4 text-sm font-semibold">AI market intelligence</div><p className="mt-2 text-xs leading-5 text-shafx-textMuted">Use SHAFX analysis and agents alongside your own decisions, with structure, liquidity and risk context in one place.</p></div>
             <div className="rounded-3xl border border-shafx-border bg-shafx-surface/75 p-5 backdrop-blur-sm lg:p-6"><div className="flex h-10 w-10 items-center justify-center rounded-xl bg-shafx-success/10 text-shafx-success"><Bot className="h-5 w-5" /></div><div className="mt-4 text-sm font-semibold">Professional workflow</div><p className="mt-2 text-xs leading-5 text-shafx-textMuted">Chart, research, replay, backtesting, trading tools and the SHAFX Bot are designed around one workspace.</p></div>
             <div className="rounded-3xl border border-shafx-border bg-shafx-surface/75 p-5 backdrop-blur-sm lg:p-6"><div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 text-shafx-text"><Activity className="h-5 w-5" /></div><div className="mt-4 text-sm font-semibold">Adaptive by provider</div><p className="mt-2 text-xs leading-5 text-shafx-textMuted">SHAFX keeps its own interface while supported providers supply the account, market and execution capabilities they actually expose.</p></div>
           </div>
