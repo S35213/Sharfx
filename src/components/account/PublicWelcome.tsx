@@ -123,7 +123,6 @@ export const PublicWelcome: React.FC = () => {
     <div className="relative z-10 mx-auto flex min-h-[calc(100vh-28px)] w-full max-w-7xl flex-col px-5 py-8 sm:px-8 lg:px-12">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-xl border border-shafx-accent/30 bg-shafx-accent/10 text-shafx-accent"><Activity className="h-5 w-5" /></div><div><div className="text-lg font-semibold tracking-tight">SHAFX</div><div className="text-[9px] uppercase tracking-[0.28em] text-shafx-textMuted">AI-powered market workspace</div></div></div>
-        <button type="button" onClick={() => openAuth('signin')} className="hidden min-h-10 items-center gap-2 rounded-xl border border-shafx-border bg-shafx-surface/70 px-4 text-xs font-semibold sm:flex hover:border-shafx-accent/40"><LogIn className="h-3.5 w-3.5" />Login</button>
       </header>
 
       <section className="flex flex-1 items-center py-12 lg:py-16">
@@ -132,10 +131,6 @@ export const PublicWelcome: React.FC = () => {
             <div className="inline-flex items-center gap-2 rounded-full border border-shafx-accent/20 bg-shafx-accent/5 px-3 py-1.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-shafx-accent"><Sparkles className="h-3 w-3" />Trade with more clarity</div>
             <h1 className="mt-6 text-4xl font-semibold leading-[1.05] tracking-[-0.04em] sm:text-6xl lg:text-7xl">Welcome to <span className="text-shafx-accent">SHAFX.</span></h1>
             <p className="mt-5 max-w-xl text-base leading-7 text-shafx-textMuted sm:text-lg">SHAFX is built to help you trade more easily with AI agents, market intelligence and a professional trading interface — all in one workspace.</p>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <button type="button" onClick={() => openAuth('signup')} className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-shafx-accent px-6 text-sm font-semibold text-white shadow-xl shadow-shafx-accent/15 hover:bg-shafx-primaryHover"><UserPlus className="h-4 w-4" />Create account<ArrowRight className="h-4 w-4" /></button>
-              <button type="button" onClick={() => openAuth('signin')} className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-shafx-border bg-shafx-surface/80 px-6 text-sm font-semibold hover:border-shafx-accent/40"><LogIn className="h-4 w-4" />Login</button>
-            </div>
             <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-[10px] text-shafx-textMuted"><span className="flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5 text-shafx-success" />Simulation-first access</span><span className="flex items-center gap-1.5"><LockKeyhole className="h-3.5 w-3.5 text-shafx-accent" />Provider credentials separated</span></div>
           </div>
 
@@ -147,7 +142,20 @@ export const PublicWelcome: React.FC = () => {
         </div>
       </section>
 
-      <footer className="border-t border-shafx-border pt-5 text-[10px] leading-5 text-shafx-textMuted">SHAFX is a trading and market-analysis workspace. Create an account to enter the simulator or continue to supported provider connections.</footer>
+      <section className="mt-auto border-t border-shafx-border pt-7">
+        <div className="rounded-3xl border border-shafx-accent/20 bg-shafx-accent/[0.045] p-5 sm:p-6 lg:flex lg:items-center lg:justify-between lg:gap-8">
+          <div className="max-w-xl">
+            <div className="text-[9px] font-semibold uppercase tracking-[0.18em] text-shafx-accent">Ready when you are</div>
+            <h2 className="mt-2 text-xl font-semibold tracking-tight sm:text-2xl">Enter the SHAFX workspace.</h2>
+            <p className="mt-2 text-xs leading-5 text-shafx-textMuted">Create your account first. You can then choose the simulator or connect a supported provider.</p>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-2.5 lg:mt-0 lg:w-[360px]">
+            <button type="button" onClick={() => openAuth('signup')} className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-shafx-accent px-4 text-xs font-semibold text-white shadow-xl shadow-shafx-accent/15 hover:bg-shafx-primaryHover"><UserPlus className="h-4 w-4" />Create account</button>
+            <button type="button" onClick={() => openAuth('signin')} className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-shafx-border bg-shafx-surface px-4 text-xs font-semibold hover:border-shafx-accent/40"><LogIn className="h-4 w-4" />Login</button>
+          </div>
+        </div>
+        <footer className="pt-5 text-[10px] leading-5 text-shafx-textMuted">SHAFX is a trading and market-analysis workspace. Create an account to enter the simulator or continue to supported provider connections.</footer>
+      </section>
     </div>
   </main>
 }
