@@ -160,7 +160,8 @@ export function TradingAgentPanel({
     }
   }, [botPositionId, tradeHistory])
 
-  runBotCycleRef.current = async (): Promise<void> => {
+  useEffect(() => {
+    runBotCycleRef.current = async (): Promise<void> => {
     if (losses >= 2) return
     const units = cycleUnitsForSeconds(cycleSeconds)
     try {
