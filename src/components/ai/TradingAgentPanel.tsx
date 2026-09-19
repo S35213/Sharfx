@@ -351,8 +351,8 @@ export function TradingAgentPanel({
         </section>
       </div>
 
-      <div className="mt-3 grid grid-cols-3 gap-2.5">
-        <button type="button" disabled={phase !== 'READY' || !symbolSpec} onClick={startBot} className="flex min-h-14 items-center justify-center gap-2 rounded-xl bg-shafx-success px-2 text-[10px] font-semibold text-white shadow-lg shadow-shafx-success/10 disabled:cursor-not-allowed disabled:opacity-35"><Play className="h-4 w-4" />Start bot</button>
+      <div className="mt-3 grid grid-cols-2 gap-2.5">
+        <button type="button" disabled={phase !== 'READY' || !symbolSpec} onClick={startBot} className="col-span-2 flex min-h-14 items-center justify-center gap-2 rounded-xl bg-shafx-success px-3 text-[11px] font-semibold text-white shadow-lg shadow-shafx-success/10 disabled:cursor-not-allowed disabled:opacity-35"><Play className="h-4 w-4" />Start bot</button>
         <button type="button" disabled={!symbolSpec} onClick={rescanBot} className="flex min-h-14 items-center justify-center gap-2 rounded-xl border border-shafx-accent/25 bg-shafx-accent/5 px-2 text-[10px] font-semibold text-shafx-accent disabled:cursor-not-allowed disabled:opacity-35">↻ Rescan</button>
         <button type="button" disabled={phase === 'READY'} onClick={stopBot} className="flex min-h-14 items-center justify-center gap-2 rounded-xl border border-shafx-danger/30 bg-shafx-danger/5 px-2 text-[10px] font-semibold text-shafx-danger disabled:cursor-not-allowed disabled:opacity-35"><CircleStop className="h-4 w-4" />Stop</button>
       </div>
