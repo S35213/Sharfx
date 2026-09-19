@@ -50,10 +50,13 @@ const TerminalContent: React.FC = () => {
   const [currentPrice, setCurrentPrice] = useState(1.08542)
   const [candles, setCandles] = useState<OHLCV[]>([])
   const [liveCandles, setLiveCandles] = useState<OHLCV[]>([])
+  const [simulatedCandles, setSimulatedCandles] = useState<OHLCV[]>([])
+  const simulatedPriceRef = useRef(1.08542)
   const [liveMarketActive, setLiveMarketActive] = useState(false)
   const [replayCount, setReplayCount] = useState(0)
   const [mobileTab, setMobileTab] = useState<MobileNavTab>('market')
   const [manualTradeOpen, setManualTradeOpen] = useState(false)
+  const [mobileDockOpen, setMobileDockOpen] = useState(false)
   const [accountData, setAccountData] = useState<AccountData | null>(null)
   const [symbolSpec, setSymbolSpec] = useState<SymbolSpec | null>(null)
   const [watchlist, setWatchlist] = useState<MarketPair[]>([])
@@ -125,6 +128,8 @@ const TerminalContent: React.FC = () => {
         setWatchlist(wl)
         setSymbolSpec(spec)
         setCandles(cands)
+        setSimulatedCandles(cands)
+        simulatedPriceRef.current = cands[cands.length - 1]?.close ?? acc.balance
         setLiveCandles([])
         setReplayCount(cands.length)
         setMarketAnalysis(ma)
@@ -206,9 +211,37 @@ const TerminalContent: React.FC = () => {
   }, [openPositions, tradeHistory])
 
   const visibleCandles = useMemo(() => replayCount > 0 && replayCount < candles.length ? candles.slice(0, replayCount) : candles, [candles, replayCount])
-  const chartCandles = liveMarketActive && liveCandles.length > 0 ? liveCandles : visibleCandles
+  useEffect(() => {
+    if (isBrokerMode() || simulatedCandles.length === 0 || !symbolSpec) return
+    const intervalSeconds: Record<string, number> = { M1: 60, M5: 300, M15: 900, M30: 1800, H1: 3600, H4: 14400, D1: 86400 }
+    const interval = intervalSeconds[timeframe] ?? 60
+    let tick = 0
+    const timer = window.setInterval(() => {
+      tick += 1
+      const pip = symbolSpec.pipSize
+      const previous = simulatedPriceRef.current
+      const direction = Math.sin(tick * 0.91 + selectedSymbol.length) >= 0 ? 1 : -1
+      const magnitude = pip * (0.18 + Math.abs(Math.sin(tick * 0.37)) * 0.82)
+      const nextPrice = Math.max(pip / 10, Number((previous + direction * magnitude).toFixed(symbolSpec.pricePrecision)))
+      simulatedPriceRef.current = nextPrice
+      const now = Math.floor(Date.now() / 1000)
+      const bucket = Math.floor(now / interval) * interval
+      setSimulatedCandles((previousCandles) => {
+        if (previousCandles.length === 0) return previousCandles
+        const last = previousCandles[previousCandles.length - 1]
+        const next = last.time < bucket
+          ? { time: bucket, open: last.close, high: Math.max(last.close, nextPrice), low: Math.min(last.close, nextPrice), close: nextPrice, volume: 1 }
+          : { ...last, high: Math.max(last.high, nextPrice), low: Math.min(last.low, nextPrice), close: nextPrice, volume: (last.volume ?? 0) + 1 }
+        return [...previousCandles.slice(-999), next]
+      })
+      setCurrentPrice(nextPrice)
+    }, 1500)
+    return () => window.clearInterval(timer)
+  }, [selectedSymbol, simulatedCandles.length, symbolSpec, timeframe])
+
   const replayActive = !liveMarketActive && visibleCandles.length > 0 && visibleCandles.length < candles.length
-  const displayPrice = liveMarketActive && liveCandles.length > 0 ? (liveCandles[liveCandles.length - 1]?.close ?? currentPrice) : replayActive ? (visibleCandles[visibleCandles.length - 1]?.close ?? currentPrice) : currentPrice
+  const chartCandles = replayActive ? visibleCandles : liveMarketActive && liveCandles.length > 0 ? liveCandles : (isSimulatorMode() && simulatedCandles.length > 0 ? simulatedCandles : visibleCandles)
+  const displayPrice = replayActive ? (visibleCandles[visibleCandles.length - 1]?.close ?? currentPrice) : liveMarketActive && liveCandles.length > 0 ? (liveCandles[liveCandles.length - 1]?.close ?? currentPrice) : isSimulatorMode() && simulatedCandles.length > 0 ? (simulatedCandles[simulatedCandles.length - 1]?.close ?? currentPrice) : currentPrice
   const conversionRate = symbolSpec ? getConversionRate(symbolSpec.quoteCurrency, accountData?.currency ?? 'USD') : undefined
   const chartAnnotations = useMemo(() => buildAIChartAnnotations(selectedSymbol, chartCandles), [selectedSymbol, chartCandles])
   const aiSetup = useMemo(() => analyzeCurrentSetup(selectedSymbol, chartCandles)?.preferredSetup ?? null, [selectedSymbol, chartCandles])
@@ -333,20 +366,22 @@ const TerminalContent: React.FC = () => {
   const liveControl = <ProviderLiveControl providerId={activeProviderId} connection={activeMarketConnection} symbol={selectedSymbol} timeframe={timeframe} onUpdate={handleLiveUpdate} onActiveChange={handleLiveActiveChange} />
   const botProps = { symbol: selectedSymbol, timeframe, candles: chartCandles, currentPrice: displayPrice, activePosition, tradeHistory, accountBalance: accountData.balance, accountCurrency: accountData.currency, symbolSpec, conversionRate, botPlan: user?.botPlan ?? 'FREE' as const, onBotOrder: handleBotOrder, onBotRunningChange: setBotRunning, onReviewSetup: reviewAISetup }
 
+  const openMobileDock = (next: WorkspaceDock): void => { setDock(next); setMobileDockOpen(true) }
+
   const dockContent = {
     insights: <div className="space-y-3"><FXMoveMatrix pairs={watchlist} /><MarketAnalysisPanel analysis={marketAnalysis} pricePrecision={symbolSpec.pricePrecision} /><AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={chartCandles} setup={aiSetup} onReviewSetup={reviewAISetup} /></div>,
-    liquidity: <LiquidityPanel symbol={selectedSymbol} price={displayPrice} precision={symbolSpec.pricePrecision} pipSize={symbolSpec.pipSize} />,
+    liquidity: <LiquidityPanel symbol={selectedSymbol} price={displayPrice} precision={symbolSpec.pricePrecision} pipSize={symbolSpec.pipSize} candles={chartCandles} />,
     orders: <div className="space-y-3">{brokerMode && activeProviderDescriptor ? <ProviderCapabilityPanel descriptor={activeProviderDescriptor} environment={activeProviderSelection?.environment ?? 'demo'} /> : <OrderPanel symbol={selectedSymbol} currentPrice={displayPrice} accountBalance={accountData.balance} accountCurrency={accountData.currency} symbolSpec={symbolSpec} conversionRate={conversionRate} onSubmitOrder={handleOrderSubmit} aiSetup={aiSetup} />}<div className="min-h-[280px]"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} /></div></div>,
     agent: <div className="space-y-3"><SimulationPulse openPositions={openPositions} tradeHistory={tradeHistory} botOrderIds={botOrderIds} botRunning={botRunning} /><SimulationFlowChart openPositions={openPositions} tradeHistory={tradeHistory} /><TradingAgentPanel {...botProps} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /></div>,
     research: <div className="space-y-3"><ReplayPanel candles={candles} replayCount={replayCount || candles.length} onReplayCountChange={setReplayCount} /><BacktestPanel symbol={selectedSymbol} candles={candles} symbolSpec={symbolSpec} initialBalance={accountData.balance} accountCurrency={accountData.currency} conversionRate={conversionRate} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /><TradingJournalPanel tradeHistory={tradeHistory} currency={accountData.currency} /></div>,
   }[dock]
 
-  return <div className="min-h-screen bg-shafx-bg text-shafx-text lg:flex lg:h-[calc(100vh-28px)] lg:flex-col lg:overflow-hidden">
+  return <div className="min-h-screen w-full min-w-0 overflow-x-hidden bg-shafx-bg text-shafx-text lg:flex lg:h-[calc(100vh-28px)] lg:flex-col lg:overflow-hidden">
     <TopNav symbol={selectedSymbol} price={displayPrice} pricePrecision={symbolSpec.pricePrecision} timeframe={timeframe} onTimeframeChange={setTimeframe} pairs={watchlist} onSelectPair={setSelectedSymbol} view={mobileTab} />
-    <main className="flex min-h-0 flex-1 flex-col overflow-visible lg:flex-row lg:overflow-hidden">
+    <main className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-visible lg:flex-row lg:overflow-hidden">
       <WorkspaceRail tool={chartTool} onToolChange={(next) => setChartTool(next)} dock={dock} onDockChange={setDock} />
 
-      <aside className="hidden w-60 flex-shrink-0 flex-col gap-3 border-r border-shafx-border bg-shafx-surface/40 p-3 lg:flex lg:overflow-y-auto">
+      <aside className="hidden w-[clamp(210px,20vw,280px)] min-w-0 flex-shrink-0 flex-col gap-3 border-r border-shafx-border bg-shafx-surface/40 p-3 lg:flex lg:overflow-y-auto">
         <Watchlist pairs={watchlist} selectedPair={selectedSymbol} onSelectPair={setSelectedSymbol} />
         <AccountPanel account={accountData} />
         {brokerMode && activeProviderId === 'deriv' && <DerivCashierLinks />}
@@ -365,13 +400,20 @@ const TerminalContent: React.FC = () => {
             <div className="pointer-events-none absolute bottom-5 right-5 z-10 hidden items-center gap-1.5 rounded-xl border border-shafx-border bg-shafx-surface/90 px-2.5 py-1.5 text-[9px] text-shafx-textMuted backdrop-blur sm:flex"><Maximize2 className="h-3 w-3 text-shafx-accent" />Scroll / pinch to navigate</div>
           </div>
           <div className="grid grid-cols-2 gap-2 border-t border-shafx-border bg-shafx-surface/55 p-2 sm:grid-cols-4">
-            <button type="button" onClick={() => setDock('insights')} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Structure</span><div className="mt-1 text-xs font-semibold">{marketAnalysis.bias} • {marketAnalysis.structure.type}</div></button>
-            <button type="button" onClick={() => setDock('liquidity')} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Liquidity</span><div className="mt-1 text-xs font-semibold">Prev H {marketAnalysis.liquidity.previousHigh?.toFixed(symbolSpec.pricePrecision) ?? '—'}</div></button>
-            <button type="button" onClick={() => { setDock('orders'); setManualTradeOpen(true) }} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Risk</span><div className="mt-1 text-xs font-semibold">Open trade workspace</div></button>
-            <button type="button" onClick={() => setDock('research')} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Research</span><div className="mt-1 text-xs font-semibold">Replay • Backtest</div></button>
+            <button type="button" onClick={() => openMobileDock('insights')} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Structure</span><div className="mt-1 text-xs font-semibold">{marketAnalysis.bias} • {marketAnalysis.structure.type}</div></button>
+            <button type="button" onClick={() => openMobileDock('liquidity')} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Liquidity</span><div className="mt-1 text-xs font-semibold">Prev H {marketAnalysis.liquidity.previousHigh?.toFixed(symbolSpec.pricePrecision) ?? '—'}</div></button>
+            <button type="button" onClick={() => { openMobileDock('orders'); setManualTradeOpen(true) }} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Risk</span><div className="mt-1 text-xs font-semibold">Open trade workspace</div></button>
+            <button type="button" onClick={() => openMobileDock('research')} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Research</span><div className="mt-1 text-xs font-semibold">Replay • Backtest</div></button>
           </div>
           <div className="hidden h-56 flex-shrink-0 border-t border-shafx-border bg-shafx-surface/25 p-2 lg:block"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} /></div>
           {manualTradeOpen && <div id="manual-trade" className="p-3 lg:hidden"><OrderPanel symbol={selectedSymbol} currentPrice={displayPrice} accountBalance={accountData.balance} accountCurrency={accountData.currency} symbolSpec={symbolSpec} conversionRate={conversionRate} onSubmitOrder={handleOrderSubmit} aiSetup={aiSetup} /></div>}
+          {mobileDockOpen && <div className="border-t border-shafx-border bg-shafx-surface p-3 lg:hidden">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div><div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Market workspace</div><div className="text-sm font-semibold">{dock === 'insights' ? 'Structure & AI' : dock === 'liquidity' ? 'Liquidity' : dock === 'orders' ? 'Risk & trade ticket' : 'Research tools'}</div></div>
+              <button type="button" onClick={() => setMobileDockOpen(false)} className="min-h-10 rounded-xl border border-shafx-border px-3 text-[10px] font-semibold text-shafx-textMuted">Close</button>
+            </div>
+            {dockContent}
+          </div>}
         </div>
       </section>
 
@@ -379,7 +421,7 @@ const TerminalContent: React.FC = () => {
       <aside className={`${showHistory ? '' : 'hidden'} w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden`}><div className="space-y-3"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /><SimulationFlowChart openPositions={openPositions} tradeHistory={tradeHistory} /><TradingJournalPanel tradeHistory={tradeHistory} currency={accountData.currency} /></div></aside>
       <aside className={`${showAccount ? '' : 'hidden'} w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden`}><div className="space-y-3"><AccountPanel account={accountData} />{brokerMode && activeProviderId === 'deriv' && <DerivCashierLinks />}</div></aside>
 
-      <aside className="hidden w-[360px] flex-shrink-0 flex-col overflow-hidden border-l border-shafx-border bg-shafx-surface/50 lg:flex">
+      <aside className="hidden w-[clamp(300px,28vw,420px)] min-w-0 flex-shrink-0 flex-col overflow-hidden border-l border-shafx-border bg-shafx-surface/50 lg:flex">
         <div className="flex h-12 flex-shrink-0 items-center justify-between border-b border-shafx-border px-3"><div><div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Workspace panel</div><div className="text-sm font-semibold">{dock === 'insights' ? 'Market intelligence' : dock === 'liquidity' ? 'Liquidity & depth' : dock === 'orders' ? 'Orders & positions' : dock === 'agent' ? 'SHAFX Bot' : 'Research lab'}</div></div><PanelRight className="h-4 w-4 text-shafx-textMuted" /></div>
         <div className="min-h-0 flex-1 overflow-y-auto p-3">{dockContent}</div>
       </aside>

@@ -52,6 +52,7 @@ export function TradingAgentPanel({
 }: Props) {
   const plan = BOT_PLANS[botPlan]
   const [riskMode, setRiskMode] = useState<RiskMode>('SAFE')
+  const [lotSize, setLotSize] = useState('0.10')
   const [cycleSeconds, setCycleSeconds] = useState<5 | 10>(5)
   const [phase, setPhase] = useState<Phase>('READY')
   const [, setWins] = useState(0)
@@ -83,6 +84,8 @@ export function TradingAgentPanel({
   const research = useMemo(() => buildAgentResearch({ context: tradingContext, learning, multiTimeframe }), [learning, multiTimeframe, tradingContext])
   const setup = tradingContext.setup.preferredSetup
   const riskAmount = accountBalance * (riskModes[riskMode].percent / 100)
+  const parsedLotSize = Number(lotSize)
+  const lotSizeValid = symbolSpec ? Number.isFinite(parsedLotSize) && parsedLotSize >= symbolSpec.minLotSize && parsedLotSize <= symbolSpec.maxLotSize && Math.abs((parsedLotSize / symbolSpec.lotStep) - Math.round(parsedLotSize / symbolSpec.lotStep)) < 1e-8 : false
   const allowanceLabel = plan.maxDailyCycleUnits === null ? 'Unlimited' : String(plan.maxDailyCycleUnits) + ' units/day'
 
   useEffect(() => {
@@ -169,6 +172,10 @@ export function TradingAgentPanel({
           setStatus('Simulation engine is not ready for this market')
           return
         }
+        if (!lotSizeValid) {
+          setStatus('Choose a valid bot lot size before starting a cycle')
+          return
+        }
         setStatus('Analyzing ' + symbol + '…')
         const result = executeSimulationTrade({
           context: { tradingContext, preferredSetup: setup, hasOpenPosition: false, permission: 'AUTONOMOUS_SIMULATION', multiTimeframe, learning, research },
@@ -177,6 +184,7 @@ export function TradingAgentPanel({
           riskPercent: riskModes[riskMode].percent,
           symbolSpec,
           conversionRate,
+          lotSize: parsedLotSize,
         })
         if (!result.order) {
           setLastResult('WAIT')
@@ -193,7 +201,7 @@ export function TradingAgentPanel({
       }
     }, cycleSeconds * 1000)
     return () => window.clearInterval(timer)
-  }, [accountBalance, accountCurrency, activePosition, bias, botPlan, botPositionId, conversionRate, cycleSeconds, cycleUnits, learning, losses, multiTimeframe, onBotOrder, phase, research, riskMode, runId, setup, symbol, symbolSpec, tradingContext])
+  }, [accountBalance, accountCurrency, activePosition, bias, botPlan, botPositionId, conversionRate, cycleSeconds, cycleUnits, learning, losses, multiTimeframe, onBotOrder, phase, research, riskMode, runId, setup, symbol, symbolSpec, tradingContext, lotSize, lotSizeValid, parsedLotSize])
 
   useEffect(() => () => {
     if (analysisTimer.current) window.clearTimeout(analysisTimer.current)
@@ -276,6 +284,14 @@ export function TradingAgentPanel({
             <div className="rounded-lg border border-shafx-border bg-shafx-bg px-2.5 py-2"><span className="text-shafx-textMuted">Balance</span><div className="mt-0.5 font-mono text-xs">${accountBalance.toFixed(2)}</div></div>
             <div className="rounded-lg border border-shafx-border bg-shafx-bg px-2.5 py-2"><span className="text-shafx-textMuted">Max risk</span><div className="mt-0.5 font-mono text-xs text-shafx-danger">${riskAmount.toFixed(2)}</div></div>
           </div>
+          <label className="mt-3 block">
+            <span className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">Bot lot size</span>
+            <div className="mt-1 flex items-center gap-2">
+              <input type="number" inputMode="decimal" step={symbolSpec?.lotStep ?? 0.01} min={symbolSpec?.minLotSize ?? 0.01} max={symbolSpec?.maxLotSize ?? 100} value={lotSize} onChange={(event) => setLotSize(event.target.value)} className="min-h-11 min-w-0 flex-1 rounded-xl border border-shafx-border bg-shafx-bg px-3 font-mono text-xs outline-none focus:border-shafx-accent" aria-label="Bot lot size" />
+              <span className="text-[9px] text-shafx-textMuted">lots</span>
+            </div>
+            <span className={lotSizeValid ? 'mt-1 block text-[8px] text-shafx-textMuted' : 'mt-1 block text-[8px] text-shafx-danger'}>{symbolSpec ? `Allowed ${symbolSpec.minLotSize}–${symbolSpec.maxLotSize}, step ${symbolSpec.lotStep}` : 'Load a symbol specification first.'}</span>
+          </label>
         </section>
 
         <section className="rounded-xl border border-shafx-border bg-shafx-bg p-3.5">
