@@ -82,11 +82,11 @@ export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, t
           <div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold">{symbol}</div><div className="mt-0.5 hidden text-[9px] text-shafx-textMuted sm:block">Market Watch • {formatPrice(price, pricePrecision)}</div></div>
           <ChevronDown className={`h-4 w-4 flex-shrink-0 text-shafx-textMuted transition-transform ${marketOpen ? 'rotate-180' : ''}`} />
         </button>
-        {marketOpen && <div className="absolute left-0 top-[calc(100%+8px)] z-[80] w-[min(92vw,360px)] rounded-2xl border border-shafx-border bg-shafx-surface p-2 shadow-2xl">
+        {marketOpen && <div className="fixed left-3 right-3 top-[76px] z-[200] max-h-[calc(100dvh-152px)] overflow-hidden rounded-2xl border border-shafx-border bg-shafx-surface p-2 shadow-2xl sm:absolute sm:left-0 sm:right-auto sm:top-[calc(100%+8px)] sm:max-h-none sm:w-[min(92vw,420px)]">
           <div className="mb-2 flex items-center gap-2 rounded-xl border border-shafx-border bg-shafx-bg px-3"><Search className="h-4 w-4 text-shafx-textMuted" /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') { setMarketOpen(false); setQuery('') } else if (event.key === 'Enter') selectFirstMatch() }} placeholder="Search symbol…" className="h-10 w-full bg-transparent text-sm outline-none" aria-label="Search trading symbols" /><kbd className="hidden rounded border border-shafx-border px-1.5 py-0.5 text-[8px] text-shafx-textMuted sm:block">⌘K</kbd></div>
           <div className="mb-1 flex items-center justify-between px-2"><div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Market Watch</div><span className="rounded-full border border-shafx-warning/20 bg-shafx-warning/5 px-1.5 py-0.5 text-[8px] text-shafx-warning">SIMULATED</span></div>
           <div className="mb-2 grid grid-cols-[1fr_82px_70px] gap-2 px-2 text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted"><span>Instrument</span><span className="text-right">Bid / Ask</span><span className="text-right">Move</span></div>
-          <div className="max-h-80 space-y-1 overflow-y-auto">{filtered.map((item, index) => {
+          <div className="max-h-[calc(100dvh-225px)] space-y-1 overflow-y-auto sm:max-h-80">{filtered.map((item, index) => {
             const quote = simulatedQuote(item, index)
             const change = quote.pair?.changePercent ?? 0
             const selectedClass = item === symbol ? 'bg-shafx-accent/10 text-shafx-accent' : ''
