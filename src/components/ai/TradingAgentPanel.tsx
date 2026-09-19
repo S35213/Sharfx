@@ -255,7 +255,7 @@ export function TradingAgentPanel({
     }
     if (losses >= 2) setLosses(0)
     setPhase('ANALYZING')
-    setStatus('Refreshing market analysis…')
+    setStatus('Refreshing market analysis… Daily allowance: ' + allowanceLabel + '.')
     if (analysisTimer.current) window.clearTimeout(analysisTimer.current)
     analysisTimer.current = window.setTimeout(() => {
       setPhase('RUNNING')
