@@ -16,9 +16,11 @@ interface CandlestickChartProps {
   toolMode?: ChartToolMode
   pipSize?: number
   onToolNotice?: (message: string) => void
+  showGrid?: boolean
+  showPriceLabels?: boolean
 }
 
-interface UserLevel { id: string; price: number; label: string; color: string; lineWidth?: 1 | 2 | 3 | 4; dashed?: boolean }
+interface UserLevel { id: string; price: number; label: string; color: string; lineWidth?: 1 | 2 | 3 | 4; dashed?: boolean; armed?: boolean }
 
 const prepareData = (data: OHLCV[]): CandlestickData[] => {
   const seen = new Set<number>()
@@ -39,7 +41,7 @@ const timeframeMeta = (timeframe?: Timeframe, data: CandlestickData[] = []): { l
   return known[seconds] ?? { label: 'Custom', interval: `${Math.round(seconds / 60)}m` }
 }
 
-export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, toolMode = 'cursor', pipSize = 0.0001, onToolNotice }) => {
+export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true }) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
@@ -49,22 +51,24 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const [userLevels, setUserLevels] = useState<UserLevel[]>([])
   const [measureStart, setMeasureStart] = useState<number | null>(null)
   const [measureEnd, setMeasureEnd] = useState<number | null>(null)
+  const [alertCandidate, setAlertCandidate] = useState<number | null>(null)
+  const [armedAlerts, setArmedAlerts] = useState<UserLevel[]>([])
 
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
     const chart = createChart(el, {
       layout: { background: { type: ColorType.Solid, color: '#070A0F' }, textColor: '#8A96A8', attributionLogo: false },
-      grid: { vertLines: { color: '#131A23' }, horzLines: { color: '#131A23' } },
+      grid: showGrid ? { vertLines: { color: '#131A23' }, horzLines: { color: '#131A23' } } : { vertLines: { color: 'transparent' }, horzLines: { color: 'transparent' } },
       width: el.clientWidth,
       height: Math.max(280, el.clientHeight),
       crosshair: { mode: 1, vertLine: { color: '#667285', width: 1, style: 2, labelBackgroundColor: '#202A38' }, horzLine: { color: '#667285', width: 1, style: 2, labelBackgroundColor: '#202A38' } },
-      rightPriceScale: { borderColor: '#202A38', minimumWidth: 78, scaleMargins: { top: 0.08, bottom: 0.08 } },
+      rightPriceScale: { borderColor: '#202A38', minimumWidth: 92, scaleMargins: { top: 0.08, bottom: 0.08 } },
       timeScale: { borderColor: '#202A38', timeVisible: true, secondsVisible: false, rightOffset: 5, barSpacing: 8, minBarSpacing: 3 },
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
       handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true },
     })
-    const series = chart.addCandlestickSeries({ upColor: '#22D3A5', downColor: '#FF5C75', borderUpColor: '#22D3A5', borderDownColor: '#FF5C75', wickUpColor: '#22D3A5', wickDownColor: '#FF5C75', priceLineVisible: false, lastValueVisible: true })
+    const series = chart.addCandlestickSeries({ priceFormat: { type: 'price', precision: Math.max(2, Math.round(Math.log10(1 / Math.max(pipSize, 0.00001)))), minMove: Math.max(pipSize, 0.00001) }, upColor: '#22D3A5', downColor: '#FF5C75', borderUpColor: '#22D3A5', borderDownColor: '#FF5C75', wickUpColor: '#22D3A5', wickDownColor: '#FF5C75', priceLineVisible: false, lastValueVisible: true })
     chartRef.current = chart
     seriesRef.current = series
     const ro = new ResizeObserver(([entry]) => {
@@ -75,6 +79,16 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     ro.observe(el)
     return () => { ro.disconnect(); chart.remove(); chartRef.current = null; seriesRef.current = null }
   }, [])
+
+  useEffect(() => {
+    const chart = chartRef.current
+    if (!chart) return
+    chart.applyOptions({
+      grid: showGrid
+        ? { vertLines: { color: '#131A23' }, horzLines: { color: '#131A23' } }
+        : { vertLines: { color: 'transparent' }, horzLines: { color: 'transparent' } },
+    })
+  }, [showGrid])
 
   useEffect(() => {
     const series = seriesRef.current
@@ -104,16 +118,17 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         color: annotation.color,
         lineWidth: annotation.lineWidth ?? 1,
         lineStyle: 'dashed' in annotation && annotation.dashed ? 2 : (annotation.lineWidth && annotation.lineWidth > 1 ? 0 : 2),
-        axisLabelVisible: !compact || annotation.id === 'support' || annotation.id === 'resistance',
+        axisLabelVisible: showPriceLabels && (!compact || annotation.id === 'support' || annotation.id === 'resistance'),
         title: compact && annotation.id !== 'support' && annotation.id !== 'resistance' ? '' : annotation.label,
       }))
     }
 
     annotations.forEach(addLine)
     userLevels.forEach(addLine)
+    armedAlerts.forEach(addLine)
     if (Number.isFinite(lastClose) && lastClose > 0) lines.push(series.createPriceLine({ price: lastClose, color: '#6B7688', lineWidth: 1, lineStyle: 2, axisLabelVisible: !compact, title: compact ? '' : 'Last' }))
     return () => { lines.forEach((line) => series.removePriceLine(line)) }
-  }, [annotations, lastClose, userLevels])
+  }, [annotations, armedAlerts, lastClose, showPriceLabels, userLevels])
 
   const placeTool = (event: React.PointerEvent<HTMLDivElement>): void => {
     if (!['level', 'alert', 'measure'].includes(toolMode)) return
@@ -126,10 +141,15 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     const price = series.coordinateToPrice(y)
     if (!Number.isFinite(price)) return
 
-    if (toolMode === 'level' || toolMode === 'alert') {
-      const label = toolMode === 'alert' ? 'Alert' : 'Level'
-      setUserLevels((current) => [...current, { id: `${toolMode}-${Date.now()}`, price: Number(price), label, color: toolMode === 'alert' ? '#F5B84B' : '#7C5CFC', dashed: toolMode === 'alert' }].slice(-8))
-      onToolNotice?.(`${label} placed at ${Number(price).toFixed(5)}`)
+    if (toolMode === 'level') {
+      const level = { id: `level-${Date.now()}`, price: Number(price), label: 'Level', color: '#7C5CFC', dashed: true }
+      setUserLevels((current) => [...current, level].slice(-6))
+      onToolNotice?.(`Price level placed at ${Number(price).toFixed(5)}`)
+      return
+    }
+
+    if (toolMode === 'alert') {
+      setAlertCandidate(Number(price))
       return
     }
 
@@ -147,6 +167,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
 
   const clearDrawings = (): void => {
     setUserLevels([])
+    setArmedAlerts([])
+    setAlertCandidate(null)
     setMeasureStart(null)
     setMeasureEnd(null)
     onToolNotice?.('Chart drawings cleared.')
@@ -154,11 +176,33 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
 
   const measureDelta = measureStart !== null && measureEnd !== null ? Math.abs(measureEnd - measureStart) / Math.max(pipSize, Number.EPSILON) : null
 
+  useEffect(() => {
+    if (armedAlerts.length === 0 || !Number.isFinite(lastClose)) return
+    const hit = armedAlerts.find((alert) => (lastClose >= alert.price && alert.color === '#22D3A5') || (lastClose <= alert.price && alert.color === '#F5B84B'))
+    if (hit) {
+      onToolNotice?.(`Price alert reached ${hit.price.toFixed(5)}`)
+      setArmedAlerts((current) => current.filter((alert) => alert.id !== hit.id))
+    }
+  }, [armedAlerts, lastClose, onToolNotice])
+
+  const armAlert = (): void => {
+    if (alertCandidate === null) return
+    const directionUp = alertCandidate > (lastClose || alertCandidate)
+    const alert = { id: `alert-${Date.now()}`, price: alertCandidate, label: directionUp ? 'Alert ↑' : 'Alert ↓', color: directionUp ? '#22D3A5' : '#F5B84B', dashed: true, armed: true }
+    setArmedAlerts((current) => [...current, alert].slice(-4))
+    setAlertCandidate(null)
+    onToolNotice?.(`Alert armed at ${alertCandidate.toFixed(5)}.`)
+  }
+
+  const cancelAlert = (): void => setAlertCandidate(null)
+
   return <div ref={containerRef} onPointerDown={placeTool} className={`shafx-chart-shell relative w-full overflow-hidden border border-shafx-border bg-shafx-bg ${['level', 'alert', 'measure'].includes(toolMode) ? 'cursor-crosshair' : ''}`} style={{ height, minHeight: 280 }}>
     <div className="pointer-events-none absolute left-3 top-3 z-10 flex items-center gap-2 rounded-xl border border-shafx-border bg-shafx-bg/90 px-2.5 py-1.5 text-[9px] font-semibold backdrop-blur"><span className="text-shafx-accent">SHAFX</span><span className="text-shafx-textMuted">•</span><span className="text-shafx-textMuted">{timeframe ?? 'PRICE'} workspace</span></div>
     <div className="pointer-events-none absolute right-3 top-3 z-10 rounded-xl border border-shafx-border bg-shafx-bg/90 px-2.5 py-1.5 text-[9px] font-semibold text-shafx-text backdrop-blur">{meta.label} <span className="font-normal text-shafx-textMuted">• {meta.interval}</span></div>
-    {(toolMode === 'level' || toolMode === 'alert' || toolMode === 'measure') && <div className="pointer-events-none absolute bottom-3 left-3 z-10 flex items-center gap-2 rounded-xl border border-shafx-border bg-shafx-surface/95 px-3 py-2 text-[9px] text-shafx-textMuted shadow-xl"><Crosshair className="h-3.5 w-3.5 text-shafx-accent" />{toolMode === 'level' ? 'Tap chart to place a level' : toolMode === 'alert' ? 'Tap chart to place an alert line' : measureStart === null ? 'Tap first point to measure' : measureEnd === null ? 'Tap second point to finish' : 'Measure complete'}</div>}
+    {(toolMode === 'level' || toolMode === 'alert' || toolMode === 'measure') && <div className="pointer-events-none absolute bottom-3 left-3 z-10 flex items-center gap-2 rounded-xl border border-shafx-border bg-shafx-surface/95 px-3 py-2 text-[9px] text-shafx-textMuted shadow-xl"><Crosshair className="h-3.5 w-3.5 text-shafx-accent" />{toolMode === 'level' ? 'Tap chart to place a price level' : toolMode === 'alert' ? 'Tap chart, then confirm the alert price' : measureStart === null ? 'Tap first point to measure' : measureEnd === null ? 'Tap second point to finish' : 'Measure complete'}</div>}
+    {alertCandidate !== null && <div className="absolute bottom-3 left-1/2 z-30 -translate-x-1/2 rounded-2xl border border-shafx-warning/30 bg-shafx-surface/98 px-3 py-3 shadow-2xl backdrop-blur"><div className="text-[9px] uppercase tracking-[0.14em] text-shafx-textMuted">Price alert</div><div className="mt-1 font-mono text-sm font-semibold text-shafx-text">{alertCandidate.toFixed(5)}</div><div className="mt-2 flex gap-2"><button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={armAlert} className="min-h-10 rounded-xl bg-shafx-warning px-3 text-[10px] font-semibold text-black">Arm alert</button><button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={cancelAlert} className="min-h-10 rounded-xl border border-shafx-border px-3 text-[10px] text-shafx-textMuted">Cancel</button></div></div>}
     {measureDelta !== null && <div className="pointer-events-none absolute bottom-3 right-3 z-10 rounded-xl border border-shafx-info/20 bg-shafx-surface/95 px-3 py-2 text-[9px] shadow-xl"><div className="flex items-center gap-2 text-shafx-textMuted"><Ruler className="h-3.5 w-3.5 text-shafx-info" />Range</div><strong className="mt-1 block font-mono text-xs text-shafx-text">{measureDelta.toFixed(1)} pips</strong></div>}
+    {(userLevels.length > 0 || armedAlerts.length > 0) && <div className="pointer-events-none absolute right-3 bottom-3 z-20 hidden max-w-[48%] gap-1 overflow-hidden sm:flex"><div className="truncate rounded-xl border border-shafx-border bg-shafx-surface/95 px-2.5 py-1.5 text-[9px] text-shafx-textMuted shadow-xl">{userLevels.length} level{userLevels.length === 1 ? '' : 's'} • {armedAlerts.length} alert{armedAlerts.length === 1 ? '' : 's'}</div></div>}
     {userLevels.length > 0 && <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={clearDrawings} className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-xl border border-shafx-border bg-shafx-surface px-2.5 py-1.5 text-[9px] text-shafx-textMuted shadow-xl hover:text-shafx-text"><Eraser className="h-3 w-3" />Clear levels</button>}
   </div>
 }

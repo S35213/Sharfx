@@ -1,5 +1,6 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { BarChart3, Bot, History, UserCircle } from 'lucide-react'
+import { readChartWorkspaceSettings, CHART_SETTINGS_EVENT, type ChartWorkspaceSettings } from '../../app/chartSettings'
 
 export type MobileNavTab = 'market' | 'agent' | 'history' | 'account'
 
@@ -12,26 +13,50 @@ const items: Array<{ id: MobileNavTab; label: string; icon: React.ElementType }>
   { id: 'account', label: 'Account', icon: UserCircle },
 ]
 
-export const MobileNav: React.FC<MobileNavProps> = ({ activeTab, onChange }) => (
-  <nav aria-label="Terminal navigation" className="fixed inset-x-0 bottom-0 z-[70] border-t border-shafx-border bg-[#080C12]/98 px-2 pb-[env(safe-area-inset-bottom)] shadow-[0_-18px_44px_rgba(0,0,0,.42)] backdrop-blur-xl lg:hidden">
-    <div className="mx-auto grid max-w-xl grid-cols-4 gap-1.5 px-1 py-1.5">
-      {items.map(({ id, label, icon: Icon }) => {
-        const active = activeTab === id
-        return (
-          <button
-            key={id}
-            type="button"
-            aria-current={active ? 'page' : undefined}
-            onClick={() => onChange(id)}
-            className={active
-              ? 'flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-xl bg-shafx-accent/10 text-shafx-accent ring-1 ring-inset ring-shafx-accent/20'
-              : 'flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-xl text-shafx-textMuted active:bg-shafx-surfaceHover'}
-          >
+export const MobileNav: React.FC<MobileNavProps> = ({ activeTab, onChange }) => {
+  const [hidden, setHidden] = useState(false)
+  const [settings, setSettings] = useState<ChartWorkspaceSettings>(() => readChartWorkspaceSettings())
+
+  useEffect(() => {
+    let lastY = window.scrollY
+    let ticking = false
+    const onScroll = (): void => {
+      if (ticking) return
+      ticking = true
+      window.requestAnimationFrame(() => {
+        const current = window.scrollY
+        const delta = current - lastY
+        if (!settings.autoHideNavigation || current <= 16) setHidden(false)
+        else if (delta > 8) setHidden(true)
+        else if (delta < -8) setHidden(false)
+        lastY = current
+        ticking = false
+      })
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [settings.autoHideNavigation])
+
+  useEffect(() => {
+    const onSettings = (event: Event): void => {
+      const detail = (event as CustomEvent<ChartWorkspaceSettings>).detail
+      if (detail) setSettings(detail)
+    }
+    window.addEventListener(CHART_SETTINGS_EVENT, onSettings)
+    return () => window.removeEventListener(CHART_SETTINGS_EVENT, onSettings)
+  }, [])
+
+  return (
+    <nav aria-label="Terminal navigation" className={hidden ? 'fixed inset-x-0 bottom-0 z-[70] translate-y-full border-t border-shafx-border bg-[#080C12]/98 px-2 pb-[env(safe-area-inset-bottom)] shadow-[0_-18px_44px_rgba(0,0,0,.42)] backdrop-blur-xl transition-transform duration-200 lg:hidden' : 'fixed inset-x-0 bottom-0 z-[70] translate-y-0 border-t border-shafx-border bg-[#080C12]/98 px-2 pb-[env(safe-area-inset-bottom)] shadow-[0_-18px_44px_rgba(0,0,0,.42)] backdrop-blur-xl transition-transform duration-200 lg:hidden'}>
+      <div className="mx-auto grid max-w-xl grid-cols-4 gap-1.5 px-1 py-1.5">
+        {items.map(({ id, label, icon: Icon }) => {
+          const active = activeTab === id
+          return <button key={id} type="button" aria-current={active ? 'page' : undefined} onClick={() => { setHidden(false); onChange(id) }} className={active ? 'flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-xl bg-shafx-accent/10 text-shafx-accent ring-1 ring-inset ring-shafx-accent/20' : 'flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-xl text-shafx-textMuted active:bg-shafx-surfaceHover'}>
             <span className="flex h-9 w-12 items-center justify-center"><Icon size={20} strokeWidth={active ? 2.25 : 1.8} /></span>
             <span className="text-[10px] font-semibold">{label}</span>
           </button>
-        )
-      })}
-    </div>
-  </nav>
-)
+        })}
+      </div>
+    </nav>
+  )
+}

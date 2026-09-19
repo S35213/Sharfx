@@ -28,6 +28,8 @@ import { AccountPanel } from './components/account/AccountPanel'
 import { TradesPanel } from './components/trades/TradesPanel'
 import { Toast, type ToastMessage } from './components/common/Toast'
 import { SimulationPulse } from './components/activity/SimulationPulse'
+import { SimulationFlowChart } from './components/activity/SimulationFlowChart'
+import { CHART_SETTINGS_EVENT, readChartWorkspaceSettings, type ChartWorkspaceSettings } from './app/chartSettings'
 import { marketDataSource } from './data/createMarketDataSource'
 import { ProviderAccountStreamManager, providerAccountStreamKey } from './data/provider/ProviderAccountStreamManager'
 import { chooseDefaultProviderSelection, getProviderConnections, getStoredProviderSelection, subscribeToProviderSelection, type ActiveProviderSelection } from './data/provider/providerConnections'
@@ -62,6 +64,7 @@ const TerminalContent: React.FC = () => {
   const [tradeHistory, setTradeHistory] = useState<TradeOrder[]>([])
   const [botOrderIds, setBotOrderIds] = useState<string[]>([])
   const [botRunning, setBotRunning] = useState(false)
+  const [chartSettings, setChartSettings] = useState<ChartWorkspaceSettings>(() => readChartWorkspaceSettings())
   const [toast, setToast] = useState<ToastMessage | null>(null)
   const [chartTool, setChartTool] = useState<WorkspaceTool>('cursor')
   const [dock, setDock] = useState<WorkspaceDock>('insights')
@@ -75,6 +78,15 @@ const TerminalContent: React.FC = () => {
   const pushToast = useCallback((text: string) => {
     toastId.current += 1
     setToast({ id: toastId.current, text })
+  }, [])
+
+  useEffect(() => {
+    const onChartSettings = (event: Event): void => {
+      const detail = (event as CustomEvent<ChartWorkspaceSettings>).detail
+      if (detail) setChartSettings(detail)
+    }
+    window.addEventListener(CHART_SETTINGS_EVENT, onChartSettings)
+    return () => window.removeEventListener(CHART_SETTINGS_EVENT, onChartSettings)
   }, [])
 
   useEffect(() => {
@@ -325,7 +337,7 @@ const TerminalContent: React.FC = () => {
     insights: <div className="space-y-3"><FXMoveMatrix pairs={watchlist} /><MarketAnalysisPanel analysis={marketAnalysis} pricePrecision={symbolSpec.pricePrecision} /><AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={chartCandles} setup={aiSetup} onReviewSetup={reviewAISetup} /></div>,
     liquidity: <LiquidityPanel symbol={selectedSymbol} price={displayPrice} precision={symbolSpec.pricePrecision} pipSize={symbolSpec.pipSize} />,
     orders: <div className="space-y-3">{brokerMode && activeProviderDescriptor ? <ProviderCapabilityPanel descriptor={activeProviderDescriptor} environment={activeProviderSelection?.environment ?? 'demo'} /> : <OrderPanel symbol={selectedSymbol} currentPrice={displayPrice} accountBalance={accountData.balance} accountCurrency={accountData.currency} symbolSpec={symbolSpec} conversionRate={conversionRate} onSubmitOrder={handleOrderSubmit} aiSetup={aiSetup} />}<div className="min-h-[280px]"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} /></div></div>,
-    agent: <div className="space-y-3"><SimulationPulse openPositions={openPositions} tradeHistory={tradeHistory} botOrderIds={botOrderIds} botRunning={botRunning} /><TradingAgentPanel {...botProps} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /></div>,
+    agent: <div className="space-y-3"><SimulationPulse openPositions={openPositions} tradeHistory={tradeHistory} botOrderIds={botOrderIds} botRunning={botRunning} /><SimulationFlowChart openPositions={openPositions} tradeHistory={tradeHistory} /><TradingAgentPanel {...botProps} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /></div>,
     research: <div className="space-y-3"><ReplayPanel candles={candles} replayCount={replayCount || candles.length} onReplayCountChange={setReplayCount} /><BacktestPanel symbol={selectedSymbol} candles={candles} symbolSpec={symbolSpec} initialBalance={accountData.balance} accountCurrency={accountData.currency} conversionRate={conversionRate} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /><TradingJournalPanel tradeHistory={tradeHistory} currency={accountData.currency} /></div>,
   }[dock]
 
@@ -349,7 +361,7 @@ const TerminalContent: React.FC = () => {
           </div>
           <MobileChartTools tool={chartTool} onToolChange={setChartTool} />
           <div className="relative h-[48vh] min-h-[320px] p-2 sm:p-3 lg:h-auto lg:min-h-[420px] lg:flex-1">
-            <CandlestickChart data={chartCandles} timeframe={timeframe} annotations={chartAnnotations} currentPrice={displayPrice} toolMode={chartToolMode} pipSize={symbolSpec.pipSize} onToolNotice={pushToast} />
+            <CandlestickChart data={chartCandles} timeframe={timeframe} annotations={chartAnnotations} currentPrice={displayPrice} toolMode={chartToolMode} pipSize={symbolSpec.pipSize} onToolNotice={pushToast} showGrid={chartSettings.showGrid} showPriceLabels={chartSettings.showPriceLabels} />
             <div className="pointer-events-none absolute bottom-5 right-5 z-10 hidden items-center gap-1.5 rounded-xl border border-shafx-border bg-shafx-surface/90 px-2.5 py-1.5 text-[9px] text-shafx-textMuted backdrop-blur sm:flex"><Maximize2 className="h-3 w-3 text-shafx-accent" />Scroll / pinch to navigate</div>
           </div>
           <div className="grid grid-cols-2 gap-2 border-t border-shafx-border bg-shafx-surface/55 p-2 sm:grid-cols-4">
@@ -363,8 +375,8 @@ const TerminalContent: React.FC = () => {
         </div>
       </section>
 
-      <aside className={`${showAgent ? '' : 'hidden'} w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden`}><SimulationPulse openPositions={openPositions} tradeHistory={tradeHistory} botOrderIds={botOrderIds} botRunning={botRunning} /><div className="mt-3"><TradingAgentPanel {...botProps} />{brokerMode && activeProviderId === 'deriv' && <div className="mt-3"><DerivCashierLinks /></div>}</div></aside>
-      <aside className={`${showHistory ? '' : 'hidden'} w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden`}><div className="space-y-3"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /><TradingJournalPanel tradeHistory={tradeHistory} currency={accountData.currency} /></div></aside>
+      <aside className={`${showAgent ? '' : 'hidden'} w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden`}><SimulationPulse openPositions={openPositions} tradeHistory={tradeHistory} botOrderIds={botOrderIds} botRunning={botRunning} /><div className="mt-3"><SimulationFlowChart openPositions={openPositions} tradeHistory={tradeHistory} /><div className="mt-3"><TradingAgentPanel {...botProps} />{brokerMode && activeProviderId === 'deriv' && <div className="mt-3"><DerivCashierLinks /></div>}</div></div></aside>
+      <aside className={`${showHistory ? '' : 'hidden'} w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden`}><div className="space-y-3"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /><SimulationFlowChart openPositions={openPositions} tradeHistory={tradeHistory} /><TradingJournalPanel tradeHistory={tradeHistory} currency={accountData.currency} /></div></aside>
       <aside className={`${showAccount ? '' : 'hidden'} w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden`}><div className="space-y-3"><AccountPanel account={accountData} />{brokerMode && activeProviderId === 'deriv' && <DerivCashierLinks />}</div></aside>
 
       <aside className="hidden w-[360px] flex-shrink-0 flex-col overflow-hidden border-l border-shafx-border bg-shafx-surface/50 lg:flex">

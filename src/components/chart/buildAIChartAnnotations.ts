@@ -31,16 +31,13 @@ export const buildAIChartAnnotations = (symbol: string, candles: OHLCV[]): Chart
   }
   const swings = findSwingPoints(candles, 2)
   const supportResistance = analyzeSupportResistance(candles, toleranceFor(symbol), swings)
-  const liquidity = analyzeLiquidity(candles, swings, toleranceFor(symbol))
-  add('support', supportResistance.nearestSupport, 'Support', '#0ECB81')
-  add('resistance', supportResistance.nearestResistance, 'Resistance', '#F6465D')
-  add('buy-liquidity', liquidity.nearestBuySide?.referencePrice ?? null, 'Buy liquidity', '#F0B90B')
-  add('sell-liquidity', liquidity.nearestSellSide?.referencePrice ?? null, 'Sell liquidity', '#F0B90B')
+  add('support', supportResistance.nearestSupport, 'Support', '#22D3A5', 2)
+  add('resistance', supportResistance.nearestResistance, 'Resistance', '#FF5C75', 2)
   const preferred = setup?.preferredSetup ?? null
   if (preferred) {
     add('ai-entry', preferred.entryPrice, `AI ${preferred.direction} entry`, '#2962FF', 2)
     add('ai-stop', preferred.stopLoss, 'AI stop', '#F6465D', 2)
     add('ai-target', preferred.takeProfit, 'AI target', '#0ECB81', 2)
   }
-  return result.sort((a, b) => a.price - b.price)
+  return result.sort((a, b) => a.price - b.price).slice(-6)
 }
