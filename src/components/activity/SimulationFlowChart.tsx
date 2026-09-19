@@ -52,7 +52,7 @@ export const SimulationFlowChart: React.FC<Props> = ({ openPositions, tradeHisto
           <div key={point.id} className="flex items-center gap-2 rounded-xl border border-shafx-border/80 bg-shafx-bg px-2.5 py-2">
             <span className={point.kind === 'OPEN' ? 'rounded-md bg-shafx-success/10 px-1.5 py-1 text-[8px] font-bold text-shafx-success' : 'rounded-md bg-shafx-accent/10 px-1.5 py-1 text-[8px] font-bold text-shafx-accent'}>{point.kind}</span>
             <span className={point.side === 'BUY' ? 'text-[9px] font-semibold text-shafx-success' : 'text-[9px] font-semibold text-shafx-danger'}>{point.side}</span>
-            <span className="min-w-0 flex-1 truncate text-[10px]">{point.kind === 'OPEN' ? `Entry ${point.price.toFixed(5)}` : `Realized ${point.profit >= 0 ? '+' : ''}${point.profit.toFixed(2)}`}</span>
+            <span className="min-w-0 flex-1 truncate text-[10px]">{point.kind === 'OPEN' && point.price !== null ? `Entry ${point.price.toFixed(5)}` : `Realized ${point.profit >= 0 ? '+' : ''}${point.profit.toFixed(2)}`}</span>
             <span className="text-[9px] text-shafx-textMuted">{point.kind === 'CLOSE' ? ((point.profit ?? 0) >= 0 ? <ArrowUpRight className="inline h-3 w-3 text-shafx-success" /> : <ArrowDownRight className="inline h-3 w-3 text-shafx-danger" />) : ''}{new Date(point.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
           </div>
         ))}
