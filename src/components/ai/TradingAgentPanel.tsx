@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Activity, Bot, ChevronDown, CircleStop, Play, ShieldCheck, Sparkles, Wallet } from 'lucide-react'
+import { Activity, Bot, ChevronDown, RefreshCw, ShieldCheck, Sparkles, Wallet } from 'lucide-react'
 import { analyzeLiquidity } from '../../engine/liquidity'
 import { analyzeMarketStructure, findSwingPoints } from '../../engine/marketStructure'
 import { analyzeSetup } from '../../engine/setup'
@@ -89,7 +89,6 @@ export function TradingAgentPanel({
   const riskAmount = accountBalance * (riskModes[riskMode].percent / 100)
   const parsedLotSize = Number(lotSize)
   const lotSizeValid = symbolSpec ? Number.isFinite(parsedLotSize) && parsedLotSize >= symbolSpec.minLotSize && parsedLotSize <= symbolSpec.maxLotSize && Math.abs((parsedLotSize / symbolSpec.lotStep) - Math.round(parsedLotSize / symbolSpec.lotStep)) < 1e-8 : false
-  const allowanceLabel = plan.maxDailyCycleUnits === null ? 'Unlimited' : String(plan.maxDailyCycleUnits) + ' units/day'
 
   useEffect(() => {
     const onLotSize = (event: Event): void => {
@@ -239,41 +238,16 @@ export function TradingAgentPanel({
     onBotRunningChange?.(false)
   }, [onBotRunningChange])
 
-  const startBot = (): void => {
-    const freshRun = crypto.randomUUID()
-    setRunId(freshRun)
-    setCycles(0)
-    setLastResult(null)
-    setScanNonce((value) => value + 1)
-    if (cycleSeconds > plan.maxCycleSeconds) {
-      setStatus(plan.label + ' allows up to ' + plan.maxCycleSeconds + 's scan cycles.')
-      return
-    }
-    if (!activePosition) {
-      setBotPositionId(null)
-      processedHistory.current.clear()
-    }
-    if (losses >= 2) setLosses(0)
-    setPhase('ANALYZING')
-    setStatus('Refreshing market analysis… Daily allowance: ' + allowanceLabel + '.')
-    if (analysisTimer.current) window.clearTimeout(analysisTimer.current)
-    analysisTimer.current = window.setTimeout(() => {
-      setPhase('RUNNING')
-      setStatus(bias + ' market read complete. Executing the first simulator cycle.')
-    }, 850)
-  }
-
   const rescanBot = (): void => {
     if (analysisTimer.current) window.clearTimeout(analysisTimer.current)
-    setPhase('READY')
     setLastResult(null)
     setScanNonce((value) => value + 1)
-    setStatus(activePosition ? 'Refreshing analysis while the existing simulated position is monitored.' : 'Market analysis refreshed. Ready for a fresh scan.')
-  }
-
-  const stopBot = (): void => {
-    setPhase('READY')
-    setStatus(activePosition ? 'Bot paused — existing simulated position is still managed by SHAFX' : 'Bot paused')
+    setPhase('ANALYZING')
+    setStatus(activePosition ? 'Refreshing market structure, liquidity and setup while monitoring the existing simulated position.' : 'Refreshing market structure, liquidity and setup…')
+    analysisTimer.current = window.setTimeout(() => {
+      setPhase('RUNNING')
+      setStatus(activePosition ? 'Analysis refreshed. Monitoring the existing simulated position.' : 'Analysis refreshed. Bot is monitoring for the next valid setup.')
+    }, 650)
   }
 
   return (
@@ -305,25 +279,17 @@ export function TradingAgentPanel({
           <Sparkles className="h-5 w-5 shrink-0 text-shafx-accent" />
         </div>
         <p className="mt-2 text-[11px] leading-5 text-shafx-textMuted">{setup ? 'Candidate ' + setup.direction + ' around ' + setup.entryPrice + '. ' + setup.rationale.join(' ') : 'No clean setup is available. The bot will wait rather than force a trade.'}</p>
-        <div className="mt-3 grid grid-cols-2 gap-2">
+        <div className="mt-3 flex items-center gap-2">
           <button
             type="button"
-            disabled={!symbolSpec}
-            onClick={phase === 'RUNNING' || phase === 'ANALYZING' ? rescanBot : startBot}
-            className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-shafx-accent px-2.5 text-[10px] font-semibold text-white shadow-lg shadow-shafx-accent/10 disabled:cursor-not-allowed disabled:opacity-35"
+            disabled={!symbolSpec || phase === 'ANALYZING'}
+            onClick={rescanBot}
+            className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-shafx-accent/35 bg-shafx-accent/10 px-3 text-[10px] font-semibold text-shafx-accent active:bg-shafx-accent/20 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <Play className="h-3.5 w-3.5" />
-            {phase === 'RUNNING' || phase === 'ANALYZING' ? 'Fresh scan' : lastResult ? 'Fresh scan' : 'Start scan'}
+            <RefreshCw className={phase === 'ANALYZING' ? 'h-3.5 w-3.5 animate-spin' : 'h-3.5 w-3.5'} />
+            {phase === 'ANALYZING' ? 'Refreshing analysis…' : 'Refresh analysis'}
           </button>
-          <button
-            type="button"
-            disabled={phase === 'READY'}
-            onClick={stopBot}
-            className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-shafx-danger/30 bg-shafx-danger/5 px-2.5 text-[10px] font-semibold text-shafx-danger disabled:cursor-not-allowed disabled:opacity-35"
-          >
-            <CircleStop className="h-3.5 w-3.5" />
-            Stop
-          </button>
+          {phase === 'RUNNING' && <span className="rounded-xl border border-shafx-success/20 bg-shafx-success/5 px-2.5 py-2 text-[9px] font-semibold text-shafx-success">Auto scan ON</span>}
         </div>
         {onReviewSetup && <button type="button" onClick={onReviewSetup} className="mt-2 min-h-10 w-full rounded-xl border border-shafx-border bg-shafx-surface px-3 text-[10px] font-semibold text-shafx-textMuted active:bg-shafx-accent/10">Review setup in Market</button>}
       </div>
@@ -373,7 +339,7 @@ export function TradingAgentPanel({
 
       <div className="mt-3 rounded-xl border border-shafx-border bg-shafx-bg p-3">
         <div className="flex items-center justify-between gap-3"><span className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">Current status</span><span className="text-[9px] text-shafx-textMuted">Scans {cycles}</span></div>
-        <p className="mt-1.5 text-[11px] leading-5 text-shafx-text">{status}</p><p className="mt-1 text-[9px] text-shafx-textMuted">Each Start or Rescan uses the latest simulator candles and creates a fresh analysis pass.</p>
+        <p className="mt-1.5 text-[11px] leading-5 text-shafx-text">{status}</p><p className="mt-1 text-[9px] text-shafx-textMuted">Each refresh uses the latest simulator candles, rebuilds the analysis context, and resumes the bot monitor.</p>
         {lastResult && <div className={lastResult === 'WIN' ? 'mt-2 text-[10px] text-shafx-success' : lastResult === 'LOSS' ? 'mt-2 text-[10px] text-shafx-danger' : 'mt-2 text-[10px] text-shafx-textMuted'}>{lastResult === 'WIN' ? 'Profit → analyze again' : lastResult === 'LOSS' ? 'Loss → re-check strategy' : 'Waiting for a valid setup'}</div>}
       </div>
 

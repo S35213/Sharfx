@@ -242,6 +242,11 @@ const TerminalContent: React.FC = () => {
   const replayActive = !liveMarketActive && visibleCandles.length > 0 && visibleCandles.length < candles.length
   const chartCandles = replayActive ? visibleCandles : liveMarketActive && liveCandles.length > 0 ? liveCandles : (isSimulatorMode() && simulatedCandles.length > 0 ? simulatedCandles : visibleCandles)
   const displayPrice = replayActive ? (visibleCandles[visibleCandles.length - 1]?.close ?? currentPrice) : liveMarketActive && liveCandles.length > 0 ? (liveCandles[liveCandles.length - 1]?.close ?? currentPrice) : isSimulatorMode() && simulatedCandles.length > 0 ? (simulatedCandles[simulatedCandles.length - 1]?.close ?? currentPrice) : currentPrice
+  // The chart's primary price is always the latest candle close. This keeps the
+  // simulated Bid/Sell stream and the candle OHLC data on one source of truth.
+  const chartLastPrice = chartCandles[chartCandles.length - 1]?.close ?? displayPrice
+  const chartSpread = symbolSpec ? symbolSpec.pipSize * 0.8 : 0.00008
+  const chartAskPrice = Number((chartLastPrice + chartSpread).toFixed(symbolSpec?.pricePrecision ?? 5))
   const conversionRate = symbolSpec ? getConversionRate(symbolSpec.quoteCurrency, accountData?.currency ?? 'USD') : undefined
   const chartAnnotations = useMemo(() => buildAIChartAnnotations(selectedSymbol, chartCandles), [selectedSymbol, chartCandles])
   const multiTimeframeCandles = useMultiTimeframeCandles(selectedSymbol, timeframe, candles)
@@ -426,7 +431,7 @@ const TerminalContent: React.FC = () => {
           </div>
           <MobileChartTools tool={chartTool} onToolChange={setChartTool} />
           <div className="relative h-[48vh] min-h-[320px] p-2 sm:p-3 lg:h-auto lg:min-h-[420px] lg:flex-1">
-            <CandlestickChart data={chartCandles} symbol={selectedSymbol} timeframe={timeframe} annotations={[...chartAnnotations, ...higherTimeframeAnnotations]} tradeLines={tradeLines} currentPrice={displayPrice} bidPrice={displayPrice - symbolSpec.pipSize * 0.4} askPrice={displayPrice + symbolSpec.pipSize * 0.4} toolMode={chartToolMode} pipSize={symbolSpec.pipSize} onToolNotice={pushToast} showGrid={chartSettings.showGrid} showPriceLabels={chartSettings.showPriceLabels} />
+            <CandlestickChart data={chartCandles} symbol={selectedSymbol} timeframe={timeframe} annotations={[...chartAnnotations, ...higherTimeframeAnnotations]} tradeLines={tradeLines} bidPrice={chartLastPrice} askPrice={chartAskPrice} toolMode={chartToolMode} pipSize={symbolSpec.pipSize} onToolNotice={pushToast} showGrid={chartSettings.showGrid} showPriceLabels={chartSettings.showPriceLabels} />
             <div className="pointer-events-none absolute bottom-5 right-5 z-10 hidden items-center gap-1.5 rounded-xl border border-shafx-border bg-shafx-surface/90 px-2.5 py-1.5 text-[9px] text-shafx-textMuted backdrop-blur sm:flex"><Maximize2 className="h-3 w-3 text-shafx-accent" />Scroll / pinch to navigate</div>
           </div>
           <div className="grid grid-cols-2 gap-2 border-t border-shafx-border bg-shafx-surface/55 p-2 sm:grid-cols-4">

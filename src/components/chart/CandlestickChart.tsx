@@ -12,7 +12,6 @@ interface CandlestickChartProps {
   annotations?: ChartAnnotation[]
   timeframe?: Timeframe
   symbol?: string
-  currentPrice?: number
   toolMode?: ChartToolMode
   pipSize?: number
   onToolNotice?: (message: string) => void
@@ -44,7 +43,7 @@ const timeframeMeta = (timeframe?: Timeframe, data: CandlestickData[] = []): { l
   return known[seconds] ?? { label: 'Custom', interval: `${Math.round(seconds / 60)}m` }
 }
 
-export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, symbol, currentPrice, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [] }) => {
+export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, symbol, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [] }) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
@@ -181,39 +180,34 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       }))
     })
 
-    const livePrice = Number.isFinite(currentPrice) && Number(currentPrice) > 0 ? Number(currentPrice) : lastClose
-    if (Number.isFinite(livePrice) && livePrice > 0) {
+    // FX candles are constructed from the Bid stream. Keep SELL/Bid exactly on
+    // the latest candle close, and place BUY/Ask only at the simulated spread.
+    // This mirrors the relationship documented by MT5 instead of letting a
+    // separate "current price" stream drift away from the candles.
+    const bid = Number.isFinite(bidPrice) && Number(bidPrice) > 0 ? Number(bidPrice) : lastClose
+    const ask = Number.isFinite(askPrice) && Number(askPrice) > 0 ? Number(askPrice) : bid
+    if (Number.isFinite(bid) && bid > 0) {
       lines.push(series.createPriceLine({
-        price: livePrice,
-        color: '#2962FF',
+        price: bid,
+        color: '#22D3A5',
         lineWidth: 2,
         lineStyle: 0,
         axisLabelVisible: showPriceLabels,
-        title: compact ? 'LAST' : 'Current',
+        title: compact ? 'SELL' : 'Bid / Sell',
       }))
     }
-    if (Number.isFinite(bidPrice) && Number(bidPrice) > 0) {
+    if (Number.isFinite(ask) && ask > 0) {
       lines.push(series.createPriceLine({
-        price: Number(bidPrice),
-        color: '#22D3A5',
-        lineWidth: 1,
-        lineStyle: 2,
-        axisLabelVisible: showPriceLabels,
-        title: compact ? 'SELL' : 'Bid',
-      }))
-    }
-    if (Number.isFinite(askPrice) && Number(askPrice) > 0) {
-      lines.push(series.createPriceLine({
-        price: Number(askPrice),
+        price: ask,
         color: '#FF5C75',
         lineWidth: 1,
         lineStyle: 2,
         axisLabelVisible: showPriceLabels,
-        title: compact ? 'BUY' : 'Ask',
+        title: compact ? 'BUY' : 'Ask / Buy',
       }))
     }
     return () => { lines.forEach((line) => series.removePriceLine(line)) }
-  }, [annotations, armedAlerts, askPrice, bidPrice, currentPrice, lastClose, showPriceLabels, tradeLines, userLevels])
+  }, [annotations, armedAlerts, askPrice, bidPrice, lastClose, showPriceLabels, tradeLines, userLevels])
 
   useEffect(() => {
     const chart = chartRef.current
