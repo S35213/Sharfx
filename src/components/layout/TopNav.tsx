@@ -18,6 +18,16 @@ export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, t
   const [query, setQuery] = useState('')
   const instruments = useMemo(() => Array.from(new Set(pairs.map((pair) => pair.symbol))), [pairs])
   const filtered = instruments.filter((item) => item.toLowerCase().includes(query.trim().toLowerCase()))
+  const simulatedQuote = (item: string, index: number) => {
+    const pair = pairs.find((entry) => entry.symbol === item)
+    const precision = item === symbol ? pricePrecision : item.includes('JPY') ? 3 : item.includes('XAU') ? 2 : item.includes('BTC') ? 2 : 5
+    const base = item === symbol ? price : pair?.price ?? 0
+    const step = item.includes('JPY') ? 0.004 : item.includes('XAU') ? 0.06 : item.includes('BTC') ? 3 : 0.00002
+    const wave = Math.sin(Date.now() / 1200 + index * 1.37)
+    const mid = Number(Math.max(step, base + step * wave).toFixed(precision))
+    const spread = item.includes('JPY') ? 0.006 : item.includes('XAU') ? 0.08 : item.includes('BTC') ? 4 : 0.00008
+    return { pair, precision, bid: Number((mid - spread / 2).toFixed(precision)), ask: Number((mid + spread / 2).toFixed(precision)), mid }
+  }
   const currentMode = typeof window !== 'undefined' && sessionStorage.getItem('shafx-trading-mode') === 'broker' ? 'broker' : 'simulator'
   const switchMode = (mode: 'simulator' | 'broker') => { setStoredTradingMode(mode, sessionStorage.getItem('shafx-simulator-account-id') || undefined); window.location.assign(`/?account=${mode === 'broker' ? 'broker' : 'demo'}`) }
 
@@ -31,15 +41,25 @@ export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, t
       <div className="hidden h-8 w-px bg-shafx-border sm:block" />
 
       {view === 'market' ? <div className="relative min-w-0 flex-1 md:flex-none">
-        <button type="button" onClick={() => setMarketOpen((open) => !open)} className="flex min-h-12 w-full min-w-0 items-center gap-3 rounded-xl border border-shafx-border bg-shafx-surface px-3 text-left transition hover:border-shafx-accent/40 md:w-[260px]" aria-expanded={marketOpen} aria-label="Choose trading instrument">
+        <button type="button" onClick={() => setMarketOpen((open) => !open)} className="flex min-h-12 w-full min-w-0 items-center gap-3 rounded-xl border border-shafx-border bg-shafx-surface px-3 text-left transition hover:border-shafx-accent/40 md:w-[260px]" aria-expanded={marketOpen} aria-label="Open Market Watch and choose trading instrument">
           <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-shafx-bg text-[10px] font-bold text-shafx-textMuted">FX</div>
-          <div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold">{symbol}</div><div className="mt-0.5 hidden text-[9px] text-shafx-textMuted sm:block">Market • {formatPrice(price, pricePrecision)}</div></div>
+          <div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold">{symbol}</div><div className="mt-0.5 hidden text-[9px] text-shafx-textMuted sm:block">Market Watch • {formatPrice(price, pricePrecision)}</div></div>
           <ChevronDown className={`h-4 w-4 flex-shrink-0 text-shafx-textMuted transition-transform ${marketOpen ? 'rotate-180' : ''}`} />
         </button>
         {marketOpen && <div className="absolute left-0 top-[calc(100%+8px)] z-[80] w-[min(92vw,360px)] rounded-2xl border border-shafx-border bg-shafx-surface p-2 shadow-2xl">
           <div className="mb-2 flex items-center gap-2 rounded-xl border border-shafx-border bg-shafx-bg px-3"><Search className="h-4 w-4 text-shafx-textMuted" /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search symbol…" className="h-10 w-full bg-transparent text-sm outline-none" /><kbd className="hidden rounded border border-shafx-border px-1.5 py-0.5 text-[8px] text-shafx-textMuted sm:block">⌘K</kbd></div>
-          <div className="mb-1 px-2 text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Markets</div>
-          <div className="max-h-72 overflow-y-auto">{filtered.map((item) => <button key={item} type="button" onClick={() => { onSelectPair(item); setMarketOpen(false); setQuery('') }} className={`flex min-h-11 w-full items-center justify-between rounded-xl px-3 text-left text-sm transition hover:bg-shafx-surfaceHover ${item === symbol ? 'bg-shafx-accent/10 text-shafx-accent' : ''}`}><span>{item}</span><span className="text-[9px] text-shafx-textMuted">{item.includes('XAU') ? 'Metal' : item.includes('BTC') ? 'Crypto' : 'FX'}</span></button>)}{filtered.length === 0 && <div className="px-3 py-5 text-center text-xs text-shafx-textMuted">No matching market</div>}</div>
+          <div className="mb-1 flex items-center justify-between px-2"><div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Market Watch</div><span className="rounded-full border border-shafx-warning/20 bg-shafx-warning/5 px-1.5 py-0.5 text-[8px] text-shafx-warning">SIMULATED</span></div>
+          <div className="mb-2 grid grid-cols-[1fr_82px_70px] gap-2 px-2 text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted"><span>Instrument</span><span className="text-right">Bid / Ask</span><span className="text-right">Move</span></div>
+          <div className="max-h-80 space-y-1 overflow-y-auto">{filtered.map((item, index) => {
+            const quote = simulatedQuote(item, index)
+            const change = quote.pair?.changePercent ?? 0
+            const selectedClass = item === symbol ? 'bg-shafx-accent/10 text-shafx-accent' : ''
+            return <button key={item} type="button" onClick={() => { onSelectPair(item); setMarketOpen(false); setQuery('') }} className={selectedClass + ' grid min-h-14 w-full grid-cols-[1fr_82px_70px] items-center gap-2 rounded-xl px-3 text-left transition hover:bg-shafx-surfaceHover'}>
+              <span className="min-w-0"><span className="block truncate text-xs font-semibold">{item}</span><span className="mt-0.5 block text-[8px] text-shafx-textMuted">{quote.pair?.status === 'closed' ? 'Market closed' : 'Market active'} • {item.includes('XAU') ? 'Metal' : item.includes('BTC') ? 'Crypto' : 'FX'}</span></span>
+              <span className="text-right font-mono text-[9px] tabular"><span className="block">{formatPrice(quote.bid, quote.precision)}</span><span className="block text-shafx-textMuted">{formatPrice(quote.ask, quote.precision)}</span></span>
+              <span className={(change >= 0 ? 'text-shafx-success' : 'text-shafx-danger') + ' text-right font-mono text-[9px] tabular'}>{change >= 0 ? '+' : ''}{change.toFixed(2)}%</span>
+            </button>
+          })}{filtered.length === 0 && <div className="px-3 py-5 text-center text-xs text-shafx-textMuted">No matching market</div>}</div>
         </div>}
       </div> : <div className="min-w-0 flex-1"><div className="text-sm font-semibold">{view === 'agent' ? 'SHAFX Bot' : view === 'history' ? 'Trade history' : 'Account'}</div><div className="text-[9px] uppercase tracking-[0.16em] text-shafx-textMuted">{currentMode === 'broker' ? 'Provider workspace' : 'Simulator workspace'}</div></div>}
 
