@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { BarChart3, Check, Grid2X2, Navigation, Settings2, X } from 'lucide-react'
 import { DEFAULT_CHART_SETTINGS, readChartWorkspaceSettings, writeChartWorkspaceSettings, type ChartWorkspaceSettings } from '../../app/chartSettings'
 
@@ -11,7 +12,7 @@ export const ChartSettingsSheet: React.FC<Props> = ({ open, onClose }) => {
     if (open) setSettings(readChartWorkspaceSettings())
   }, [open])
 
-  if (!open) return null
+  if (!open || typeof document === 'undefined') return null
 
   const update = (key: keyof ChartWorkspaceSettings): void => {
     const next = { ...settings, [key]: !settings[key] }
@@ -24,8 +25,8 @@ export const ChartSettingsSheet: React.FC<Props> = ({ open, onClose }) => {
     writeChartWorkspaceSettings(DEFAULT_CHART_SETTINGS)
   }
 
-  return (
-    <div className="fixed inset-0 z-[120] flex items-end justify-center bg-black/55 p-3 backdrop-blur-sm sm:items-center" role="dialog" aria-modal="true" aria-label="Chart settings">
+  return createPortal((
+    <div className="fixed inset-0 z-[10000] flex items-start justify-center overflow-y-auto bg-black/65 p-3 pt-[max(5rem,env(safe-area-inset-top)+4.5rem)] backdrop-blur-sm sm:items-center sm:p-6 sm:pt-6" role="dialog" aria-modal="true" aria-label="Chart settings">
       <div className="w-full max-w-lg rounded-3xl border border-shafx-border bg-shafx-surface shadow-2xl shadow-black/40">
         <header className="flex items-center justify-between border-b border-shafx-border px-4 py-4 sm:px-5">
           <div className="flex items-center gap-3">
@@ -47,7 +48,7 @@ export const ChartSettingsSheet: React.FC<Props> = ({ open, onClose }) => {
         </footer>
       </div>
     </div>
-  )
+  ), document.body)
 }
 
 function SettingRow({ icon: Icon, title, detail, enabled, onToggle }: { icon: React.ElementType; title: string; detail: string; enabled: boolean; onToggle: () => void }) {
