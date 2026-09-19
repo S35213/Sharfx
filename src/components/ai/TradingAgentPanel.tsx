@@ -305,7 +305,27 @@ export function TradingAgentPanel({
           <Sparkles className="h-5 w-5 shrink-0 text-shafx-accent" />
         </div>
         <p className="mt-2 text-[11px] leading-5 text-shafx-textMuted">{setup ? 'Candidate ' + setup.direction + ' around ' + setup.entryPrice + '. ' + setup.rationale.join(' ') : 'No clean setup is available. The bot will wait rather than force a trade.'}</p>
-        {onReviewSetup && <button type="button" onClick={onReviewSetup} className="mt-3 min-h-11 w-full rounded-xl border border-shafx-accent/25 bg-shafx-accent/5 px-3 text-[10px] font-semibold text-shafx-accent active:bg-shafx-accent/10">Review setup in Market</button>}
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            disabled={!symbolSpec}
+            onClick={phase === 'RUNNING' || phase === 'ANALYZING' ? rescanBot : startBot}
+            className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-shafx-accent px-2.5 text-[10px] font-semibold text-white shadow-lg shadow-shafx-accent/10 disabled:cursor-not-allowed disabled:opacity-35"
+          >
+            <Play className="h-3.5 w-3.5" />
+            {phase === 'RUNNING' || phase === 'ANALYZING' ? 'Fresh scan' : lastResult ? 'Fresh scan' : 'Start scan'}
+          </button>
+          <button
+            type="button"
+            disabled={phase === 'READY'}
+            onClick={stopBot}
+            className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-shafx-danger/30 bg-shafx-danger/5 px-2.5 text-[10px] font-semibold text-shafx-danger disabled:cursor-not-allowed disabled:opacity-35"
+          >
+            <CircleStop className="h-3.5 w-3.5" />
+            Stop
+          </button>
+        </div>
+        {onReviewSetup && <button type="button" onClick={onReviewSetup} className="mt-2 min-h-10 w-full rounded-xl border border-shafx-border bg-shafx-surface px-3 text-[10px] font-semibold text-shafx-textMuted active:bg-shafx-accent/10">Review setup in Market</button>}
       </div>
 
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -349,12 +369,6 @@ export function TradingAgentPanel({
           </div>
           <div className="mt-3 rounded-lg border border-shafx-border px-2.5 py-2 text-[10px] text-shafx-textMuted"><span>Allowance</span><span className="float-right font-mono text-shafx-text">{cycleUnits}{plan.maxDailyCycleUnits === null ? ' / ∞' : ' / ' + plan.maxDailyCycleUnits}</span></div>
         </section>
-      </div>
-
-      <div className="mt-3 grid grid-cols-2 gap-2.5">
-        <button type="button" disabled={phase !== 'READY' || !symbolSpec} onClick={startBot} className="col-span-2 flex min-h-14 items-center justify-center gap-2 rounded-xl bg-shafx-success px-3 text-[11px] font-semibold text-white shadow-lg shadow-shafx-success/10 disabled:cursor-not-allowed disabled:opacity-35"><Play className="h-4 w-4" />Start bot</button>
-        <button type="button" disabled={!symbolSpec} onClick={rescanBot} className="flex min-h-14 items-center justify-center gap-2 rounded-xl border border-shafx-accent/25 bg-shafx-accent/5 px-2 text-[10px] font-semibold text-shafx-accent disabled:cursor-not-allowed disabled:opacity-35">↻ Rescan</button>
-        <button type="button" disabled={phase === 'READY'} onClick={stopBot} className="flex min-h-14 items-center justify-center gap-2 rounded-xl border border-shafx-danger/30 bg-shafx-danger/5 px-2 text-[10px] font-semibold text-shafx-danger disabled:cursor-not-allowed disabled:opacity-35"><CircleStop className="h-4 w-4" />Stop</button>
       </div>
 
       <div className="mt-3 rounded-xl border border-shafx-border bg-shafx-bg p-3">
