@@ -34,6 +34,7 @@ input::placeholder { color: #667285; }
   button, a, input, select, textarea { touch-action: manipulation; }
   .shafx-mobile-content { padding-bottom: calc(5.75rem + env(safe-area-inset-bottom)); }
   .shafx-chart-shell { min-height: 48vh !important; }
+  main.shafx-mobile-content { padding-bottom: calc(6.5rem + env(safe-area-inset-bottom)); }
 }
 
 .shafx-grid {
