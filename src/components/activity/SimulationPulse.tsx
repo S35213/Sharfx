@@ -4,6 +4,7 @@ import type { TradeOrder } from '../../types'
 import { buildSimulationPulseStats } from './simulationPulse'
 
 interface Props {
+  selectedSymbol: string
   openPositions: TradeOrder[]
   tradeHistory: TradeOrder[]
   botOrderIds: string[]
