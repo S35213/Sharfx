@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { BarChart3, Check, Grid2X2, Navigation, Settings2, X } from 'lucide-react'
+import { BarChart3, Check, Grid2X2, Navigation, Settings2, Shapes, X } from 'lucide-react'
 import { DEFAULT_CHART_SETTINGS, readChartWorkspaceSettings, writeChartWorkspaceSettings, type ChartWorkspaceSettings } from '../../app/chartSettings'
 
 interface Props { open: boolean; onClose: () => void }
@@ -39,6 +39,29 @@ export const ChartSettingsSheet: React.FC<Props> = ({ open, onClose }) => {
         <div className="space-y-2.5 p-4 sm:p-5">
           <SettingRow icon={Grid2X2} title="Chart grid" detail="Show the chart's horizontal and vertical guide grid." enabled={settings.showGrid} onToggle={() => update('showGrid')} />
           <SettingRow icon={BarChart3} title="Price labels" detail="Keep price labels visible on the chart axis and drawings." enabled={settings.showPriceLabels} onToggle={() => update('showPriceLabels')} />
+          <div className="rounded-2xl border border-shafx-border bg-shafx-bg p-3">
+            <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.13em] text-shafx-textMuted"><Shapes className="h-4 w-4 text-shafx-accent" />Chart design</div>
+            <div className="mt-2 grid grid-cols-4 gap-2">
+              {([
+                ['candles', 'Candles'],
+                ['bars', 'Bars'],
+                ['wave', 'Wave'],
+                ['area', 'Area'],
+              ] as const).map(([id, label]) => {
+                const selected = settings.chartMode === id
+                return <button key={id} type="button" onClick={() => { const next = { ...settings, chartMode: id }; setSettings(next); writeChartWorkspaceSettings(next) }} aria-pressed={selected} className={selected ? 'min-h-10 rounded-xl border border-shafx-accent/40 bg-shafx-accent/10 text-[9px] font-semibold text-shafx-accent' : 'min-h-10 rounded-xl border border-shafx-border bg-shafx-bg text-[9px] font-semibold text-shafx-textMuted'}>{label}</button>
+              })}
+            </div>
+          </div>
+          <div className="rounded-2xl border border-shafx-border bg-shafx-bg p-3">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.13em] text-shafx-textMuted">Candle theme</div>
+            <div className="mt-2 grid grid-cols-4 gap-2">
+              {(['mt5', 'shafx', 'blue', 'amber'] as const).map((id) => {
+                const selected = settings.candleTheme === id
+                return <button key={id} type="button" onClick={() => { const next = { ...settings, candleTheme: id }; setSettings(next); writeChartWorkspaceSettings(next) }} aria-pressed={selected} className={selected ? 'min-h-10 rounded-xl border border-shafx-accent/40 bg-shafx-accent/10 text-[9px] font-semibold text-shafx-accent' : 'min-h-10 rounded-xl border border-shafx-border bg-shafx-bg text-[9px] font-semibold text-shafx-textMuted'}>{id.toUpperCase()}</button>
+              })}
+            </div>
+          </div>
           <SettingRow icon={Navigation} title="Auto-hide navigation" detail="Hide the mobile navigation while scrolling down; bring it back by scrolling up." enabled={settings.autoHideNavigation} onToggle={() => update('autoHideNavigation')} />
         </div>
 
