@@ -38,6 +38,7 @@ import { getConversionRate } from './data/mock/symbols'
 import { applyDemoProfit, setDemoOpenPositions, setDemoTradeHistory } from './engine/simulator/accountStore'
 import { submitSimulatedOrder } from './engine/simulator/submitSimulatedOrder'
 import { closeSimulatedPosition, markSimulatedPosition } from './engine/simulator/positionManager'
+import { SimulatorRealtimeMarketEngine } from './engine/simulator/realtimeMarketEngine'
 import { providerCatalog } from './integrations/catalog'
 import type { AccountData, AIAnalysis, MarketAnalysis, MarketPair, OHLCV, SimulatedOrderDraft, SymbolSpec, TradeOrder } from './types'
 
@@ -54,9 +55,7 @@ const TerminalContent: React.FC = () => {
   const [liveCandles, setLiveCandles] = useState<OHLCV[]>([])
   const [simulatedCandles, setSimulatedCandles] = useState<OHLCV[]>([])
   const simulatedPriceRef = useRef(1.08542)
-  const simulatedCandlesRef = useRef<OHLCV[]>([])
-  const simulatedTimeRef = useRef(0)
-  const simulatedTickWallClockRef = useRef<number | null>(null)
+  const simulatedEngineRef = useRef<SimulatorRealtimeMarketEngine | null>(null)
   const [liveMarketActive, setLiveMarketActive] = useState(false)
   const [replayCount, setReplayCount] = useState(0)
   const [mobileTab, setMobileTab] = useState<MobileNavTab>('market')
@@ -132,13 +131,21 @@ const TerminalContent: React.FC = () => {
         setWatchlist(wl)
         setSymbolSpec(spec)
         setCandles(cands)
-        setSimulatedCandles(cands)
-        simulatedCandlesRef.current = cands
-        simulatedPriceRef.current = cands[cands.length - 1]?.close ?? acc.balance
-        setSimulatedPrice(cands[cands.length - 1]?.close ?? acc.balance)
-        simulatedTimeRef.current = cands[cands.length - 1]?.time ?? Math.floor(Date.now() / 1000)
-        simulatedTickWallClockRef.current = Date.now()
         setLiveCandles([])
+        if (!isBrokerMode()) {
+          const m1 = await marketDataSource.getCandles(selectedSymbol, 'M1', 12000)
+          const engine = new SimulatorRealtimeMarketEngine(spec, timeframe, m1, m1[m1.length - 1]?.close ?? acc.balance)
+          simulatedEngineRef.current = engine
+          const snapshot = engine.snapshot()
+          setSimulatedCandles(snapshot.candles)
+          setSimulatedPrice(snapshot.bid)
+          simulatedPriceRef.current = snapshot.bid
+        } else {
+          simulatedEngineRef.current = null
+          setSimulatedCandles(cands)
+          setSimulatedPrice(cands[cands.length - 1]?.close ?? acc.balance)
+          simulatedPriceRef.current = cands[cands.length - 1]?.close ?? acc.balance
+        }
         setReplayCount(cands.length)
         setMarketAnalysis(ma)
         setAiAnalysis(ai)
@@ -221,66 +228,21 @@ const TerminalContent: React.FC = () => {
 
   const visibleCandles = useMemo(() => replayCount > 0 && replayCount < candles.length ? candles.slice(0, replayCount) : candles, [candles, replayCount])
   useEffect(() => {
-    if (isBrokerMode() || !symbolSpec) return
-    const intervalSeconds: Record<string, number> = { M1: 60, M5: 300, M15: 900, M30: 1800, H1: 3600, H4: 14400, D1: 86400 }
-    const interval = intervalSeconds[timeframe] ?? 60
-    simulatedTickWallClockRef.current = Date.now()
-    let tick = 0
+    if (isBrokerMode() || !symbolSpec || !simulatedEngineRef.current) return
 
     const timer = window.setInterval(() => {
-      const currentCandles = simulatedCandlesRef.current
-      if (currentCandles.length === 0) return
+      const engine = simulatedEngineRef.current
+      if (!engine) return
 
-      // Accelerated demo clock: the simulator advances one market second per
-      // tick so the forming candle visibly develops on a phone.
-      simulatedTimeRef.current += 1
-      tick += 1
-
-      const pip = symbolSpec.pipSize
-      const previous = simulatedPriceRef.current
-      const impulse =
-        Math.sin(tick * 0.41 + selectedSymbol.length * 0.71) * 0.62 +
-        Math.sin(tick * 0.13 + selectedSymbol.length * 0.19) * 0.23 +
-        Math.sin(tick * 1.07 + selectedSymbol.length * 0.37) * 0.15
-      const direction = Math.sign(impulse || 1)
-      const magnitudePips = 0.22 + Math.abs(impulse) * 0.78
-      const nextPrice = Math.max(
-        pip / 10,
-        Number((previous + direction * pip * magnitudePips).toFixed(symbolSpec.pricePrecision)),
-      )
-
-      simulatedPriceRef.current = nextPrice
-      setSimulatedPrice(nextPrice)
-      setCurrentPrice(nextPrice)
-
-      const bucket = Math.floor(simulatedTimeRef.current / interval) * interval
-      setSimulatedCandles((previousCandles) => {
-        if (previousCandles.length === 0) return previousCandles
-        const last = previousCandles[previousCandles.length - 1]
-        const next = last.time < bucket
-          ? {
-              time: bucket,
-              open: last.close,
-              high: Math.max(last.close, nextPrice),
-              low: Math.min(last.close, nextPrice),
-              close: nextPrice,
-              volume: 1,
-            }
-          : {
-              ...last,
-              high: Math.max(last.high, nextPrice),
-              low: Math.min(last.low, nextPrice),
-              close: nextPrice,
-              volume: (last.volume ?? 0) + 1,
-            }
-        const nextCandles = [...previousCandles.slice(-999), next]
-        simulatedCandlesRef.current = nextCandles
-        return nextCandles
-      })
-    }, 350)
+      const snapshot = engine.tickOnce(1)
+      setSimulatedCandles(snapshot.candles)
+      setSimulatedPrice(snapshot.bid)
+      setCurrentPrice(snapshot.bid)
+    }, 250)
 
     return () => window.clearInterval(timer)
   }, [selectedSymbol, symbolSpec, timeframe])
+
 
   const replayActive = !isSimulatorMode() && !liveMarketActive && visibleCandles.length > 0 && visibleCandles.length < candles.length
   const chartCandles = liveMarketActive && liveCandles.length > 0
@@ -303,7 +265,12 @@ const TerminalContent: React.FC = () => {
   const chartSpread = symbolSpec ? symbolSpec.pipSize * 0.8 : 0.00008
   const chartAskPrice = Number((chartLastPrice + chartSpread).toFixed(symbolSpec?.pricePrecision ?? 5))
   const conversionRate = symbolSpec ? getConversionRate(symbolSpec.quoteCurrency, accountData?.currency ?? 'USD') : undefined
-  const chartAnnotations = useMemo(() => buildAIChartAnnotations(selectedSymbol, chartCandles), [selectedSymbol, chartCandles])
+  const chartAnnotations = useMemo(() => {
+    const annotations = buildAIChartAnnotations(selectedSymbol, chartCandles)
+    return ['M1', 'M5'].includes(timeframe)
+      ? annotations.filter((annotation) => annotation.id === 'support' || annotation.id === 'resistance')
+      : annotations
+  }, [selectedSymbol, chartCandles, timeframe])
   const multiTimeframeCandles = useMultiTimeframeCandles(selectedSymbol, timeframe, candles)
   const higherTimeframeAnnotations = useMemo(() => {
     if (['M1', 'M5', 'M15'].includes(timeframe)) return []
@@ -486,8 +453,8 @@ const TerminalContent: React.FC = () => {
             <div className="flex items-center gap-1.5"><span className="hidden text-[9px] uppercase tracking-[0.15em] text-shafx-textMuted sm:block">Feed</span>{liveControl}<button type="button" onClick={() => setDock(dock === 'orders' ? 'insights' : 'orders')} className="flex min-h-10 items-center gap-1.5 rounded-xl border border-shafx-border bg-shafx-bg px-2.5 text-[9px] font-semibold hover:border-shafx-accent/40"><SlidersHorizontal className="h-3.5 w-3.5 text-shafx-accent" />Trade</button></div>
           </div>
           <MobileChartTools tool={chartTool} onToolChange={setChartTool} />
-          <div className="relative h-[48vh] min-h-[320px] p-2 sm:p-3 lg:h-auto lg:min-h-[420px] lg:flex-1">
-            <CandlestickChart data={chartCandles} symbol={selectedSymbol} timeframe={timeframe} annotations={[...chartAnnotations, ...higherTimeframeAnnotations]} tradeLines={tradeLines} bidPrice={chartLastPrice} askPrice={chartAskPrice} toolMode={chartToolMode} pipSize={symbolSpec.pipSize} onToolNotice={pushToast} showGrid={chartSettings.showGrid} showPriceLabels={chartSettings.showPriceLabels} followLatest={isSimulatorMode() || liveMarketActive} />
+          <div className="relative h-[58vh] min-h-[420px] p-2 sm:h-[62vh] sm:min-h-[480px] sm:p-3 lg:h-auto lg:min-h-[520px] lg:flex-1">
+            <CandlestickChart data={chartCandles} symbol={selectedSymbol} timeframe={timeframe} annotations={[...chartAnnotations, ...higherTimeframeAnnotations]} tradeLines={tradeLines} bidPrice={chartLastPrice} askPrice={chartAskPrice} toolMode={chartToolMode} pipSize={symbolSpec.pipSize} onToolNotice={pushToast} showGrid={chartSettings.showGrid} showPriceLabels={chartSettings.showPriceLabels} followLatest={isSimulatorMode() || liveMarketActive} candleTheme={chartSettings.candleTheme} />
             <div className="pointer-events-none absolute bottom-5 right-5 z-10 hidden items-center gap-1.5 rounded-xl border border-shafx-border bg-shafx-surface/90 px-2.5 py-1.5 text-[9px] text-shafx-textMuted backdrop-blur sm:flex"><Maximize2 className="h-3 w-3 text-shafx-accent" />Scroll / pinch to navigate</div>
           </div>
           <div className="grid grid-cols-2 gap-2 border-t border-shafx-border bg-shafx-surface/55 p-2 sm:grid-cols-4">
