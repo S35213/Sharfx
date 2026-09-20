@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { Activity, BellRing, ChevronDown, Crosshair, Minus, Ruler, Wrench } from 'lucide-react'
 import type { CandleTheme } from '../../app/chartSettings'
-import { writeChartWorkspaceSettings } from '../../app/chartSettings'
+import { readChartWorkspaceSettings, writeChartWorkspaceSettings } from '../../app/chartSettings'
 import type { WorkspaceTool } from './WorkspaceRail'
 
 interface Props { tool: WorkspaceTool; onToolChange: (tool: WorkspaceTool) => void; candleTheme: CandleTheme }
@@ -49,13 +49,8 @@ export const MobileChartTools: React.FC<Props> = ({ tool, onToolChange, candleTh
               ] as Array<[CandleTheme, string, string, string]>).map(([id, label, up, down]) => {
                 const selected = id === candleTheme
                 return <button key={id} type="button" onClick={() => {
-                  const current = JSON.parse(localStorage.getItem('shafx.chart.settings') ?? '{}') as Record<string, unknown>
-                  writeChartWorkspaceSettings({
-                    showGrid: current.showGrid !== false,
-                    showPriceLabels: current.showPriceLabels !== false,
-                    autoHideNavigation: current.autoHideNavigation !== false,
-                    candleTheme: id,
-                  })
+                  const current = readChartWorkspaceSettings()
+                  writeChartWorkspaceSettings({ ...current, candleTheme: id })
                 }} aria-pressed={selected} className={selected ? 'min-h-11 rounded-lg border border-shafx-accent/40 bg-shafx-accent/10 px-1 text-left' : 'min-h-11 rounded-lg border border-shafx-border bg-shafx-bg px-1 text-left'}>
                   <span className="flex items-center justify-center gap-1"><span className="h-3 w-3 rounded-[2px]" style={{ background: up }} /><span className="h-3 w-3 rounded-[2px]" style={{ background: down }} /></span>
                   <span className={selected ? 'mt-1 block text-center text-[8px] font-semibold text-shafx-accent' : 'mt-1 block text-center text-[8px] font-semibold text-shafx-textMuted'}>{label}</span>
