@@ -54,6 +54,7 @@ const TerminalContent: React.FC = () => {
   const [candles, setCandles] = useState<OHLCV[]>([])
   const [liveCandles, setLiveCandles] = useState<OHLCV[]>([])
   const [simulatedCandles, setSimulatedCandles] = useState<OHLCV[]>([])
+  const [simulatedM1Candles, setSimulatedM1Candles] = useState<OHLCV[]>([])
   const simulatedPriceRef = useRef(1.08542)
   const simulatedEngineRef = useRef<SimulatorRealtimeMarketEngine | null>(null)
   const simulatedEngineSymbolRef = useRef<string | null>(null)
@@ -143,6 +144,7 @@ const TerminalContent: React.FC = () => {
           simulatedEngineSymbolRef.current = selectedSymbol
           const snapshot = engine.snapshot()
           setSimulatedCandles(snapshot.candles)
+          setSimulatedM1Candles(snapshot.m1Candles.slice(-3000))
           setSimulatedPrice(snapshot.bid)
           simulatedPriceRef.current = snapshot.bid
           setMarketTimestamp(snapshot.timestamp)
@@ -150,6 +152,7 @@ const TerminalContent: React.FC = () => {
           simulatedEngineRef.current = null
           simulatedEngineSymbolRef.current = null
           setSimulatedCandles(cands)
+          setSimulatedM1Candles([])
           setSimulatedPrice(cands[cands.length - 1]?.close ?? acc.balance)
           simulatedPriceRef.current = cands[cands.length - 1]?.close ?? acc.balance
           setMarketTimestamp(cands[cands.length - 1]?.time ?? Math.floor(Date.now() / 1000))
@@ -244,6 +247,7 @@ const TerminalContent: React.FC = () => {
 
       const snapshot = engine.tickOnce(1)
       setSimulatedCandles(snapshot.candles)
+      setSimulatedM1Candles(snapshot.m1Candles.slice(-3000))
       setSimulatedPrice(snapshot.bid)
       setMarketTimestamp(snapshot.timestamp)
       setCurrentPrice(snapshot.bid)
@@ -434,7 +438,7 @@ const TerminalContent: React.FC = () => {
   const showHistory = mobileTab === 'history'
   const showAccount = mobileTab === 'account'
   const liveControl = <ProviderLiveControl providerId={activeProviderId} connection={activeMarketConnection} symbol={selectedSymbol} timeframe={timeframe} onUpdate={handleLiveUpdate} onActiveChange={handleLiveActiveChange} />
-  const botProps = { symbol: selectedSymbol, timeframe, candles: chartCandles, currentPrice: displayPrice, activePosition, tradeHistory, accountBalance: accountData.balance, accountCurrency: accountData.currency, symbolSpec, conversionRate, botPlan: user?.botPlan ?? 'FREE' as const, onBotOrder: handleBotOrder, onBotClose: handleBotClose, onBotRunningChange: setBotRunning, onReviewSetup: reviewAISetup }
+  const botProps = { symbol: selectedSymbol, timeframe, candles: chartCandles, scanM1Candles: simulatedM1Candles, currentPrice: displayPrice, activePosition, tradeHistory, accountBalance: accountData.balance, accountCurrency: accountData.currency, symbolSpec, conversionRate, botPlan: user?.botPlan ?? 'FREE' as const, onBotOrder: handleBotOrder, onBotClose: handleBotClose, onBotRunningChange: setBotRunning, onReviewSetup: reviewAISetup }
 
   const openMobileDock = (next: WorkspaceDock): void => {
     setMobileDockOpen((open) => dock === next ? !open : true)
