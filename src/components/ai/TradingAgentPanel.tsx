@@ -22,6 +22,7 @@ interface Props {
   conversionRate?: number
   botPlan?: BotPlan
   onBotOrder?: (order: TradeOrder) => void
+  onBotClose?: (id: string) => void | Promise<void>
   onBotRunningChange?: (running: boolean) => void
   onReviewSetup?: () => void
 }
@@ -33,7 +34,9 @@ const riskModes: Record<RiskMode, { label: string; percent: number; description:
   RISK: { label: 'Risk', percent: 1, description: 'Higher simulated risk' },
 }
 type Phase = 'READY' | 'ANALYZING' | 'RUNNING'
-const BOT_CYCLE_SECONDS = 10 as const
+const FAST_SCAN_TIMEFRAMES: Timeframe[] = ['M1', 'M5', 'M15', 'M30']
+const BOT_CYCLE_SECONDS = 5 as const
+const BOT_RESULT_DELAY_MS = 4500 as const
 const BOT_RISK_MODE: RiskMode = 'SAFE'
 
 export function TradingAgentPanel({
@@ -49,6 +52,7 @@ export function TradingAgentPanel({
   conversionRate,
   botPlan = 'FREE',
   onBotOrder,
+  onBotClose,
   onBotRunningChange,
   onReviewSetup,
 }: Props) {
@@ -67,6 +71,7 @@ export function TradingAgentPanel({
   const [bias, setBias] = useState('Neutral')
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [botPositionId, setBotPositionId] = useState<string | null>(null)
+  const botCloseTimer = useRef<number | null>(null)
   const [runId, setRunId] = useState<string | null>(null)
   const processedHistory = useRef(new Set<string>())
   const analysisTimer = useRef<number | null>(null)
@@ -84,6 +89,26 @@ export function TradingAgentPanel({
 
   const timeframeFrames = useMultiTimeframeCandles(symbol, timeframe, candles)
   const multiTimeframe = useMemo(() => analyzeMultiTimeframeBias(timeframeFrames), [timeframeFrames])
+  const fastScanCandidates = useMemo(() => {
+    const qualityWeight: Record<'weak' | 'moderate' | 'strong', number> = { weak: 1, moderate: 2, strong: 3 }
+    return FAST_SCAN_TIMEFRAMES.flatMap((scanTimeframe) => {
+      const frameCandles = timeframeFrames[scanTimeframe] ?? []
+      if (frameCandles.length < 5) return []
+      const swings = findSwingPoints(frameCandles, 2)
+      const structure = analyzeMarketStructure(frameCandles, 2)
+      const tolerance = symbol.includes('JPY') ? 0.1 : 0.001
+      const supportResistance = analyzeSupportResistance(frameCandles, tolerance, swings)
+      const liquidity = analyzeLiquidity(frameCandles, swings, tolerance)
+      const framePrice = frameCandles[frameCandles.length - 1]?.close ?? currentPrice
+      const setupResult = analyzeSetup({ currentPrice: framePrice, structure, supportResistance, liquidity })
+      const preferredSetup = setupResult.preferredSetup
+      if (!preferredSetup || preferredSetup.status !== 'candidate') return []
+      const context = buildTradingContext(symbol, scanTimeframe, frameCandles, structure, supportResistance, liquidity, setupResult)
+      return [{ timeframe: scanTimeframe, setup: preferredSetup, context, score: preferredSetup.confidence + qualityWeight[preferredSetup.quality] * 5 }]
+    }).sort((a, b) => b.score - a.score)
+  }, [currentPrice, symbol, timeframeFrames])
+  const activeBotScan = fastScanCandidates[0] ?? null
+
   const learning = useMemo(() => learnFromTrades(tradeHistory.filter((trade) => trade.status === 'closed').map((trade) => ({ symbol: trade.symbol, direction: trade.type, profit: trade.profit, riskRewardRatio: trade.riskRewardRatio }))), [tradeHistory])
   const research = useMemo(() => buildAgentResearch({ context: tradingContext, learning, multiTimeframe }), [learning, multiTimeframe, tradingContext])
   const setup = tradingContext.setup.preferredSetup
@@ -203,9 +228,12 @@ export function TradingAgentPanel({
         setStatus('Choose a valid bot lot size before starting a cycle')
         return
       }
-      setStatus('Scanning ' + symbol + '…')
+      const scan = activeBotScan
+      setStatus(scan ? ('Scanning ' + scan.timeframe + ' • ' + symbol + '…') : ('Scanning M1/M5/M15/M30 • ' + symbol + '…'))
       const result = executeSimulationTrade({
-        context: { tradingContext, preferredSetup: setup, hasOpenPosition: false, permission: 'AUTONOMOUS_SIMULATION', multiTimeframe, learning, research },
+        context: scan
+          ? { tradingContext: scan.context, preferredSetup: scan.setup, hasOpenPosition: false, permission: 'AUTONOMOUS_SIMULATION', multiTimeframe, learning, research }
+          : { tradingContext, preferredSetup: setup, hasOpenPosition: false, permission: 'AUTONOMOUS_SIMULATION', multiTimeframe, learning, research },
         accountBalance,
         accountCurrency,
         riskPercent: riskModes[BOT_RISK_MODE].percent,
@@ -221,8 +249,12 @@ export function TradingAgentPanel({
       }
       setBotPositionId(result.order.id)
       setLastResult(null)
-      setStatus(result.order.type + ' ' + symbol + ' simulated at ' + result.order.entryPrice + ' — monitoring SL/TP')
+      setStatus(result.order.type + ' ' + symbol + ' simulated at ' + result.order.entryPrice + ' — cycle will resolve within 5 seconds')
       onBotOrder(result.order)
+      if (botCloseTimer.current) window.clearTimeout(botCloseTimer.current)
+      botCloseTimer.current = window.setTimeout(() => {
+        void onBotClose?.(result.order.id)
+      }, BOT_RESULT_DELAY_MS)
     } catch {
       setPhase('READY')
       setStatus('Unable to verify bot cycle allowance. Try again.')
@@ -230,7 +262,7 @@ export function TradingAgentPanel({
     }
 
     return () => { runBotCycleRef.current = null }
-  }, [accountBalance, accountCurrency, activePosition, bias, botPositionId, conversionRate, learning, losses, lotSizeValid, multiTimeframe, onBotOrder, parsedLotSize, research, runId, setup, symbol, symbolSpec, tradingContext])
+  }, [accountBalance, accountCurrency, activeBotScan, activePosition, bias, botPositionId, conversionRate, learning, losses, lotSizeValid, multiTimeframe, onBotClose, onBotOrder, parsedLotSize, research, runId, setup, symbol, symbolSpec, tradingContext])
 
   useEffect(() => {
     if (phase !== 'RUNNING') return
@@ -244,6 +276,7 @@ export function TradingAgentPanel({
 
   useEffect(() => () => {
     if (analysisTimer.current) window.clearTimeout(analysisTimer.current)
+    if (botCloseTimer.current) window.clearTimeout(botCloseTimer.current)
     onBotRunningChange?.(false)
   }, [onBotRunningChange])
 
@@ -257,7 +290,7 @@ export function TradingAgentPanel({
     setStatus('Starting automatic trading for ' + symbol + '…')
     analysisTimer.current = window.setTimeout(() => {
       setPhase('RUNNING')
-      setStatus('Automatic trading is ON. The bot will scan ' + symbol + ' and place simulated trades when a valid setup qualifies.')
+      setStatus('Automatic trading is ON. The bot will scan M1, M5, M15 and M30 on ' + symbol + ' and place simulated trades when a valid setup qualifies.')
     }, 650)
   }
 
@@ -272,12 +305,11 @@ export function TradingAgentPanel({
     if (analysisTimer.current) window.clearTimeout(analysisTimer.current)
     setLastResult(null)
     setScanNonce((value) => value + 1)
-    setAutoTradingEnabled(true)
     setPhase('ANALYZING')
-    setStatus(activePosition ? 'Refreshing market structure, liquidity and setup while monitoring the existing simulated position.' : 'Refreshing market structure, liquidity and setup…')
+    setStatus(activePosition ? 'Refreshing market structure, liquidity and setup while monitoring the existing simulated position.' : 'Refreshing M1/M5/M15/M30 market structure, liquidity and setup…')
     analysisTimer.current = window.setTimeout(() => {
-      setPhase('RUNNING')
-      setStatus(activePosition ? 'Analysis refreshed. Monitoring the existing simulated position.' : 'Analysis refreshed. Bot is now running automatic simulated trading.')
+      setPhase('READY')
+      setStatus('Analysis refreshed. Start automatic trading when you want the bot to place simulated trades.')
     }, 650)
   }
 
@@ -317,7 +349,7 @@ export function TradingAgentPanel({
         </button>
         <div className="mt-2 grid grid-cols-3 gap-2 text-[9px] text-shafx-textMuted">
           <div className="rounded-lg border border-shafx-border bg-shafx-bg px-2 py-2"><span className="block">Market</span><strong className="mt-0.5 block font-mono text-shafx-text">{symbol}</strong></div>
-          <div className="rounded-lg border border-shafx-border bg-shafx-bg px-2 py-2"><span className="block">Cycle</span><strong className="mt-0.5 block font-mono text-shafx-text">10s</strong></div>
+          <div className="rounded-lg border border-shafx-border bg-shafx-bg px-2 py-2"><span className="block">Cycle</span><strong className="mt-0.5 block font-mono text-shafx-text">5s</strong></div>
           <div className="rounded-lg border border-shafx-border bg-shafx-bg px-2 py-2"><span className="block">Mode</span><strong className="mt-0.5 block text-shafx-text">Simulator</strong></div>
         </div>
       </section>
@@ -365,7 +397,7 @@ export function TradingAgentPanel({
 
         <section className="rounded-xl border border-shafx-border bg-shafx-bg p-3.5">
           <div className="flex items-center justify-between gap-3">
-            <div><div className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">Bot cycle</div><div className="mt-1 text-sm font-semibold">Automatic scan</div></div>
+            <div><div className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">Bot cycle</div><div className="mt-1 text-sm font-semibold">5s automatic scan</div></div>
             <Wallet className="h-4 w-4 text-shafx-accent" />
           </div>
           <div className="mt-3 rounded-lg border border-shafx-border px-2.5 py-2 text-[10px] text-shafx-textMuted">
