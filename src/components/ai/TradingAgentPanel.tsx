@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Activity, Bot, ChevronDown, RefreshCw, ShieldCheck, Sparkles, Wallet } from 'lucide-react'
+import { Activity, Bot, ChevronDown, Play, RefreshCw, ShieldCheck, Sparkles, Square, Wallet } from 'lucide-react'
 import { analyzeLiquidity } from '../../engine/liquidity'
 import { analyzeMarketStructure, findSwingPoints } from '../../engine/marketStructure'
 import { analyzeSetup } from '../../engine/setup'
@@ -56,6 +56,7 @@ export function TradingAgentPanel({
   const readStoredLotSize = (): string => typeof window !== 'undefined' ? window.sessionStorage.getItem('shafx-simulator-lot-size') || '0.10' : '0.10'
   const [lotSize, setLotSize] = useState(readStoredLotSize)
   const [phase, setPhase] = useState<Phase>('READY')
+  const [autoTradingEnabled, setAutoTradingEnabled] = useState(false)
   const [, setWins] = useState(0)
   const [losses, setLosses] = useState(0)
   const [cycles, setCycles] = useState(0)
@@ -111,8 +112,16 @@ export function TradingAgentPanel({
   }, [multiTimeframe.dominantBias, setup?.direction])
 
   useEffect(() => {
-    onBotRunningChange?.(phase === 'RUNNING' || phase === 'ANALYZING')
-  }, [onBotRunningChange, phase])
+    onBotRunningChange?.(autoTradingEnabled && (phase === 'RUNNING' || phase === 'ANALYZING'))
+  }, [autoTradingEnabled, onBotRunningChange, phase])
+
+  useEffect(() => {
+    setAutoTradingEnabled(false)
+    setPhase('READY')
+    setBotPositionId(null)
+    setLastResult(null)
+    setStatus('Ready to trade ' + symbol)
+  }, [symbol])
 
   useEffect(() => {
     let cancelled = false
@@ -238,15 +247,37 @@ export function TradingAgentPanel({
     onBotRunningChange?.(false)
   }, [onBotRunningChange])
 
+  const startAutomaticTrading = (): void => {
+    if (!symbolSpec || autoTradingEnabled) return
+    if (analysisTimer.current) window.clearTimeout(analysisTimer.current)
+    setLastResult(null)
+    setScanNonce((value) => value + 1)
+    setAutoTradingEnabled(true)
+    setPhase('ANALYZING')
+    setStatus('Starting automatic trading for ' + symbol + '…')
+    analysisTimer.current = window.setTimeout(() => {
+      setPhase('RUNNING')
+      setStatus('Automatic trading is ON. The bot will scan ' + symbol + ' and place simulated trades when a valid setup qualifies.')
+    }, 650)
+  }
+
+  const stopAutomaticTrading = (): void => {
+    if (analysisTimer.current) window.clearTimeout(analysisTimer.current)
+    setAutoTradingEnabled(false)
+    setPhase('READY')
+    setStatus('Automatic trading is OFF. No new bot trades will be opened.')
+  }
+
   const rescanBot = (): void => {
     if (analysisTimer.current) window.clearTimeout(analysisTimer.current)
     setLastResult(null)
     setScanNonce((value) => value + 1)
+    setAutoTradingEnabled(true)
     setPhase('ANALYZING')
     setStatus(activePosition ? 'Refreshing market structure, liquidity and setup while monitoring the existing simulated position.' : 'Refreshing market structure, liquidity and setup…')
     analysisTimer.current = window.setTimeout(() => {
       setPhase('RUNNING')
-      setStatus(activePosition ? 'Analysis refreshed. Monitoring the existing simulated position.' : 'Analysis refreshed. Bot is monitoring for the next valid setup.')
+      setStatus(activePosition ? 'Analysis refreshed. Monitoring the existing simulated position.' : 'Analysis refreshed. Bot is now running automatic simulated trading.')
     }, 650)
   }
 
@@ -265,6 +296,31 @@ export function TradingAgentPanel({
           {phase === 'ANALYZING' ? 'Analyzing' : phase === 'RUNNING' ? 'Running' : 'Ready'}
         </span>
       </header>
+
+      <section className="mt-3 rounded-xl border border-shafx-accent/30 bg-shafx-accent/[0.045] p-3.5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Automatic trading</div>
+            <div className="mt-1 text-base font-semibold">{autoTradingEnabled ? 'Bot is running' : 'Bot is stopped'}</div>
+            <p className="mt-1 text-[10px] leading-4 text-shafx-textMuted">{autoTradingEnabled ? 'SHAFX will scan this market automatically and place simulated trades when the setup passes its rules.' : 'Start the bot to let SHAFX scan this market automatically and place simulated trades for you.'}</p>
+          </div>
+          <span className={autoTradingEnabled ? 'rounded-full border border-shafx-success/20 bg-shafx-success/5 px-2.5 py-1 text-[9px] font-semibold text-shafx-success' : 'rounded-full border border-shafx-border bg-shafx-bg px-2.5 py-1 text-[9px] font-semibold text-shafx-textMuted'}>{autoTradingEnabled ? 'ON' : 'OFF'}</span>
+        </div>
+        <button
+          type="button"
+          disabled={!symbolSpec || phase === 'ANALYZING'}
+          onClick={autoTradingEnabled ? stopAutomaticTrading : startAutomaticTrading}
+          className={autoTradingEnabled ? 'mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-shafx-danger/30 bg-shafx-danger/10 px-3 text-[10px] font-semibold text-shafx-danger active:bg-shafx-danger/20 disabled:opacity-40' : 'mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-shafx-accent px-3 text-[10px] font-semibold text-white active:opacity-90 disabled:opacity-40'}
+        >
+          {autoTradingEnabled ? <Square className="h-3.5 w-3.5 fill-current" /> : <Play className="h-3.5 w-3.5 fill-current" />}
+          {autoTradingEnabled ? 'Stop automatic trading' : 'Start automatic trading'}
+        </button>
+        <div className="mt-2 grid grid-cols-3 gap-2 text-[9px] text-shafx-textMuted">
+          <div className="rounded-lg border border-shafx-border bg-shafx-bg px-2 py-2"><span className="block">Market</span><strong className="mt-0.5 block font-mono text-shafx-text">{symbol}</strong></div>
+          <div className="rounded-lg border border-shafx-border bg-shafx-bg px-2 py-2"><span className="block">Cycle</span><strong className="mt-0.5 block font-mono text-shafx-text">10s</strong></div>
+          <div className="rounded-lg border border-shafx-border bg-shafx-bg px-2 py-2"><span className="block">Mode</span><strong className="mt-0.5 block text-shafx-text">Simulator</strong></div>
+        </div>
+      </section>
 
       <div className="mt-3 rounded-xl border border-shafx-border bg-shafx-bg p-3.5">
         <div className="flex items-start justify-between gap-3">
