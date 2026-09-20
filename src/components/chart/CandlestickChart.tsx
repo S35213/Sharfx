@@ -20,6 +20,7 @@ interface CandlestickChartProps {
   bidPrice?: number
   askPrice?: number
   tradeLines?: ChartAnnotation[]
+  followLatest?: boolean
 }
 
 interface UserLevel { id: string; price: number; label: string; color: string; lineWidth?: 1 | 2 | 3 | 4; dashed?: boolean; armed?: boolean }
@@ -43,7 +44,7 @@ const timeframeMeta = (timeframe?: Timeframe, data: CandlestickData[] = []): { l
   return known[seconds] ?? { label: 'Custom', interval: `${Math.round(seconds / 60)}m` }
 }
 
-export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, symbol, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [] }) => {
+export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, symbol, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [], followLatest = false }) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
@@ -162,6 +163,11 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, lastIndex - visibleBars + 1), to: lastIndex + 2 })
       chart.timeScale().scrollToRealTime()
       followRealtimeRef.current = true
+    } else if (followLatest) {
+      // In realtime mode the latest bar must remain in view, otherwise the
+      // Bid/Ask lines can move while the visible candles stay in the past.
+      chart.timeScale().scrollToRealTime()
+      followRealtimeRef.current = true
     } else if (isNewBar && wasFollowingRealtime) {
       chart.timeScale().scrollToRealTime()
       followRealtimeRef.current = true
@@ -173,7 +179,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     previousTimeframeRef.current = timeframe
     renderedFirstTimeRef.current = firstTime
     renderedLastTimeRef.current = lastTime
-  }, [chartData, symbol, timeframe])
+  }, [chartData, followLatest, symbol, timeframe])
 
   useEffect(() => {
     const series = seriesRef.current
