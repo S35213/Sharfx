@@ -49,6 +49,7 @@ const TerminalContent: React.FC = () => {
   const { user } = useAuth()
   const [activeProviderSelection, setActiveProviderSelection] = useState<ActiveProviderSelection | null>(() => getStoredProviderSelection())
   const [currentPrice, setCurrentPrice] = useState(1.08542)
+  const [simulatedPrice, setSimulatedPrice] = useState(1.08542)
   const [candles, setCandles] = useState<OHLCV[]>([])
   const [liveCandles, setLiveCandles] = useState<OHLCV[]>([])
   const [simulatedCandles, setSimulatedCandles] = useState<OHLCV[]>([])
@@ -134,6 +135,7 @@ const TerminalContent: React.FC = () => {
         setSimulatedCandles(cands)
         simulatedCandlesRef.current = cands
         simulatedPriceRef.current = cands[cands.length - 1]?.close ?? acc.balance
+        setSimulatedPrice(cands[cands.length - 1]?.close ?? acc.balance)
         simulatedTimeRef.current = cands[cands.length - 1]?.time ?? Math.floor(Date.now() / 1000)
         simulatedTickWallClockRef.current = Date.now()
         setLiveCandles([])
@@ -229,24 +231,26 @@ const TerminalContent: React.FC = () => {
       const currentCandles = simulatedCandlesRef.current
       if (currentCandles.length === 0) return
 
-      const wallNow = Date.now()
-      const previousWall = simulatedTickWallClockRef.current ?? wallNow
-      const elapsedSeconds = Math.min(2.5, Math.max(0.1, (wallNow - previousWall) / 1000))
-      simulatedTickWallClockRef.current = wallNow
-      simulatedTimeRef.current += elapsedSeconds
+      // Accelerated demo clock: the simulator advances one market second per
+      // tick so the forming candle visibly develops on a phone.
+      simulatedTimeRef.current += 1
       tick += 1
 
       const pip = symbolSpec.pipSize
       const previous = simulatedPriceRef.current
-      const waveA = Math.sin(tick * 0.48 + selectedSymbol.length * 0.73)
-      const waveB = Math.sin(tick * 0.17 + selectedSymbol.length * 0.31)
-      const signedMove = (waveA * 0.68 + waveB * 0.32)
-      const magnitude = pip * (0.18 + Math.abs(signedMove) * 0.72)
+      const impulse =
+        Math.sin(tick * 0.41 + selectedSymbol.length * 0.71) * 0.62 +
+        Math.sin(tick * 0.13 + selectedSymbol.length * 0.19) * 0.23 +
+        Math.sin(tick * 1.07 + selectedSymbol.length * 0.37) * 0.15
+      const direction = Math.sign(impulse || 1)
+      const magnitudePips = 0.22 + Math.abs(impulse) * 0.78
       const nextPrice = Math.max(
         pip / 10,
-        Number((previous + Math.sign(signedMove || 1) * magnitude).toFixed(symbolSpec.pricePrecision)),
+        Number((previous + direction * pip * magnitudePips).toFixed(symbolSpec.pricePrecision)),
       )
+
       simulatedPriceRef.current = nextPrice
+      setSimulatedPrice(nextPrice)
       setCurrentPrice(nextPrice)
 
       const bucket = Math.floor(simulatedTimeRef.current / interval) * interval
@@ -273,23 +277,36 @@ const TerminalContent: React.FC = () => {
         simulatedCandlesRef.current = nextCandles
         return nextCandles
       })
-    }, 700)
+    }, 350)
 
     return () => window.clearInterval(timer)
   }, [selectedSymbol, symbolSpec, timeframe])
 
-  const replayActive = !liveMarketActive && visibleCandles.length > 0 && visibleCandles.length < candles.length
-  const chartCandles = replayActive ? visibleCandles : liveMarketActive && liveCandles.length > 0 ? liveCandles : (isSimulatorMode() && simulatedCandles.length > 0 ? simulatedCandles : visibleCandles)
-  const displayPrice = replayActive ? (visibleCandles[visibleCandles.length - 1]?.close ?? currentPrice) : liveMarketActive && liveCandles.length > 0 ? (liveCandles[liveCandles.length - 1]?.close ?? currentPrice) : isSimulatorMode() && simulatedCandles.length > 0 ? (simulatedCandles[simulatedCandles.length - 1]?.close ?? currentPrice) : currentPrice
+  const replayActive = !isSimulatorMode() && !liveMarketActive && visibleCandles.length > 0 && visibleCandles.length < candles.length
+  const chartCandles = liveMarketActive && liveCandles.length > 0
+    ? liveCandles
+    : isSimulatorMode() && simulatedCandles.length > 0
+      ? simulatedCandles
+      : replayActive
+        ? visibleCandles
+        : visibleCandles
+  const displayPrice = liveMarketActive && liveCandles.length > 0
+    ? (liveCandles[liveCandles.length - 1]?.close ?? currentPrice)
+    : isSimulatorMode()
+      ? simulatedPrice
+      : replayActive
+        ? (visibleCandles[visibleCandles.length - 1]?.close ?? currentPrice)
+        : currentPrice
   // The chart's primary price is always the latest candle close. This keeps the
   // simulated Bid/Sell stream and the candle OHLC data on one source of truth.
-  const chartLastPrice = chartCandles[chartCandles.length - 1]?.close ?? displayPrice
+  const chartLastPrice = isSimulatorMode() ? simulatedPrice : (chartCandles[chartCandles.length - 1]?.close ?? displayPrice)
   const chartSpread = symbolSpec ? symbolSpec.pipSize * 0.8 : 0.00008
   const chartAskPrice = Number((chartLastPrice + chartSpread).toFixed(symbolSpec?.pricePrecision ?? 5))
   const conversionRate = symbolSpec ? getConversionRate(symbolSpec.quoteCurrency, accountData?.currency ?? 'USD') : undefined
   const chartAnnotations = useMemo(() => buildAIChartAnnotations(selectedSymbol, chartCandles), [selectedSymbol, chartCandles])
   const multiTimeframeCandles = useMultiTimeframeCandles(selectedSymbol, timeframe, candles)
   const higherTimeframeAnnotations = useMemo(() => {
+    if (['M1', 'M5', 'M15'].includes(timeframe)) return []
     const frames = timeframe === 'D1' ? ['H4'] as const : ['H4', 'D1'] as const
     return frames.flatMap((frame) => {
       const frameCandles = multiTimeframeCandles[frame] ?? []
