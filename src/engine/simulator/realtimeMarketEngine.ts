@@ -77,10 +77,25 @@ export class SimulatorRealtimeMarketEngine {
     if (!initialM1Candles.length) throw new Error('Simulator requires M1 history.')
     this.spec = spec
     this.timeframe = timeframe
+    const maxDemoRange = Math.max(spec.pipSize, 0.000001) * 6
     this.m1Candles = initialM1Candles
       .filter((candle) => finitePositive(candle.open) && finitePositive(candle.high) && finitePositive(candle.low) && finitePositive(candle.close))
       .sort((a, b) => a.time - b.time)
       .slice(-12000)
+      .map((candle) => {
+        const bodyHigh = Math.max(candle.open, candle.close)
+        const bodyLow = Math.min(candle.open, candle.close)
+        const body = bodyHigh - bodyLow
+        if (body >= maxDemoRange || candle.high - candle.low <= maxDemoRange) return candle
+
+        const remainingWick = Math.max(0, maxDemoRange - body)
+        const halfWick = remainingWick / 2
+        return {
+          ...candle,
+          high: Number((bodyHigh + halfWick).toFixed(spec.pricePrecision)),
+          low: Number((bodyLow - halfWick).toFixed(spec.pricePrecision)),
+        }
+      })
 
     const last = this.m1Candles[this.m1Candles.length - 1]
     if (!last) throw new Error('Simulator M1 history is invalid.')
