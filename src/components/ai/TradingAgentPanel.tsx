@@ -34,6 +34,7 @@ const riskModes: Record<RiskMode, { label: string; percent: number; description:
 }
 type Phase = 'READY' | 'ANALYZING' | 'RUNNING'
 const BOT_CYCLE_SECONDS = 10 as const
+const BOT_RISK_MODE: RiskMode = 'SAFE'
 
 export function TradingAgentPanel({
   symbol,
@@ -52,7 +53,6 @@ export function TradingAgentPanel({
   onReviewSetup,
 }: Props) {
   const plan = BOT_PLANS[botPlan]
-  const [riskMode, setRiskMode] = useState<RiskMode>('SAFE')
   const readStoredLotSize = (): string => typeof window !== 'undefined' ? window.sessionStorage.getItem('shafx-simulator-lot-size') || '0.10' : '0.10'
   const [lotSize, setLotSize] = useState(readStoredLotSize)
   const [phase, setPhase] = useState<Phase>('READY')
@@ -86,7 +86,7 @@ export function TradingAgentPanel({
   const learning = useMemo(() => learnFromTrades(tradeHistory.filter((trade) => trade.status === 'closed').map((trade) => ({ symbol: trade.symbol, direction: trade.type, profit: trade.profit, riskRewardRatio: trade.riskRewardRatio }))), [tradeHistory])
   const research = useMemo(() => buildAgentResearch({ context: tradingContext, learning, multiTimeframe }), [learning, multiTimeframe, tradingContext])
   const setup = tradingContext.setup.preferredSetup
-  const riskAmount = accountBalance * (riskModes[riskMode].percent / 100)
+  const riskAmount = accountBalance * (riskModes[BOT_RISK_MODE].percent / 100)
   const parsedLotSize = Number(lotSize)
   const lotSizeValid = symbolSpec ? Number.isFinite(parsedLotSize) && parsedLotSize >= symbolSpec.minLotSize && parsedLotSize <= symbolSpec.maxLotSize && Math.abs((parsedLotSize / symbolSpec.lotStep) - Math.round(parsedLotSize / symbolSpec.lotStep)) < 1e-8 : false
 
@@ -199,7 +199,7 @@ export function TradingAgentPanel({
         context: { tradingContext, preferredSetup: setup, hasOpenPosition: false, permission: 'AUTONOMOUS_SIMULATION', multiTimeframe, learning, research },
         accountBalance,
         accountCurrency,
-        riskPercent: riskModes[riskMode].percent,
+        riskPercent: riskModes[BOT_RISK_MODE].percent,
         symbolSpec,
         conversionRate,
         lotSize: parsedLotSize,
@@ -221,7 +221,7 @@ export function TradingAgentPanel({
     }
 
     return () => { runBotCycleRef.current = null }
-  }, [accountBalance, accountCurrency, activePosition, bias, botPositionId, conversionRate, learning, losses, lotSizeValid, multiTimeframe, onBotOrder, parsedLotSize, research, riskMode, runId, setup, symbol, symbolSpec, tradingContext])
+  }, [accountBalance, accountCurrency, activePosition, bias, botPositionId, conversionRate, learning, losses, lotSizeValid, multiTimeframe, onBotOrder, parsedLotSize, research, runId, setup, symbol, symbolSpec, tradingContext])
 
   useEffect(() => {
     if (phase !== 'RUNNING') return
@@ -298,27 +298,13 @@ export function TradingAgentPanel({
         <section className="rounded-xl border border-shafx-accent/25 bg-shafx-accent/[0.045] p-3.5">
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-4 w-4 text-shafx-accent" />
-            <div><div className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">Risk gate</div><div className="text-sm font-semibold">{riskModes[riskMode].label} mode</div></div>
-          </div>
-          <div className="mt-3 grid grid-cols-3 gap-2">
-            {(Object.keys(riskModes) as RiskMode[]).map((mode) => (
-              <button key={mode} type="button" onClick={() => setRiskMode(mode)} className={riskMode === mode ? 'min-h-12 rounded-xl bg-shafx-accent px-1 text-[10px] font-semibold text-white' : 'min-h-12 rounded-xl border border-shafx-border bg-shafx-bg px-1 text-[10px] font-semibold text-shafx-textMuted'}>
-                {riskModes[mode].label}<span className="mt-0.5 block opacity-80">{riskModes[mode].percent}%</span>
-              </button>
-            ))}
+            <div><div className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">Automatic protection</div><div className="text-sm font-semibold">{riskModes[BOT_RISK_MODE].label} simulation mode</div></div>
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2 text-[10px]">
             <div className="rounded-lg border border-shafx-border bg-shafx-bg px-2.5 py-2"><span className="text-shafx-textMuted">Balance</span><div className="mt-0.5 font-mono text-xs">${accountBalance.toFixed(2)}</div></div>
             <div className="rounded-lg border border-shafx-border bg-shafx-bg px-2.5 py-2"><span className="text-shafx-textMuted">Max risk</span><div className="mt-0.5 font-mono text-xs text-shafx-danger">${riskAmount.toFixed(2)}</div></div>
           </div>
-          <label className="mt-3 block">
-            <span className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">Bot lot size</span>
-            <div className="mt-1 flex items-center gap-2">
-              <input type="number" inputMode="decimal" step={symbolSpec?.lotStep ?? 0.01} min={symbolSpec?.minLotSize ?? 0.01} max={symbolSpec?.maxLotSize ?? 100} value={lotSize} onChange={(event) => setLotSize(event.target.value)} className="min-h-11 min-w-0 flex-1 rounded-xl border border-shafx-border bg-shafx-bg px-3 font-mono text-xs outline-none focus:border-shafx-accent" aria-label="Bot lot size" />
-              <span className="text-[9px] text-shafx-textMuted">lots</span>
-            </div>
-            <span className={lotSizeValid ? 'mt-1 block text-[8px] text-shafx-textMuted' : 'mt-1 block text-[8px] text-shafx-danger'}>{symbolSpec ? `Allowed ${symbolSpec.minLotSize}–${symbolSpec.maxLotSize}, step ${symbolSpec.lotStep}` : 'Load a symbol specification first.'}</span>
-          </label>
+          <p className="mt-3 text-[9px] leading-4 text-shafx-textMuted">Risk mode and bot lot size are automatic here. Use the Open Trade Workshop when you need manual trade sizing.</p>
         </section>
 
         <section className="rounded-xl border border-shafx-border bg-shafx-bg p-3.5">
@@ -349,7 +335,7 @@ export function TradingAgentPanel({
         <div>Learning: {learning.summary}</div>
         <div>Research agreement: {research.agreement.toFixed(0)}%.</div>
         <div>Current price: {currentPrice}</div>
-        <div>{riskModes[riskMode].description}.</div>
+        <div>{riskModes[BOT_RISK_MODE].description}.</div>
         <div>Multi-timeframe context is used before a simulated order is considered.</div>
       </div>}
 
