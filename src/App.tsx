@@ -15,7 +15,6 @@ import { ProviderCapabilityPanel } from './components/market/ProviderCapabilityP
 import { FXMoveMatrix } from './components/market/FXMoveMatrix'
 import { CandlestickChart, type ChartAnnotation, type ChartToolMode } from './components/chart/CandlestickChart'
 import { analyzeCurrentSetup, buildStructuralChartAnnotations } from './components/chart/buildAIChartAnnotations'
-import { useMultiTimeframeCandles } from './engine/agent/loadMultiTimeframe'
 import { Watchlist } from './components/watchlist/Watchlist'
 import { MarketAnalysisPanel } from './components/analysis/MarketAnalysis'
 import { AIAssistantPanel } from './components/ai/AIAssistantPanel'
@@ -275,7 +274,6 @@ const TerminalContent: React.FC = () => {
   const chartSpread = symbolSpec ? symbolSpec.pipSize * 0.8 : 0.00008
   const chartAskPrice = Number((chartLastPrice + chartSpread).toFixed(symbolSpec?.pricePrecision ?? 5))
   const conversionRate = symbolSpec ? getConversionRate(symbolSpec.quoteCurrency, accountData?.currency ?? 'USD') : undefined
-  const multiTimeframeCandles = useMultiTimeframeCandles(selectedSymbol, timeframe, candles)
 
   // The forming candle changes every simulator tick. Structural levels do not
   // need to be rebuilt on every tick because the annotation builder already
