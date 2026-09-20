@@ -28,6 +28,7 @@ interface CandlestickChartProps {
 }
 
 interface UserLevel { id: string; price: number; label: string; color: string; lineWidth?: 1 | 2 | 3 | 4; dashed?: boolean; armed?: boolean }
+type ShafxSeries = ISeriesApi<'Candlestick'> | ISeriesApi<'Bar'> | ISeriesApi<'Line'> | ISeriesApi<'Area'>
 
 const prepareData = (data: OHLCV[]): CandlestickData[] => {
   const seen = new Set<number>()
@@ -51,7 +52,7 @@ const timeframeMeta = (timeframe?: Timeframe, data: CandlestickData[] = []): { l
 export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, symbol, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [], followLatest = false, candleTheme = 'mt5', chartMode = 'candles', marketTimestamp }) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<IChartApi | null>(null)
-  const seriesRef = useRef<ISeriesApi<any> | null>(null)
+  const seriesRef = useRef<ShafxSeries | null>(null)
   const chartData = useMemo(() => prepareData(data), [data])
   const visualData = useMemo(() => {
     if (chartMode === 'candles' || chartMode === 'bars') return chartData
@@ -97,7 +98,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     })
     const colors = candleColors[candleTheme]
     const precision = Math.max(2, Math.round(Math.log10(1 / Math.max(pipSize, 0.00001))))
-    let series: ISeriesApi<any>
+    let series: ShafxSeries
     if (chartMode === 'bars') {
       series = chart.addBarSeries({ priceFormat: { type: 'price', precision, minMove: Math.max(pipSize, 0.00001) }, upColor: colors.up, downColor: colors.down, openVisible: true, thinBars: false, priceLineVisible: false, lastValueVisible: false })
     } else if (chartMode === 'wave') {
