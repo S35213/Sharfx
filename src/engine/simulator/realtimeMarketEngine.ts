@@ -72,8 +72,9 @@ export class SimulatorRealtimeMarketEngine {
   private bid: number
   private tick = 0
   private phase: number
-  private higherTimeframeDirection: -1 | 0 | 1 = 0
-  private higherTimeframeBucket: number | null = null
+  private displayedHigherTimeframeClose: number | null = null
+  private displayedHigherTimeframeBucket: number | null = null
+  private lastHigherTimeframeRefresh: number | null = null
 
   constructor(spec: SymbolSpec, timeframe: Timeframe, initialM1Candles: OHLCV[], initialBid?: number, initialTimestamp?: number) {
     if (!initialM1Candles.length) throw new Error('Simulator requires M1 history.')
@@ -109,32 +110,50 @@ export class SimulatorRealtimeMarketEngine {
 
   private displayCandles(): OHLCV[] {
     const raw = aggregate(this.m1Candles, this.timeframe, this.spec.pricePrecision, 300)
-    if (!['H1', 'H4', 'D1'].includes(this.timeframe) || raw.length === 0) return raw
+    if (raw.length === 0 || this.timeframe === 'M1') return raw
 
     const current = raw[raw.length - 1]
-    if (this.higherTimeframeBucket !== current.time) {
-      this.higherTimeframeBucket = current.time
-      this.higherTimeframeDirection = 0
+    const bucketChanged = this.displayedHigherTimeframeBucket !== current.time
+
+    // The simulator receives a price tick every second, but a higher-timeframe
+    // candle should not visually behave like M1. We therefore refresh the
+    // displayed close at a cadence that gets slower as the timeframe grows.
+    // OHLC high/low still accumulate continuously; only the body/colour is
+    // deliberately sampled more slowly.
+    const refreshSeconds: Record<Timeframe, number> = {
+      M1: 1,
+      M5: 60,
+      M15: 300,
+      M30: 600,
+      H1: 900,
+      H4: 3600,
+      D1: 14400,
+    }
+    const cadence = refreshSeconds[this.timeframe]
+
+    if (bucketChanged) {
+      this.displayedHigherTimeframeBucket = current.time
+      this.displayedHigherTimeframeClose = current.open
+      this.lastHigherTimeframeRefresh = current.time
     }
 
-    if (this.higherTimeframeDirection === 0 && current.close !== current.open) {
-      this.higherTimeframeDirection = current.close > current.open ? 1 : -1
+    const now = this.simulatedTime
+    const lastRefresh = this.lastHigherTimeframeRefresh ?? current.time
+    if (
+      this.displayedHigherTimeframeClose === null ||
+      now - lastRefresh >= cadence
+    ) {
+      this.displayedHigherTimeframeClose = current.close
+      this.lastHigherTimeframeRefresh = now
     }
 
-    // Higher timeframes still receive the live high/low information, but their
-    // body direction is latched for the life of the forming bar. This prevents
-    // one-second simulator ticks from making H1/H4/D1 flash green/red as price
-    // crosses the opening price repeatedly. The finished bar remains the true
-    // OHLC result because it is replaced by the next aggregate calculation.
-    const close = this.higherTimeframeDirection === 1
-      ? Math.max(current.open, current.close)
-      : this.higherTimeframeDirection === -1
-        ? Math.min(current.open, current.close)
-        : current.open
+    const displayedClose = Number(
+      (this.displayedHigherTimeframeClose ?? current.open).toFixed(this.spec.pricePrecision),
+    )
 
     return [
       ...raw.slice(0, -1),
-      { ...current, close: Number(close.toFixed(this.spec.pricePrecision)) },
+      { ...current, close: displayedClose },
     ]
   }
 
