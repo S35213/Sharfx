@@ -51,7 +51,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({ activeTab, onChange }) => 
       <div className="mx-auto grid max-w-xl grid-cols-4 gap-1.5 px-1 py-1.5">
         {items.map(({ id, label, icon: Icon }) => {
           const active = activeTab === id
-          return <button key={id} type="button" aria-current={active ? 'page' : undefined} onClick={() => { setHidden(false); onChange(id) }} className={active ? 'flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-xl bg-shafx-accent/10 text-shafx-accent ring-1 ring-inset ring-shafx-accent/20' : 'flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-xl text-shafx-textMuted active:bg-shafx-surfaceHover'}>
+          return <button key={id} type="button" aria-current={active ? 'page' : undefined} onClick={() => { setHidden(false); if (active && id !== 'market') onChange('market'); else onChange(id) }} className={active ? 'flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-xl bg-shafx-accent/10 text-shafx-accent ring-1 ring-inset ring-shafx-accent/20' : 'flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-xl text-shafx-textMuted active:bg-shafx-surfaceHover'}>
             <span className="flex h-9 w-12 items-center justify-center"><Icon size={20} strokeWidth={active ? 2.25 : 1.8} /></span>
             <span className="text-[10px] font-semibold">{label}</span>
           </button>
