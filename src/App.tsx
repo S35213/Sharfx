@@ -277,13 +277,25 @@ const TerminalContent: React.FC = () => {
   const conversionRate = symbolSpec ? getConversionRate(symbolSpec.quoteCurrency, accountData?.currency ?? 'USD') : undefined
   const multiTimeframeCandles = useMultiTimeframeCandles(selectedSymbol, timeframe, candles)
 
+  // The forming candle changes every simulator tick. Structural levels do not
+  // need to be rebuilt on every tick because the annotation builder already
+  // excludes that forming candle. Keep the annotation source stable until a
+  // completed candle, symbol, or timeframe actually changes; this prevents
+  // price-line labels from flickering while the market is moving.
+  const structureCandleIndex = Math.max(0, chartCandles.length - 2)
+  const structureCandle = chartCandles[structureCandleIndex]
+  const chartStructureSourceKey = chartCandles.length === 0
+    ? 'empty'
+    : [chartCandles.length, structureCandle?.time, structureCandle?.open, structureCandle?.high, structureCandle?.low, structureCandle?.close].join(':')
+  const structuralChartCandles = useMemo(() => [...chartCandles], [chartStructureSourceKey, selectedSymbol, timeframe])
+
   // Support/resistance/liquidity on the main chart belong to the timeframe
   // the trader is actually viewing. The builder ignores the forming candle,
   // so these levels stay structural instead of following the live BUY/SELL
   // quote. Higher-timeframe context remains a separate overlay below.
-  const chartAnnotations = useMemo(() => buildStructuralChartAnnotations(selectedSymbol, chartCandles, timeframe)
+  const chartAnnotations = useMemo(() => buildStructuralChartAnnotations(selectedSymbol, structuralChartCandles, timeframe)
     .map((annotation) => ({ ...annotation, id: `structure-${timeframe}-${annotation.id}` })),
-  [chartCandles, selectedSymbol, timeframe])
+  [structuralChartCandles, selectedSymbol, timeframe])
 
   const higherTimeframeAnnotations = useMemo(() => {
     if (timeframe === 'D1') return []
