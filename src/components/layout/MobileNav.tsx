@@ -19,22 +19,52 @@ export const MobileNav: React.FC<MobileNavProps> = ({ activeTab, onChange }) => 
 
   useEffect(() => {
     let lastY = window.scrollY
+    let lastTouchY: number | null = null
     let ticking = false
+
+    const applyDirection = (delta: number, currentY: number): void => {
+      if (!settings.autoHideNavigation || currentY <= 16) setHidden(false)
+      else if (delta > 8) setHidden(true)
+      else if (delta < -8) setHidden(false)
+    }
+
     const onScroll = (): void => {
       if (ticking) return
       ticking = true
       window.requestAnimationFrame(() => {
         const current = window.scrollY
-        const delta = current - lastY
-        if (!settings.autoHideNavigation || current <= 16) setHidden(false)
-        else if (delta > 8) setHidden(true)
-        else if (delta < -8) setHidden(false)
+        applyDirection(current - lastY, current)
         lastY = current
         ticking = false
       })
     }
+
+    const onTouchStart = (event: TouchEvent): void => {
+      lastTouchY = event.touches[0]?.clientY ?? null
+    }
+
+    const onTouchMove = (event: TouchEvent): void => {
+      const currentTouchY = event.touches[0]?.clientY
+      if (currentTouchY === undefined || lastTouchY === null) return
+      const delta = lastTouchY - currentTouchY
+      if (Math.abs(delta) > 8) {
+        applyDirection(delta, window.scrollY)
+        lastTouchY = currentTouchY
+      }
+    }
+
+    const onTouchEnd = (): void => { lastTouchY = null }
+
     window.addEventListener('scroll', onScroll, { passive: true })
-    return () => window.removeEventListener('scroll', onScroll)
+    window.addEventListener('touchstart', onTouchStart, { passive: true })
+    window.addEventListener('touchmove', onTouchMove, { passive: true })
+    window.addEventListener('touchend', onTouchEnd, { passive: true })
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      window.removeEventListener('touchstart', onTouchStart)
+      window.removeEventListener('touchmove', onTouchMove)
+      window.removeEventListener('touchend', onTouchEnd)
+    }
   }, [settings.autoHideNavigation])
 
   useEffect(() => {
