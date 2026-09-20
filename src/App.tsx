@@ -51,7 +51,7 @@ const TerminalContent: React.FC = () => {
   const [activeProviderSelection, setActiveProviderSelection] = useState<ActiveProviderSelection | null>(() => getStoredProviderSelection())
   const [currentPrice, setCurrentPrice] = useState(1.08542)
   const [simulatedPrice, setSimulatedPrice] = useState(1.08542)
-  const [marketTimestamp, setMarketTimestamp] = useState<number>(Math.floor(Date.now() / 1000))
+  const [marketTimestamp, setMarketTimestamp] = useState<number>(0)
   const [candles, setCandles] = useState<OHLCV[]>([])
   const [liveCandles, setLiveCandles] = useState<OHLCV[]>([])
   const [simulatedCandles, setSimulatedCandles] = useState<OHLCV[]>([])
