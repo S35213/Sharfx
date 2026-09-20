@@ -85,7 +85,7 @@ export class SimulatorRealtimeMarketEngine {
     const last = this.m1Candles[this.m1Candles.length - 1]
     if (!last) throw new Error('Simulator M1 history is invalid.')
     this.simulatedTime = last.time
-    this.bid = finitePositive(initialBid) ? Number(initialBid) : last.close
+    this.bid = initialBid !== undefined && finitePositive(initialBid) ? Number(initialBid) : last.close
     const seed = seedFor(spec.baseCurrency + spec.quoteCurrency)
     this.phase = (seed % 10000) / 10000 * Math.PI * 2
   }
