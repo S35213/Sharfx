@@ -276,25 +276,14 @@ const TerminalContent: React.FC = () => {
   const chartAskPrice = Number((chartLastPrice + chartSpread).toFixed(symbolSpec?.pricePrecision ?? 5))
   const conversionRate = symbolSpec ? getConversionRate(symbolSpec.quoteCurrency, accountData?.currency ?? 'USD') : undefined
   const multiTimeframeCandles = useMultiTimeframeCandles(selectedSymbol, timeframe, candles)
-  const structuralSourceFrame: Timeframe = timeframe === 'M1'
-    ? 'M5'
-    : timeframe === 'M5'
-      ? 'M15'
-      : timeframe === 'M15'
-        ? 'M30'
-        : timeframe === 'M30'
-          ? 'H1'
-          : timeframe === 'H1'
-            ? 'H4'
-            : timeframe
 
-  const chartAnnotations = useMemo(() => {
-    const sourceCandles = structuralSourceFrame === timeframe
-      ? chartCandles
-      : (multiTimeframeCandles[structuralSourceFrame] ?? chartCandles)
-    return buildStructuralChartAnnotations(selectedSymbol, sourceCandles, structuralSourceFrame)
-      .map((annotation) => ({ ...annotation, id: `structure-${structuralSourceFrame}-${annotation.id}` }))
-  }, [chartCandles, multiTimeframeCandles, selectedSymbol, structuralSourceFrame, timeframe])
+  // Support/resistance/liquidity on the main chart belong to the timeframe
+  // the trader is actually viewing. The builder ignores the forming candle,
+  // so these levels stay structural instead of following the live BUY/SELL
+  // quote. Higher-timeframe context remains a separate overlay below.
+  const chartAnnotations = useMemo(() => buildStructuralChartAnnotations(selectedSymbol, chartCandles, timeframe)
+    .map((annotation) => ({ ...annotation, id: `structure-${timeframe}-${annotation.id}` })),
+  [chartCandles, selectedSymbol, timeframe])
 
   const higherTimeframeAnnotations = useMemo(() => {
     if (timeframe === 'D1') return []
