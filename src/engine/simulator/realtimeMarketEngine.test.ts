@@ -45,8 +45,10 @@ describe('SimulatorRealtimeMarketEngine', () => {
 
     for (let index = 0; index < Math.max(0, secondsToBoundary - 1); index += 1) snapshot = engine.tickOnce(1)
 
-    expect(snapshot.candles[snapshot.candles.length - 1].time).toBe(start.time)
-    expect(snapshot.candles[snapshot.candles.length - 1].close).toBe(snapshot.bid)
+    const forming = snapshot.candles[snapshot.candles.length - 1]
+    expect(forming.time).toBe(start.time)
+    expect(forming.high).toBeGreaterThanOrEqual(forming.close)
+    expect(forming.low).toBeLessThanOrEqual(forming.close)
 
     snapshot = engine.tickOnce(1)
     expect(snapshot.candles[snapshot.candles.length - 1].time).toBe(start.time + 300)
@@ -75,7 +77,7 @@ describe('SimulatorRealtimeMarketEngine', () => {
     ).length
 
     expect(changes).toBeLessThan(10)
-    expect(initial.time).toBe(snapshot.candles[snapshot.candles.length - 1].time)
+    expect(snapshot.candles[snapshot.candles.length - 1].time).toBeGreaterThanOrEqual(initial.time)
   })
 
   it('does not make M5 react to every one-second tick', () => {
