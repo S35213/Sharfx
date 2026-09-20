@@ -51,6 +51,7 @@ const TerminalContent: React.FC = () => {
   const [activeProviderSelection, setActiveProviderSelection] = useState<ActiveProviderSelection | null>(() => getStoredProviderSelection())
   const [currentPrice, setCurrentPrice] = useState(1.08542)
   const [simulatedPrice, setSimulatedPrice] = useState(1.08542)
+  const [marketTimestamp, setMarketTimestamp] = useState<number>(Math.floor(Date.now() / 1000))
   const [candles, setCandles] = useState<OHLCV[]>([])
   const [liveCandles, setLiveCandles] = useState<OHLCV[]>([])
   const [simulatedCandles, setSimulatedCandles] = useState<OHLCV[]>([])
@@ -140,11 +141,13 @@ const TerminalContent: React.FC = () => {
           setSimulatedCandles(snapshot.candles)
           setSimulatedPrice(snapshot.bid)
           simulatedPriceRef.current = snapshot.bid
+          setMarketTimestamp(snapshot.timestamp)
         } else {
           simulatedEngineRef.current = null
           setSimulatedCandles(cands)
           setSimulatedPrice(cands[cands.length - 1]?.close ?? acc.balance)
           simulatedPriceRef.current = cands[cands.length - 1]?.close ?? acc.balance
+          setMarketTimestamp(cands[cands.length - 1]?.time ?? Math.floor(Date.now() / 1000))
         }
         setReplayCount(cands.length)
         setMarketAnalysis(ma)
@@ -237,8 +240,9 @@ const TerminalContent: React.FC = () => {
       const snapshot = engine.tickOnce(1)
       setSimulatedCandles(snapshot.candles)
       setSimulatedPrice(snapshot.bid)
+      setMarketTimestamp(snapshot.timestamp)
       setCurrentPrice(snapshot.bid)
-    }, 250)
+    }, 1000)
 
     return () => window.clearInterval(timer)
   }, [selectedSymbol, symbolSpec, timeframe])
@@ -321,7 +325,7 @@ const TerminalContent: React.FC = () => {
     window.setTimeout(() => document.getElementById('mobile-market-workspace')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60)
   }, [])
 
-  const handleLiveUpdate = useCallback((nextCandles: OHLCV[], price: number): void => { setLiveCandles(nextCandles); setCurrentPrice(price) }, [])
+  const handleLiveUpdate = useCallback((nextCandles: OHLCV[], price: number, epoch: number): void => { setLiveCandles(nextCandles); setCurrentPrice(price); setMarketTimestamp(Math.floor(epoch / 1000)) }, [])
   const handleLiveActiveChange = useCallback((active: boolean): void => { setLiveMarketActive(active); if (!active) setLiveCandles([]) }, [])
   const handleOrderSubmit = useCallback((draft: SimulatedOrderDraft): void => {
     try {
@@ -452,9 +456,9 @@ const TerminalContent: React.FC = () => {
             <div className="flex min-w-0 items-center gap-2"><span className="truncate text-xs font-semibold">{selectedSymbol}</span><span className="rounded-md border border-shafx-border bg-shafx-bg px-2 py-1 text-[9px] text-shafx-textMuted">{liveMarketActive ? `LIVE • ${activeProviderName}` : 'SIMULATED MARKET'}</span></div>
             <div className="flex items-center gap-1.5"><span className="hidden text-[9px] uppercase tracking-[0.15em] text-shafx-textMuted sm:block">Feed</span>{liveControl}<button type="button" onClick={() => setDock(dock === 'orders' ? 'insights' : 'orders')} className="flex min-h-10 items-center gap-1.5 rounded-xl border border-shafx-border bg-shafx-bg px-2.5 text-[9px] font-semibold hover:border-shafx-accent/40"><SlidersHorizontal className="h-3.5 w-3.5 text-shafx-accent" />Trade</button></div>
           </div>
-          <MobileChartTools tool={chartTool} onToolChange={setChartTool} candleTheme={chartSettings.candleTheme} />
+          <MobileChartTools tool={chartTool} onToolChange={setChartTool} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} />
           <div className="relative h-[58vh] min-h-[420px] p-2 sm:h-[62vh] sm:min-h-[480px] sm:p-3 lg:h-auto lg:min-h-[520px] lg:flex-1">
-            <CandlestickChart data={chartCandles} symbol={selectedSymbol} timeframe={timeframe} annotations={[...chartAnnotations, ...higherTimeframeAnnotations]} tradeLines={tradeLines} bidPrice={chartLastPrice} askPrice={chartAskPrice} toolMode={chartToolMode} pipSize={symbolSpec.pipSize} onToolNotice={pushToast} showGrid={chartSettings.showGrid} showPriceLabels={chartSettings.showPriceLabels} followLatest={isSimulatorMode() || liveMarketActive} candleTheme={chartSettings.candleTheme} />
+            <CandlestickChart data={chartCandles} symbol={selectedSymbol} timeframe={timeframe} annotations={[...chartAnnotations, ...higherTimeframeAnnotations]} tradeLines={tradeLines} bidPrice={chartLastPrice} askPrice={chartAskPrice} toolMode={chartToolMode} pipSize={symbolSpec.pipSize} onToolNotice={pushToast} showGrid={chartSettings.showGrid} showPriceLabels={chartSettings.showPriceLabels} followLatest={isSimulatorMode() || liveMarketActive} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} marketTimestamp={marketTimestamp} />
             <div className="pointer-events-none absolute bottom-5 right-5 z-10 hidden items-center gap-1.5 rounded-xl border border-shafx-border bg-shafx-surface/90 px-2.5 py-1.5 text-[9px] text-shafx-textMuted backdrop-blur sm:flex"><Maximize2 className="h-3 w-3 text-shafx-accent" />Scroll / pinch to navigate</div>
           </div>
           <div className="grid grid-cols-2 gap-2 border-t border-shafx-border bg-shafx-surface/55 p-2 sm:grid-cols-4">
