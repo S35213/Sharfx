@@ -53,17 +53,24 @@ describe('SimulatorRealtimeMarketEngine', () => {
     expect(snapshot.candles.length).toBeGreaterThanOrEqual(2)
   })
 
-  it('keeps higher timeframes internally consistent with the same tick feed', () => {
+  it('keeps higher timeframes internally consistent while preventing rapid color flips', () => {
     const engine = new SimulatorRealtimeMarketEngine(spec, 'H1', seed)
     let snapshot = engine.tickOnce(1)
-    const previous = snapshot.candles[snapshot.candles.length - 1]
+    const openingBar = snapshot.candles[snapshot.candles.length - 1]
+    const firstDirection = Math.sign(openingBar.close - openingBar.open)
+    let directionChanges = 0
+    let previousDirection = firstDirection
 
-    for (let index = 0; index < 59; index += 1) snapshot = engine.tickOnce(1)
+    for (let index = 0; index < 180; index += 1) {
+      snapshot = engine.tickOnce(1)
+      const current = snapshot.candles[snapshot.candles.length - 1]
+      const direction = Math.sign(current.close - current.open)
+      if (direction !== 0 && previousDirection !== 0 && direction !== previousDirection) directionChanges += 1
+      if (direction !== 0) previousDirection = direction
+      expect(current.high).toBeGreaterThanOrEqual(Math.max(current.open, current.close))
+      expect(current.low).toBeLessThanOrEqual(Math.min(current.open, current.close))
+    }
 
-    const current = snapshot.candles[snapshot.candles.length - 1]
-    expect(current.time).toBe(previous.time)
-    expect(current.close).toBe(snapshot.bid)
-    expect(current.high).toBeGreaterThanOrEqual(current.close)
-    expect(current.low).toBeLessThanOrEqual(current.close)
+    expect(directionChanges).toBe(0)
   })
 })
