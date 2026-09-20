@@ -8,6 +8,8 @@ import type { ChartAnnotation } from './CandlestickChart'
 
 const toleranceFor = (symbol: string): number => symbol.includes('JPY') ? 0.1 : 0.001
 
+const annotationPriceTolerance = (symbol: string): number => Math.max(toleranceFor(symbol) * 0.05, Number.EPSILON)
+
 export const analyzeCurrentSetup = (symbol: string, candles: OHLCV[]): SetupResult | null => {
   if (candles.length === 0) return null
   const currentPrice = candles[candles.length - 1]?.close ?? Number.NaN
@@ -67,8 +69,25 @@ export const buildStructuralChartAnnotations = (symbol: string, candles: OHLCV[]
   const prefix = sourceLabel ? `${sourceLabel} ` : ''
 
   const result: ChartAnnotation[] = []
+  const priceTolerance = annotationPriceTolerance(symbol)
   const add = (id: string, price: number | null, label: string, color: string, lineWidth: 1 | 2 = 1): void => {
     if (typeof price !== 'number' || !Number.isFinite(price) || price <= 0) return
+
+    const duplicate = result.find((item) => Math.abs(item.price - price) <= priceTolerance)
+    if (duplicate) {
+      // A buy-side and sell-side liquidity pool can collapse to the same
+      // reference price after clustering. Rendering both labels on one
+      // horizontal line creates a misleading duplicate label in the chart.
+      if (duplicate.id.startsWith('liquidity-') && id.startsWith('liquidity-')) {
+        if (!duplicate.label.includes('liquidity')) return
+        duplicate.label = `${prefix}Liquidity`
+        duplicate.id = 'liquidity-both'
+        duplicate.color = '#A78BFA'
+        duplicate.lineWidth = 1
+      }
+      return
+    }
+
     result.push({ id, price, label: `${prefix}${label}`, color, lineWidth })
   }
 
