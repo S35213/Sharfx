@@ -219,22 +219,20 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     if (rangeNeedsReset) {
       const width = containerRef.current?.clientWidth ?? 1000
       const currentVisible = visibleRange
-      const previousSeconds: Record<Timeframe, number> = { M1: 60, M5: 300, M15: 900, M30: 1800, H1: 3600, H4: 14400, D1: 86400 }
-      const previousBarSpan = currentVisible ? Math.max(14, currentVisible.to - currentVisible.from) : (width < 640 ? 58 : 92)
-      const scaledBars = timeframeChanged && previousTimeframeRef.current
-        ? Math.round(previousBarSpan * previousSeconds[previousTimeframeRef.current] / previousSeconds[timeframe ?? previousTimeframeRef.current])
-        : previousBarSpan
-      const visibleBars = Math.max(14, Math.min(180, scaledBars))
-      chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, lastIndex - visibleBars + 1), to: lastIndex + 2 })
+      // A timeframe change is a deliberate view reset. Do not preserve the
+      // previous zoom ratio because that can make M1/M5 appear artificially
+      // zoomed-in after switching from H1/H4 (or vice versa). Start wide;
+      // the user can then zoom in manually.
+      const visibleBars = width < 640 ? 140 : 180
+      const from = Math.max(0, lastIndex - visibleBars + 1)
+      const to = lastIndex + 7
+      chart.timeScale().setVisibleLogicalRange({ from, to })
       series.priceScale().applyOptions({ autoScale: true })
-      chart.timeScale().scrollToRealTime()
-      followRealtimeRef.current = true
-    } else if (followLatest) {
-      // In realtime mode the latest bar must remain in view, otherwise the
-      // Bid/Ask lines can move while the visible candles stay in the past.
-      chart.timeScale().scrollToRealTime()
       followRealtimeRef.current = true
     } else if (isNewBar && wasFollowingRealtime) {
+      // Only follow the newest bar when the user is already at the live edge.
+      // When the user has panned back into history, never pull them back to
+      // the front just because a new simulator/provider tick arrived.
       chart.timeScale().scrollToRealTime()
       followRealtimeRef.current = true
     }
@@ -245,7 +243,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     previousTimeframeRef.current = timeframe
     renderedFirstTimeRef.current = firstTime
     renderedLastTimeRef.current = lastTime
-  }, [visualData, followLatest, symbol, timeframe])
+  }, [visualData, symbol, timeframe])
 
   useEffect(() => {
     const series = seriesRef.current
