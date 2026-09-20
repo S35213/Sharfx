@@ -3,15 +3,17 @@ import { ArrowDownRight, ArrowUpRight, Radio, TrendingUp } from 'lucide-react'
 import type { TradeOrder } from '../../types'
 import { buildSimulationFlow } from './simulationFlow'
 
-interface Props { openPositions: TradeOrder[]; tradeHistory: TradeOrder[] }
+interface Props { selectedSymbol: string; openPositions: TradeOrder[]; tradeHistory: TradeOrder[] }
 
 const formatExactTime = (date: Date): string => {
   const pad = (value: number, width = 2): string => String(value).padStart(width, '0')
   return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${pad(date.getMilliseconds(), 3)}`
 }
 
-export const SimulationFlowChart: React.FC<Props> = ({ openPositions, tradeHistory }) => {
-  const points = useMemo(() => buildSimulationFlow(openPositions, tradeHistory), [openPositions, tradeHistory])
+export const SimulationFlowChart: React.FC<Props> = ({ selectedSymbol, openPositions, tradeHistory }) => {
+  const marketOpenPositions = useMemo(() => openPositions.filter((trade) => trade.symbol === selectedSymbol), [openPositions, selectedSymbol])
+  const marketTradeHistory = useMemo(() => tradeHistory.filter((trade) => trade.symbol === selectedSymbol), [tradeHistory, selectedSymbol])
+  const points = useMemo(() => buildSimulationFlow(marketOpenPositions, marketTradeHistory), [marketOpenPositions, marketTradeHistory])
   const eventScrollRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
     const element = eventScrollRef.current
@@ -36,7 +38,7 @@ export const SimulationFlowChart: React.FC<Props> = ({ openPositions, tradeHisto
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-shafx-info/10 text-shafx-info"><TrendingUp className="h-4 w-4" /></div>
-          <div><h3 className="text-sm font-semibold">Simulation flow</h3><p className="text-[10px] text-shafx-textMuted">Real simulator orders placed and closed in this session.</p></div>
+          <div><h3 className="text-sm font-semibold">Simulation flow • {selectedSymbol}</h3><p className="text-[10px] text-shafx-textMuted">Real simulator orders placed and closed in this {selectedSymbol} session.</p></div>
         </div>
         <span className="flex items-center gap-1 rounded-full border border-shafx-success/20 bg-shafx-success/5 px-2 py-1 text-[9px] font-semibold text-shafx-success"><Radio className="h-3 w-3" />LIVE SIM</span>
       </div>
@@ -59,7 +61,7 @@ export const SimulationFlowChart: React.FC<Props> = ({ openPositions, tradeHisto
 
       <div ref={eventScrollRef} className="mt-3 max-h-[260px] space-y-1.5 overflow-y-auto">
         {points.slice(-12).map((point) => {
-          const trade = [...openPositions, ...tradeHistory].find((item) => point.id.startsWith(item.id + '-'))
+          const trade = [...marketOpenPositions, ...marketTradeHistory].find((item) => point.id.startsWith(item.id + '-'))
           const lotText = trade ? `${trade.lotSize.toFixed(2)} lots` : ''
           return (
             <div key={point.id} className="flex items-center gap-2 rounded-xl border border-shafx-border/80 bg-shafx-bg px-2.5 py-2">
