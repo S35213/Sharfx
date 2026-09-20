@@ -20,11 +20,14 @@ const formatTime = (value: string): string => {
 type MarketTick = { id: string; time: number; side: 'BUY' | 'SELL'; lots: number; price: number }
 
 
-export const SimulationPulse: React.FC<Props> = ({ openPositions, tradeHistory, botOrderIds, botRunning }) => {
-  const stats = buildSimulationPulseStats({ openPositions, tradeHistory, botOrderIds, botRunning })
+export const SimulationPulse: React.FC<Props> = ({ selectedSymbol, openPositions, tradeHistory, botOrderIds, botRunning }) => {
+  const marketOpenPositions = openPositions.filter((trade) => trade.symbol === selectedSymbol)
+  const marketTradeHistory = tradeHistory.filter((trade) => trade.symbol === selectedSymbol)
+  const marketBotOrderIds = new Set(botOrderIds.filter((id) => [...marketOpenPositions, ...marketTradeHistory].some((trade) => trade.id === id)))
+  const stats = buildSimulationPulseStats({ openPositions: marketOpenPositions, tradeHistory: marketTradeHistory, botOrderIds: [...marketBotOrderIds], botRunning })
   const tapeScrollRef = useRef<HTMLDivElement | null>(null)
   const autoScrollTapeRef = useRef(true)
-  const initialPrice = openPositions[0]?.entryPrice ?? tradeHistory[0]?.exitPrice ?? tradeHistory[0]?.entryPrice ?? 1.085
+  const initialPrice = marketOpenPositions[0]?.entryPrice ?? marketTradeHistory[0]?.exitPrice ?? marketTradeHistory[0]?.entryPrice ?? 1.085
   const [marketTicks, setMarketTicks] = useState<MarketTick[]>(() => Array.from({ length: 8 }, (_, index) => ({
     id: 'seed-' + index,
     time: Date.now() - (7 - index) * 1100,
@@ -58,8 +61,8 @@ export const SimulationPulse: React.FC<Props> = ({ openPositions, tradeHistory, 
   }, [marketTicks])
   const ids = new Set(botOrderIds)
   const activity = [
-    ...openPositions.filter((trade) => ids.has(trade.id)).map((trade) => ({ trade, state: 'OPEN' as const, time: trade.openTime })),
-    ...tradeHistory.filter((trade) => ids.has(trade.id)).map((trade) => ({ trade, state: 'CLOSED' as const, time: trade.closeTime ?? trade.openTime })),
+    ...marketOpenPositions.filter((trade) => ids.has(trade.id)).map((trade) => ({ trade, state: 'OPEN' as const, time: trade.openTime })),
+    ...marketTradeHistory.filter((trade) => ids.has(trade.id)).map((trade) => ({ trade, state: 'CLOSED' as const, time: trade.closeTime ?? trade.openTime })),
   ].sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()).slice(0, 5)
 
   return (
@@ -107,7 +110,7 @@ export const SimulationPulse: React.FC<Props> = ({ openPositions, tradeHistory, 
         <div className="flex items-center justify-between gap-2">
           <div>
             <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Market order tape</div>
-            <div className="text-[9px] text-shafx-textMuted">Synthetic simulator flow • updates every ~1s</div>
+            <div className="text-[9px] text-shafx-textMuted">Synthetic {selectedSymbol} simulator flow • updates every ~1s</div>
           </div>
           <span className="rounded-full border border-shafx-warning/20 bg-shafx-warning/5 px-2 py-1 text-[8px] font-semibold text-shafx-warning">SIMULATED</span>
         </div>
