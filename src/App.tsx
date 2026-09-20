@@ -349,10 +349,6 @@ const TerminalContent: React.FC = () => {
     pushToast(`SHAFX Bot opened simulated ${order.type} ${order.symbol}.`)
   }, [pushToast])
 
-  const handleBotClose = useCallback(async (id: string): Promise<void> => {
-    await handleClosePosition(id)
-  }, [handleClosePosition])
-
   const handleClosePosition = useCallback(async (id: string): Promise<void> => {
     const order = openPositions.find((item) => item.id === id)
     if (!order || !accountData) return
@@ -377,6 +373,10 @@ const TerminalContent: React.FC = () => {
       pushToast(`Simulated ${closed.type} ${closed.symbol} closed at ${exitPrice.toFixed(spec.pricePrecision)}.`)
     } catch (err) { pushToast(err instanceof Error ? err.message : 'Unable to close simulated position.') }
   }, [accountData, displayPrice, openPositions, pushToast, selectedSymbol])
+
+  const handleBotClose = useCallback(async (id: string): Promise<void> => {
+    await handleClosePosition(id)
+  }, [handleClosePosition])
 
   useEffect(() => {
     if (!accountData || openPositions.length === 0) return
