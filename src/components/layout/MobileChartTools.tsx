@@ -1,8 +1,10 @@
 import React, { useState } from 'react'
 import { Activity, BellRing, ChevronDown, Crosshair, Minus, Ruler, Wrench } from 'lucide-react'
+import type { CandleTheme } from '../../app/chartSettings'
+import { writeChartWorkspaceSettings } from '../../app/chartSettings'
 import type { WorkspaceTool } from './WorkspaceRail'
 
-interface Props { tool: WorkspaceTool; onToolChange: (tool: WorkspaceTool) => void }
+interface Props { tool: WorkspaceTool; onToolChange: (tool: WorkspaceTool) => void; candleTheme: CandleTheme }
 
 const items: Array<{ id: WorkspaceTool; label: string; icon: React.ElementType; detail: string }> = [
   { id: 'cursor', label: 'Pointer', icon: Activity, detail: 'Pan and inspect' },
@@ -12,7 +14,7 @@ const items: Array<{ id: WorkspaceTool; label: string; icon: React.ElementType; 
   { id: 'alert', label: 'Price alert', icon: BellRing, detail: 'Arm an alert at a chart price' },
 ]
 
-export const MobileChartTools: React.FC<Props> = ({ tool, onToolChange }) => {
+export const MobileChartTools: React.FC<Props> = ({ tool, onToolChange, candleTheme }) => {
   const [open, setOpen] = useState(false)
   const active = items.find((item) => item.id === tool) ?? items[0]
   const ActiveIcon = active.icon
@@ -36,7 +38,32 @@ export const MobileChartTools: React.FC<Props> = ({ tool, onToolChange }) => {
               </button>
             })}
           </div>
-          <div className="mt-2 flex items-center gap-2 rounded-xl border border-shafx-border bg-shafx-surface p-2 text-[9px] text-shafx-textMuted"><Wrench className="h-3.5 w-3.5 text-shafx-accent" />Choose one tool at a time. Tapping the chart applies it at the price under your finger.</div>
+          <div className="mt-2 rounded-xl border border-shafx-border bg-shafx-surface p-2.5">
+            <div className="mb-2 flex items-center gap-2 text-[9px] font-semibold uppercase tracking-[0.13em] text-shafx-textMuted"><Wrench className="h-3.5 w-3.5 text-shafx-accent" />Candlestick theme</div>
+            <div className="grid grid-cols-4 gap-1.5">
+              {([
+                ['mt5', 'MT5', '#26A69A', '#EF5350'],
+                ['shafx', 'SHAFX', '#22D3A5', '#FF5C75'],
+                ['blue', 'Blue', '#42A5F5', '#FF7043'],
+                ['amber', 'Amber', '#FFCA28', '#EF5350'],
+              ] as Array<[CandleTheme, string, string, string]>).map(([id, label, up, down]) => {
+                const selected = id === candleTheme
+                return <button key={id} type="button" onClick={() => {
+                  const current = JSON.parse(localStorage.getItem('shafx.chart.settings') ?? '{}') as Record<string, unknown>
+                  writeChartWorkspaceSettings({
+                    showGrid: current.showGrid !== false,
+                    showPriceLabels: current.showPriceLabels !== false,
+                    autoHideNavigation: current.autoHideNavigation !== false,
+                    candleTheme: id,
+                  })
+                }} aria-pressed={selected} className={selected ? 'min-h-11 rounded-lg border border-shafx-accent/40 bg-shafx-accent/10 px-1 text-left' : 'min-h-11 rounded-lg border border-shafx-border bg-shafx-bg px-1 text-left'}>
+                  <span className="flex items-center justify-center gap-1"><span className="h-3 w-3 rounded-[2px]" style={{ background: up }} /><span className="h-3 w-3 rounded-[2px]" style={{ background: down }} /></span>
+                  <span className={selected ? 'mt-1 block text-center text-[8px] font-semibold text-shafx-accent' : 'mt-1 block text-center text-[8px] font-semibold text-shafx-textMuted'}>{label}</span>
+                </button>
+              })}
+            </div>
+          </div>
+          <div className="mt-2 flex items-center gap-2 rounded-xl border border-shafx-border bg-shafx-surface p-2 text-[9px] text-shafx-textMuted">Choose a tool, then tap the chart to use it. The candlestick theme is saved on this device.</div>
         </div>
       )}
     </div>
