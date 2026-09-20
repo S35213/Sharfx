@@ -16,12 +16,7 @@ export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, t
   const [moreOpen, setMoreOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [query, setQuery] = useState('')
-  const [quoteTick, setQuoteTick] = useState(0)
   const navRef = useRef<HTMLElement | null>(null)
-  useEffect(() => {
-    const timer = window.setInterval(() => setQuoteTick((value) => value + 1), 900)
-    return () => window.clearInterval(timer)
-  }, [])
   useEffect(() => {
     const onPointerDown = (event: PointerEvent): void => {
       const target = event.target
@@ -46,14 +41,12 @@ export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, t
   }, [])
   const instruments = useMemo(() => Array.from(new Set(pairs.map((pair) => pair.symbol))), [pairs])
   const filtered = instruments.filter((item) => item.toLowerCase().includes(query.trim().toLowerCase()))
-  const simulatedQuote = (item: string, index: number) => {
+  const simulatedQuote = (item: string) => {
     const pair = pairs.find((entry) => entry.symbol === item)
     const precision = item === symbol ? pricePrecision : item.includes('JPY') ? 3 : item.includes('XAU') ? 2 : item.includes('BTC') ? 2 : 5
     const base = item === symbol ? price : pair?.price ?? 0
-    const step = item.includes('JPY') ? 0.004 : item.includes('XAU') ? 0.06 : item.includes('BTC') ? 3 : 0.00002
-    const wave = Math.sin(quoteTick * 0.9 + index * 1.37)
-    const mid = Number(Math.max(step, base + step * wave).toFixed(precision))
     const spread = item.includes('JPY') ? 0.006 : item.includes('XAU') ? 0.08 : item.includes('BTC') ? 4 : 0.00008
+    const mid = Number(base.toFixed(precision))
     return { pair, precision, bid: Number((mid - spread / 2).toFixed(precision)), ask: Number((mid + spread / 2).toFixed(precision)), mid }
   }
   const currentMode = typeof window !== 'undefined' && sessionStorage.getItem('shafx-trading-mode') === 'broker' ? 'broker' : 'simulator'
@@ -86,8 +79,8 @@ export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, t
           <div className="mb-2 flex items-center gap-2 rounded-xl border border-shafx-border bg-shafx-bg px-3"><Search className="h-4 w-4 text-shafx-textMuted" /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') { setMarketOpen(false); setQuery('') } else if (event.key === 'Enter') selectFirstMatch() }} placeholder="Search symbol…" className="h-10 w-full bg-transparent text-sm outline-none" aria-label="Search trading symbols" /><kbd className="hidden rounded border border-shafx-border px-1.5 py-0.5 text-[8px] text-shafx-textMuted sm:block">⌘K</kbd></div>
           <div className="mb-1 flex items-center justify-between px-2"><div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Market Watch</div><span className="rounded-full border border-shafx-warning/20 bg-shafx-warning/5 px-1.5 py-0.5 text-[8px] text-shafx-warning">SIMULATED</span></div>
           <div className="mb-2 grid grid-cols-[1fr_82px_70px] gap-2 px-2 text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted"><span>Instrument</span><span className="text-right">Bid / Ask</span><span className="text-right">Move</span></div>
-          <div className="max-h-[calc(100dvh-225px)] space-y-1 overflow-y-auto sm:max-h-80">{filtered.map((item, index) => {
-            const quote = simulatedQuote(item, index)
+          <div className="max-h-[calc(100dvh-225px)] space-y-1 overflow-y-auto sm:max-h-80">{filtered.map((item) => {
+            const quote = simulatedQuote(item)
             const change = quote.pair?.changePercent ?? 0
             const selectedClass = item === symbol ? 'bg-shafx-accent/10 text-shafx-accent' : ''
             return <button key={item} type="button" onClick={() => { onSelectPair(item); setMarketOpen(false); setQuery('') }} className={selectedClass + ' grid min-h-14 w-full grid-cols-[1fr_82px_70px] items-center gap-2 rounded-xl px-3 text-left transition hover:bg-shafx-surfaceHover'}>

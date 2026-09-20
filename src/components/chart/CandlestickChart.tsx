@@ -61,6 +61,10 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const renderedFirstTimeRef = useRef<number | null>(null)
   const renderedLastTimeRef = useRef<number | null>(null)
   const [crosshairInfo, setCrosshairInfo] = useState<{ price: number; time: string } | null>(null)
+  const marketBidLineRef = useRef<IPriceLine | null>(null)
+  const marketAskLineRef = useRef<IPriceLine | null>(null)
+  const followRealtimeRef = useRef(true)
+  const latestIndexRef = useRef(-1)
 
   useEffect(() => {
     const el = containerRef.current
@@ -71,12 +75,12 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       width: el.clientWidth,
       height: Math.max(280, el.clientHeight),
       crosshair: { mode: 1, vertLine: { color: '#667285', width: 1, style: 2, labelBackgroundColor: '#202A38' }, horzLine: { color: '#667285', width: 1, style: 2, labelBackgroundColor: '#202A38' } },
-      rightPriceScale: { borderColor: '#202A38', minimumWidth: 92, scaleMargins: { top: 0.08, bottom: 0.08 } },
-      timeScale: { borderColor: '#202A38', timeVisible: true, secondsVisible: true, rightOffset: 5, barSpacing: 8, minBarSpacing: 3 },
+      rightPriceScale: { borderColor: '#202A38', minimumWidth: 104, alignLabels: true, ticksVisible: true, scaleMargins: { top: 0.08, bottom: 0.08 } },
+      timeScale: { borderColor: '#202A38', timeVisible: true, secondsVisible: false, rightOffset: 7, barSpacing: 9, minBarSpacing: 3 },
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
       handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true },
     })
-    const series = chart.addCandlestickSeries({ priceFormat: { type: 'price', precision: Math.max(2, Math.round(Math.log10(1 / Math.max(pipSize, 0.00001)))), minMove: Math.max(pipSize, 0.00001) }, upColor: '#22D3A5', downColor: '#FF5C75', borderUpColor: '#22D3A5', borderDownColor: '#FF5C75', wickUpColor: '#22D3A5', wickDownColor: '#FF5C75', priceLineVisible: false, lastValueVisible: true })
+    const series = chart.addCandlestickSeries({ priceFormat: { type: 'price', precision: Math.max(2, Math.round(Math.log10(1 / Math.max(pipSize, 0.00001)))), minMove: Math.max(pipSize, 0.00001) }, upColor: '#22D3A5', downColor: '#FF5C75', borderUpColor: '#22D3A5', borderDownColor: '#FF5C75', wickUpColor: '#22D3A5', wickDownColor: '#FF5C75', priceLineVisible: false, lastValueVisible: false })
     chartRef.current = chart
     seriesRef.current = series
     const ro = new ResizeObserver(([entry]) => {
@@ -84,8 +88,25 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       const { width, height: h } = entry.contentRect
       if (width > 0 && h > 0) chart.applyOptions({ width, height: Math.max(280, h) })
     })
+    const onVisibleRangeChange = (range: { from: number; to: number } | null): void => {
+      if (!range) {
+        followRealtimeRef.current = true
+        return
+      }
+      const lastIndex = latestIndexRef.current
+      followRealtimeRef.current = lastIndex < 0 || range.to >= lastIndex - 1
+    }
+    chart.timeScale().subscribeVisibleLogicalRangeChange(onVisibleRangeChange)
     ro.observe(el)
-    return () => { ro.disconnect(); chart.remove(); chartRef.current = null; seriesRef.current = null }
+    return () => {
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(onVisibleRangeChange)
+      ro.disconnect()
+      chart.remove()
+      chartRef.current = null
+      seriesRef.current = null
+      marketBidLineRef.current = null
+      marketAskLineRef.current = null
+    }
   }, [])
 
   useEffect(() => {
@@ -119,20 +140,34 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       renderedLastTimeRef.current !== null &&
       lastTime >= renderedLastTimeRef.current
 
+    const previousLastTime = renderedLastTimeRef.current
+    const previousLastIndex = latestIndexRef.current
+    const visibleRange = chart.timeScale().getVisibleLogicalRange()
+    const wasFollowingRealtime =
+      followRealtimeRef.current ||
+      !visibleRange ||
+      (previousLastIndex >= 0 && visibleRange.to >= previousLastIndex - 1)
+    const isNewBar = previousLastTime !== null && lastTime > previousLastTime
+
     if (canUpdateLatestBar) {
       series.update(chartData[chartData.length - 1])
     } else {
       series.setData(chartData)
     }
 
+    const lastIndex = chartData.length - 1
     if (rangeNeedsReset) {
       const width = containerRef.current?.clientWidth ?? 1000
       const visibleBars = width < 640 ? 58 : 92
-      const lastIndex = chartData.length - 1
       chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, lastIndex - visibleBars + 1), to: lastIndex + 2 })
       chart.timeScale().scrollToRealTime()
+      followRealtimeRef.current = true
+    } else if (isNewBar && wasFollowingRealtime) {
+      chart.timeScale().scrollToRealTime()
+      followRealtimeRef.current = true
     }
 
+    latestIndexRef.current = lastIndex
     viewInitializedRef.current = true
     previousSymbolRef.current = symbol
     previousTimeframeRef.current = timeframe
@@ -180,34 +215,66 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       }))
     })
 
-    // FX candles are constructed from the Bid stream. Keep SELL/Bid exactly on
-    // the latest candle close, and place BUY/Ask only at the simulated spread.
-    // This mirrors the relationship documented by MT5 instead of letting a
-    // separate "current price" stream drift away from the candles.
+    return () => { lines.forEach((line) => series.removePriceLine(line)) }
+  }, [annotations, armedAlerts, showPriceLabels, tradeLines, userLevels])
+
+  useEffect(() => {
+    const series = seriesRef.current
+    if (!series) return
+    const compact = (containerRef.current?.clientWidth ?? 1000) < 640
     const bid = Number.isFinite(bidPrice) && Number(bidPrice) > 0 ? Number(bidPrice) : lastClose
     const ask = Number.isFinite(askPrice) && Number(askPrice) > 0 ? Number(askPrice) : bid
-    if (Number.isFinite(bid) && bid > 0) {
-      lines.push(series.createPriceLine({
-        price: bid,
-        color: '#22D3A5',
-        lineWidth: 2,
-        lineStyle: 0,
-        axisLabelVisible: showPriceLabels,
-        title: compact ? 'SELL' : 'Bid / Sell',
-      }))
+
+    const updateLine = (
+      ref: React.MutableRefObject<IPriceLine | null>,
+      options: Parameters<IPriceLine['applyOptions']>[0] | null,
+    ): void => {
+      if (!options) {
+        if (ref.current) {
+          series.removePriceLine(ref.current)
+          ref.current = null
+        }
+        return
+      }
+      if (ref.current) {
+        ref.current.applyOptions(options)
+      } else {
+        ref.current = series.createPriceLine(options)
+      }
     }
-    if (Number.isFinite(ask) && ask > 0) {
-      lines.push(series.createPriceLine({
-        price: ask,
-        color: '#FF5C75',
-        lineWidth: 1,
-        lineStyle: 2,
-        axisLabelVisible: showPriceLabels,
-        title: compact ? 'BUY' : 'Ask / Buy',
-      }))
-    }
-    return () => { lines.forEach((line) => series.removePriceLine(line)) }
-  }, [annotations, armedAlerts, askPrice, bidPrice, lastClose, showPriceLabels, tradeLines, userLevels])
+
+    updateLine(
+      marketBidLineRef,
+      Number.isFinite(bid) && bid > 0
+        ? {
+            price: bid,
+            color: '#22D3A5',
+            lineWidth: 2,
+            lineStyle: 0,
+            axisLabelVisible: showPriceLabels,
+            axisLabelColor: '#22D3A5',
+            axisLabelTextColor: '#07110E',
+            title: compact ? 'SELL' : 'SELL / BID',
+          }
+        : null,
+    )
+    updateLine(
+      marketAskLineRef,
+      Number.isFinite(ask) && ask > 0
+        ? {
+            price: ask,
+            color: '#FF5C75',
+            lineWidth: 1,
+            lineStyle: 2,
+            axisLabelVisible: showPriceLabels,
+            axisLabelColor: '#FF5C75',
+            axisLabelTextColor: '#19070B',
+            title: compact ? 'BUY' : 'BUY / ASK',
+          }
+        : null,
+    )
+  }, [askPrice, bidPrice, lastClose, showPriceLabels])
+
 
   useEffect(() => {
     const chart = chartRef.current
@@ -269,6 +336,10 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   }
 
   const measureDelta = measureStart !== null && measureEnd !== null ? Math.abs(measureEnd - measureStart) / Math.max(pipSize, Number.EPSILON) : null
+  const quotePrecision = Math.max(2, Math.round(Math.log10(1 / Math.max(pipSize, 0.00001))))
+  const displayBid = Number.isFinite(bidPrice) && Number(bidPrice) > 0 ? Number(bidPrice) : lastClose
+  const displayAsk = Number.isFinite(askPrice) && Number(askPrice) > 0 ? Number(askPrice) : displayBid
+  const spreadPips = Number.isFinite(displayBid) && Number.isFinite(displayAsk) && pipSize > 0 ? (displayAsk - displayBid) / pipSize : 0
 
   useEffect(() => {
     if (armedAlerts.length === 0 || !Number.isFinite(lastClose)) return
@@ -293,6 +364,12 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   return <div ref={containerRef} onPointerDown={placeTool} className={`shafx-chart-shell relative w-full overflow-hidden border border-shafx-border bg-shafx-bg ${['level', 'alert', 'measure'].includes(toolMode) ? 'cursor-crosshair' : ''}`} style={{ height, minHeight: 280 }}>
     <div className="pointer-events-none absolute left-3 top-3 z-10 flex items-center gap-2 rounded-xl border border-shafx-border bg-shafx-bg/90 px-2.5 py-1.5 text-[9px] font-semibold backdrop-blur"><span className="text-shafx-accent">SHAFX</span><span className="text-shafx-textMuted">•</span><span className="text-shafx-textMuted">{timeframe ?? 'PRICE'} workspace</span></div>
     <div className="pointer-events-none absolute right-3 top-3 z-10 rounded-xl border border-shafx-border bg-shafx-bg/90 px-2.5 py-1.5 text-[9px] font-semibold text-shafx-text backdrop-blur">{meta.label} <span className="font-normal text-shafx-textMuted">• {meta.interval}</span></div>
+    <div className="pointer-events-none absolute right-3 top-12 z-10 flex items-center gap-1.5 rounded-xl border border-shafx-border bg-shafx-surface/90 px-1.5 py-1 shadow-lg backdrop-blur">
+      <span className="rounded-lg px-2 py-1 text-[9px] font-bold tabular text-shafx-success"><span className="mr-1 text-[8px] uppercase tracking-[0.12em]">SELL</span>{Number.isFinite(displayBid) ? displayBid.toFixed(quotePrecision) : '—'}</span>
+      <span className="h-3.5 w-px bg-shafx-border" />
+      <span className="rounded-lg px-2 py-1 text-[9px] font-bold tabular text-shafx-danger"><span className="mr-1 text-[8px] uppercase tracking-[0.12em]">BUY</span>{Number.isFinite(displayAsk) ? displayAsk.toFixed(quotePrecision) : '—'}</span>
+      <span className="hidden border-l border-shafx-border pl-2 text-[8px] font-semibold tabular text-shafx-textMuted sm:inline">SP {spreadPips.toFixed(1)}p</span>
+    </div>
     {toolMode === 'crosshair' && crosshairInfo && <div className="pointer-events-none absolute left-3 bottom-3 z-20 rounded-xl border border-shafx-accent/25 bg-shafx-surface/95 px-3 py-2 text-[9px] shadow-xl"><span className="text-shafx-textMuted">Crosshair</span><strong className="ml-2 font-mono text-shafx-text">{crosshairInfo.price.toFixed(5)}</strong><span className="ml-2 text-shafx-textMuted">{crosshairInfo.time}</span></div>}
     {(toolMode === 'level' || toolMode === 'alert' || toolMode === 'measure') && <div className="pointer-events-none absolute bottom-3 left-3 z-10 flex items-center gap-2 rounded-xl border border-shafx-border bg-shafx-surface/95 px-3 py-2 text-[9px] text-shafx-textMuted shadow-xl"><Crosshair className="h-3.5 w-3.5 text-shafx-accent" />{toolMode === 'level' ? 'Tap chart to place a price level' : toolMode === 'alert' ? 'Tap chart, then confirm the alert price' : measureStart === null ? 'Tap first point to measure' : measureEnd === null ? 'Tap second point to finish' : 'Measure complete'}</div>}
     {alertCandidate !== null && <div className="absolute bottom-3 left-1/2 z-30 -translate-x-1/2 rounded-2xl border border-shafx-warning/30 bg-shafx-surface/98 px-3 py-3 shadow-2xl backdrop-blur"><div className="text-[9px] uppercase tracking-[0.14em] text-shafx-textMuted">Price alert</div><div className="mt-1 font-mono text-sm font-semibold text-shafx-text">{alertCandidate.toFixed(5)}</div><div className="mt-2 flex gap-2"><button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={armAlert} className="min-h-10 rounded-xl bg-shafx-warning px-3 text-[10px] font-semibold text-black">Arm alert</button><button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={cancelAlert} className="min-h-10 rounded-xl border border-shafx-border px-3 text-[10px] text-shafx-textMuted">Cancel</button></div></div>}

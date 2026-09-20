@@ -53,6 +53,7 @@ const TerminalContent: React.FC = () => {
   const [liveCandles, setLiveCandles] = useState<OHLCV[]>([])
   const [simulatedCandles, setSimulatedCandles] = useState<OHLCV[]>([])
   const simulatedPriceRef = useRef(1.08542)
+  const simulatedCandlesRef = useRef<OHLCV[]>([])
   const [liveMarketActive, setLiveMarketActive] = useState(false)
   const [replayCount, setReplayCount] = useState(0)
   const [mobileTab, setMobileTab] = useState<MobileNavTab>('market')
@@ -129,6 +130,7 @@ const TerminalContent: React.FC = () => {
         setSymbolSpec(spec)
         setCandles(cands)
         setSimulatedCandles(cands)
+        simulatedCandlesRef.current = cands
         simulatedPriceRef.current = cands[cands.length - 1]?.close ?? acc.balance
         setLiveCandles([])
         setReplayCount(cands.length)
@@ -137,7 +139,8 @@ const TerminalContent: React.FC = () => {
         if (!accountInitialized.current) { accountInitialized.current = true; setAccountData(acc) }
         if (!simulatorInitialized.current) { simulatorInitialized.current = true; setOpenPositions(positions); setPendingOrders(pending); setTradeHistory(history) }
         const pair = wl.find((p) => p.symbol === selectedSymbol)
-        if (pair) setCurrentPrice(pair.price)
+        const initialChartPrice = cands[cands.length - 1]?.close ?? pair?.price
+        if (Number.isFinite(initialChartPrice)) setCurrentPrice(Number(initialChartPrice))
       } catch (err) {
         if (!cancelled) pushToast(err instanceof Error ? err.message : 'Unable to load market data.')
       }
@@ -212,18 +215,23 @@ const TerminalContent: React.FC = () => {
 
   const visibleCandles = useMemo(() => replayCount > 0 && replayCount < candles.length ? candles.slice(0, replayCount) : candles, [candles, replayCount])
   useEffect(() => {
-    if (isBrokerMode() || simulatedCandles.length === 0 || !symbolSpec) return
+    if (isBrokerMode() || !symbolSpec) return
     const intervalSeconds: Record<string, number> = { M1: 60, M5: 300, M15: 900, M30: 1800, H1: 3600, H4: 14400, D1: 86400 }
     const interval = intervalSeconds[timeframe] ?? 60
     let tick = 0
     const timer = window.setInterval(() => {
+      const currentCandles = simulatedCandlesRef.current
+      if (currentCandles.length === 0) return
+
       tick += 1
       const pip = symbolSpec.pipSize
       const previous = simulatedPriceRef.current
-      const direction = Math.sin(tick * 0.91 + selectedSymbol.length) >= 0 ? 1 : -1
-      const magnitude = pip * (0.18 + Math.abs(Math.sin(tick * 0.37)) * 0.82)
+      const directionWave = Math.sin(tick * 0.91 + selectedSymbol.length * 0.73)
+      const direction = directionWave >= 0 ? 1 : -1
+      const magnitude = pip * (0.16 + Math.abs(Math.sin(tick * 0.37 + selectedSymbol.length)) * 0.84)
       const nextPrice = Math.max(pip / 10, Number((previous + direction * magnitude).toFixed(symbolSpec.pricePrecision)))
       simulatedPriceRef.current = nextPrice
+
       const now = Math.floor(Date.now() / 1000)
       const bucket = Math.floor(now / interval) * interval
       setSimulatedCandles((previousCandles) => {
@@ -232,12 +240,13 @@ const TerminalContent: React.FC = () => {
         const next = last.time < bucket
           ? { time: bucket, open: last.close, high: Math.max(last.close, nextPrice), low: Math.min(last.close, nextPrice), close: nextPrice, volume: 1 }
           : { ...last, high: Math.max(last.high, nextPrice), low: Math.min(last.low, nextPrice), close: nextPrice, volume: (last.volume ?? 0) + 1 }
-        return [...previousCandles.slice(-999), next]
+        const nextCandles = [...previousCandles.slice(-999), next]
+        simulatedCandlesRef.current = nextCandles
+        return nextCandles
       })
-      setCurrentPrice(nextPrice)
     }, 1500)
     return () => window.clearInterval(timer)
-  }, [selectedSymbol, simulatedCandles.length, symbolSpec, timeframe])
+  }, [selectedSymbol, symbolSpec, timeframe])
 
   const replayActive = !liveMarketActive && visibleCandles.length > 0 && visibleCandles.length < candles.length
   const chartCandles = replayActive ? visibleCandles : liveMarketActive && liveCandles.length > 0 ? liveCandles : (isSimulatorMode() && simulatedCandles.length > 0 ? simulatedCandles : visibleCandles)
@@ -344,7 +353,7 @@ const TerminalContent: React.FC = () => {
     const refreshPositions = async (): Promise<void> => {
       try {
         const prices = new Map(watchlist.map((pair) => [pair.symbol, pair.price]))
-        prices.set(selectedSymbol, currentPrice)
+        prices.set(selectedSymbol, displayPrice)
         const uniqueSymbols = [...new Set(openPositions.map((position) => position.symbol))]
         const specs = await Promise.all(uniqueSymbols.map(async (symbol) => {
           if (symbol === selectedSymbol && symbolSpec) return [symbol, symbolSpec] as const
@@ -386,7 +395,7 @@ const TerminalContent: React.FC = () => {
     }
     void refreshPositions()
     return () => { cancelled = true }
-  }, [accountData?.currency, currentPrice, openPositions, pushToast, selectedSymbol, symbolSpec, watchlist])
+  }, [accountData?.currency, displayPrice, openPositions, pushToast, selectedSymbol, symbolSpec, watchlist])
 
   if (!accountData || !symbolSpec || !marketAnalysis || !aiAnalysis) return <div className="flex h-full items-center justify-center bg-shafx-bg text-shafx-text">Preparing SHAFX workspace…</div>
 
