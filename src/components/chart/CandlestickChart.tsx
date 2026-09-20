@@ -225,6 +225,10 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       const from = Math.max(0, lastIndex - visibleBars + 1)
       const to = lastIndex + 7
       chart.timeScale().setVisibleLogicalRange({ from, to })
+      // A timeframe change should always land on the newest candle while
+      // retaining the intentionally wide zoom. History remains user-controlled
+      // after this initial positioning.
+      chart.timeScale().scrollToRealTime()
       series.priceScale().applyOptions({ autoScale: true })
       followRealtimeRef.current = true
     } else if (isNewBar && wasFollowingRealtime) {
