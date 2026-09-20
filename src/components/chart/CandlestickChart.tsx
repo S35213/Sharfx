@@ -21,7 +21,6 @@ interface CandlestickChartProps {
   bidPrice?: number
   askPrice?: number
   tradeLines?: ChartAnnotation[]
-  followLatest?: boolean
   candleTheme?: CandleTheme
   chartMode?: ChartMode
   marketTimestamp?: number
@@ -218,7 +217,6 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     const lastIndex = visualData.length - 1
     if (rangeNeedsReset) {
       const width = containerRef.current?.clientWidth ?? 1000
-      const currentVisible = visibleRange
       // A timeframe change is a deliberate view reset. Do not preserve the
       // previous zoom ratio because that can make M1/M5 appear artificially
       // zoomed-in after switching from H1/H4 (or vice versa). Start wide;
