@@ -99,7 +99,10 @@ export const getMockCandles = (symbol: string, timeframe: Timeframe, limit = 300
   const base = baseCache.get(baseKey) ?? generateBaseM1(symbol, PRICE_BY_SYMBOL[symbol] ?? PRICE_BY_SYMBOL['EUR/USD'], pipSize, specPrecision)
   baseCache.set(baseKey, base)
   const aggregated = aggregate(base, timeframe, specPrecision)
-  const validated = validateCandles(aggregated.slice(-Math.max(10, Math.min(limit, 1000))))
+  // The simulator can request a larger M1 history so higher timeframes have
+  // enough completed bars to render a real chart instead of one or two candles.
+  const historyLimit = Math.max(10, Math.min(limit, 12000))
+  const validated = validateCandles(aggregated.slice(-historyLimit))
   cache.set(key, validated)
   return validated
 }
