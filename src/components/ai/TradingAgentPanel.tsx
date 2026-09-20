@@ -185,13 +185,7 @@ export function TradingAgentPanel({
       setLosses((v) => {
         const next = v + 1
         setLastResult('LOSS')
-        if (next >= 2) {
-          setAutoTradingEnabled(false)
-          setPhase('READY')
-          setStatus('Stopped after 2 simulated losses — review the strategy')
-        } else {
-          setStatus('Simulated loss — bot will re-check the market before the next trade')
-        }
+        setStatus('Simulated loss — bot will re-check the market on the next 5s cycle')
         return next
       })
     }
@@ -199,7 +193,6 @@ export function TradingAgentPanel({
 
   useEffect(() => {
     runBotCycleRef.current = async (): Promise<void> => {
-    if (losses >= 2) return
     const units = cycleUnitsForSeconds(BOT_CYCLE_SECONDS)
     try {
       const response = await fetch('/api/bot/usage', {
