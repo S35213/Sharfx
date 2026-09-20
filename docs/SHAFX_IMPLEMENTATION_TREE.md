@@ -137,6 +137,7 @@
 - [x] Simulator market-data boundary exists.
 - [x] Live market-data interface exists.
 - [x] OHLC validation exists.
+- [x] Simulator realtime tick engine advances the forming candle and simulated Bid price from one synchronized tick source; simulator realtime-follow pins the viewport to the newest candle.
 - [x] Freshness/clock health gates exist.
 - [x] Live polling/stream cleanup exists.
 - [x] Provider/account selection is user-driven and the selected connection feeds the live market control.
@@ -208,12 +209,12 @@
 
 ## Current checkpoint
 
-**Last verified:** 2026-09-18
+**Last verified:** 2026-09-20
 
-**Current main:** `1054e1789bf4a3fa3ed15c351a4c3ff57ee93191` (UI overhaul + final UI polish merged). The last verified READY production deployment still points to an older main commit because new Vercel deployments are currently rate-limited on the Hobby plan.
+**Current main:** `00b500c05ff82ff73ce72f8202ecbd1ac0794a32` (realtime simulator tick/candle synchronization + realtime chart-follow fix). The last verified READY production deployment still points to an older main commit because new Vercel deployments are currently rate-limited on the Hobby plan.
 
 **Current branch for continuation:** `main`
 
-**Current state:** Provider foundation, Supabase registry, Deriv, OANDA, generic connector/onboarding primitives, Binance read-only pack, concurrent account streaming/cache/retry, health/telemetry primitives, funding dispatcher, and FIX/custom gateway boundaries are present on `main`. Latest SHAFX CI and Provider Architecture CI pass. Remaining hard gates are real external provider credentials/sandbox tests, concrete IBKR/cTrader/MT4/MT5 provider packs, production telemetry/alert delivery, and the unresolved Vercel runtime deprecation warning. New Vercel deployments are presently blocked by the Hobby deployment-rate quota.
+**Current state:** Provider foundation, Supabase registry, Deriv, OANDA, generic connector/onboarding primitives, Binance read-only pack, concurrent account streaming/cache/retry, health/telemetry primitives, funding dispatcher, FIX/custom gateway boundaries, and the synchronized simulator realtime chart feed are present on `main`. Latest SHAFX CI and Provider Architecture CI pass. Remaining hard gates are real external provider credentials/sandbox tests, concrete IBKR/cTrader/MT4/MT5 provider packs, production telemetry/alert delivery, and the unresolved Vercel runtime deprecation warning. New Vercel deployments are presently blocked by the Hobby deployment-rate quota.
 
 **Handoff rule:** Never replace this tree with a new checklist. Update this file in the same branch/commit chain as work progresses. Only mark an item `[x]` after verification.
