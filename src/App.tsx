@@ -57,6 +57,7 @@ const TerminalContent: React.FC = () => {
   const [simulatedCandles, setSimulatedCandles] = useState<OHLCV[]>([])
   const simulatedPriceRef = useRef(1.08542)
   const simulatedEngineRef = useRef<SimulatorRealtimeMarketEngine | null>(null)
+  const simulatedEngineSymbolRef = useRef<string | null>(null)
   const [liveMarketActive, setLiveMarketActive] = useState(false)
   const [replayCount, setReplayCount] = useState(0)
   const [mobileTab, setMobileTab] = useState<MobileNavTab>('market')
@@ -135,8 +136,12 @@ const TerminalContent: React.FC = () => {
         setLiveCandles([])
         if (!isBrokerMode()) {
           const m1 = await marketDataSource.getCandles(selectedSymbol, 'M1', 12000)
-          const engine = new SimulatorRealtimeMarketEngine(spec, timeframe, m1, m1[m1.length - 1]?.close ?? acc.balance)
+          const sameSymbolContinuation = simulatedEngineRef.current !== null && simulatedEngineSymbolRef.current === selectedSymbol
+          const carryBid = sameSymbolContinuation ? simulatedPriceRef.current : (m1[m1.length - 1]?.close ?? acc.balance)
+          const carryTimestamp = sameSymbolContinuation ? marketTimestamp : m1[m1.length - 1]?.time
+          const engine = new SimulatorRealtimeMarketEngine(spec, timeframe, m1, carryBid, carryTimestamp)
           simulatedEngineRef.current = engine
+          simulatedEngineSymbolRef.current = selectedSymbol
           const snapshot = engine.snapshot()
           setSimulatedCandles(snapshot.candles)
           setSimulatedPrice(snapshot.bid)
@@ -144,6 +149,7 @@ const TerminalContent: React.FC = () => {
           setMarketTimestamp(snapshot.timestamp)
         } else {
           simulatedEngineRef.current = null
+          simulatedEngineSymbolRef.current = null
           setSimulatedCandles(cands)
           setSimulatedPrice(cands[cands.length - 1]?.close ?? acc.balance)
           simulatedPriceRef.current = cands[cands.length - 1]?.close ?? acc.balance
