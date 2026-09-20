@@ -72,6 +72,8 @@ export class SimulatorRealtimeMarketEngine {
   private bid: number
   private tick = 0
   private phase: number
+  private higherTimeframeDirection: -1 | 0 | 1 = 0
+  private higherTimeframeBucket: number | null = null
 
   constructor(spec: SymbolSpec, timeframe: Timeframe, initialM1Candles: OHLCV[], initialBid?: number, initialTimestamp?: number) {
     if (!initialM1Candles.length) throw new Error('Simulator requires M1 history.')
@@ -103,6 +105,37 @@ export class SimulatorRealtimeMarketEngine {
     this.bid = initialBid !== undefined && finitePositive(initialBid) ? Number(initialBid) : last.close
     const seed = seedFor(spec.baseCurrency + spec.quoteCurrency)
     this.phase = (seed % 10000) / 10000 * Math.PI * 2
+  }
+
+  private displayCandles(): OHLCV[] {
+    const raw = aggregate(this.m1Candles, this.timeframe, this.spec.pricePrecision, 300)
+    if (!['H1', 'H4', 'D1'].includes(this.timeframe) || raw.length === 0) return raw
+
+    const current = raw[raw.length - 1]
+    if (this.higherTimeframeBucket !== current.time) {
+      this.higherTimeframeBucket = current.time
+      this.higherTimeframeDirection = 0
+    }
+
+    if (this.higherTimeframeDirection === 0 && current.close !== current.open) {
+      this.higherTimeframeDirection = current.close > current.open ? 1 : -1
+    }
+
+    // Higher timeframes still receive the live high/low information, but their
+    // body direction is latched for the life of the forming bar. This prevents
+    // one-second simulator ticks from making H1/H4/D1 flash green/red as price
+    // crosses the opening price repeatedly. The finished bar remains the true
+    // OHLC result because it is replaced by the next aggregate calculation.
+    const close = this.higherTimeframeDirection === 1
+      ? Math.max(current.open, current.close)
+      : this.higherTimeframeDirection === -1
+        ? Math.min(current.open, current.close)
+        : current.open
+
+    return [
+      ...raw.slice(0, -1),
+      { ...current, close: Number(close.toFixed(this.spec.pricePrecision)) },
+    ]
   }
 
   tickOnce(simulatedSeconds = 1): SimulatorSnapshot {
@@ -160,7 +193,7 @@ export class SimulatorRealtimeMarketEngine {
       ask,
       timestamp: this.simulatedTime,
       m1Candles: [...this.m1Candles.slice(-12000)],
-      candles: aggregate(this.m1Candles, this.timeframe, this.spec.pricePrecision, 300),
+      candles: this.displayCandles(),
     }
   }
 
@@ -171,7 +204,7 @@ export class SimulatorRealtimeMarketEngine {
       ask: Number((this.bid + spread).toFixed(this.spec.pricePrecision)),
       timestamp: this.simulatedTime,
       m1Candles: [...this.m1Candles.slice(-12000)],
-      candles: aggregate(this.m1Candles, this.timeframe, this.spec.pricePrecision, 300),
+      candles: this.displayCandles(),
     }
   }
 }
