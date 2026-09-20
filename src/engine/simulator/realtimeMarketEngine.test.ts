@@ -8,6 +8,9 @@ const spec: SymbolSpec = {
   quoteCurrency: 'USD',
   pipSize: 0.0001,
   contractSize: 100000,
+  minLotSize: 0.01,
+  maxLotSize: 100,
+  lotStep: 0.01,
   pricePrecision: 5,
 }
 
