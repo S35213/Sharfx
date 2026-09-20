@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { ColorType, createChart, type CandlestickData, type IChartApi, type IPriceLine, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts'
 import { Crosshair, Eraser, Ruler } from 'lucide-react'
-import type { CandleTheme } from '../../app/chartSettings'
+import type { CandleTheme, ChartMode } from '../../app/chartSettings'
 import type { OHLCV, Timeframe } from '../../types'
 
 export interface ChartAnnotation { id: string; price: number; label: string; color: string; lineWidth?: 1 | 2 | 3 | 4 }
@@ -23,6 +23,8 @@ interface CandlestickChartProps {
   tradeLines?: ChartAnnotation[]
   followLatest?: boolean
   candleTheme?: CandleTheme
+  chartMode?: ChartMode
+  marketTimestamp?: number
 }
 
 interface UserLevel { id: string; price: number; label: string; color: string; lineWidth?: 1 | 2 | 3 | 4; dashed?: boolean; armed?: boolean }
@@ -46,11 +48,15 @@ const timeframeMeta = (timeframe?: Timeframe, data: CandlestickData[] = []): { l
   return known[seconds] ?? { label: 'Custom', interval: `${Math.round(seconds / 60)}m` }
 }
 
-export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, symbol, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [], followLatest = false, candleTheme = 'mt5' }) => {
+export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, symbol, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [], followLatest = false, candleTheme = 'mt5', chartMode = 'candles', marketTimestamp }) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<IChartApi | null>(null)
-  const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
+  const seriesRef = useRef<ISeriesApi<any> | null>(null)
   const chartData = useMemo(() => prepareData(data), [data])
+  const visualData = useMemo(() => {
+    if (chartMode === 'candles' || chartMode === 'bars') return chartData
+    return chartData.map((candle) => ({ time: candle.time, value: candle.close }))
+  }, [chartData, chartMode])
   const lastClose = chartData.length ? Number(chartData[chartData.length - 1]?.close) : Number.NaN
   const meta = timeframeMeta(timeframe, chartData)
   const [userLevels, setUserLevels] = useState<UserLevel[]>([])
@@ -90,7 +96,18 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true },
     })
     const colors = candleColors[candleTheme]
-    const series = chart.addCandlestickSeries({ priceFormat: { type: 'price', precision: Math.max(2, Math.round(Math.log10(1 / Math.max(pipSize, 0.00001)))), minMove: Math.max(pipSize, 0.00001) }, upColor: colors.up, downColor: colors.down, borderUpColor: colors.up, borderDownColor: colors.down, wickUpColor: colors.up, wickDownColor: colors.down, priceLineVisible: false, lastValueVisible: false })
+    const precision = Math.max(2, Math.round(Math.log10(1 / Math.max(pipSize, 0.00001))))
+    let series: ISeriesApi<any>
+    if (chartMode === 'bars') {
+      series = chart.addBarSeries({ priceFormat: { type: 'price', precision, minMove: Math.max(pipSize, 0.00001) }, upColor: colors.up, downColor: colors.down, openVisible: true, thinBars: false, priceLineVisible: false, lastValueVisible: false })
+    } else if (chartMode === 'wave') {
+      series = chart.addLineSeries({ color: colors.up, lineWidth: 2, crosshairMarkerVisible: true, priceLineVisible: false, lastValueVisible: false })
+    } else if (chartMode === 'area') {
+      series = chart.addAreaSeries({ lineColor: colors.up, topColor: colors.up + '66', bottomColor: colors.up + '05', lineWidth: 2, priceLineVisible: false, lastValueVisible: false })
+    } else {
+      series = chart.addCandlestickSeries({ priceFormat: { type: 'price', precision, minMove: Math.max(pipSize, 0.00001) }, upColor: colors.up, downColor: colors.down, borderUpColor: colors.up, borderDownColor: colors.down, wickUpColor: colors.up, wickDownColor: colors.down, priceLineVisible: false, lastValueVisible: false })
+    }
+
     chartRef.current = chart
     seriesRef.current = series
     const ro = new ResizeObserver(([entry]) => {
@@ -117,21 +134,29 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       marketBidLineRef.current = null
       marketAskLineRef.current = null
     }
-  }, [])
+  }, [chartMode])
 
   useEffect(() => {
     const series = seriesRef.current
     if (!series) return
     const colors = candleColors[candleTheme]
-    series.applyOptions({
-      upColor: colors.up,
-      downColor: colors.down,
-      borderUpColor: colors.up,
-      borderDownColor: colors.down,
-      wickUpColor: colors.up,
-      wickDownColor: colors.down,
-    })
-  }, [candleTheme])
+    if (chartMode === 'wave') {
+      series.applyOptions({ color: colors.up, lineColor: colors.up })
+    } else if (chartMode === 'area') {
+      series.applyOptions({ lineColor: colors.up, topColor: colors.up + '66', bottomColor: colors.up + '05' })
+    } else if (chartMode === 'bars') {
+      series.applyOptions({ upColor: colors.up, downColor: colors.down })
+    } else {
+      series.applyOptions({
+        upColor: colors.up,
+        downColor: colors.down,
+        borderUpColor: colors.up,
+        borderDownColor: colors.down,
+        wickUpColor: colors.up,
+        wickDownColor: colors.down,
+      })
+    }
+  }, [candleTheme, chartMode])
 
   useEffect(() => {
     const chart = chartRef.current
@@ -146,10 +171,10 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   useEffect(() => {
     const series = seriesRef.current
     const chart = chartRef.current
-    if (!series || !chart || !chartData.length) return
+    if (!series || !chart || !visualData.length) return
 
-    const firstTime = Number(chartData[0].time)
-    const lastTime = Number(chartData[chartData.length - 1].time)
+    const firstTime = Number(visualData[0].time)
+    const lastTime = Number(visualData[visualData.length - 1].time)
     const symbolChanged = previousSymbolRef.current !== symbol
     const timeframeChanged = previousTimeframeRef.current !== timeframe
     const rangeNeedsReset = !viewInitializedRef.current || symbolChanged || timeframeChanged
@@ -174,16 +199,23 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     const isNewBar = previousLastTime !== null && lastTime > previousLastTime
 
     if (canUpdateLatestBar) {
-      series.update(chartData[chartData.length - 1])
+      series.update(visualData[visualData.length - 1])
     } else {
-      series.setData(chartData)
+      series.setData(visualData)
     }
 
-    const lastIndex = chartData.length - 1
+    const lastIndex = visualData.length - 1
     if (rangeNeedsReset) {
       const width = containerRef.current?.clientWidth ?? 1000
-      const visibleBars = width < 640 ? 58 : 92
+      const currentVisible = visibleRange
+      const previousSeconds: Record<Timeframe, number> = { M1: 60, M5: 300, M15: 900, M30: 1800, H1: 3600, H4: 14400, D1: 86400 }
+      const previousBarSpan = currentVisible ? Math.max(14, currentVisible.to - currentVisible.from) : (width < 640 ? 58 : 92)
+      const scaledBars = timeframeChanged && previousTimeframeRef.current
+        ? Math.round(previousBarSpan * previousSeconds[previousTimeframeRef.current] / previousSeconds[timeframe ?? previousTimeframeRef.current])
+        : previousBarSpan
+      const visibleBars = Math.max(14, Math.min(180, scaledBars))
       chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, lastIndex - visibleBars + 1), to: lastIndex + 2 })
+      series.priceScale().setAutoScale(true)
       chart.timeScale().scrollToRealTime()
       followRealtimeRef.current = true
     } else if (followLatest) {
@@ -202,7 +234,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     previousTimeframeRef.current = timeframe
     renderedFirstTimeRef.current = firstTime
     renderedLastTimeRef.current = lastTime
-  }, [chartData, followLatest, symbol, timeframe])
+  }, [visualData, followLatest, symbol, timeframe])
 
   useEffect(() => {
     const series = seriesRef.current
@@ -369,6 +401,14 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const displayBid = Number.isFinite(bidPrice) && Number(bidPrice) > 0 ? Number(bidPrice) : lastClose
   const displayAsk = Number.isFinite(askPrice) && Number(askPrice) > 0 ? Number(askPrice) : displayBid
   const spreadPips = Number.isFinite(displayBid) && Number.isFinite(displayAsk) && pipSize > 0 ? (displayAsk - displayBid) / pipSize : 0
+  const timeframeSeconds: Record<Timeframe, number> = { M1: 60, M5: 300, M15: 900, M30: 1800, H1: 3600, H4: 14400, D1: 86400 }
+  const countdown = timeframe && Number.isFinite(marketTimestamp) ? Math.max(0, timeframeSeconds[timeframe] - (Math.floor(Number(marketTimestamp)) % timeframeSeconds[timeframe])) : null
+  const formatCountdown = (seconds: number): string => {
+    if (seconds >= 86400) return `${Math.floor(seconds / 86400)}d ${Math.floor((seconds % 86400) / 3600)}h`
+    if (seconds >= 3600) return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`
+    if (seconds >= 60) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`
+    return `${seconds}s`
+  }
 
   useEffect(() => {
     if (armedAlerts.length === 0 || !Number.isFinite(lastClose)) return
@@ -393,6 +433,10 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   return <div ref={containerRef} onPointerDown={placeTool} className={`shafx-chart-shell relative w-full overflow-hidden border border-shafx-border bg-shafx-bg ${['level', 'alert', 'measure'].includes(toolMode) ? 'cursor-crosshair' : ''}`} style={{ height, minHeight: 280 }}>
     <div className="pointer-events-none absolute left-3 top-3 z-10 flex items-center gap-2 rounded-xl border border-shafx-border bg-shafx-bg/90 px-2.5 py-1.5 text-[9px] font-semibold backdrop-blur"><span className="text-shafx-accent">SHAFX</span><span className="text-shafx-textMuted">•</span><span className="text-shafx-textMuted">{timeframe ?? 'PRICE'} workspace</span></div>
     <div className="pointer-events-none absolute right-3 top-3 z-10 rounded-xl border border-shafx-border bg-shafx-bg/90 px-2.5 py-1.5 text-[9px] font-semibold text-shafx-text backdrop-blur">{meta.label} <span className="font-normal text-shafx-textMuted">• {meta.interval}</span></div>
+    <div className="pointer-events-none absolute left-3 top-12 z-10 rounded-xl border border-shafx-border/70 bg-shafx-surface/85 px-2 py-1 shadow-md backdrop-blur">
+      <span className="text-[8px] font-semibold uppercase tracking-[0.12em] text-shafx-textMuted">{chartMode === 'candles' ? 'Candles' : chartMode === 'bars' ? 'Bars' : chartMode === 'wave' ? 'Wave' : 'Area'}</span>
+      {countdown !== null && <span className="ml-2 font-mono text-[9px] font-semibold tabular text-shafx-accent">Close {formatCountdown(countdown)}</span>}
+    </div>
     <div className="pointer-events-none absolute right-3 top-12 z-10 flex items-center gap-1 rounded-xl border border-shafx-border/70 bg-shafx-surface/85 px-1 py-0.5 shadow-md backdrop-blur">
       <span className="rounded-lg px-1.5 py-0.5 text-[8px] font-bold tabular text-shafx-success"><span className="mr-1 text-[8px] uppercase tracking-[0.12em]">SELL</span>{Number.isFinite(displayBid) ? displayBid.toFixed(quotePrecision) : '—'}</span>
       <span className="h-3.5 w-px bg-shafx-border" />
