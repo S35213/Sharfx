@@ -73,7 +73,7 @@ export const SimulationPulse: React.FC<Props> = ({ selectedSymbol, openPositions
             <Radio className="h-4 w-4" />
           </div>
           <div>
-            <h3 className="font-semibold">Simulation pulse</h3>
+            <h3 className="font-semibold">Simulation pulse • {selectedSymbol}</h3>
             <p className="text-[10px] text-shafx-textMuted">Live simulator activity from this SHAFX session.</p>
           </div>
         </div>
