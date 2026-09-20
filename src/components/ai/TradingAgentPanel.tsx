@@ -246,18 +246,19 @@ export function TradingAgentPanel({
         lotSize: parsedLotSize,
         allowSimulationFallback: true,
       })
-      if (!result.order) {
+      const order = result.order
+      if (!order) {
         setLastResult('WAIT')
         setStatus(bias + ': ' + result.decision.rationale)
         return
       }
-      setBotPositionId(result.order.id)
+      setBotPositionId(order.id)
       setLastResult(null)
-      setStatus(result.order.type + ' ' + symbol + ' simulated at ' + result.order.entryPrice + ' — cycle will resolve within 5 seconds')
-      onBotOrder(result.order)
+      setStatus(order.type + ' ' + symbol + ' simulated at ' + order.entryPrice + ' — cycle will resolve within 5 seconds')
+      onBotOrder(order)
       if (botCloseTimer.current) window.clearTimeout(botCloseTimer.current)
       botCloseTimer.current = window.setTimeout(() => {
-        void onBotClose?.(result.order.id)
+        void onBotClose?.(order.id)
       }, BOT_RESULT_DELAY_MS)
     } catch {
       setAutoTradingEnabled(false)
