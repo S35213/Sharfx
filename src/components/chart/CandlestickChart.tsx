@@ -49,7 +49,7 @@ const timeframeMeta = (timeframe?: Timeframe, data: CandlestickData[] = []): { l
   return known[seconds] ?? { label: 'Custom', interval: `${Math.round(seconds / 60)}m` }
 }
 
-export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, symbol, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [], followLatest = false, candleTheme = 'mt5', chartMode = 'candles', marketTimestamp }) => {
+export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, symbol, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [], candleTheme = 'mt5', chartMode = 'candles', marketTimestamp }) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ShafxSeries | null>(null)
