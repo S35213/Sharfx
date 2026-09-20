@@ -54,6 +54,8 @@ const TerminalContent: React.FC = () => {
   const [simulatedCandles, setSimulatedCandles] = useState<OHLCV[]>([])
   const simulatedPriceRef = useRef(1.08542)
   const simulatedCandlesRef = useRef<OHLCV[]>([])
+  const simulatedTimeRef = useRef(0)
+  const simulatedTickWallClockRef = useRef<number | null>(null)
   const [liveMarketActive, setLiveMarketActive] = useState(false)
   const [replayCount, setReplayCount] = useState(0)
   const [mobileTab, setMobileTab] = useState<MobileNavTab>('market')
@@ -132,6 +134,8 @@ const TerminalContent: React.FC = () => {
         setSimulatedCandles(cands)
         simulatedCandlesRef.current = cands
         simulatedPriceRef.current = cands[cands.length - 1]?.close ?? acc.balance
+        simulatedTimeRef.current = cands[cands.length - 1]?.time ?? Math.floor(Date.now() / 1000)
+        simulatedTickWallClockRef.current = Date.now()
         setLiveCandles([])
         setReplayCount(cands.length)
         setMarketAnalysis(ma)
@@ -218,33 +222,59 @@ const TerminalContent: React.FC = () => {
     if (isBrokerMode() || !symbolSpec) return
     const intervalSeconds: Record<string, number> = { M1: 60, M5: 300, M15: 900, M30: 1800, H1: 3600, H4: 14400, D1: 86400 }
     const interval = intervalSeconds[timeframe] ?? 60
+    simulatedTickWallClockRef.current = Date.now()
     let tick = 0
+
     const timer = window.setInterval(() => {
       const currentCandles = simulatedCandlesRef.current
       if (currentCandles.length === 0) return
 
+      const wallNow = Date.now()
+      const previousWall = simulatedTickWallClockRef.current ?? wallNow
+      const elapsedSeconds = Math.min(2.5, Math.max(0.1, (wallNow - previousWall) / 1000))
+      simulatedTickWallClockRef.current = wallNow
+      simulatedTimeRef.current += elapsedSeconds
       tick += 1
+
       const pip = symbolSpec.pipSize
       const previous = simulatedPriceRef.current
-      const directionWave = Math.sin(tick * 0.91 + selectedSymbol.length * 0.73)
-      const direction = directionWave >= 0 ? 1 : -1
-      const magnitude = pip * (0.16 + Math.abs(Math.sin(tick * 0.37 + selectedSymbol.length)) * 0.84)
-      const nextPrice = Math.max(pip / 10, Number((previous + direction * magnitude).toFixed(symbolSpec.pricePrecision)))
+      const waveA = Math.sin(tick * 0.48 + selectedSymbol.length * 0.73)
+      const waveB = Math.sin(tick * 0.17 + selectedSymbol.length * 0.31)
+      const signedMove = (waveA * 0.68 + waveB * 0.32)
+      const magnitude = pip * (0.18 + Math.abs(signedMove) * 0.72)
+      const nextPrice = Math.max(
+        pip / 10,
+        Number((previous + Math.sign(signedMove || 1) * magnitude).toFixed(symbolSpec.pricePrecision)),
+      )
       simulatedPriceRef.current = nextPrice
+      setCurrentPrice(nextPrice)
 
-      const now = Math.floor(Date.now() / 1000)
-      const bucket = Math.floor(now / interval) * interval
+      const bucket = Math.floor(simulatedTimeRef.current / interval) * interval
       setSimulatedCandles((previousCandles) => {
         if (previousCandles.length === 0) return previousCandles
         const last = previousCandles[previousCandles.length - 1]
         const next = last.time < bucket
-          ? { time: bucket, open: last.close, high: Math.max(last.close, nextPrice), low: Math.min(last.close, nextPrice), close: nextPrice, volume: 1 }
-          : { ...last, high: Math.max(last.high, nextPrice), low: Math.min(last.low, nextPrice), close: nextPrice, volume: (last.volume ?? 0) + 1 }
+          ? {
+              time: bucket,
+              open: last.close,
+              high: Math.max(last.close, nextPrice),
+              low: Math.min(last.close, nextPrice),
+              close: nextPrice,
+              volume: 1,
+            }
+          : {
+              ...last,
+              high: Math.max(last.high, nextPrice),
+              low: Math.min(last.low, nextPrice),
+              close: nextPrice,
+              volume: (last.volume ?? 0) + 1,
+            }
         const nextCandles = [...previousCandles.slice(-999), next]
         simulatedCandlesRef.current = nextCandles
         return nextCandles
       })
-    }, 1500)
+    }, 700)
+
     return () => window.clearInterval(timer)
   }, [selectedSymbol, symbolSpec, timeframe])
 
@@ -440,7 +470,7 @@ const TerminalContent: React.FC = () => {
           </div>
           <MobileChartTools tool={chartTool} onToolChange={setChartTool} />
           <div className="relative h-[48vh] min-h-[320px] p-2 sm:p-3 lg:h-auto lg:min-h-[420px] lg:flex-1">
-            <CandlestickChart data={chartCandles} symbol={selectedSymbol} timeframe={timeframe} annotations={[...chartAnnotations, ...higherTimeframeAnnotations]} tradeLines={tradeLines} bidPrice={chartLastPrice} askPrice={chartAskPrice} toolMode={chartToolMode} pipSize={symbolSpec.pipSize} onToolNotice={pushToast} showGrid={chartSettings.showGrid} showPriceLabels={chartSettings.showPriceLabels} />
+            <CandlestickChart data={chartCandles} symbol={selectedSymbol} timeframe={timeframe} annotations={[...chartAnnotations, ...higherTimeframeAnnotations]} tradeLines={tradeLines} bidPrice={chartLastPrice} askPrice={chartAskPrice} toolMode={chartToolMode} pipSize={symbolSpec.pipSize} onToolNotice={pushToast} showGrid={chartSettings.showGrid} showPriceLabels={chartSettings.showPriceLabels} followLatest={isSimulatorMode() || liveMarketActive} />
             <div className="pointer-events-none absolute bottom-5 right-5 z-10 hidden items-center gap-1.5 rounded-xl border border-shafx-border bg-shafx-surface/90 px-2.5 py-1.5 text-[9px] text-shafx-textMuted backdrop-blur sm:flex"><Maximize2 className="h-3 w-3 text-shafx-accent" />Scroll / pinch to navigate</div>
           </div>
           <div className="grid grid-cols-2 gap-2 border-t border-shafx-border bg-shafx-surface/55 p-2 sm:grid-cols-4">
