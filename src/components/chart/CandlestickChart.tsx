@@ -215,7 +215,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         : previousBarSpan
       const visibleBars = Math.max(14, Math.min(180, scaledBars))
       chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, lastIndex - visibleBars + 1), to: lastIndex + 2 })
-      series.priceScale().setAutoScale(true)
+      series.priceScale().applyOptions({ autoScale: true })
       chart.timeScale().scrollToRealTime()
       followRealtimeRef.current = true
     } else if (followLatest) {
