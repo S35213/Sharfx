@@ -197,8 +197,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       lines.push(series.createPriceLine({
         price: annotation.price,
         color: annotation.color,
-        lineWidth: annotation.lineWidth ?? 1,
-        lineStyle: 'dashed' in annotation && annotation.dashed ? 2 : (annotation.lineWidth && annotation.lineWidth > 1 ? 0 : 2),
+        lineWidth: 1,
+        lineStyle: 2,
         axisLabelVisible: showPriceLabels && (!compact || annotation.id === 'support' || annotation.id === 'resistance'),
         title: compact && annotation.id !== 'support' && annotation.id !== 'resistance' ? '' : annotation.label,
       }))
@@ -370,8 +370,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   return <div ref={containerRef} onPointerDown={placeTool} className={`shafx-chart-shell relative w-full overflow-hidden border border-shafx-border bg-shafx-bg ${['level', 'alert', 'measure'].includes(toolMode) ? 'cursor-crosshair' : ''}`} style={{ height, minHeight: 280 }}>
     <div className="pointer-events-none absolute left-3 top-3 z-10 flex items-center gap-2 rounded-xl border border-shafx-border bg-shafx-bg/90 px-2.5 py-1.5 text-[9px] font-semibold backdrop-blur"><span className="text-shafx-accent">SHAFX</span><span className="text-shafx-textMuted">•</span><span className="text-shafx-textMuted">{timeframe ?? 'PRICE'} workspace</span></div>
     <div className="pointer-events-none absolute right-3 top-3 z-10 rounded-xl border border-shafx-border bg-shafx-bg/90 px-2.5 py-1.5 text-[9px] font-semibold text-shafx-text backdrop-blur">{meta.label} <span className="font-normal text-shafx-textMuted">• {meta.interval}</span></div>
-    <div className="pointer-events-none absolute right-3 top-12 z-10 flex items-center gap-1.5 rounded-xl border border-shafx-border bg-shafx-surface/90 px-1.5 py-1 shadow-lg backdrop-blur">
-      <span className="rounded-lg px-2 py-1 text-[9px] font-bold tabular text-shafx-success"><span className="mr-1 text-[8px] uppercase tracking-[0.12em]">SELL</span>{Number.isFinite(displayBid) ? displayBid.toFixed(quotePrecision) : '—'}</span>
+    <div className="pointer-events-none absolute right-3 top-12 z-10 flex items-center gap-1 rounded-xl border border-shafx-border/70 bg-shafx-surface/85 px-1 py-0.5 shadow-md backdrop-blur">
+      <span className="rounded-lg px-1.5 py-0.5 text-[8px] font-bold tabular text-shafx-success"><span className="mr-1 text-[8px] uppercase tracking-[0.12em]">SELL</span>{Number.isFinite(displayBid) ? displayBid.toFixed(quotePrecision) : '—'}</span>
       <span className="h-3.5 w-px bg-shafx-border" />
       <span className="rounded-lg px-2 py-1 text-[9px] font-bold tabular text-shafx-danger"><span className="mr-1 text-[8px] uppercase tracking-[0.12em]">BUY</span>{Number.isFinite(displayAsk) ? displayAsk.toFixed(quotePrecision) : '—'}</span>
       <span className="hidden border-l border-shafx-border pl-2 text-[8px] font-semibold tabular text-shafx-textMuted sm:inline">SP {spreadPips.toFixed(1)}p</span>
