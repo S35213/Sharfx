@@ -60,6 +60,24 @@ Funding is also separate from trading. A provider can expose deposits/withdrawal
 
 The analysis stack is deterministic and simulator-safe: market structure, support/resistance, liquidity, setup detection, and the AI trading-agent layer operate on supplied candle data. The AI agent can prepare and review simulated opportunities, but execution still requires explicit user approval.
 
+## Recent simulator/UI synchronization
+
+The latest source on `main` includes the recent simulator/UI fixes before production resynchronization:
+
+- structural chart levels are cached without following the live forming candle
+- structure/liquidity calculations are based on completed candles
+- the selected timeframe drives the main chart structure
+- higher-timeframe simulator candle behavior is smoothed while keeping candle close aligned with the simulated bid
+- simulator history supports larger higher-timeframe windows
+- Free Bot scanning/risk controls are automatic, with manual sizing kept in Open Trade Workshop
+- Free Bot refresh remains the user action rather than a visible bot speed/risk control
+- mobile navigation hides on downward touch/scroll and returns on upward movement
+- workspace tab second-tap returns to Market
+- mobile toasts stay clear of bottom navigation
+- timeframe changes return the chart to the latest candle with a wider initial view
+
+The source-of-truth commit for this synchronization is `f93e87868cde58dd7ef1870727a643375c3e6e00`. This README update exists only to trigger a fresh Vercel production deployment of the already-implemented source changes.
+
 ## Phase 3 acceptance
 
 Phase 3 — Backtesting & Strategy Development — is complete on the simulator boundary. It includes deterministic backtesting, no-lookahead replay, conservative SL/TP handling, strategy analytics, visual replay, performance statistics, a trading journal, responsive controls, persistent safety disclaimers, and automated CI verification.
