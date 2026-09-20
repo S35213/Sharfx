@@ -72,9 +72,8 @@ export class SimulatorRealtimeMarketEngine {
   private bid: number
   private tick = 0
   private phase: number
-  private displayedHigherTimeframeClose: number | null = null
-  private displayedHigherTimeframeBucket: number | null = null
-  private lastHigherTimeframeRefresh: number | null = null
+  private momentum = 0
+  private lastDirection = 1
 
   constructor(spec: SymbolSpec, timeframe: Timeframe, initialM1Candles: OHLCV[], initialBid?: number, initialTimestamp?: number) {
     if (!initialM1Candles.length) throw new Error('Simulator requires M1 history.')
@@ -109,52 +108,12 @@ export class SimulatorRealtimeMarketEngine {
   }
 
   private displayCandles(): OHLCV[] {
-    const raw = aggregate(this.m1Candles, this.timeframe, this.spec.pricePrecision, 300)
-    if (raw.length === 0 || this.timeframe === 'M1') return raw
-
-    const current = raw[raw.length - 1]
-    const bucketChanged = this.displayedHigherTimeframeBucket !== current.time
-
-    // The simulator receives a price tick every second, but a higher-timeframe
-    // candle should not visually behave like M1. We therefore refresh the
-    // displayed close at a cadence that gets slower as the timeframe grows.
-    // OHLC high/low still accumulate continuously; only the body/colour is
-    // deliberately sampled more slowly.
-    const refreshSeconds: Record<Timeframe, number> = {
-      M1: 1,
-      M5: 60,
-      M15: 300,
-      M30: 600,
-      H1: 900,
-      H4: 3600,
-      D1: 14400,
-    }
-    const cadence = refreshSeconds[this.timeframe]
-
-    if (bucketChanged) {
-      this.displayedHigherTimeframeBucket = current.time
-      this.displayedHigherTimeframeClose = current.open
-      this.lastHigherTimeframeRefresh = current.time
-    }
-
-    const now = this.simulatedTime
-    const lastRefresh = this.lastHigherTimeframeRefresh ?? current.time
-    if (
-      this.displayedHigherTimeframeClose === null ||
-      now - lastRefresh >= cadence
-    ) {
-      this.displayedHigherTimeframeClose = current.close
-      this.lastHigherTimeframeRefresh = now
-    }
-
-    const displayedClose = Number(
-      (this.displayedHigherTimeframeClose ?? current.open).toFixed(this.spec.pricePrecision),
-    )
-
-    return [
-      ...raw.slice(0, -1),
-      { ...current, close: displayedClose },
-    ]
+    // The candle close is always the simulator bid. Higher timeframes are
+    // still aggregated from the same M1 stream, but the stream itself uses a
+    // slower, smoother price path as the timeframe grows. This keeps BUY/SELL
+    // and the live candle on one source of truth instead of letting the quote
+    // drift away from the candle body.
+    return aggregate(this.m1Candles, this.timeframe, this.spec.pricePrecision, 300)
   }
 
   tickOnce(simulatedSeconds = 1): SimulatorSnapshot {
@@ -165,20 +124,36 @@ export class SimulatorRealtimeMarketEngine {
     const last = this.m1Candles[this.m1Candles.length - 1]
     const distanceFromOpen = last ? this.bid - last.open : 0
 
-    // This is intentionally a tick-driven walk rather than a bar-driven jump.
-    // The current bar reacts to every tick and can flip bullish/bearish before
-    // the timeframe closes, matching the way a live forming MT5 bar behaves.
-    const wave =
-      Math.sin(this.tick * 0.31 + this.phase) * 0.58 +
-      Math.sin(this.tick * 0.071 + this.phase * 0.53) * 0.27 +
-      Math.sin(this.tick * 1.17 + this.phase * 1.11) * 0.15
+    // The previous simulator used fast sine waves, so even H1/H4 candles
+    // could cross their open and flip colour several times per minute. A real
+    // study feed should behave more like a smooth market path: persistent
+    // directional drift, small micro-noise, and slower regime changes as the
+    // selected timeframe increases.
+    const profile: Record<Timeframe, { cycleSeconds: number; pipsPerSecond: number; inertia: number }> = {
+      M1: { cycleSeconds: 90, pipsPerSecond: 0.12, inertia: 0.975 },
+      M5: { cycleSeconds: 240, pipsPerSecond: 0.095, inertia: 0.985 },
+      M15: { cycleSeconds: 600, pipsPerSecond: 0.085, inertia: 0.99 },
+      M30: { cycleSeconds: 1200, pipsPerSecond: 0.075, inertia: 0.992 },
+      H1: { cycleSeconds: 2400, pipsPerSecond: 0.065, inertia: 0.994 },
+      H4: { cycleSeconds: 7200, pipsPerSecond: 0.055, inertia: 0.996 },
+      D1: { cycleSeconds: 14400, pipsPerSecond: 0.05, inertia: 0.997 },
+    }
+    const selectedProfile = profile[this.timeframe]
+    const slowWave =
+      Math.sin((this.simulatedTime / selectedProfile.cycleSeconds) * Math.PI * 2 + this.phase) * 0.78 +
+      Math.sin((this.simulatedTime / (selectedProfile.cycleSeconds * 0.63)) * Math.PI * 2 + this.phase * 0.71) * 0.22
+    const microNoise = Math.sin(this.tick * 0.17 + this.phase * 1.7) * 0.05
+    const pullback = -Math.sign(distanceFromOpen) * Math.min(Math.abs(distanceFromOpen) / pip, 12) * 0.012
+    const signal = slowWave + microNoise + pullback
 
-    const pullback = -Math.sign(distanceFromOpen) * Math.min(Math.abs(distanceFromOpen) / pip, 2.6) * 0.18
-    const moveInPips = 0.35 + Math.abs(wave) * 0.95
-    const direction = Math.sign(wave + pullback || 1)
+    this.momentum = this.momentum * selectedProfile.inertia + signal * (1 - selectedProfile.inertia)
+    if (this.momentum > 0.06) this.lastDirection = 1
+    else if (this.momentum < -0.06) this.lastDirection = -1
+
+    const moveInPips = selectedProfile.pipsPerSecond * (0.72 + Math.min(1, Math.abs(this.momentum)) * 0.28)
     const next = Math.max(
       pip / 10,
-      Number((this.bid + direction * pip * moveInPips).toFixed(this.spec.pricePrecision)),
+      Number((this.bid + this.lastDirection * pip * moveInPips).toFixed(this.spec.pricePrecision)),
     )
 
     this.bid = next
