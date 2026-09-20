@@ -139,8 +139,10 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
 
   useEffect(() => {
     const series = seriesRef.current
-    if (!series) return
+    const chart = chartRef.current
+    if (!series || !chart) return
     const colors = candleColors[candleTheme]
+
     if (chartMode === 'wave') {
       series.applyOptions({ color: colors.up, lineColor: colors.up })
     } else if (chartMode === 'area') {
@@ -157,7 +159,15 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         wickDownColor: colors.down,
       })
     }
-  }, [candleTheme, chartMode])
+
+    // Re-apply the current visual dataset immediately. This makes a theme or
+    // chart-mode selection repaint in-place instead of waiting for a browser
+    // refresh or an unrelated timeframe change.
+    series.setData(visualData)
+    chart.applyOptions({})
+    const el = containerRef.current
+    if (el) chart.resize(el.clientWidth, Math.max(280, el.clientHeight), true)
+  }, [candleTheme, chartMode, visualData])
 
   useEffect(() => {
     const chart = chartRef.current
@@ -250,13 +260,14 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     const addLine = (annotation: ChartAnnotation | UserLevel): void => {
       if (!annotation.id || seen.has(annotation.id) || !Number.isFinite(annotation.price) || annotation.price <= 0) return
       seen.add(annotation.id)
+      const isLiquidity = annotation.id.includes('liquidity')
       lines.push(series.createPriceLine({
         price: annotation.price,
         color: annotation.color,
-        lineWidth: 1,
-        lineStyle: 2,
-        axisLabelVisible: showPriceLabels && (!compact || annotation.id === 'support' || annotation.id === 'resistance'),
-        title: compact && annotation.id !== 'support' && annotation.id !== 'resistance' ? '' : annotation.label,
+        lineWidth: annotation.lineWidth ?? 1,
+        lineStyle: isLiquidity ? 2 : 1,
+        axisLabelVisible: showPriceLabels && (!compact || annotation.id.includes('support') || annotation.id.includes('resistance') || isLiquidity),
+        title: compact && !annotation.id.includes('support') && !annotation.id.includes('resistance') && !isLiquidity ? '' : annotation.label,
       }))
     }
 
