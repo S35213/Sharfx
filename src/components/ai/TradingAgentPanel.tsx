@@ -25,6 +25,7 @@ interface Props {
   onBotClose?: (id: string) => void | Promise<void>
   onBotRunningChange?: (running: boolean) => void
   onReviewSetup?: () => void
+  scanM1Candles?: OHLCV[]
 }
 
 type RiskMode = 'SAFE' | 'NORMAL' | 'RISK'
@@ -55,6 +56,7 @@ export function TradingAgentPanel({
   onBotClose,
   onBotRunningChange,
   onReviewSetup,
+  scanM1Candles = [],
 }: Props) {
   const plan = BOT_PLANS[botPlan]
   const readStoredLotSize = (): string => typeof window !== 'undefined' ? window.sessionStorage.getItem('shafx-simulator-lot-size') || '0.10' : '0.10'
@@ -87,7 +89,7 @@ export function TradingAgentPanel({
     return buildTradingContext(symbol, timeframe, candles, structure, supportResistance, liquidity, setup)
   }, [candles, currentPrice, symbol, timeframe, scanNonce])
 
-  const timeframeFrames = useMultiTimeframeCandles(symbol, timeframe, candles)
+  const timeframeFrames = useMultiTimeframeCandles(symbol, timeframe, candles, scanM1Candles)
   const multiTimeframe = useMemo(() => analyzeMultiTimeframeBias(timeframeFrames), [timeframeFrames])
   const fastScanCandidates = useMemo(() => {
     const qualityWeight: Record<'weak' | 'moderate' | 'strong', number> = { weak: 1, moderate: 2, strong: 3 }
