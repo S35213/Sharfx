@@ -1,10 +1,10 @@
 import React, { useState } from 'react'
 import { Activity, BellRing, ChevronDown, Crosshair, Minus, Ruler, Wrench } from 'lucide-react'
-import type { CandleTheme } from '../../app/chartSettings'
+import type { CandleTheme, ChartMode } from '../../app/chartSettings'
 import { readChartWorkspaceSettings, writeChartWorkspaceSettings } from '../../app/chartSettings'
 import type { WorkspaceTool } from './WorkspaceRail'
 
-interface Props { tool: WorkspaceTool; onToolChange: (tool: WorkspaceTool) => void; candleTheme: CandleTheme }
+interface Props { tool: WorkspaceTool; onToolChange: (tool: WorkspaceTool) => void; candleTheme: CandleTheme; chartMode: ChartMode }
 
 const items: Array<{ id: WorkspaceTool; label: string; icon: React.ElementType; detail: string }> = [
   { id: 'cursor', label: 'Pointer', icon: Activity, detail: 'Pan and inspect' },
@@ -14,7 +14,7 @@ const items: Array<{ id: WorkspaceTool; label: string; icon: React.ElementType; 
   { id: 'alert', label: 'Price alert', icon: BellRing, detail: 'Arm an alert at a chart price' },
 ]
 
-export const MobileChartTools: React.FC<Props> = ({ tool, onToolChange, candleTheme }) => {
+export const MobileChartTools: React.FC<Props> = ({ tool, onToolChange, candleTheme, chartMode }) => {
   const [open, setOpen] = useState(false)
   const active = items.find((item) => item.id === tool) ?? items[0]
   const ActiveIcon = active.icon
@@ -37,6 +37,20 @@ export const MobileChartTools: React.FC<Props> = ({ tool, onToolChange, candleTh
                 <span className="mt-1 block text-[8px] leading-3 opacity-75">{detail}</span>
               </button>
             })}
+          </div>
+          <div className="mt-2 rounded-xl border border-shafx-border bg-shafx-surface p-2.5">
+            <div className="mb-2 flex items-center gap-2 text-[9px] font-semibold uppercase tracking-[0.13em] text-shafx-textMuted"><Wrench className="h-3.5 w-3.5 text-shafx-accent" />Chart design</div>
+            <div className="grid grid-cols-4 gap-1.5">
+              {([
+                ['candles', 'Candles'],
+                ['bars', 'Bars'],
+                ['wave', 'Wave'],
+                ['area', 'Area'],
+              ] as Array<[ChartMode, string]>).map(([id, label]) => {
+                const selected = id === chartMode
+                return <button key={id} type="button" onClick={() => writeChartWorkspaceSettings({ ...readChartWorkspaceSettings(), chartMode: id })} aria-pressed={selected} className={selected ? 'min-h-10 rounded-lg border border-shafx-accent/40 bg-shafx-accent/10 px-1 text-center text-[8px] font-semibold text-shafx-accent' : 'min-h-10 rounded-lg border border-shafx-border bg-shafx-bg px-1 text-center text-[8px] font-semibold text-shafx-textMuted'}>{label}</button>
+              })}
+            </div>
           </div>
           <div className="mt-2 rounded-xl border border-shafx-border bg-shafx-surface p-2.5">
             <div className="mb-2 flex items-center gap-2 text-[9px] font-semibold uppercase tracking-[0.13em] text-shafx-textMuted"><Wrench className="h-3.5 w-3.5 text-shafx-accent" />Candlestick theme</div>
