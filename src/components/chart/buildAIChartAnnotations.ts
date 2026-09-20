@@ -23,21 +23,59 @@ export const buildAIChartAnnotations = (symbol: string, candles: OHLCV[]): Chart
   if (candles.length === 0) return []
   const currentPrice = candles[candles.length - 1]?.close ?? Number.NaN
   if (!Number.isFinite(currentPrice) || currentPrice <= 0) return []
-  const setup = analyzeCurrentSetup(symbol, candles)
+
+  // Structural levels are based on completed candles. The forming candle is
+  // deliberately excluded so support/resistance does not chase the live
+  // Bid/Ask tick inside the current bar.
+  const structuralCandles = candles.length > 1 ? candles.slice(0, -1) : candles
   const result: ChartAnnotation[] = []
   const add = (id: string, price: number | null, label: string, color: string, lineWidth: 1 | 2 = 1): void => {
     if (typeof price !== 'number' || !Number.isFinite(price) || price <= 0) return
     result.push({ id, price, label, color, lineWidth })
   }
-  const swings = findSwingPoints(candles, 2)
-  const supportResistance = analyzeSupportResistance(candles, toleranceFor(symbol), swings)
+
+  const swings = findSwingPoints(structuralCandles, 2)
+  const tolerance = toleranceFor(symbol)
+  const supportResistance = analyzeSupportResistance(structuralCandles, tolerance, swings)
+  const liquidity = analyzeLiquidity(structuralCandles, swings, tolerance)
+
   add('support', supportResistance.nearestSupport, 'Support', '#22D3A5', 2)
   add('resistance', supportResistance.nearestResistance, 'Resistance', '#FF5C75', 2)
+  add('liquidity-buy', liquidity.nearestBuySide?.referencePrice ?? null, 'Buy-side liquidity', '#A78BFA', 1)
+  add('liquidity-sell', liquidity.nearestSellSide?.referencePrice ?? null, 'Sell-side liquidity', '#A78BFA', 1)
+
+  const setup = analyzeCurrentSetup(symbol, candles)
   const preferred = setup?.preferredSetup ?? null
   if (preferred) {
     add('ai-entry', preferred.entryPrice, `AI ${preferred.direction} entry`, '#2962FF', 2)
     add('ai-stop', preferred.stopLoss, 'AI stop', '#F6465D', 2)
     add('ai-target', preferred.takeProfit, 'AI target', '#0ECB81', 2)
   }
-  return result.sort((a, b) => a.price - b.price).slice(-6)
+
+  return result.sort((a, b) => a.price - b.price).slice(-8)
+}
+
+export const buildStructuralChartAnnotations = (symbol: string, candles: OHLCV[], sourceLabel?: string): ChartAnnotation[] => {
+  if (candles.length === 0) return []
+  const structuralCandles = candles.length > 1 ? candles.slice(0, -1) : candles
+  if (structuralCandles.length < 5) return []
+
+  const swings = findSwingPoints(structuralCandles, 2)
+  const tolerance = toleranceFor(symbol)
+  const supportResistance = analyzeSupportResistance(structuralCandles, tolerance, swings)
+  const liquidity = analyzeLiquidity(structuralCandles, swings, tolerance)
+  const prefix = sourceLabel ? `${sourceLabel} ` : ''
+
+  const result: ChartAnnotation[] = []
+  const add = (id: string, price: number | null, label: string, color: string, lineWidth: 1 | 2 = 1): void => {
+    if (typeof price !== 'number' || !Number.isFinite(price) || price <= 0) return
+    result.push({ id, price, label: `${prefix}${label}`, color, lineWidth })
+  }
+
+  add('support', supportResistance.nearestSupport, 'Support', '#22D3A5', 2)
+  add('resistance', supportResistance.nearestResistance, 'Resistance', '#FF5C75', 2)
+  add('liquidity-buy', liquidity.nearestBuySide?.referencePrice ?? null, 'Buy-side liquidity', '#A78BFA', 1)
+  add('liquidity-sell', liquidity.nearestSellSide?.referencePrice ?? null, 'Sell-side liquidity', '#A78BFA', 1)
+
+  return result.sort((a, b) => a.price - b.price)
 }
