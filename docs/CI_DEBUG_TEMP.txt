@@ -1,0 +1,1 @@
+Temporary CI verification marker. Safe to remove after build diagnosis.
