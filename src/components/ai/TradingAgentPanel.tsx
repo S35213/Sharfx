@@ -33,6 +33,7 @@ const riskModes: Record<RiskMode, { label: string; percent: number; description:
   RISK: { label: 'Risk', percent: 1, description: 'Higher simulated risk' },
 }
 type Phase = 'READY' | 'ANALYZING' | 'RUNNING'
+const BOT_CYCLE_SECONDS = 10 as const
 
 export function TradingAgentPanel({
   symbol,
@@ -54,7 +55,6 @@ export function TradingAgentPanel({
   const [riskMode, setRiskMode] = useState<RiskMode>('SAFE')
   const readStoredLotSize = (): string => typeof window !== 'undefined' ? window.sessionStorage.getItem('shafx-simulator-lot-size') || '0.10' : '0.10'
   const [lotSize, setLotSize] = useState(readStoredLotSize)
-  const [cycleSeconds, setCycleSeconds] = useState<5 | 10>(5)
   const [phase, setPhase] = useState<Phase>('READY')
   const [, setWins] = useState(0)
   const [losses, setLosses] = useState(0)
@@ -163,7 +163,7 @@ export function TradingAgentPanel({
   useEffect(() => {
     runBotCycleRef.current = async (): Promise<void> => {
     if (losses >= 2) return
-    const units = cycleUnitsForSeconds(cycleSeconds)
+    const units = cycleUnitsForSeconds(BOT_CYCLE_SECONDS)
     try {
       const response = await fetch('/api/bot/usage', {
         method: 'POST',
@@ -221,17 +221,17 @@ export function TradingAgentPanel({
     }
 
     return () => { runBotCycleRef.current = null }
-  }, [accountBalance, accountCurrency, activePosition, bias, botPositionId, conversionRate, cycleSeconds, learning, losses, lotSizeValid, multiTimeframe, onBotOrder, parsedLotSize, research, riskMode, runId, setup, symbol, symbolSpec, tradingContext])
+  }, [accountBalance, accountCurrency, activePosition, bias, botPositionId, conversionRate, learning, losses, lotSizeValid, multiTimeframe, onBotOrder, parsedLotSize, research, riskMode, runId, setup, symbol, symbolSpec, tradingContext])
 
   useEffect(() => {
     if (phase !== 'RUNNING') return
     const kickoff = window.setTimeout(() => { void runBotCycleRef.current?.() }, 250)
-    const timer = window.setInterval(() => { void runBotCycleRef.current?.() }, cycleSeconds * 1000)
+    const timer = window.setInterval(() => { void runBotCycleRef.current?.() }, BOT_CYCLE_SECONDS * 1000)
     return () => {
       window.clearTimeout(kickoff)
       window.clearInterval(timer)
     }
-  }, [cycleSeconds, phase])
+  }, [phase])
 
   useEffect(() => () => {
     if (analysisTimer.current) window.clearTimeout(analysisTimer.current)
@@ -323,17 +323,14 @@ export function TradingAgentPanel({
 
         <section className="rounded-xl border border-shafx-border bg-shafx-bg p-3.5">
           <div className="flex items-center justify-between gap-3">
-            <div><div className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">Scan speed</div><div className="mt-1 text-sm font-semibold">{cycleSeconds}s cycle</div></div>
+            <div><div className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">Bot cycle</div><div className="mt-1 text-sm font-semibold">Automatic scan</div></div>
             <Wallet className="h-4 w-4 text-shafx-accent" />
           </div>
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            {([5, 10] as const).map((seconds) => (
-              <button key={seconds} type="button" disabled={seconds > plan.maxCycleSeconds} onClick={() => setCycleSeconds(seconds)} className={cycleSeconds === seconds ? 'min-h-12 rounded-xl border border-shafx-accent/40 bg-shafx-accent/10 text-[10px] font-semibold text-shafx-accent' : 'min-h-12 rounded-xl border border-shafx-border bg-shafx-surface text-[10px] font-semibold text-shafx-textMuted disabled:cursor-not-allowed disabled:opacity-35'}>
-                <span className="block">{seconds}s scan</span><span className="mt-0.5 block text-[9px] opacity-75">{cycleUnitsForSeconds(seconds)} unit{cycleUnitsForSeconds(seconds) > 1 ? 's' : ''}</span>
-              </button>
-            ))}
+          <div className="mt-3 rounded-lg border border-shafx-border px-2.5 py-2 text-[10px] text-shafx-textMuted">
+            <span>Allowance</span>
+            <span className="float-right font-mono text-shafx-text">{cycleUnits}{plan.maxDailyCycleUnits === null ? ' / ∞' : ' / ' + plan.maxDailyCycleUnits}</span>
           </div>
-          <div className="mt-3 rounded-lg border border-shafx-border px-2.5 py-2 text-[10px] text-shafx-textMuted"><span>Allowance</span><span className="float-right font-mono text-shafx-text">{cycleUnits}{plan.maxDailyCycleUnits === null ? ' / ∞' : ' / ' + plan.maxDailyCycleUnits}</span></div>
+          <p className="mt-2 text-[9px] leading-4 text-shafx-textMuted">The simulator bot manages its scan cadence automatically. Use Refresh analysis when you want a fresh market read immediately.</p>
         </section>
       </div>
 
