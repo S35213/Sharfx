@@ -53,24 +53,40 @@ describe('SimulatorRealtimeMarketEngine', () => {
     expect(snapshot.candles.length).toBeGreaterThanOrEqual(2)
   })
 
-  it('keeps higher timeframes internally consistent while preventing rapid color flips', () => {
+  it('updates higher-timeframe candle bodies on a slower cadence than M1', () => {
     const engine = new SimulatorRealtimeMarketEngine(spec, 'H1', seed)
-    let snapshot = engine.tickOnce(1)
-    const openingBar = snapshot.candles[snapshot.candles.length - 1]
-    const firstDirection = Math.sign(openingBar.close - openingBar.open)
-    let directionChanges = 0
-    let previousDirection = firstDirection
+    let snapshot = engine.snapshot()
+    const initial = snapshot.candles[snapshot.candles.length - 1]
 
-    for (let index = 0; index < 180; index += 1) {
+    const colors: number[] = []
+    for (let index = 0; index < 600; index += 1) {
       snapshot = engine.tickOnce(1)
       const current = snapshot.candles[snapshot.candles.length - 1]
-      const direction = Math.sign(current.close - current.open)
-      if (direction !== 0 && previousDirection !== 0 && direction !== previousDirection) directionChanges += 1
-      if (direction !== 0) previousDirection = direction
+      colors.push(Math.sign(current.close - current.open))
       expect(current.high).toBeGreaterThanOrEqual(Math.max(current.open, current.close))
       expect(current.low).toBeLessThanOrEqual(Math.min(current.open, current.close))
     }
 
-    expect(directionChanges).toBe(0)
+    const changes = colors.filter((direction, index) =>
+      index > 0 &&
+      direction !== 0 &&
+      colors[index - 1] !== 0 &&
+      direction !== colors[index - 1],
+    ).length
+
+    expect(changes).toBeLessThan(10)
+    expect(initial.time).toBe(snapshot.candles[snapshot.candles.length - 1].time)
+  })
+
+  it('does not make M5 react to every one-second tick', () => {
+    const engine = new SimulatorRealtimeMarketEngine(spec, 'M5', seed)
+    let snapshot = engine.snapshot()
+    const initial = snapshot.candles[snapshot.candles.length - 1]
+    const initialClose = initial.close
+
+    for (let index = 0; index < 30; index += 1) {
+      snapshot = engine.tickOnce(1)
+      expect(snapshot.candles[snapshot.candles.length - 1].close).toBe(initialClose)
+    }
   })
 })
