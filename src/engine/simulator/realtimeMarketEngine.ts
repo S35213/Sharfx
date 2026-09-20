@@ -73,7 +73,7 @@ export class SimulatorRealtimeMarketEngine {
   private tick = 0
   private phase: number
 
-  constructor(spec: SymbolSpec, timeframe: Timeframe, initialM1Candles: OHLCV[], initialBid?: number) {
+  constructor(spec: SymbolSpec, timeframe: Timeframe, initialM1Candles: OHLCV[], initialBid?: number, initialTimestamp?: number) {
     if (!initialM1Candles.length) throw new Error('Simulator requires M1 history.')
     this.spec = spec
     this.timeframe = timeframe
@@ -84,7 +84,7 @@ export class SimulatorRealtimeMarketEngine {
 
     const last = this.m1Candles[this.m1Candles.length - 1]
     if (!last) throw new Error('Simulator M1 history is invalid.')
-    this.simulatedTime = last.time
+    this.simulatedTime = Number.isFinite(initialTimestamp) ? Number(initialTimestamp) : last.time
     this.bid = initialBid !== undefined && finitePositive(initialBid) ? Number(initialBid) : last.close
     const seed = seedFor(spec.baseCurrency + spec.quoteCurrency)
     this.phase = (seed % 10000) / 10000 * Math.PI * 2
