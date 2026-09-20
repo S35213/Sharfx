@@ -38,8 +38,9 @@ describe('SimulatorRealtimeMarketEngine', () => {
     const before = engine.snapshot()
     const start = before.candles[before.candles.length - 1]
     let snapshot = before
+    const secondsToBoundary = 300 - (before.timestamp % 300)
 
-    for (let index = 0; index < 299; index += 1) snapshot = engine.tickOnce(1)
+    for (let index = 0; index < Math.max(0, secondsToBoundary - 1); index += 1) snapshot = engine.tickOnce(1)
 
     expect(snapshot.candles[snapshot.candles.length - 1].time).toBe(start.time)
     expect(snapshot.candles[snapshot.candles.length - 1].close).toBe(snapshot.bid)
