@@ -287,7 +287,11 @@ const TerminalContent: React.FC = () => {
   const chartStructureSourceKey = chartCandles.length === 0
     ? 'empty'
     : [chartCandles.length, structureCandle?.time, structureCandle?.open, structureCandle?.high, structureCandle?.low, structureCandle?.close].join(':')
-  const structuralChartCandles = useMemo(() => [...chartCandles], [chartStructureSourceKey, selectedSymbol, timeframe])
+  const structuralChartCandlesRef = useRef<{ key: string; candles: OHLCV[] }>({ key: '', candles: [] })
+  if (structuralChartCandlesRef.current.key !== chartStructureSourceKey) {
+    structuralChartCandlesRef.current = { key: chartStructureSourceKey, candles: [...chartCandles] }
+  }
+  const structuralChartCandles = structuralChartCandlesRef.current.candles
 
   // Support/resistance/liquidity on the main chart belong to the timeframe
   // the trader is actually viewing. The builder ignores the forming candle,
