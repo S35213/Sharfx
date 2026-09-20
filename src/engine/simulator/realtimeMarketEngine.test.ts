@@ -55,7 +55,7 @@ describe('SimulatorRealtimeMarketEngine', () => {
     expect(snapshot.candles.length).toBeGreaterThanOrEqual(2)
   })
 
-  it('updates higher-timeframe candle bodies on a slower cadence than M1', () => {
+  it('keeps higher-timeframe candle direction stable while the live close follows the bid', () => {
     const engine = new SimulatorRealtimeMarketEngine(spec, 'H1', seed)
     let snapshot = engine.snapshot()
     const initial = snapshot.candles[snapshot.candles.length - 1]
@@ -65,6 +65,7 @@ describe('SimulatorRealtimeMarketEngine', () => {
       snapshot = engine.tickOnce(1)
       const current = snapshot.candles[snapshot.candles.length - 1]
       colors.push(Math.sign(current.close - current.open))
+      expect(current.close).toBe(snapshot.bid)
       expect(current.high).toBeGreaterThanOrEqual(Math.max(current.open, current.close))
       expect(current.low).toBeLessThanOrEqual(Math.min(current.open, current.close))
     }
@@ -76,19 +77,24 @@ describe('SimulatorRealtimeMarketEngine', () => {
       direction !== colors[index - 1],
     ).length
 
-    expect(changes).toBeLessThan(10)
+    expect(changes).toBeLessThan(20)
     expect(snapshot.candles[snapshot.candles.length - 1].time).toBeGreaterThanOrEqual(initial.time)
   })
 
-  it('does not make M5 react to every one-second tick', () => {
-    const engine = new SimulatorRealtimeMarketEngine(spec, 'M5', seed)
-    let snapshot = engine.snapshot()
-    const initial = snapshot.candles[snapshot.candles.length - 1]
-    const initialClose = initial.close
+  it('keeps M15 price and candle body on the same live price source', () => {
+    const engine = new SimulatorRealtimeMarketEngine(spec, 'M15', seed)
+    let previousDirection = 0
+    let directionChanges = 0
 
-    for (let index = 0; index < 30; index += 1) {
-      snapshot = engine.tickOnce(1)
-      expect(snapshot.candles[snapshot.candles.length - 1].close).toBe(initialClose)
+    for (let index = 0; index < 300; index += 1) {
+      const snapshot = engine.tickOnce(1)
+      const current = snapshot.candles[snapshot.candles.length - 1]
+      const direction = Math.sign(current.close - current.open)
+      if (direction !== 0 && previousDirection !== 0 && direction !== previousDirection) directionChanges += 1
+      if (direction !== 0) previousDirection = direction
+      expect(current.close).toBe(snapshot.bid)
     }
+
+    expect(directionChanges).toBeLessThan(12)
   })
 })
