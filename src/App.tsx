@@ -14,7 +14,7 @@ import { LiquidityPanel } from './components/market/LiquidityPanel'
 import { ProviderCapabilityPanel } from './components/market/ProviderCapabilityPanel'
 import { FXMoveMatrix } from './components/market/FXMoveMatrix'
 import { CandlestickChart, type ChartAnnotation, type ChartToolMode } from './components/chart/CandlestickChart'
-import { analyzeCurrentSetup, buildAIChartAnnotations } from './components/chart/buildAIChartAnnotations'
+import { analyzeCurrentSetup, buildAIChartAnnotations, buildStructuralChartAnnotations } from './components/chart/buildAIChartAnnotations'
 import { useMultiTimeframeCandles } from './engine/agent/loadMultiTimeframe'
 import { Watchlist } from './components/watchlist/Watchlist'
 import { MarketAnalysisPanel } from './components/analysis/MarketAnalysis'
@@ -275,24 +275,36 @@ const TerminalContent: React.FC = () => {
   const chartSpread = symbolSpec ? symbolSpec.pipSize * 0.8 : 0.00008
   const chartAskPrice = Number((chartLastPrice + chartSpread).toFixed(symbolSpec?.pricePrecision ?? 5))
   const conversionRate = symbolSpec ? getConversionRate(symbolSpec.quoteCurrency, accountData?.currency ?? 'USD') : undefined
-  const chartAnnotations = useMemo(() => {
-    const annotations = buildAIChartAnnotations(selectedSymbol, chartCandles)
-    return ['M1', 'M5'].includes(timeframe)
-      ? annotations.filter((annotation) => annotation.id === 'support' || annotation.id === 'resistance')
-      : annotations
-  }, [selectedSymbol, chartCandles, timeframe])
   const multiTimeframeCandles = useMultiTimeframeCandles(selectedSymbol, timeframe, candles)
+  const structuralSourceFrame: Timeframe = timeframe === 'M1'
+    ? 'M5'
+    : timeframe === 'M5'
+      ? 'M15'
+      : timeframe === 'M15'
+        ? 'M30'
+        : timeframe === 'M30'
+          ? 'H1'
+          : timeframe === 'H1'
+            ? 'H4'
+            : timeframe
+
+  const chartAnnotations = useMemo(() => {
+    const sourceCandles = structuralSourceFrame === timeframe
+      ? chartCandles
+      : (multiTimeframeCandles[structuralSourceFrame] ?? chartCandles)
+    return buildStructuralChartAnnotations(selectedSymbol, sourceCandles, structuralSourceFrame)
+      .map((annotation) => ({ ...annotation, id: `structure-${structuralSourceFrame}-${annotation.id}` }))
+  }, [chartCandles, multiTimeframeCandles, selectedSymbol, structuralSourceFrame, timeframe])
+
   const higherTimeframeAnnotations = useMemo(() => {
-    if (['M1', 'M5', 'M15'].includes(timeframe)) return []
-    const frames = timeframe === 'D1' ? ['H4'] as const : ['H4', 'D1'] as const
+    if (timeframe === 'D1') return []
+    const frames = timeframe === 'H4' ? ['D1'] as const : ['H4'] as const
     return frames.flatMap((frame) => {
       const frameCandles = multiTimeframeCandles[frame] ?? []
-      return buildAIChartAnnotations(selectedSymbol, frameCandles)
-        .filter((annotation) => annotation.id === 'support' || annotation.id === 'resistance')
+      return buildStructuralChartAnnotations(selectedSymbol, frameCandles, frame)
         .map((annotation) => ({
           ...annotation,
           id: `htf-${frame}-${annotation.id}`,
-          label: `${frame} ${annotation.label}`,
           lineWidth: 1 as const,
         }))
     })
