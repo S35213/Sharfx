@@ -17,7 +17,20 @@ export const OrderPanel: React.FC<Props> = ({ symbol, currentPrice, accountBalan
   const [takeProfit, setTakeProfit] = useState('')
   const [riskPercent, setRiskPercent] = useState('1.0')
 
-  useEffect(() => { setEntryPrice(currentPrice.toFixed(symbolSpec.pricePrecision)); setStopLoss(''); setTakeProfit('') }, [symbol, symbolSpec.pricePrecision])
+  useEffect(() => {
+    setOrderType('BUY')
+    const storedLot = typeof window !== 'undefined' ? window.sessionStorage.getItem('shafx-simulator-lot-size') || '' : ''
+    const parsedStoredLot = Number(storedLot)
+    const storedLotIsValid = Number.isFinite(parsedStoredLot)
+      && parsedStoredLot >= symbolSpec.minLotSize
+      && parsedStoredLot <= symbolSpec.maxLotSize
+      && Math.abs((parsedStoredLot / symbolSpec.lotStep) - Math.round(parsedStoredLot / symbolSpec.lotStep)) < 1e-8
+    setLotSize(storedLotIsValid ? storedLot : symbolSpec.minLotSize.toFixed(2))
+    setEntryPrice(currentPrice.toFixed(symbolSpec.pricePrecision))
+    setStopLoss('')
+    setTakeProfit('')
+    setRiskPercent('1.0')
+  }, [currentPrice, symbol, symbolSpec])
 
   useEffect(() => {
     const onLotSize = (event: Event): void => {
