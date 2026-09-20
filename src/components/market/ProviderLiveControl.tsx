@@ -28,6 +28,7 @@ export const ProviderLiveControl: React.FC<ProviderLiveControlProps> = ({ provid
   const streamRef = useRef<ProviderStreamHandle | null>(null)
   const [enabled, setEnabled] = useState(false)
   const [status, setStatus] = useState<Status>('demo')
+  const [detailsOpen, setDetailsOpen] = useState(false)
 
   useEffect(() => {
     onActiveChange?.(enabled)
@@ -103,7 +104,29 @@ export const ProviderLiveControl: React.FC<ProviderLiveControlProps> = ({ provid
     }
   }, [enabled, onActiveChange, onUpdate, providedConnection, providerId, symbol, timeframe])
 
-  const toggle = (): void => setEnabled((value) => !value)
+  const toggle = (): void => { setEnabled((value) => !value); setDetailsOpen(true) }
   const label = status === 'live' ? 'Live' : status === 'connecting' ? 'Connecting' : status === 'error' ? 'Retry Live' : 'Demo'
-  return <button type="button" onClick={toggle} aria-pressed={enabled} className="flex min-h-10 items-center gap-2 rounded-lg border border-shafx-border bg-shafx-surface px-3 text-xs font-medium text-shafx-text transition hover:border-shafx-primary"><span className={`h-2 w-2 rounded-full ${status === 'live' ? 'bg-emerald-400' : status === 'error' ? 'bg-red-400' : 'bg-shafx-textMuted'}`} />{label} Market</button>
+  return <div className="relative">
+    <button type="button" onClick={toggle} aria-pressed={enabled} className="flex min-h-10 items-center gap-2 rounded-lg border border-shafx-border bg-shafx-surface px-3 text-xs font-medium text-shafx-text transition hover:border-shafx-primary">
+      <span className={`h-2 w-2 rounded-full ${status === 'live' ? 'bg-emerald-400' : status === 'error' ? 'bg-red-400' : 'bg-shafx-textMuted'}`} />
+      {label} Market
+    </button>
+    {detailsOpen && <div className="absolute right-0 top-[calc(100%+8px)] z-[120] w-72 rounded-2xl border border-shafx-border bg-shafx-surface p-3 shadow-2xl">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-xs font-semibold">{enabled ? 'Provider market stream' : 'SHAFX Demo Market'}</div>
+          <p className="mt-1 text-[9px] leading-4 text-shafx-textMuted">
+            {enabled
+              ? status === 'live' ? `Live quote stream requested for ${symbol}.` : status === 'connecting' ? 'Connecting to the selected provider…' : status === 'error' ? 'The provider stream could not be started. The simulator remains available.' : 'Provider stream is off.'
+              : 'Simulated market data is active. No broker connection is required.'}
+          </p>
+        </div>
+        <button type="button" onClick={() => setDetailsOpen(false)} className="min-h-8 rounded-lg border border-shafx-border px-2 text-[9px] text-shafx-textMuted">Close</button>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 text-[9px]">
+        <div className="rounded-xl border border-shafx-border bg-shafx-bg p-2"><span className="text-shafx-textMuted">Mode</span><strong className="mt-1 block">{enabled ? 'PROVIDER' : 'SIMULATOR'}</strong></div>
+        <div className="rounded-xl border border-shafx-border bg-shafx-bg p-2"><span className="text-shafx-textMuted">Timeframe</span><strong className="mt-1 block">{timeframe}</strong></div>
+      </div>
+    </div>}
+  </div>
 }
