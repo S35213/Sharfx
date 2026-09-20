@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { ColorType, createChart, type CandlestickData, type IChartApi, type IPriceLine, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts'
 import { Crosshair, Eraser, Ruler } from 'lucide-react'
+import type { CandleTheme } from '../../app/chartSettings'
 import type { OHLCV, Timeframe } from '../../types'
 
 export interface ChartAnnotation { id: string; price: number; label: string; color: string; lineWidth?: 1 | 2 | 3 | 4 }
@@ -21,6 +22,7 @@ interface CandlestickChartProps {
   askPrice?: number
   tradeLines?: ChartAnnotation[]
   followLatest?: boolean
+  candleTheme?: CandleTheme
 }
 
 interface UserLevel { id: string; price: number; label: string; color: string; lineWidth?: 1 | 2 | 3 | 4; dashed?: boolean; armed?: boolean }
@@ -44,7 +46,7 @@ const timeframeMeta = (timeframe?: Timeframe, data: CandlestickData[] = []): { l
   return known[seconds] ?? { label: 'Custom', interval: `${Math.round(seconds / 60)}m` }
 }
 
-export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, symbol, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [], followLatest = false }) => {
+export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, symbol, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [], followLatest = false, candleTheme = 'mt5' }) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
@@ -66,6 +68,12 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const marketAskLineRef = useRef<IPriceLine | null>(null)
   const followRealtimeRef = useRef(true)
   const latestIndexRef = useRef(-1)
+  const candleColors: Record<CandleTheme, { up: string; down: string }> = {
+    shafx: { up: '#22D3A5', down: '#FF5C75' },
+    mt5: { up: '#26A69A', down: '#EF5350' },
+    blue: { up: '#42A5F5', down: '#FF7043' },
+    amber: { up: '#FFCA28', down: '#EF5350' },
+  }
 
   useEffect(() => {
     const el = containerRef.current
@@ -81,7 +89,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
       handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true },
     })
-    const series = chart.addCandlestickSeries({ priceFormat: { type: 'price', precision: Math.max(2, Math.round(Math.log10(1 / Math.max(pipSize, 0.00001)))), minMove: Math.max(pipSize, 0.00001) }, upColor: '#22D3A5', downColor: '#FF5C75', borderUpColor: '#22D3A5', borderDownColor: '#FF5C75', wickUpColor: '#22D3A5', wickDownColor: '#FF5C75', priceLineVisible: false, lastValueVisible: false })
+    const colors = candleColors[candleTheme]
+    const series = chart.addCandlestickSeries({ priceFormat: { type: 'price', precision: Math.max(2, Math.round(Math.log10(1 / Math.max(pipSize, 0.00001)))), minMove: Math.max(pipSize, 0.00001) }, upColor: colors.up, downColor: colors.down, borderUpColor: colors.up, borderDownColor: colors.down, wickUpColor: colors.up, wickDownColor: colors.down, priceLineVisible: false, lastValueVisible: false })
     chartRef.current = chart
     seriesRef.current = series
     const ro = new ResizeObserver(([entry]) => {
@@ -109,6 +118,20 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       marketAskLineRef.current = null
     }
   }, [])
+
+  useEffect(() => {
+    const series = seriesRef.current
+    if (!series) return
+    const colors = candleColors[candleTheme]
+    series.applyOptions({
+      upColor: colors.up,
+      downColor: colors.down,
+      borderUpColor: colors.up,
+      borderDownColor: colors.down,
+      wickUpColor: colors.up,
+      wickDownColor: colors.down,
+    })
+  }, [candleTheme])
 
   useEffect(() => {
     const chart = chartRef.current
