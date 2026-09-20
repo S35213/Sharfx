@@ -183,7 +183,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     const compact = (containerRef.current?.clientWidth ?? 1000) < 640
     // Keep the latest-price label visible on mobile. It is tied to the chart's
     // price scale, so it follows the latest candle instead of floating beside it.
-    series.applyOptions({ lastValueVisible: showPriceLabels })
+    series.applyOptions({ lastValueVisible: false })
 
     const addLine = (annotation: ChartAnnotation | UserLevel): void => {
       if (!annotation.id || seen.has(annotation.id) || !Number.isFinite(annotation.price) || annotation.price <= 0) return
@@ -227,7 +227,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
 
     const updateLine = (
       ref: React.MutableRefObject<IPriceLine | null>,
-      options: Parameters<IPriceLine['applyOptions']>[0] | null,
+      options: (Parameters<IPriceLine['applyOptions']>[0] & { price: number }) | null,
     ): void => {
       if (!options) {
         if (ref.current) {
