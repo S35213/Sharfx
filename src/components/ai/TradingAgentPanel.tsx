@@ -295,7 +295,6 @@ export function TradingAgentPanel({
           return
         }
 
-        setCycles((value) => value + 1)
         setUnitRound(nextRound)
         setBotPositionId(order.id)
         setLastResult(null)
