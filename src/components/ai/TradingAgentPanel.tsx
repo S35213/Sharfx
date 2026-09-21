@@ -454,210 +454,48 @@ export function TradingAgentPanel({
   return (
     <section className="rounded-2xl border border-shafx-border bg-shafx-surface p-3.5 text-sm shadow-[0_14px_36px_rgba(0,0,0,.22)] sm:p-4">
       <header className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-shafx-accent/10 text-shafx-accent"><Bot className="h-5 w-5" /></div>
-          <div className="min-w-0">
-            <h2 className="truncate text-base font-semibold">{plan.label}</h2>
-            <p className="mt-0.5 text-[10px] leading-4 text-shafx-textMuted">Structure, liquidity, setup and risk analysis. Simulator-only execution.</p>
-          </div>
-        </div>
-        <span className={phase === 'RUNNING' ? 'flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border border-shafx-success/20 bg-shafx-success/5 px-2.5 text-[9px] font-semibold text-shafx-success' : 'flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border border-shafx-border bg-shafx-bg px-2.5 text-[9px] font-semibold text-shafx-textMuted'}>
-          <Activity className="h-3 w-3" />
-          {phase === 'ANALYZING' ? 'Analyzing' : phase === 'RUNNING' ? 'Running' : 'Ready'}
-        </span>
+        <div className="flex min-w-0 items-center gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-shafx-accent/10 text-shafx-accent"><Bot className="h-5 w-5" /></div><div className="min-w-0"><h2 className="truncate text-base font-semibold">${{plan.label}${</h2><p className="mt-0.5 text-[10px] text-shafx-textMuted">Structure, liquidity, setup and risk analysis. Simulator-only execution.</p></div></div>
+        <span className={phase === 'RUNNING' ? 'flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border border-shafx-success/20 bg-shafx-success/5 px-2.5 text-[9px] font-semibold text-shafx-success' : phase === 'ANALYZING' ? 'flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border border-shafx-accent/20 bg-shafx-accent/5 px-2.5 text-[9px] font-semibold text-shafx-accent' : 'flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border border-shafx-border bg-shafx-bg px-2.5 text-[9px] font-semibold text-shafx-textMuted'}><Activity className="h-3 w-3" />${{phase === 'ANALYZING' ? 'Scanning' : phase === 'RUNNING' ? 'Running' : 'Ready'}${</span>
       </header>
 
-  {showBotActivity && (
-      <section className="mt-3 rounded-xl border border-shafx-success/20 bg-shafx-success/[0.025] p-3.5">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <div className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">AI BOT RUN • TRADE ACTIVITY</div>
-            <div className="mt-1 text-sm font-semibold">{activeBotOrder ? activeBotOrder.type + ' ' + activeBotOrder.symbol + ' is OPEN' : lastResult === 'WIN' ? 'Last round: WIN' : lastResult === 'LOSS' ? 'Last round: LOSS' : 'Bot is preparing the next trade…'}</div>
-          </div>
-          <span className="rounded-full border border-shafx-border px-2.5 py-1 font-mono text-[9px] text-shafx-accent bg-shafx-accent/5 border-shafx-accent/30">Unit {displayedUnitNumber}/{plan.maxDailyCycleUnits === null ? '∞' : plan.maxDailyCycleUnits} • Round {unitRound}/5</span>
-        </div>
-        <div className="mt-3 grid grid-cols-3 gap-2 text-[9px] text-shafx-textMuted">
-          <div className="rounded-lg border border-shafx-border bg-shafx-bg px-2 py-2"><span className="block">WIN</span><strong className="mt-0.5 block font-mono text-shafx-success">{wins}</strong></div>
-          <div className="rounded-lg border border-shafx-border bg-shafx-bg px-2 py-2"><span className="block">LOSS</span><strong className="mt-0.5 block font-mono text-shafx-danger">{losses}</strong></div>
-          <div className="rounded-lg border border-shafx-border bg-shafx-bg px-2 py-2"><span className="block">Daily units</span><strong className="mt-0.5 block font-mono text-shafx-text">{cycleUnits}/{plan.maxDailyCycleUnits === null ? '∞' : plan.maxDailyCycleUnits}</strong></div>
-        </div>
-        {activeBotOrder && <div className="mt-3 rounded-xl border border-shafx-success/30 bg-shafx-success/5 p-3">
-          <div className="flex items-center justify-between gap-2"><span className={activeBotOrder.type === 'BUY' ? 'text-lg font-bold text-shafx-success' : 'text-lg font-bold text-shafx-danger'}>{activeBotOrder.type} {activeBotOrder.lotSize.toFixed(2)} LOT</span><span className="font-mono text-sm">{tradeSecondsLeft.toFixed(1)}s</span></div>
-          <div className="mt-2 grid grid-cols-3 gap-2 text-[9px]">
-            <div className="rounded-lg border border-shafx-border bg-shafx-bg p-2"><span className="block text-shafx-textMuted">Entry</span><b className="font-mono">{activeBotOrder.entryPrice}</b></div>
-            <div className="rounded-lg border border-shafx-danger/20 bg-shafx-danger/[0.04] p-2"><span className="block text-shafx-textMuted">Stop Loss</span><b className="font-mono text-shafx-danger">{activeBotOrder.stopLoss}</b></div>
-            <div className="rounded-lg border border-shafx-success/20 bg-shafx-success/[0.04] p-2"><span className="block text-shafx-textMuted">Take Profit</span><b className="font-mono text-shafx-success">{activeBotOrder.takeProfit}</b></div>
-          </div>
-          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-shafx-border"><div className="h-full rounded-full bg-shafx-success" style={{ width: Math.max(0, Math.min(100, ((2500 - tradeSecondsLeft * 1000) / 2500) * 100)) + '%' }} /></div>
-          <div className="mt-2 text-[9px] text-shafx-textMuted">AI simulation is running this {activeBotOrder.type} trade. The round closes automatically, then the next round starts.</div>
-        </div>}
-        {botTrades.length > 0 && <div className="mt-3 space-y-1.5">
-          {botTrades.slice(0, 5).map((trade) => {
-            const profit = trade.profit ?? 0
-            return <div key={trade.id} className="flex items-center justify-between gap-2 rounded-lg border border-shafx-border bg-shafx-bg px-2.5 py-2 text-[9px]">
-              <span className={trade.type === 'BUY' ? 'font-semibold text-shafx-success' : 'font-semibold text-shafx-danger'}>{trade.type} {trade.symbol} • {trade.lotSize.toFixed(2)} lots</span>
-              <span className={profit >= 0 ? 'font-mono text-shafx-success' : 'font-mono text-shafx-danger'}>{profit >= 0 ? '+' : ''}{profit.toFixed(2)} {accountCurrency}</span>
-            </div>
-          })}
-        </div>}
-      </section>
-
+      {showBotActivity && (
+        <section className="mt-3 rounded-xl border border-shafx-accent/25 bg-shafx-accent/[0.04] p-3.5">
+          <div className="flex items-start justify-between gap-3"><div><div className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-accent">AI BOT RUN • TRADE ACTIVITY</div><div className="mt-1 text-sm font-semibold">${{activeBotOrder ? activeBotOrder.type + ' ' + activeBotOrder.symbol + ' is OPEN' : lastResult === 'WIN' ? 'Last round: WIN' : lastResult === 'LOSS' ? 'Last round: LOSS' : autoTradingEnabled ? 'Bot is preparing the next trade…' : 'Bot run finished'}${</div></div><span className="rounded-full border border-shafx-accent/25 bg-shafx-accent/5 px-2.5 py-1 font-mono text-[9px] text-shafx-accent">Unit ${{displayedUnitNumber}${/${{plan.maxDailyCycleUnits === null ? '∞' : plan.maxDailyCycleUnits}${ • Round ${{unitRound}${/5</span></div>
+          <div className="mt-3 grid grid-cols-3 gap-2 text-[9px]"><div className="rounded-lg border border-shafx-border bg-shafx-bg px-2 py-2"><span className="block text-shafx-textMuted">WIN</span><strong className="mt-0.5 block font-mono text-shafx-success">${{wins}${</strong></div><div className="rounded-lg border border-shafx-border bg-shafx-bg px-2 py-2"><span className="block text-shafx-textMuted">LOSS</span><strong className="mt-0.5 block font-mono text-shafx-danger">${{losses}${</strong></div><div className="rounded-lg border border-shafx-border bg-shafx-bg px-2 py-2"><span className="block text-shafx-textMuted">Daily units</span><strong className="mt-0.5 block font-mono">${{cycleUnits}${/${{plan.maxDailyCycleUnits === null ? '∞' : plan.maxDailyCycleUnits}${</strong></div></div>
+          {activeBotOrder && (<div className="mt-3 rounded-xl border border-shafx-success/30 bg-shafx-success/5 p-3"><div className="flex items-center justify-between gap-2"><span className={activeBotOrder.type === 'BUY' ? 'text-lg font-bold text-shafx-success' : 'text-lg font-bold text-shafx-danger'}>${{activeBotOrder.type}${ ${{activeBotOrder.lotSize.toFixed(2)}${ LOT</span><span className="font-mono text-sm">${{tradeSecondsLeft.toFixed(1)}${s</span></div><div className="mt-2 grid grid-cols-3 gap-2 text-[9px]"><div className="rounded-lg border border-shafx-border bg-shafx-bg p-2"><span className="block text-shafx-textMuted">Entry</span><b className="font-mono">${{activeBotOrder.entryPrice}${</b></div><div className="rounded-lg border border-shafx-danger/20 bg-shafx-danger/[0.04] p-2"><span className="block text-shafx-textMuted">Stop Loss</span><b className="font-mono text-shafx-danger">${{activeBotOrder.stopLoss}${</b></div><div className="rounded-lg border border-shafx-success/20 bg-shafx-success/[0.04] p-2"><span className="block text-shafx-textMuted">Take Profit</span><b className="font-mono text-shafx-success">${{activeBotOrder.takeProfit}${</b></div></div><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-shafx-border"><div className="h-full rounded-full bg-shafx-accent" style={{width: Math.max(0, Math.min(100, ((BOT_RESULT_DELAY_MS - tradeSecondsLeft * 1000) / BOT_RESULT_DELAY_MS) * 100)) + '%'}} /></div><p className="mt-2 text-[9px] text-shafx-textMuted">The simulator opens this round automatically, closes it, records the result, then advances through the 3-second bot cycle.</p></div>)}
+          {botTrades.length > 0 && (<div className="mt-3 space-y-1.5">{botTrades.slice(0, 5).map((trade) => { const profit = trade.profit ?? 0; return <div key={trade.id} className="flex items-center justify-between gap-2 rounded-lg border border-shafx-border bg-shafx-bg px-2.5 py-2 text-[9px]"><span className={trade.type === 'BUY' ? 'font-semibold text-shafx-success' : 'font-semibold text-shafx-danger'}>${{trade.type}${ ${{trade.symbol}${ • ${{trade.lotSize.toFixed(2)}${ lots</span><span className={profit >= 0 ? 'font-mono text-shafx-success' : 'font-mono text-shafx-danger'}>${{profit >= 0 ? '+' : ''}${${{profit.toFixed(2)}${ ${{accountCurrency}${</span></div> })}</div>)}
+        </section>
       )}
 
       <section className="mt-3 rounded-xl border border-shafx-accent/30 bg-shafx-accent/[0.045] p-3.5">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Automatic trading</div>
-            <div className="mt-1 text-base font-semibold">{autoTradingEnabled ? 'Bot is running' : 'Bot is stopped'}</div>
-            <p className="mt-1 text-[10px] leading-4 text-shafx-textMuted">{autoTradingEnabled ? 'SHAFX will scan this market automatically and place simulated trades when the setup passes its rules.' : 'Start the bot to let SHAFX scan this market automatically and place simulated trades for you.'}</p>
-          </div>
-          <span className={autoTradingEnabled ? 'rounded-full border border-shafx-success/20 bg-shafx-success/5 px-2.5 py-1 text-[9px] font-semibold text-shafx-success' : 'rounded-full border border-shafx-border bg-shafx-bg px-2.5 py-1 text-[9px] font-semibold text-shafx-textMuted'}>{autoTradingEnabled ? 'ON' : 'OFF'}</span>
-        </div>
-        <button
-          type="button"
-          disabled={!symbolSpec || phase === 'ANALYZING'}
-          onClick={autoTradingEnabled ? stopAutomaticTrading : pendingUnitCompletion ? continueNextUnit : startAutomaticTrading}
-          className={autoTradingEnabled ? 'mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-shafx-danger/30 bg-shafx-danger/10 px-3 text-[10px] font-semibold text-shafx-danger active:bg-shafx-danger/20 disabled:opacity-40' : 'mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-shafx-accent px-3 text-[10px] font-semibold text-white active:opacity-90 disabled:opacity-40'}
-        >
-          {autoTradingEnabled ? <Square className="h-3.5 w-3.5 fill-current" /> : <Play className="h-3.5 w-3.5 fill-current" />}
-          {autoTradingEnabled ? 'Stop automatic trading' : pendingUnitCompletion ? 'Continue next unit' : 'Start automatic trading'}
-        </button>
-        <div className="mt-2 grid grid-cols-3 gap-2 text-[9px] text-shafx-textMuted">
-          <div className="rounded-lg border border-shafx-border bg-shafx-bg px-2 py-2"><span className="block">Market</span><strong className="mt-0.5 block font-mono text-shafx-text">{symbol}</strong></div>
-          <div className="rounded-lg border border-shafx-border bg-shafx-bg px-2 py-2"><span className="block">Round</span><strong className="mt-0.5 block font-mono text-shafx-text">3s</strong></div>
-          <div className="rounded-lg border border-shafx-border bg-shafx-bg px-2 py-2"><span className="block">Mode</span><strong className="mt-0.5 block text-shafx-text">Simulator</strong></div>
-        </div>
+        <div className="flex items-start justify-between gap-3"><div><div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Automatic trading</div><div className="mt-1 text-base font-semibold">${{autoTradingEnabled ? 'Bot is running' : 'Bot is stopped'}${</div><p className="mt-1 text-[10px] text-shafx-textMuted">${{autoTradingEnabled ? 'SHAFX scans all seven timeframes and executes simulator rounds automatically.' : 'Run the bot to start the simulated proposal → trade → monitor → result loop.'}${</p></div><span className={autoTradingEnabled ? 'rounded-full border border-shafx-success/20 bg-shafx-success/5 px-2.5 py-1 text-[9px] font-semibold text-shafx-success' : 'rounded-full border border-shafx-border bg-shafx-bg px-2.5 py-1 text-[9px] font-semibold text-shafx-textMuted'}>${{autoTradingEnabled ? 'ON' : 'OFF'}${</span></div>
+        <button type="button" disabled={!symbolSpec || phase === 'ANALYZING'} onClick={autoTradingEnabled ? stopAutomaticTrading : pendingUnitCompletion ? continueNextUnit : startAutomaticTrading} className={autoTradingEnabled ? 'mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-shafx-danger/30 bg-shafx-danger/10 px-3 text-[10px] font-semibold text-shafx-danger active:bg-shafx-danger/20 disabled:opacity-40' : 'mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-shafx-accent px-3 text-[10px] font-semibold text-white active:opacity-90 disabled:opacity-40'}>${{autoTradingEnabled ? <Square className="h-3.5 w-3.5 fill-current" /> : <Play className="h-3.5 w-3.5 fill-current" />}${ ${{autoTradingEnabled ? 'Stop automatic trading' : pendingUnitCompletion ? 'Continue next unit' : 'Start automatic trading'}${</button>
+        <div className="mt-2 grid grid-cols-3 gap-2 text-[9px] text-shafx-textMuted"><div className="rounded-lg border border-shafx-border bg-shafx-bg px-2 py-2"><span className="block">Market</span><strong className="mt-0.5 block font-mono text-shafx-text">${{symbol}${</strong></div><div className="rounded-lg border border-shafx-border bg-shafx-bg px-2 py-2"><span className="block">Round</span><strong className="mt-0.5 block font-mono text-shafx-text">3s</strong></div><div className="rounded-lg border border-shafx-border bg-shafx-bg px-2 py-2"><span className="block">Mode</span><strong className="mt-0.5 block text-shafx-text">Simulator</strong></div></div>
       </section>
 
-      <div className="mt-3 rounded-xl border border-shafx-border bg-shafx-bg p-3.5">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <div className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">Bot stake</div>
-            <div className="mt-1 text-sm font-semibold">Lot size per round</div>
-          </div>
-          <span className="rounded-lg border border-shafx-border px-2 py-1 font-mono text-[9px] text-shafx-textMuted">5 rounds = 1 unit</span>
-        </div>
-        <div className="mt-3 flex items-center gap-2">
-          <button type="button" onClick={() => {
-            const next = Math.max(symbolSpec?.minLotSize ?? 0.01, Number((parsedLotSize - (symbolSpec?.lotStep ?? 0.01)).toFixed(4)))
-            setLotSize(String(next))
-          }} className="min-h-11 min-w-11 rounded-xl border border-shafx-border bg-shafx-surface text-base font-semibold">−</button>
-          <label className="flex-1">
-            <span className="sr-only">Bot lot size</span>
-            <input type="number" inputMode="decimal" step={symbolSpec?.lotStep ?? 0.01} min={symbolSpec?.minLotSize ?? 0.01} max={symbolSpec?.maxLotSize ?? 100} value={lotSize} onChange={(event) => setLotSize(event.target.value)} className="min-h-11 w-full rounded-xl border border-shafx-border bg-shafx-surface px-3 text-center font-mono text-sm focus:border-shafx-accent focus:outline-none" aria-label="Bot lot size" />
-          </label>
-          <button type="button" onClick={() => {
-            const next = Math.min(symbolSpec?.maxLotSize ?? 100, Number((parsedLotSize + (symbolSpec?.lotStep ?? 0.01)).toFixed(4)))
-            setLotSize(String(next))
-          }} className="min-h-11 min-w-11 rounded-xl border border-shafx-border bg-shafx-surface text-base font-semibold">+</button>
-        </div>
-        <p className="mt-2 text-[9px] leading-4 text-shafx-textMuted">This lot size is used for each simulated bot round. One unit contains 5 rounds; the Free Bot has 5 units per day, so it can execute up to 25 simulated trade rounds per day.</p>
-      </div>
+      <section className="mt-3 rounded-xl border border-shafx-border bg-shafx-bg p-3.5">
+        <div className="flex items-center justify-between gap-3"><div><div className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">Bot stake</div><div className="mt-1 text-sm font-semibold">Lot size per round</div></div><span className="rounded-lg border border-shafx-border px-2 py-1 font-mono text-[9px] text-shafx-textMuted">5 rounds = 1 unit</span></div>
+        <div className="mt-3 flex items-center gap-2"><button type="button" onClick={() => { const next = Math.max(symbolSpec?.minLotSize ?? 0.01, Number((parsedLotSize - (symbolSpec?.lotStep ?? 0.01)).toFixed(4))); setLotSize(String(next)) }} className="min-h-11 min-w-11 rounded-xl border border-shafx-border bg-shafx-surface text-base font-semibold">−</button><label className="flex-1"><span className="sr-only">Bot lot size</span><input type="number" inputMode="decimal" step={symbolSpec?.lotStep ?? 0.01} min={symbolSpec?.minLotSize ?? 0.01} max={symbolSpec?.maxLotSize ?? 100} value={lotSize} onChange={(event) => setLotSize(event.target.value)} className="min-h-11 w-full rounded-xl border border-shafx-border bg-shafx-surface px-3 text-center font-mono text-sm focus:border-shafx-accent focus:outline-none" aria-label="Bot lot size" /></label><button type="button" onClick={() => { const next = Math.min(symbolSpec?.maxLotSize ?? 100, Number((parsedLotSize + (symbolSpec?.lotStep ?? 0.01)).toFixed(4))); setLotSize(String(next)) }} className="min-h-11 min-w-11 rounded-xl border border-shafx-border bg-shafx-surface text-base font-semibold">+</button></div>
+        <p className="mt-2 text-[9px] text-shafx-textMuted">Your lot size is used for every simulator round. Five rounds make one unit. Free Bot allows five units per day, up to 25 simulated rounds.</p>
+      </section>
 
-      <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Market read</div>
-            <div className="mt-1.5 flex flex-wrap items-center gap-2">
-              <div className="text-xl font-semibold">{phase === 'ANALYZING' ? 'Analyzing…' : bias}</div>
-              <span className="rounded-lg border border-shafx-accent/20 bg-shafx-accent/5 px-2.5 py-1 text-[9px] font-semibold text-shafx-accent">All TFs</span>
-              <span className="rounded-lg border border-shafx-border px-2.5 py-1 text-[9px] text-shafx-textMuted">{research.agreement.toFixed(0)}% evidence agreement</span>
-            </div>
-          </div>
-          <Sparkles className="h-5 w-5 shrink-0 text-shafx-accent" />
-        </div>
-        {phase === 'ANALYZING' ? (
-          <div className="mt-3 rounded-xl border border-shafx-accent/25 bg-shafx-accent/[0.05] p-4 text-center">
-            <div className="text-2xl font-semibold text-shafx-accent">{scanFrame}</div>
-            <div className="mt-1 text-[10px] text-shafx-textMuted">Scanning all seven timeframes • {scanSeconds}/10s</div>
-            <div className="mt-3 grid grid-cols-7 gap-1">
-              {SCAN_TIMEFRAMES.map((frame) => <span key={frame} className={frame === scanFrame ? 'rounded-md bg-shafx-accent px-1 py-1.5 text-[8px] font-semibold text-white' : 'rounded-md border border-shafx-border px-1 py-1.5 text-[8px] text-shafx-textMuted'}>{frame}</span>)}
-            </div>
-          </div>
-        ) : scanComplete && bestOpportunity ? (
-          <div className="mt-3 rounded-xl border border-shafx-success/30 bg-shafx-success/[0.055] p-4 text-center">
-            <div className="text-[9px] font-semibold uppercase tracking-[0.2em] text-shafx-success">OPPORTUNITY FOUND</div>
-            <div className="mt-1 text-3xl font-semibold">{bestOpportunity.direction}</div>
-            <div className="mt-1 text-base font-semibold text-shafx-accent">Found on {activeBotScan?.timeframe ?? timeframe}</div>
-            <div className="mt-2 text-6xl font-black leading-none tracking-tight text-shafx-accent">{confidenceDisplay}%</div>
-            <div className="mt-1 text-[9px] uppercase tracking-[0.16em] text-shafx-textMuted">AI confidence</div>
-            <div className="mt-2 text-[10px] text-shafx-textMuted">Entry {bestOpportunity.entryPrice}</div>
-            <div className="mt-3 grid grid-cols-3 gap-2 text-[9px]">
-              <div className="rounded-lg border border-shafx-border bg-shafx-bg p-2"><span className="block text-shafx-textMuted">Entry</span><b className="font-mono">{bestOpportunity.entryPrice}</b></div>
-              <div className="rounded-lg border border-shafx-danger/20 bg-shafx-danger/[0.04] p-2"><span className="block text-shafx-textMuted">Stop Loss</span><b className="font-mono text-shafx-danger">{bestOpportunity.stopLoss}</b></div>
-              <div className="rounded-lg border border-shafx-success/20 bg-shafx-success/[0.04] p-2"><span className="block text-shafx-textMuted">Take Profit</span><b className="font-mono text-shafx-success">{bestOpportunity.takeProfit}</b></div>
-            </div>
-          </div>
-        ) : (
-          <p className="mt-2 text-[11px] leading-5 text-shafx-textMuted">Every scan recalculates the current simulated market across M1, M5, M15, M30, H1, H4 and D1. The selected chart timeframe never limits the bot.</p>
-        )}
-        <div className="mt-3 flex items-center gap-2">
-          <button
-            type="button"
-            disabled={!symbolSpec || phase === 'ANALYZING'}
-            onClick={rescanBot}
-            className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-shafx-accent/35 bg-shafx-accent/10 px-3 text-[10px] font-semibold text-shafx-accent active:bg-shafx-accent/20 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <RefreshCw className={phase === 'ANALYZING' ? 'h-3.5 w-3.5 animate-spin' : 'h-3.5 w-3.5'} />
-            {phase === 'ANALYZING' ? 'Refreshing analysis…' : 'Refresh analysis'}
-          </button>
-          {phase === 'RUNNING' && <span className="rounded-xl border border-shafx-success/20 bg-shafx-success/5 px-2.5 py-2 text-[9px] font-semibold text-shafx-success">Auto scan ON</span>}
-        </div>
-        {onReviewSetup && <button type="button" onClick={() => onReviewSetup(bestOpportunity)} className="mt-2 min-h-10 w-full rounded-xl border border-shafx-border bg-shafx-surface px-3 text-[10px] font-semibold text-shafx-textMuted active:bg-shafx-accent/10">Review AI strategy</button>}
-      </div>
+      <section className="mt-3 rounded-xl border border-shafx-border bg-shafx-bg p-3.5">
+        <div className="flex items-start justify-between gap-3"><div><div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Market read</div><div className="mt-1.5 flex flex-wrap items-center gap-2"><div className="text-xl font-semibold">${{phase === 'ANALYZING' ? 'Scanning…' : bias}${</div><span className="rounded-lg border border-shafx-accent/20 bg-shafx-accent/5 px-2.5 py-1 text-[9px] font-semibold text-shafx-accent">All TFs</span><span className="rounded-lg border border-shafx-border px-2.5 py-1 text-[9px] text-shafx-textMuted">Scan #${{Math.max(1, scanNonce + 1)}${ • ${{research.agreement.toFixed(0)}${% evidence</span></div></div><Sparkles className="h-5 w-5 shrink-0 text-shafx-accent" /></div>
+        {phase === 'ANALYZING' ? (<div className="mt-3 rounded-xl border border-shafx-accent/25 bg-shafx-accent/[0.05] p-4 text-center"><div className="text-2xl font-semibold text-shafx-accent">${{scanFrame}${</div><div className="mt-1 text-[10px] text-shafx-textMuted">Scanning M1 → M5 → M15 → M30 → H1 → H4 → D1 • ${{scanSeconds}${/10s</div><div className="mt-3 grid grid-cols-7 gap-1">{SCAN_TIMEFRAMES.map((frame) => <span key={frame} className={frame === scanFrame ? 'rounded-md bg-shafx-accent px-1 py-1.5 text-[8px] font-semibold text-white' : 'rounded-md border border-shafx-border px-1 py-1.5 text-[8px] text-shafx-textMuted'}>${{frame}${</span>)}</div></div>)
+        : scanComplete && bestOpportunity ? (<div className="mt-3 rounded-xl border border-shafx-success/30 bg-shafx-success/[0.055] p-4 text-center"><div className="text-[9px] font-semibold uppercase tracking-[0.2em] text-shafx-success">OPPORTUNITY FOUND</div><div className="mt-1 text-3xl font-semibold">${{bestOpportunity.direction}${</div><div className="mt-1 text-base font-semibold text-shafx-accent">Found on ${{activeBotScan?.timeframe ?? timeframe}${</div><div className="mt-2 text-6xl font-black leading-none tracking-tight text-shafx-accent">${{confidenceDisplay}${%</div><div className="mt-1 text-[9px] uppercase tracking-[0.16em] text-shafx-textMuted">AI confidence</div><div className="mt-2 text-[10px] text-shafx-textMuted">Entry ${{bestOpportunity.entryPrice}${</div><div className="mt-3 grid grid-cols-3 gap-2 text-[9px]"><div className="rounded-lg border border-shafx-border bg-shafx-bg p-2"><span className="block text-shafx-textMuted">Entry</span><b className="font-mono">${{bestOpportunity.entryPrice}${</b></div><div className="rounded-lg border border-shafx-danger/20 bg-shafx-danger/[0.04] p-2"><span className="block text-shafx-textMuted">Stop Loss</span><b className="font-mono text-shafx-danger">${{bestOpportunity.stopLoss}${</b></div><div className="rounded-lg border border-shafx-success/20 bg-shafx-success/[0.04] p-2"><span className="block text-shafx-textMuted">Take Profit</span><b className="font-mono text-shafx-success">${{bestOpportunity.takeProfit}${</b></div></div><div className="mt-3 text-[9px] text-shafx-textMuted">Fresh result generated from the current simulated market data.</div></div>)
+        : (<div className="mt-3 rounded-xl border border-shafx-border bg-shafx-surface p-3 text-[10px] text-shafx-textMuted">Tap Scan market for a fresh 10-second scan across all seven timeframes.</div>)}
+        <div className="mt-3 flex gap-2"><button type="button" disabled={!symbolSpec || phase === 'ANALYZING'} onClick={rescanBot} className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-shafx-accent/35 bg-shafx-accent/10 px-3 text-[10px] font-semibold text-shafx-accent disabled:opacity-40"><RefreshCw className={phase === 'ANALYZING' ? 'h-3.5 w-3.5 animate-spin' : 'h-3.5 w-3.5'} />${{phase === 'ANALYZING' ? 'Scanning…' : 'Scan market'}${</button>{onReviewSetup && <button type="button" disabled={!bestOpportunity} onClick={() => onReviewSetup(bestOpportunity)} className="min-h-11 flex-1 rounded-xl border border-shafx-border bg-shafx-surface px-3 text-[10px] font-semibold text-shafx-text disabled:opacity-40">Review AI strategy</button>}</div>
+      </section>
 
-}
+      <section className="mt-3 grid gap-3 sm:grid-cols-2">
+        <div className="rounded-xl border border-shafx-accent/25 bg-shafx-accent/[0.045] p-3.5"><div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-shafx-accent" /><div><div className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">Automatic protection</div><div className="text-sm font-semibold">${{riskModes[BOT_RISK_MODE].label}${ simulation mode</div></div></div><div className="mt-3 grid grid-cols-2 gap-2 text-[10px]"><div className="rounded-lg border border-shafx-border bg-shafx-bg px-2.5 py-2"><span className="text-shafx-textMuted">Balance</span><div className="mt-0.5 font-mono text-xs">${{accountBalance.toFixed(2)}${</div></div><div className="rounded-lg border border-shafx-border bg-shafx-bg px-2.5 py-2"><span className="text-shafx-textMuted">Max risk</span><div className="mt-0.5 font-mono text-xs text-shafx-danger">${{riskAmount.toFixed(2)}${</div></div></div><p className="mt-3 text-[9px] text-shafx-textMuted">BUY/SELL direction automatically receives the matching Stop Loss and Take Profit from the selected AI setup.</p></div>
+        <div className="rounded-xl border border-shafx-border bg-shafx-bg p-3.5"><div className="flex items-center justify-between gap-3"><div><div className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">Bot cycle</div><div className="mt-1 text-sm font-semibold">3s automatic round</div></div><Wallet className="h-4 w-4 text-shafx-accent" /></div><div className="mt-3 rounded-lg border border-shafx-border px-2.5 py-2 text-[10px] text-shafx-textMuted"><span>Allowance</span><span className="float-right font-mono text-shafx-text">${{cycleUnits}${${{plan.maxDailyCycleUnits === null ? ' / ∞' : ' / ' + plan.maxDailyCycleUnits}${</span></div><div className="mt-2 text-[9px] text-shafx-textMuted">Unit ${{displayedUnitNumber}${ • Round ${{unitRound}${/5</div></div>
+      </section>
 
-      <div className="mt-3 rounded-xl border border-shafx-border bg-shafx-bg p-3.5">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-        
+      <section className="mt-3 rounded-xl border border-shafx-border bg-shafx-bg p-3"><div className="flex items-center justify-between gap-3"><span className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">Current status</span><span className="text-[9px] text-shafx-textMuted">Round ${{unitRound}${/5</span></div><p className="mt-1.5 text-[11px] text-shafx-text">${{status}${</p><p className="mt-1 text-[9px] text-shafx-textMuted">Manual Scan = 10 seconds. Run starts the first simulator round in about 1 second, then uses a 3-second round cadence.</p></section>
 
-      <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        <section className="rounded-xl border border-shafx-accent/25 bg-shafx-accent/[0.045] p-3.5">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4 text-shafx-accent" />
-            <div><div className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">Automatic protection</div><div className="text-sm font-semibold">{riskModes[BOT_RISK_MODE].label} simulation mode</div></div>
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-2 text-[10px]">
-            <div className="rounded-lg border border-shafx-border bg-shafx-bg px-2.5 py-2"><span className="text-shafx-textMuted">Balance</span><div className="mt-0.5 font-mono text-xs">${accountBalance.toFixed(2)}</div></div>
-            <div className="rounded-lg border border-shafx-border bg-shafx-bg px-2.5 py-2"><span className="text-shafx-textMuted">Max risk</span><div className="mt-0.5 font-mono text-xs text-shafx-danger">${riskAmount.toFixed(2)}</div></div>
-          </div>
-          <p className="mt-3 text-[9px] leading-4 text-shafx-textMuted">The AI sets the protective Stop Loss and Take Profit from the chosen setup. You control the bot lot size above.</p>
-        </section>
-
-        <section className="rounded-xl border border-shafx-border bg-shafx-bg p-3.5">
-          <div className="flex items-center justify-between gap-3">
-            <div><div className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">Bot cycle</div><div className="mt-1 text-sm font-semibold">3s automatic round</div></div>
-            <Wallet className="h-4 w-4 text-shafx-accent" />
-          </div>
-          <div className="mt-3 rounded-lg border border-shafx-border px-2.5 py-2 text-[10px] text-shafx-textMuted">
-            <span>Allowance</span>
-            <span className="float-right font-mono text-shafx-text">{cycleUnits}{plan.maxDailyCycleUnits === null ? ' / ∞' : ' / ' + plan.maxDailyCycleUnits}</span>
-          </div>
-          <p className="mt-2 text-[9px] leading-4 text-shafx-textMuted">The simulator bot manages its scan cadence automatically. Use Refresh analysis when you want a fresh market read immediately.</p>
-        </section>
-      </div>
-
-      <div className="mt-3 rounded-xl border border-shafx-border bg-shafx-bg p-3">
-        <div className="flex items-center justify-between gap-3"><span className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">Current status</span><span className="text-[9px] text-shafx-textMuted">Round {unitRound}/5</span></div>
-        <p className="mt-1.5 text-[11px] leading-5 text-shafx-text">{status}</p><p className="mt-1 text-[9px] text-shafx-textMuted">Refresh market recalculates all seven timeframes. Run starts the simulator immediately and uses a 3-second round cadence.</p>
-        {lastResult && <div className={lastResult === 'WIN' ? 'mt-2 text-[10px] text-shafx-success' : lastResult === 'LOSS' ? 'mt-2 text-[10px] text-shafx-danger' : 'mt-2 text-[10px] text-shafx-textMuted'}>{lastResult === 'WIN' ? 'Profit → analyze again' : lastResult === 'LOSS' ? 'Loss → re-check strategy' : 'Waiting for a valid setup'}</div>}
-      </div>
-
-      <button type="button" onClick={() => setDetailsOpen((open) => !open)} className="mt-3 flex min-h-12 w-full items-center justify-between rounded-xl border border-shafx-border bg-shafx-bg px-3 text-xs text-shafx-textMuted">
-        <span>Advanced analysis</span>
-        <ChevronDown className={detailsOpen ? 'h-4 w-4 rotate-180 transition-transform' : 'h-4 w-4 transition-transform'} />
-      </button>
-
-      {detailsOpen && <div className="mt-2 space-y-2 rounded-xl border border-shafx-border bg-shafx-bg p-3 text-[10px] text-shafx-textMuted">
-        <div>Learning: {learning.summary}</div>
-        <div>Research agreement: {research.agreement.toFixed(0)}%.</div>
-        <div>Current price: {currentPrice}</div>
-        <div>{riskModes[BOT_RISK_MODE].description}.</div>
-        <div>Multi-timeframe context is used before a simulated order is considered.</div>
-      </div>}
-
-      <div className="mt-3 rounded-xl border border-shafx-warning/15 bg-shafx-warning/[0.035] p-3 text-[9px] leading-4 text-shafx-textMuted">
-        <strong className="text-shafx-warning">Simulator only.</strong> This bot never sends broker orders. It creates SHAFX simulated positions and is not financial advice.
-      </div>
+      <button type="button" onClick={() => setDetailsOpen((open) => !open)} className="mt-3 flex min-h-12 w-full items-center justify-between rounded-xl border border-shafx-border bg-shafx-bg px-3 text-xs text-shafx-textMuted"><span>Advanced analysis</span><ChevronDown className={detailsOpen ? 'h-4 w-4 rotate-180 transition-transform' : 'h-4 w-4'} /></button>
+      {detailsOpen && <div className="mt-2 space-y-2 rounded-xl border border-shafx-border bg-shafx-bg p-3 text-[10px] text-shafx-textMuted"><div>Learning: ${{learning.summary}${</div><div>Research agreement: ${{research.agreement.toFixed(0)}${%.</div><div>Current price: ${{currentPrice}${</div><div>${{riskModes[BOT_RISK_MODE].description}${.</div><div>Multi-timeframe context is used before a simulated order is considered.</div></div>}
+      <div className="mt-3 rounded-xl border border-shafx-warning/15 bg-shafx-warning/[0.035] p-3 text-[9px] text-shafx-textMuted"><strong className="text-shafx-warning">Simulator only.</strong> This bot never sends broker orders. It creates SHAFX simulated positions and is not financial advice.</div>
     </section>
   )
-}
