@@ -72,6 +72,7 @@ export function TradingAgentPanel({
   const [cycleUnits, setCycleUnits] = useState(0)
   const [unitRound, setUnitRound] = useState(0)
   const [pendingUnitCompletion, setPendingUnitCompletion] = useState(false)
+  const [botSessionStarted, setBotSessionStarted] = useState(false)
   const [tradeCloseAt, setTradeCloseAt] = useState<number | null>(null)
   const [tradeSecondsLeft, setTradeSecondsLeft] = useState(0)
   const [scanFrame, setScanFrame] = useState<Timeframe>('M1')
@@ -132,7 +133,7 @@ export function TradingAgentPanel({
   const riskAmount = accountBalance * (riskModes[BOT_RISK_MODE].percent / 100)
   const displayedUnitNumber = unitRound === BOT_CYCLES_PER_UNIT ? Math.max(1, cycleUnits) : Math.min(cycleUnits + 1, plan.maxDailyCycleUnits ?? cycleUnits + 1)
   const bestOpportunityRef = useRef(bestOpportunity)
-  const showBotActivity = autoTradingEnabled || Boolean(botPositionId) || botTrades.length > 0 || lastResult !== null
+  const showBotActivity = botSessionStarted
   const confidenceDisplay = bestOpportunity ? Math.max(50, Math.min(95, bestOpportunity.confidence)) : 0
   const parsedLotSize = Number(lotSize)
   const lotSizeValid = symbolSpec ? Number.isFinite(parsedLotSize) && parsedLotSize >= symbolSpec.minLotSize && parsedLotSize <= symbolSpec.maxLotSize && Math.abs((parsedLotSize / symbolSpec.lotStep) - Math.round(parsedLotSize / symbolSpec.lotStep)) < 1e-8 : false
@@ -171,6 +172,7 @@ export function TradingAgentPanel({
     setBotPositionId(null)
     setUnitRound(0)
     setPendingUnitCompletion(false)
+    setBotSessionStarted(false)
     setTradeCloseAt(null)
     setTradeSecondsLeft(0)
     setLastResult(null)
@@ -313,7 +315,6 @@ export function TradingAgentPanel({
           try {
             await onBotClose?.(order.id)
           } finally {
-            setBotPositionId(null)
             setTradeCloseAt(null)
             setTradeSecondsLeft(0)
 
@@ -389,6 +390,7 @@ export function TradingAgentPanel({
     }
     if (analysisTimer.current) window.clearTimeout(analysisTimer.current)
     setPendingUnitCompletion(false)
+    setBotSessionStarted(true)
     setLastResult(null)
     setScanComplete(false)
     setAutoTradingEnabled(true)
@@ -400,6 +402,18 @@ export function TradingAgentPanel({
       setPhase('RUNNING')
       setStatus('BOT RUNNING • first simulated trade in about 1 second.')
     }, BOT_START_DELAY_MS)
+  }
+
+  const continueNextUnit = (): void => {
+    if (cycleUnits >= (plan.maxDailyCycleUnits ?? Number.MAX_SAFE_INTEGER)) {
+      setStatus('Daily bot units are exhausted.')
+      return
+    }
+    setUnitRound(0)
+    setPendingUnitCompletion(false)
+    setBotSessionStarted(true)
+    setLastResult(null)
+    startAutomaticTrading()
   }
 
   const stopAutomaticTrading = (): void => {
@@ -465,7 +479,7 @@ export function TradingAgentPanel({
         <button
           type="button"
           disabled={!symbolSpec || phase === 'ANALYZING'}
-          onClick={autoTradingEnabled ? stopAutomaticTrading : startAutomaticTrading}
+          onClick={autoTradingEnabled ? stopAutomaticTrading : pendingUnitCompletion ? continueNextUnit : startAutomaticTrading}
           className={autoTradingEnabled ? 'mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-shafx-danger/30 bg-shafx-danger/10 px-3 text-[10px] font-semibold text-shafx-danger active:bg-shafx-danger/20 disabled:opacity-40' : 'mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-shafx-accent px-3 text-[10px] font-semibold text-white active:opacity-90 disabled:opacity-40'}
         >
           {autoTradingEnabled ? <Square className="h-3.5 w-3.5 fill-current" /> : <Play className="h-3.5 w-3.5 fill-current" />}
@@ -621,7 +635,7 @@ export function TradingAgentPanel({
       </div>
 
       <div className="mt-3 rounded-xl border border-shafx-border bg-shafx-bg p-3">
-        <div className="flex items-center justify-between gap-3"><span className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">Current status</span><span className="text-[9px] text-shafx-textMuted">Scans {cycles}</span></div>
+        <div className="flex items-center justify-between gap-3"><span className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">Current status</span><span className="text-[9px] text-shafx-textMuted">Round {unitRound}/5</span></div>
         <p className="mt-1.5 text-[11px] leading-5 text-shafx-text">{status}</p><p className="mt-1 text-[9px] text-shafx-textMuted">Refresh market recalculates all seven timeframes. Run starts the simulator immediately and uses a 3-second round cadence.</p>
         {lastResult && <div className={lastResult === 'WIN' ? 'mt-2 text-[10px] text-shafx-success' : lastResult === 'LOSS' ? 'mt-2 text-[10px] text-shafx-danger' : 'mt-2 text-[10px] text-shafx-textMuted'}>{lastResult === 'WIN' ? 'Profit → analyze again' : lastResult === 'LOSS' ? 'Loss → re-check strategy' : 'Waiting for a valid setup'}</div>}
       </div>
