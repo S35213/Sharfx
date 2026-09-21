@@ -438,7 +438,7 @@ const TerminalContent: React.FC = () => {
   const showHistory = mobileTab === 'history'
   const showAccount = mobileTab === 'account'
   const liveControl = <ProviderLiveControl providerId={activeProviderId} connection={activeMarketConnection} symbol={selectedSymbol} timeframe={timeframe} onUpdate={handleLiveUpdate} onActiveChange={handleLiveActiveChange} />
-  const botProps = { symbol: selectedSymbol, timeframe, candles: chartCandles, scanM1Candles: simulatedM1Candles, currentPrice: displayPrice, activePosition, tradeHistory, accountBalance: accountData.balance, accountCurrency: accountData.currency, symbolSpec, conversionRate, botPlan: user?.botPlan ?? 'FREE' as const, onBotOrder: handleBotOrder, onBotClose: handleBotClose, onBotRunningChange: setBotRunning, onReviewSetup: reviewAISetup }
+  const botProps = { symbol: selectedSymbol, timeframe, candles: chartCandles, botOrderIds, scanM1Candles: simulatedM1Candles, currentPrice: displayPrice, activePosition, tradeHistory, accountBalance: accountData.balance, accountCurrency: accountData.currency, symbolSpec, conversionRate, botPlan: user?.botPlan ?? 'FREE' as const, onBotOrder: handleBotOrder, onBotClose: handleBotClose, onBotRunningChange: setBotRunning, onReviewSetup: reviewAISetup }
 
   const openMobileDock = (next: WorkspaceDock): void => {
     setMobileDockOpen((open) => dock === next ? !open : true)
