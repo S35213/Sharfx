@@ -43,9 +43,9 @@ export default async function handler(req, res) {
     const user = await getUser(req, res)
     if (!user) return json(res, 401, { ok: false, error: 'Not signed in' })
 
-    const usageResponse = await rest(`/shafx_bot_usage?user_id=eq.${encodeURIComponent(user.id)}&select=run_id,used_cycle_units,usage_day`)
+    const usageResponse = await rest(`/shafx_bot_usage?user_id=eq.${encodeURIComponent(user.id)}&select=run_id,used_cycle_units,current_unit_round,usage_day`)
     const usageRows = usageResponse.ok ? await usageResponse.json() : []
-    const current = usageRows[0] || { run_id: null, used_cycle_units: 0, usage_day: null }
+    const current = usageRows[0] || { run_id: null, used_cycle_units: 0, current_unit_round: 0, usage_day: null }
     const entitlementResponse = await rest(`/shafx_bot_entitlements?user_id=eq.${encodeURIComponent(user.id)}&select=plan,subscription_status,subscription_ends_at`)
     const entitlementRows = entitlementResponse.ok ? await entitlementResponse.json() : []
     const plan = normalizeEntitlement(entitlementRows[0])
@@ -53,6 +53,7 @@ export default async function handler(req, res) {
     const today = new Date().toISOString().slice(0, 10)
     const isCurrentBotVersion = String(current.run_id || '').startsWith('v2-')
     const usedCycleUnits = current.usage_day === today && isCurrentBotVersion ? Number(current.used_cycle_units) || 0 : 0
+    const currentUnitRound = current.usage_day === today && isCurrentBotVersion ? Number(current.current_unit_round) || 0 : 0
 
     if (req.method === 'GET') {
       return json(res, 200, {
@@ -61,21 +62,21 @@ export default async function handler(req, res) {
         runId: isCurrentBotVersion ? current.run_id : null,
         usedCycleUnits,
         maxCycleUnits: max,
+        currentUnitRound,
         usageDay: today,
       })
     }
 
     const body = typeof req.body === 'object' && req.body ? req.body : {}
     const runId = String(body.runId || '').slice(0, 100)
-    const units = Number(body.units)
-    if (!runId.startsWith('v2-') || !Number.isInteger(units) || units !== 1) return json(res, 400, { ok: false, error: 'Invalid bot unit request.' })
+    if (!runId.startsWith('v3-')) return json(res, 400, { ok: false, error: 'Invalid bot session.' })
 
-    const rpc = await rest('/rpc/consume_shafx_bot_cycle', { method: 'POST', body: JSON.stringify({ p_user_id: user.id, p_run_id: runId, p_units: units }) })
+    const rpc = await rest('/rpc/consume_shafx_bot_round', { method: 'POST', body: JSON.stringify({ p_user_id: user.id, p_run_id: runId }) })
     const rows = await rpc.json().catch(() => [])
-    if (!rpc.ok || !Array.isArray(rows) || !rows[0]) return json(res, 503, { ok: false, error: 'Unable to record bot cycle usage.' })
+    if (!rpc.ok || !Array.isArray(rows) || !rows[0]) return json(res, 503, { ok: false, error: 'Unable to record bot round.' })
     const result = rows[0]
-    if (!result.ok) return json(res, 429, { ok: false, error: `${result.plan} bot daily allowance reached.`, plan: result.plan, usedCycleUnits: result.used_cycle_units, maxCycleUnits: result.max_cycle_units, usageDay: result.usage_day })
-    return json(res, 200, { ok: true, plan: result.plan, runId, usedCycleUnits: result.used_cycle_units, maxCycleUnits: result.max_cycle_units, usageDay: result.usage_day })
+    if (!result.ok) return json(res, 429, { ok: false, error: `${result.plan} bot daily allowance reached.`, plan: result.plan, usedCycleUnits: result.used_cycle_units, maxCycleUnits: result.max_cycle_units, currentUnitRound: result.round_number, completedUnit: false, usageDay: result.usage_day })
+    return json(res, 200, { ok: true, plan: result.plan, runId, usedCycleUnits: result.used_cycle_units, maxCycleUnits: result.max_cycle_units, currentUnitRound: result.round_number, completedUnit: result.completed_unit, usageDay: result.usage_day })
   } catch (error) {
     return json(res, 500, { ok: false, error: error instanceof Error ? error.message : 'Bot usage service failed.' })
   }
