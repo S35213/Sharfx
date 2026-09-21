@@ -38,8 +38,8 @@ const riskModes: Record<RiskMode, { label: string; percent: number; description:
 type Phase = 'READY' | 'ANALYZING' | 'RUNNING'
 const SCAN_TIMEFRAMES: Timeframe[] = ['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1']
 const BOT_CYCLE_SECONDS = 3 as const
-const BOT_RESULT_DELAY_MS = 2500 as const
-const BOT_START_DELAY_MS = 3000 as const
+const BOT_RESULT_DELAY_MS = 1800 as const
+const BOT_START_DELAY_MS = 1000 as const
 const BOT_RISK_MODE: RiskMode = 'SAFE'
 
 export function TradingAgentPanel({
@@ -83,12 +83,12 @@ export function TradingAgentPanel({
   const [bias, setBias] = useState('Neutral')
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [botPositionId, setBotPositionId] = useState<string | null>(null)
-  const botCloseTimer = useRef<number | null>(null)
   const [runId, setRunId] = useState<string | null>(null)
   const processedHistory = useRef(new Set<string>())
   const analysisTimer = useRef<number | null>(null)
   const scanInterval = useRef<number | null>(null)
   const tradeCloseTimer = useRef<number | null>(null)
+  const runInFlightRef = useRef(false)
   const runBotCycleRef = useRef<(() => Promise<void>) | null>(null)
 
   const tradingContext = useMemo(() => {
@@ -132,6 +132,8 @@ export function TradingAgentPanel({
   const riskAmount = accountBalance * (riskModes[BOT_RISK_MODE].percent / 100)
   const displayedUnitNumber = unitRound === BOT_CYCLES_PER_UNIT ? Math.max(1, cycleUnits) : Math.min(cycleUnits + 1, plan.maxDailyCycleUnits ?? cycleUnits + 1)
   const bestOpportunityRef = useRef(bestOpportunity)
+  const showBotActivity = autoTradingEnabled || Boolean(botPositionId) || botTrades.length > 0 || lastResult !== null
+  const confidenceDisplay = bestOpportunity ? Math.max(50, Math.min(95, bestOpportunity.confidence)) : 0
   const parsedLotSize = Number(lotSize)
   const lotSizeValid = symbolSpec ? Number.isFinite(parsedLotSize) && parsedLotSize >= symbolSpec.minLotSize && parsedLotSize <= symbolSpec.maxLotSize && Math.abs((parsedLotSize / symbolSpec.lotStep) - Math.round(parsedLotSize / symbolSpec.lotStep)) < 1e-8 : false
 
@@ -236,53 +238,41 @@ export function TradingAgentPanel({
 
   useEffect(() => {
     runBotCycleRef.current = async (): Promise<void> => {
+      if (runInFlightRef.current) return
+      runInFlightRef.current = true
+
       try {
+        if (!autoTradingEnabled || phase !== 'RUNNING') return
         if (activePosition || botPositionId) {
-          setStatus('Monitoring the current simulated position • waiting for the round to finish')
+          setStatus('MONITORING • waiting for the current simulated round to close')
           return
         }
         if (!symbolSpec || !onBotOrder) {
-          setStatus('Simulation engine is not ready for this market')
+          setStatus('BOT ERROR • simulator order engine is not ready')
           return
         }
         if (!lotSizeValid) {
-          setStatus('Choose a valid lot size before starting the next round')
+          setStatus('BOT ERROR • choose a valid lot size')
           setAutoTradingEnabled(false)
           setPhase('READY')
           return
         }
-
-        const sessionRunId = runId ?? 'v3-' + crypto.randomUUID()
-        const usageResponse = await fetch('/api/bot/usage', {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ runId: sessionRunId }),
-        })
-        const usage = await usageResponse.json().catch(() => ({}))
-        if (!usageResponse.ok || !usage.ok) {
-          setCycleUnits(Number(usage.usedCycleUnits) || cycleUnits)
-          setUnitRound(Number(usage.currentUnitRound) || 0)
-          setStatus(usage.error || 'Daily bot units are exhausted')
+        if (pendingUnitCompletion || (cycleUnits >= (plan.maxDailyCycleUnits ?? Number.MAX_SAFE_INTEGER) && unitRound === 0)) {
           setAutoTradingEnabled(false)
           setPhase('READY')
+          setStatus('UNIT LIMIT REACHED • continue after the current unit is confirmed')
           return
-        }
-
-        setRunId(sessionRunId)
-        setCycleUnits(Number(usage.usedCycleUnits) || 0)
-        setUnitRound(Number(usage.currentUnitRound) || 0)
-        if (usage.completedUnit) {
-          setPendingUnitCompletion(true)
-          setAutoTradingEnabled(false)
-          setPhase('READY')
         }
 
         const scan = activeBotScan
+        const nextRound = unitRound + 1
+        const unitNumber = unitRound === 0 ? Math.min(cycleUnits + 1, plan.maxDailyCycleUnits ?? cycleUnits + 1) : displayedUnitNumber
+
         setScanComplete(true)
+        setLastResult(null)
         setStatus(scan
-          ? 'Opportunity • ' + scan.timeframe + ' • ' + scan.setup.direction + ' • ' + scan.setup.confidence + '%'
-          : 'Scanning M1/M5/M15/M30/H1/H4/D1 for the best simulator opportunity…')
+          ? 'PROPOSAL • ' + scan.setup.direction + ' on ' + scan.timeframe + ' • confidence ' + scan.setup.confidence + '%'
+          : 'PROPOSAL • building a simulator setup from current market structure…')
 
         const result = executeSimulationTrade({
           context: scan
@@ -300,31 +290,81 @@ export function TradingAgentPanel({
         const order = result.order
         if (!order) {
           setLastResult('WAIT')
-          setStatus('WAIT • no setup qualified in this round')
+          setStatus('WAIT • the risk/setup gate did not produce a valid simulated order')
           return
         }
 
         setCycles((value) => value + 1)
+        setUnitRound(nextRound)
         setBotPositionId(order.id)
         setLastResult(null)
         setTradeCloseAt(Date.now() + BOT_RESULT_DELAY_MS)
         setTradeSecondsLeft(BOT_RESULT_DELAY_MS / 1000)
-        setStatus(order.type + ' ' + symbol + ' • Round ' + (usage.currentUnitRound || BOT_CYCLES_PER_UNIT) + '/' + BOT_CYCLES_PER_UNIT + ' • Entry ' + order.entryPrice)
+        setStatus(
+          'BUY/SELL • ' + order.type + ' ' + order.symbol
+          + ' • Unit ' + unitNumber + '/' + (plan.maxDailyCycleUnits ?? '∞')
+          + ' • Round ' + nextRound + '/' + BOT_CYCLES_PER_UNIT
+        )
+
         onBotOrder(order)
 
         if (tradeCloseTimer.current) window.clearTimeout(tradeCloseTimer.current)
-        tradeCloseTimer.current = window.setTimeout(() => {
-          void onBotClose?.(order.id)
+        tradeCloseTimer.current = window.setTimeout(async () => {
+          try {
+            await onBotClose?.(order.id)
+          } finally {
+            setBotPositionId(null)
+            setTradeCloseAt(null)
+            setTradeSecondsLeft(0)
+
+            const sessionRunId = runId ?? 'v3-' + crypto.randomUUID()
+            try {
+              const response = await fetch('/api/bot/usage', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ runId: sessionRunId }),
+              })
+              const data = await response.json().catch(() => ({}))
+              if (response.ok && data.ok) {
+                setRunId(sessionRunId)
+                setCycleUnits(Number(data.usedCycleUnits) || cycleUnits)
+                setUnitRound(Number(data.currentUnitRound) || nextRound)
+                if (data.completedUnit || nextRound >= BOT_CYCLES_PER_UNIT) {
+                  setPendingUnitCompletion(true)
+                  setAutoTradingEnabled(false)
+                  setPhase('READY')
+                  setStatus('UNIT COMPLETE • 5/5 rounds finished • tap Continue next unit')
+                }
+              } else if (nextRound >= BOT_CYCLES_PER_UNIT) {
+                setPendingUnitCompletion(true)
+                setAutoTradingEnabled(false)
+                setPhase('READY')
+                setStatus('UNIT COMPLETE locally • server allowance sync needs another pass')
+              } else {
+                setStatus('RESULT • round closed • server allowance sync pending')
+              }
+            } catch {
+              if (nextRound >= BOT_CYCLES_PER_UNIT) {
+                setPendingUnitCompletion(true)
+                setAutoTradingEnabled(false)
+                setPhase('READY')
+                setStatus('UNIT COMPLETE locally • server allowance sync needs another pass')
+              }
+            }
+          }
         }, BOT_RESULT_DELAY_MS)
-      } catch {
+      } catch (error) {
         setAutoTradingEnabled(false)
         setPhase('READY')
-        setStatus('Unable to run this simulator round. Try again.')
+        setStatus('BOT ERROR • ' + (error instanceof Error ? error.message : 'Unable to open simulator trade'))
+      } finally {
+        runInFlightRef.current = false
       }
     }
 
     return () => { runBotCycleRef.current = null }
-  }, [accountBalance, accountCurrency, activeBotScan, activePosition, bias, botPositionId, conversionRate, cycleUnits, learning, lotSizeValid, multiTimeframe, onBotClose, onBotOrder, parsedLotSize, research, runId, setup, symbol, symbolSpec, tradingContext])
+  }, [accountBalance, accountCurrency, activeBotScan, activePosition, autoTradingEnabled, botPositionId, conversionRate, cycleUnits, displayedUnitNumber, learning, lotSizeValid, multiTimeframe, onBotClose, onBotOrder, parsedLotSize, pendingUnitCompletion, phase, plan.maxDailyCycleUnits, research, runId, setup, symbol, symbolSpec, tradingContext, unitRound])
   useEffect(() => {
     if (phase !== 'RUNNING') return
     const kickoff = window.setTimeout(() => { void runBotCycleRef.current?.() }, BOT_START_DELAY_MS)
@@ -338,7 +378,6 @@ export function TradingAgentPanel({
   useEffect(() => () => {
     if (analysisTimer.current) window.clearTimeout(analysisTimer.current)
     if (scanInterval.current) window.clearInterval(scanInterval.current)
-    if (botCloseTimer.current) window.clearTimeout(botCloseTimer.current)
     onBotRunningChange?.(false)
   }, [onBotRunningChange])
 
@@ -354,11 +393,13 @@ export function TradingAgentPanel({
     setScanComplete(false)
     setAutoTradingEnabled(true)
     setPhase('ANALYZING')
-    setStatus('Preparing the bot • scanning all seven timeframes…')
+    setScanFrame('M1')
+    setScanSeconds(0)
+    setStatus('BOT START • scanning all seven timeframes…')
     analysisTimer.current = window.setTimeout(() => {
       setPhase('RUNNING')
-      setStatus('Bot running • first simulated trade in about 3 seconds.')
-    }, 500)
+      setStatus('BOT RUNNING • first simulated trade in about 1 second.')
+    }, BOT_START_DELAY_MS)
   }
 
   const stopAutomaticTrading = (): void => {
@@ -462,7 +503,9 @@ export function TradingAgentPanel({
             <div className="text-[9px] font-semibold uppercase tracking-[0.2em] text-shafx-success">OPPORTUNITY FOUND</div>
             <div className="mt-1 text-3xl font-semibold">{bestOpportunity.direction}</div>
             <div className="mt-1 text-base font-semibold text-shafx-accent">Found on {activeBotScan?.timeframe ?? timeframe}</div>
-            <div className="mt-2 text-[10px] text-shafx-textMuted">{bestOpportunity.confidence.toFixed(0)}% confidence • Entry {bestOpportunity.entryPrice}</div>
+            <div className="mt-2 text-6xl font-black leading-none tracking-tight text-shafx-accent">{confidenceDisplay}%</div>
+            <div className="mt-1 text-[9px] uppercase tracking-[0.16em] text-shafx-textMuted">AI confidence</div>
+            <div className="mt-2 text-[10px] text-shafx-textMuted">Entry {bestOpportunity.entryPrice}</div>
             <div className="mt-3 grid grid-cols-3 gap-2 text-[9px]">
               <div className="rounded-lg border border-shafx-border bg-shafx-bg p-2"><span className="block text-shafx-textMuted">Entry</span><b className="font-mono">{bestOpportunity.entryPrice}</b></div>
               <div className="rounded-lg border border-shafx-danger/20 bg-shafx-danger/[0.04] p-2"><span className="block text-shafx-textMuted">Stop Loss</span><b className="font-mono text-shafx-danger">{bestOpportunity.stopLoss}</b></div>
@@ -470,7 +513,7 @@ export function TradingAgentPanel({
             </div>
           </div>
         ) : (
-          <p className="mt-2 text-[11px] leading-5 text-shafx-textMuted">Refresh market for a 10-second scan across M1, M5, M15, M30, H1, H4 and D1. The selected chart timeframe never limits the bot.</p>
+          <p className="mt-2 text-[11px] leading-5 text-shafx-textMuted">Every scan recalculates the current simulated market across M1, M5, M15, M30, H1, H4 and D1. The selected chart timeframe never limits the bot.</p>
         )}
         <div className="mt-3 flex items-center gap-2">
           <button
@@ -487,13 +530,14 @@ export function TradingAgentPanel({
         {onReviewSetup && <button type="button" onClick={() => onReviewSetup(bestOpportunity)} className="mt-2 min-h-10 w-full rounded-xl border border-shafx-border bg-shafx-surface px-3 text-[10px] font-semibold text-shafx-textMuted active:bg-shafx-accent/10">Review AI strategy</button>}
       </div>
 
-        <section className="mt-3 rounded-xl border border-shafx-success/20 bg-shafx-success/[0.025] p-3.5">
+  {showBotActivity && (
+      <section className="mt-3 rounded-xl border border-shafx-success/20 bg-shafx-success/[0.025] p-3.5">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <div className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">AI trade activity</div>
-            <div className="mt-1 text-sm font-semibold">{activeBotOrder ? activeBotOrder.type + ' ' + activeBotOrder.symbol + ' is OPEN' : lastResult === 'WIN' ? 'Last round: WIN' : lastResult === 'LOSS' ? 'Last round: LOSS' : 'Waiting for first bot trade'}</div>
+            <div className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">AI BOT RUN • TRADE ACTIVITY</div>
+            <div className="mt-1 text-sm font-semibold">{activeBotOrder ? activeBotOrder.type + ' ' + activeBotOrder.symbol + ' is OPEN' : lastResult === 'WIN' ? 'Last round: WIN' : lastResult === 'LOSS' ? 'Last round: LOSS' : 'Bot is preparing the next trade…'}</div>
           </div>
-          <span className="rounded-full border border-shafx-border px-2.5 py-1 font-mono text-[9px] text-shafx-textMuted">Unit {displayedUnitNumber}/{plan.maxDailyCycleUnits === null ? '∞' : plan.maxDailyCycleUnits} • Round {unitRound}/5</span>
+          <span className="rounded-full border border-shafx-border px-2.5 py-1 font-mono text-[9px] text-shafx-accent bg-shafx-accent/5 border-shafx-accent/30">Unit {displayedUnitNumber}/{plan.maxDailyCycleUnits === null ? '∞' : plan.maxDailyCycleUnits} • Round {unitRound}/5</span>
         </div>
         <div className="mt-3 grid grid-cols-3 gap-2 text-[9px] text-shafx-textMuted">
           <div className="rounded-lg border border-shafx-border bg-shafx-bg px-2 py-2"><span className="block">WIN</span><strong className="mt-0.5 block font-mono text-shafx-success">{wins}</strong></div>
@@ -520,6 +564,8 @@ export function TradingAgentPanel({
           })}
         </div>}
       </section>
+
+      )}
 
       <div className="mt-3 rounded-xl border border-shafx-border bg-shafx-bg p-3.5">
           <div className="flex items-center justify-between gap-3">
@@ -574,7 +620,7 @@ export function TradingAgentPanel({
 
       <div className="mt-3 rounded-xl border border-shafx-border bg-shafx-bg p-3">
         <div className="flex items-center justify-between gap-3"><span className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">Current status</span><span className="text-[9px] text-shafx-textMuted">Scans {cycles}</span></div>
-        <p className="mt-1.5 text-[11px] leading-5 text-shafx-text">{status}</p><p className="mt-1 text-[9px] text-shafx-textMuted">Refresh market performs a 10-second scan across all seven timeframes. Automatic trading runs 3-second rounds.</p>
+        <p className="mt-1.5 text-[11px] leading-5 text-shafx-text">{status}</p><p className="mt-1 text-[9px] text-shafx-textMuted">Refresh market recalculates all seven timeframes. Run starts the simulator immediately and uses a 3-second round cadence.</p>
         {lastResult && <div className={lastResult === 'WIN' ? 'mt-2 text-[10px] text-shafx-success' : lastResult === 'LOSS' ? 'mt-2 text-[10px] text-shafx-danger' : 'mt-2 text-[10px] text-shafx-textMuted'}>{lastResult === 'WIN' ? 'Profit → analyze again' : lastResult === 'LOSS' ? 'Loss → re-check strategy' : 'Waiting for a valid setup'}</div>}
       </div>
 
