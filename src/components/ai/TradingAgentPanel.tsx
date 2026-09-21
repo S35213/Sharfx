@@ -502,7 +502,7 @@ export function TradingAgentPanel({
         </div>}
       </section>
 
-      )
+      )}
 
       <section className="mt-3 rounded-xl border border-shafx-accent/30 bg-shafx-accent/[0.045] p-3.5">
         <div className="flex items-start justify-between gap-3">
