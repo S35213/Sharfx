@@ -19,6 +19,7 @@ import { Watchlist } from './components/watchlist/Watchlist'
 import { MarketAnalysisPanel } from './components/analysis/MarketAnalysis'
 import { AIAssistantPanel } from './components/ai/AIAssistantPanel'
 import { TradingAgentPanel } from './components/ai/TradingAgentPanel'
+import type { SetupCandidate } from './engine/setup/types'
 import { BacktestPanel } from './components/backtest/BacktestPanel'
 import { ReplayPanel } from './components/backtest/ReplayPanel'
 import { PerformancePanel } from './components/performance/PerformancePanel'
@@ -55,6 +56,7 @@ const TerminalContent: React.FC = () => {
   const [liveCandles, setLiveCandles] = useState<OHLCV[]>([])
   const [simulatedCandles, setSimulatedCandles] = useState<OHLCV[]>([])
   const [simulatedM1Candles, setSimulatedM1Candles] = useState<OHLCV[]>([])
+  const [reviewedSetup, setReviewedSetup] = useState<SetupCandidate | null>(null)
   const simulatedPriceRef = useRef(1.08542)
   const simulatedEngineRef = useRef<SimulatorRealtimeMarketEngine | null>(null)
   const simulatedEngineSymbolRef = useRef<string | null>(null)
@@ -325,12 +327,13 @@ const TerminalContent: React.FC = () => {
     connectedAt: new Date().toISOString(),
   } : undefined
 
-  const reviewAISetup = useCallback((): void => {
+  const reviewAISetup = useCallback((nextSetup: SetupCandidate | null = null): void => {
+    setReviewedSetup(nextSetup ?? aiSetup)
     setMobileTab('market')
     setDock('orders')
     setMobileDockOpen(true)
     window.setTimeout(() => document.getElementById('mobile-market-workspace')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60)
-  }, [])
+  }, [aiSetup])
 
   const handleLiveUpdate = useCallback((nextCandles: OHLCV[], price: number, epoch: number): void => { setLiveCandles(nextCandles); setCurrentPrice(price); setMarketTimestamp(Math.floor(epoch / 1000)) }, [])
   const handleLiveActiveChange = useCallback((active: boolean): void => { setLiveMarketActive(active); if (!active) setLiveCandles([]) }, [])
@@ -444,7 +447,7 @@ const TerminalContent: React.FC = () => {
   const dockContent = {
     insights: <div className="space-y-3"><FXMoveMatrix pairs={watchlist} /><MarketAnalysisPanel analysis={marketAnalysis} pricePrecision={symbolSpec.pricePrecision} /><AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={chartCandles} setup={aiSetup} onReviewSetup={reviewAISetup} /></div>,
     liquidity: <LiquidityPanel symbol={selectedSymbol} price={displayPrice} precision={symbolSpec.pricePrecision} pipSize={symbolSpec.pipSize} candles={chartCandles} />,
-    orders: <div className="space-y-3">{brokerMode && activeProviderDescriptor ? <ProviderCapabilityPanel descriptor={activeProviderDescriptor} environment={activeProviderSelection?.environment ?? 'demo'} /> : <OrderPanel key={selectedSymbol + ':' + symbolSpec.pricePrecision + ':' + symbolSpec.lotStep} symbol={selectedSymbol} currentPrice={displayPrice} accountBalance={accountData.balance} accountCurrency={accountData.currency} symbolSpec={symbolSpec} conversionRate={conversionRate} onSubmitOrder={handleOrderSubmit} aiSetup={aiSetup} />}<div className="min-h-[280px]"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} /></div></div>,
+    orders: <div className="space-y-3">{brokerMode && activeProviderDescriptor ? <ProviderCapabilityPanel descriptor={activeProviderDescriptor} environment={activeProviderSelection?.environment ?? 'demo'} /> : <OrderPanel key={selectedSymbol + ':' + symbolSpec.pricePrecision + ':' + symbolSpec.lotStep} symbol={selectedSymbol} currentPrice={displayPrice} accountBalance={accountData.balance} accountCurrency={accountData.currency} symbolSpec={symbolSpec} conversionRate={conversionRate} onSubmitOrder={handleOrderSubmit} aiSetup={reviewedSetup ?? aiSetup} autoApplyAISetup={reviewedSetup !== null} />}<div className="min-h-[280px]"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} /></div></div>,
     agent: <div className="space-y-3"><SimulationPulse key={selectedSymbol} selectedSymbol={selectedSymbol} openPositions={openPositions} tradeHistory={tradeHistory} botOrderIds={botOrderIds} botRunning={botRunning} /><SimulationFlowChart key={selectedSymbol} selectedSymbol={selectedSymbol} openPositions={openPositions} tradeHistory={tradeHistory} /><TradingAgentPanel {...botProps} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /></div>,
     research: <div className="space-y-3"><ReplayPanel candles={candles} replayCount={replayCount || candles.length} onReplayCountChange={setReplayCount} /><BacktestPanel symbol={selectedSymbol} candles={candles} symbolSpec={symbolSpec} initialBalance={accountData.balance} accountCurrency={accountData.currency} conversionRate={conversionRate} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /><TradingJournalPanel tradeHistory={tradeHistory} currency={accountData.currency} /></div>,
   }[dock]
