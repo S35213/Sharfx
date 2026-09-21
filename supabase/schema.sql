@@ -109,8 +109,9 @@ declare
   v_max integer;
   v_day date := (now() at time zone 'UTC')::date;
   v_current_day date;
+  v_run_id text;
 begin
-  if p_units not in (1,2) then raise exception 'invalid cycle units'; end if;
+  if p_units <> 1 or p_run_id not like 'v2-%' then raise exception 'invalid bot unit request'; end if;
   select case
     when e.plan in ('PRO','REGULAR') and e.subscription_status in ('trialing','active') and (e.subscription_ends_at is null or e.subscription_ends_at > now()) then e.plan
     else 'FREE'
@@ -119,8 +120,8 @@ begin
   if v_plan is null then v_plan := 'FREE'; end if;
   v_max := case v_plan when 'PRO' then null when 'REGULAR' then 15 else 5 end;
   insert into public.shafx_bot_usage(user_id, run_id, used_cycle_units, usage_day) values (p_user_id, p_run_id, 0, v_day) on conflict (user_id) do nothing;
-  select u.used_cycle_units, u.usage_day into v_used, v_current_day from public.shafx_bot_usage u where u.user_id = p_user_id for update;
-  if v_current_day is distinct from v_day then
+  select u.used_cycle_units, u.usage_day, u.run_id into v_used, v_current_day, v_run_id from public.shafx_bot_usage u where u.user_id = p_user_id for update;
+  if v_current_day is distinct from v_day or coalesce(v_run_id, '') not like 'v2-%' then
     v_used := 0;
     update public.shafx_bot_usage set usage_day=v_day, run_id=p_run_id, used_cycle_units=0, updated_at=now() where user_id=p_user_id;
   end if;
