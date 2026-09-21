@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertCircle, ArrowDownCircle, ArrowUpCircle, Sparkles } from 'lucide-react'
 import type { RiskCalculationResult, SimulatedOrderDraft, SymbolSpec } from '../../types'
 import type { SetupCandidate } from '../../engine/setup/types'
@@ -47,17 +47,17 @@ export const OrderPanel: React.FC<Props> = ({ symbol, currentPrice, accountBalan
     window.dispatchEvent(new CustomEvent<string>('shafx-lot-size', { detail: lotSize }))
   }, [lotSize])
 
-  useEffect(() => {
-    if (autoApplyAISetup && aiSetup?.status === 'candidate') applyAISetup()
-  }, [autoApplyAISetup, aiSetup, symbolSpec])
-
-  const applyAISetup = (): void => {
+  const applyAISetup = useCallback((): void => {
     if (!aiSetup) return
     setOrderType(aiSetup.direction)
     setEntryPrice(aiSetup.entryPrice.toFixed(symbolSpec.pricePrecision))
     setStopLoss(aiSetup.stopLoss.toFixed(symbolSpec.pricePrecision))
     setTakeProfit(aiSetup.takeProfit.toFixed(symbolSpec.pricePrecision))
-  }
+  }, [aiSetup, symbolSpec.pricePrecision])
+
+  useEffect(() => {
+    if (autoApplyAISetup && aiSetup?.status === 'candidate') applyAISetup()
+  }, [applyAISetup, autoApplyAISetup, aiSetup?.status])
 
   const numEntry = Number(entryPrice)
   const defaultStopDistance = symbolSpec.pipSize * 30
