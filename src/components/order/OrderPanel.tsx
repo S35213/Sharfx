@@ -5,10 +5,10 @@ import type { SetupCandidate } from '../../engine/setup/types'
 import { calculateRisk } from '../../engine/risk/riskCalculator'
 import { formatCurrency, formatPrice } from '../../lib/format'
 
-interface Props { symbol: string; currentPrice: number; accountBalance: number; accountCurrency: string; symbolSpec: SymbolSpec; conversionRate?: number; onSubmitOrder: (draft: SimulatedOrderDraft) => void; aiSetup?: SetupCandidate | null }
+interface Props { symbol: string; currentPrice: number; accountBalance: number; accountCurrency: string; symbolSpec: SymbolSpec; conversionRate?: number; onSubmitOrder: (draft: SimulatedOrderDraft) => void; aiSetup?: SetupCandidate | null; autoApplyAISetup?: boolean }
 const emptyResult: RiskCalculationResult = { isValid: false, riskAmount: 0, stopDistancePips: 0, rewardDistancePips: 0, riskRewardRatio: 0, suggestedLotSize: 0, pipValuePerLot: 0, estimatedLossAtStop: 0 }
 
-export const OrderPanel: React.FC<Props> = ({ symbol, currentPrice, accountBalance, accountCurrency, symbolSpec, conversionRate, onSubmitOrder, aiSetup }) => {
+export const OrderPanel: React.FC<Props> = ({ symbol, currentPrice, accountBalance, accountCurrency, symbolSpec, conversionRate, onSubmitOrder, aiSetup, autoApplyAISetup = false }) => {
   const [orderType, setOrderType] = useState<'BUY' | 'SELL'>('BUY')
   const readStoredLotSize = (): string => typeof window !== 'undefined' ? window.sessionStorage.getItem('shafx-simulator-lot-size') || '0.10' : '0.10'
   const [lotSize, setLotSize] = useState(readStoredLotSize)
@@ -30,7 +30,7 @@ export const OrderPanel: React.FC<Props> = ({ symbol, currentPrice, accountBalan
     setStopLoss('')
     setTakeProfit('')
     setRiskPercent('1.0')
-  }, [currentPrice, symbol, symbolSpec])
+  }, [symbol, symbolSpec])
 
   useEffect(() => {
     const onLotSize = (event: Event): void => {
@@ -46,6 +46,10 @@ export const OrderPanel: React.FC<Props> = ({ symbol, currentPrice, accountBalan
     window.sessionStorage.setItem('shafx-simulator-lot-size', lotSize)
     window.dispatchEvent(new CustomEvent<string>('shafx-lot-size', { detail: lotSize }))
   }, [lotSize])
+
+  useEffect(() => {
+    if (autoApplyAISetup && aiSetup?.status === 'candidate') applyAISetup()
+  }, [autoApplyAISetup, aiSetup, symbolSpec])
 
   const applyAISetup = (): void => {
     if (!aiSetup) return
