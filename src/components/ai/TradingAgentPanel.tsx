@@ -68,7 +68,6 @@ export function TradingAgentPanel({
   const [autoTradingEnabled, setAutoTradingEnabled] = useState(false)
   const [wins, setWins] = useState(0)
   const [losses, setLosses] = useState(0)
-  const [cycles, setCycles] = useState(0)
   const [cycleUnits, setCycleUnits] = useState(0)
   const [unitRound, setUnitRound] = useState(0)
   const [pendingUnitCompletion, setPendingUnitCompletion] = useState(false)
