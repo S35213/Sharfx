@@ -57,6 +57,7 @@ const TerminalContent: React.FC = () => {
   const [simulatedCandles, setSimulatedCandles] = useState<OHLCV[]>([])
   const [simulatedM1Candles, setSimulatedM1Candles] = useState<OHLCV[]>([])
   const [reviewedSetup, setReviewedSetup] = useState<SetupCandidate | null>(null)
+  useEffect(() => { setReviewedSetup(null) }, [selectedSymbol])
   const simulatedPriceRef = useRef(1.08542)
   const simulatedEngineRef = useRef<SimulatorRealtimeMarketEngine | null>(null)
   const simulatedEngineSymbolRef = useRef<string | null>(null)
