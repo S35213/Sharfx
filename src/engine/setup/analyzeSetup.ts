@@ -66,7 +66,9 @@ export const analyzeSetup = (input: SetupEngineInput): SetupResult => {
     if (support < currentPrice && target > currentPrice) {
       const stopBuffer = Math.abs(currentPrice - support) * 0.15
       const stopLoss = support - stopBuffer
-      const score = 55 + (structure.status === 'Intact' ? 15 : 0) + (buyTarget.strength === 'strong' ? 15 : buyTarget.strength === 'moderate' ? 8 : 0) + (supportResistance.nearestSupport !== null ? 10 : 0)
+      const rrHint = Math.min(15, Math.max(0, Math.round((Math.abs(target - currentPrice) / Math.max(Math.abs(currentPrice - support), 1e-9)) * 2)))
+      const distanceQuality = Math.max(0, 10 - Math.round((Math.abs(currentPrice - support) / Math.max(Math.abs(target - currentPrice), 1e-9)) * 10))
+      const score = 50 + (structure.status === 'Intact' ? 12 : 0) + (buyTarget.strength === 'strong' ? 12 : buyTarget.strength === 'moderate' ? 7 : 3) + distanceQuality + rrHint
       const candidate = makeCandidate(
         'BUY',
         currentPrice,
@@ -91,7 +93,9 @@ export const analyzeSetup = (input: SetupEngineInput): SetupResult => {
     if (resistance > currentPrice && target < currentPrice) {
       const stopBuffer = Math.abs(resistance - currentPrice) * 0.15
       const stopLoss = resistance + stopBuffer
-      const score = 55 + (structure.status === 'Intact' ? 15 : 0) + (sellTarget.strength === 'strong' ? 15 : sellTarget.strength === 'moderate' ? 8 : 0) + (supportResistance.nearestResistance !== null ? 10 : 0)
+      const rrHint = Math.min(15, Math.max(0, Math.round((Math.abs(target - currentPrice) / Math.max(Math.abs(resistance - currentPrice), 1e-9)) * 2)))
+      const distanceQuality = Math.max(0, 10 - Math.round((Math.abs(resistance - currentPrice) / Math.max(Math.abs(target - currentPrice), 1e-9)) * 10))
+      const score = 50 + (structure.status === 'Intact' ? 12 : 0) + (sellTarget.strength === 'strong' ? 12 : sellTarget.strength === 'moderate' ? 7 : 3) + distanceQuality + rrHint
       const candidate = makeCandidate(
         'SELL',
         currentPrice,
