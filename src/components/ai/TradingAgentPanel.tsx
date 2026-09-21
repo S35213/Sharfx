@@ -499,3 +499,4 @@ export function TradingAgentPanel({
       <div className="mt-3 rounded-xl border border-shafx-warning/15 bg-shafx-warning/[0.035] p-3 text-[9px] text-shafx-textMuted"><strong className="text-shafx-warning">Simulator only.</strong> This bot never sends broker orders. It creates SHAFX simulated positions and is not financial advice.</div>
     </section>
   )
+}
