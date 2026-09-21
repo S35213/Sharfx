@@ -529,7 +529,10 @@ export function TradingAgentPanel({
         </div>
       </section>
 
->Bot stake</div>
+      <div className="mt-3 rounded-xl border border-shafx-border bg-shafx-bg p-3.5">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">Bot stake</div>
             <div className="mt-1 text-sm font-semibold">Lot size per round</div>
           </div>
           <span className="rounded-lg border border-shafx-border px-2 py-1 font-mono text-[9px] text-shafx-textMuted">5 rounds = 1 unit</span>
@@ -551,10 +554,7 @@ export function TradingAgentPanel({
         <p className="mt-2 text-[9px] leading-4 text-shafx-textMuted">This lot size is used for each simulated bot round. One unit contains 5 rounds; the Free Bot has 5 units per day, so it can execute up to 25 simulated trade rounds per day.</p>
       </div>
 
-      <div className="mt-3 rounded-xl border border-shafx-border bg-shafx-bg p-3.5">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Market read</div>
+      <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Market read</div>
             <div className="mt-1.5 flex flex-wrap items-center gap-2">
               <div className="text-xl font-semibold">{phase === 'ANALYZING' ? 'Analyzing…' : bias}</div>
               <span className="rounded-lg border border-shafx-accent/20 bg-shafx-accent/5 px-2.5 py-1 text-[9px] font-semibold text-shafx-accent">All TFs</span>
