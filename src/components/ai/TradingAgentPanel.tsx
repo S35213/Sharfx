@@ -6,7 +6,7 @@ import { analyzeSetup } from '../../engine/setup'
 import { analyzeSupportResistance } from '../../engine/supportResistance'
 import { buildTradingContext } from '../../engine/ai/context'
 import { analyzeMultiTimeframeBias, buildAgentResearch, executeSimulationTrade, learnFromTrades, useMultiTimeframeCandles } from '../../engine/agent'
-import { BOT_PLANS, cycleUnitsForSeconds, type BotPlan } from '../../engine/agent/botPlans'
+import { BOT_CYCLES_PER_UNIT, BOT_PLANS, type BotPlan } from '../../engine/agent/botPlans'
 import type { OHLCV, SymbolSpec, Timeframe, TradeOrder } from '../../types'
 
 interface Props {
@@ -21,6 +21,7 @@ interface Props {
   symbolSpec?: SymbolSpec | null
   conversionRate?: number
   botPlan?: BotPlan
+  botOrderIds?: string[]
   onBotOrder?: (order: TradeOrder) => void
   onBotClose?: (id: string) => void | Promise<void>
   onBotRunningChange?: (running: boolean) => void
@@ -35,10 +36,10 @@ const riskModes: Record<RiskMode, { label: string; percent: number; description:
   RISK: { label: 'Risk', percent: 1, description: 'Higher simulated risk' },
 }
 type Phase = 'READY' | 'ANALYZING' | 'RUNNING'
-const FAST_SCAN_TIMEFRAMES: Timeframe[] = ['M1', 'M5', 'M15', 'M30']
-const BOT_CYCLE_SECONDS = 5 as const
-const BOT_RESULT_DELAY_MS = 4500 as const
-const BOT_START_DELAY_MS = 3500 as const
+const SCAN_TIMEFRAMES: Timeframe[] = ['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1']
+const BOT_CYCLE_SECONDS = 3 as const
+const BOT_RESULT_DELAY_MS = 2500 as const
+const BOT_START_DELAY_MS = 3000 as const
 const BOT_RISK_MODE: RiskMode = 'SAFE'
 
 export function TradingAgentPanel({
@@ -53,6 +54,7 @@ export function TradingAgentPanel({
   symbolSpec = null,
   conversionRate,
   botPlan = 'FREE',
+  botOrderIds = [],
   onBotOrder,
   onBotClose,
   onBotRunningChange,
@@ -68,6 +70,7 @@ export function TradingAgentPanel({
   const [losses, setLosses] = useState(0)
   const [cycles, setCycles] = useState(0)
   const [cycleUnits, setCycleUnits] = useState(0)
+  const [cyclesThisUnit, setCyclesThisUnit] = useState(0)
   const [scanNonce, setScanNonce] = useState(0)
   const [lastResult, setLastResult] = useState<'WIN' | 'LOSS' | 'WAIT' | null>(null)
   const [status, setStatus] = useState('Ready to scan')
@@ -94,7 +97,7 @@ export function TradingAgentPanel({
   const multiTimeframe = useMemo(() => analyzeMultiTimeframeBias(timeframeFrames), [timeframeFrames])
   const fastScanCandidates = useMemo(() => {
     const qualityWeight: Record<'weak' | 'moderate' | 'strong', number> = { weak: 1, moderate: 2, strong: 3 }
-    return FAST_SCAN_TIMEFRAMES.flatMap((scanTimeframe) => {
+    return SCAN_TIMEFRAMES.flatMap((scanTimeframe) => {
       const frameCandles = timeframeFrames[scanTimeframe] ?? []
       if (frameCandles.length < 5) return []
       const swings = findSwingPoints(frameCandles, 2)
@@ -109,14 +112,17 @@ export function TradingAgentPanel({
       const context = buildTradingContext(symbol, scanTimeframe, frameCandles, structure, supportResistance, liquidity, setupResult)
       return [{ timeframe: scanTimeframe, setup: preferredSetup, context, score: preferredSetup.confidence + qualityWeight[preferredSetup.quality] * 5 }]
     }).sort((a, b) => b.score - a.score)
-  }, [currentPrice, symbol, timeframeFrames])
+  }, [currentPrice, scanNonce, symbol, timeframeFrames])
   const activeBotScan = fastScanCandidates[0] ?? null
+  const botTrades = useMemo(() => tradeHistory.filter((trade) => botOrderIds.includes(trade.id)).sort((a, b) => new Date(b.closeTime ?? b.openTime).getTime() - new Date(a.closeTime ?? a.openTime).getTime()), [botOrderIds, tradeHistory])
+  const activeBotOrder = activePosition && botOrderIds.includes(activePosition.id) ? activePosition : null
 
   const learning = useMemo(() => learnFromTrades(tradeHistory.filter((trade) => trade.status === 'closed').map((trade) => ({ symbol: trade.symbol, direction: trade.type, profit: trade.profit, riskRewardRatio: trade.riskRewardRatio }))), [tradeHistory])
   const research = useMemo(() => buildAgentResearch({ context: tradingContext, learning, multiTimeframe }), [learning, multiTimeframe, tradingContext])
   const setup = tradingContext.setup.preferredSetup
   const bestOpportunity = activeBotScan?.setup ?? setup
   const riskAmount = accountBalance * (riskModes[BOT_RISK_MODE].percent / 100)
+  const displayedUnitNumber = cycleUnits + 1
   const parsedLotSize = Number(lotSize)
   const lotSizeValid = symbolSpec ? Number.isFinite(parsedLotSize) && parsedLotSize >= symbolSpec.minLotSize && parsedLotSize <= symbolSpec.maxLotSize && Math.abs((parsedLotSize / symbolSpec.lotStep) - Math.round(parsedLotSize / symbolSpec.lotStep)) < 1e-8 : false
 
@@ -195,74 +201,108 @@ export function TradingAgentPanel({
 
   useEffect(() => {
     runBotCycleRef.current = async (): Promise<void> => {
-    const units = cycleUnitsForSeconds(BOT_CYCLE_SECONDS)
-    try {
-      const response = await fetch('/api/bot/usage', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ runId: runId ?? crypto.randomUUID(), units }),
-      })
-      const data = await response.json().catch(() => ({}))
-      if (!response.ok || !data.ok) {
+      try {
+        if (cyclesThisUnit === 0) {
+          const usageResponse = await fetch('/api/bot/usage', { credentials: 'same-origin' })
+          const usageData = await usageResponse.json().catch(() => ({}))
+          if (!usageResponse.ok || usageData.ok === false) {
+            setAutoTradingEnabled(false)
+            setPhase('READY')
+            setStatus(usageData.error || 'Unable to verify your bot allowance.')
+            return
+          }
+          setCycleUnits(Number(usageData.usedCycleUnits) || 0)
+          if (usageData.runId) setRunId(String(usageData.runId))
+          if (usageData.maxCycleUnits !== null && Number(usageData.usedCycleUnits) >= Number(usageData.maxCycleUnits)) {
+            setAutoTradingEnabled(false)
+            setPhase('READY')
+            setStatus('Daily bot units are exhausted. Start again after the allowance resets.')
+            return
+          }
+        }
+
+        if (activePosition || botPositionId) {
+          setStatus('Monitoring ' + (activePosition?.type ?? 'simulated') + ' position — waiting for the round to finish')
+          return
+        }
+        if (!symbolSpec || !onBotOrder) {
+          setStatus('Simulation engine is not ready for this market')
+          return
+        }
+        if (!lotSizeValid) {
+          setStatus('Choose a valid bot lot size before starting a round')
+          return
+        }
+
+        const scan = activeBotScan
+        setStatus(scan
+          ? ('Scanning all timeframes • best opportunity ' + scan.timeframe + ' • ' + symbol + '…')
+          : ('Scanning M1/M5/M15/M30/H1/H4/D1 • ' + symbol + '…'))
+
+        const result = executeSimulationTrade({
+          context: scan
+            ? { tradingContext: scan.context, preferredSetup: scan.setup, hasOpenPosition: false, permission: 'AUTONOMOUS_SIMULATION', multiTimeframe, learning, research }
+            : { tradingContext, preferredSetup: setup, hasOpenPosition: false, permission: 'AUTONOMOUS_SIMULATION', multiTimeframe, learning, research },
+          accountBalance,
+          accountCurrency,
+          riskPercent: riskModes[BOT_RISK_MODE].percent,
+          symbolSpec,
+          conversionRate,
+          lotSize: parsedLotSize,
+          allowSimulationFallback: true,
+        })
+
+        const order = result.order
+        if (!order) {
+          setLastResult('WAIT')
+          setStatus(bias + ': ' + result.decision.rationale)
+          return
+        }
+
+        const completedRound = cyclesThisUnit + 1
+        const unitNumber = cycleUnits + 1
+        setCycles((value) => value + 1)
+        setCyclesThisUnit(completedRound)
+        setBotPositionId(order.id)
+        setLastResult(null)
+        setStatus(order.type + ' ' + symbol + ' simulated at ' + order.entryPrice + ' • Round ' + completedRound + '/' + BOT_CYCLES_PER_UNIT + ' of Unit ' + unitNumber + '/' + (plan.maxDailyCycleUnits ?? '∞'))
+
+        onBotOrder(order)
+
+        if (botCloseTimer.current) window.clearTimeout(botCloseTimer.current)
+        botCloseTimer.current = window.setTimeout(() => {
+          void onBotClose?.(order.id)
+        }, BOT_RESULT_DELAY_MS)
+
+        if (completedRound === BOT_CYCLES_PER_UNIT) {
+          const v2RunId = runId ?? 'v2-' + crypto.randomUUID()
+          const usageResponse = await fetch('/api/bot/usage', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ runId: v2RunId, units: 1 }),
+          })
+          const usageData = await usageResponse.json().catch(() => ({}))
+          if (!usageResponse.ok || !usageData.ok) {
+            setAutoTradingEnabled(false)
+            setPhase('READY')
+            setStatus(usageData.error || 'Unable to record the completed bot unit.')
+            return
+          }
+          setRunId(v2RunId)
+          setCycleUnits(Number(usageData.usedCycleUnits) || unitNumber)
+          setCyclesThisUnit(0)
+          setStatus('Unit ' + unitNumber + ' completed • 5/5 rounds finished • starting the next unit automatically')
+        }
+      } catch {
         setAutoTradingEnabled(false)
         setPhase('READY')
-        setCycleUnits((previous) => Number(data.usedCycleUnits) || previous)
-        setStatus(data.error || 'Bot daily allowance reached.')
-        return
+        setStatus('Unable to run the simulated bot round. Try again.')
       }
-      if (!runId && data.runId) setRunId(data.runId)
-      setCycleUnits(Number(data.usedCycleUnits) || 0)
-      setCycles((value) => value + 1)
-      if (activePosition || botPositionId) {
-        setStatus('Monitoring ' + (activePosition?.type ?? 'simulated') + ' position — waiting for its stop or target')
-        return
-      }
-      if (!symbolSpec || !onBotOrder) {
-        setStatus('Simulation engine is not ready for this market')
-        return
-      }
-      if (!lotSizeValid) {
-        setStatus('Choose a valid bot lot size before starting a cycle')
-        return
-      }
-      const scan = activeBotScan
-      setStatus(scan ? ('Scanning ' + scan.timeframe + ' • ' + symbol + '…') : ('Scanning M1/M5/M15/M30 • ' + symbol + '…'))
-      const result = executeSimulationTrade({
-        context: scan
-          ? { tradingContext: scan.context, preferredSetup: scan.setup, hasOpenPosition: false, permission: 'AUTONOMOUS_SIMULATION', multiTimeframe, learning, research }
-          : { tradingContext, preferredSetup: setup, hasOpenPosition: false, permission: 'AUTONOMOUS_SIMULATION', multiTimeframe, learning, research },
-        accountBalance,
-        accountCurrency,
-        riskPercent: riskModes[BOT_RISK_MODE].percent,
-        symbolSpec,
-        conversionRate,
-        lotSize: parsedLotSize,
-        allowSimulationFallback: true,
-      })
-      const order = result.order
-      if (!order) {
-        setLastResult('WAIT')
-        setStatus(bias + ': ' + result.decision.rationale)
-        return
-      }
-      setBotPositionId(order.id)
-      setLastResult(null)
-      setStatus(order.type + ' ' + symbol + ' simulated at ' + order.entryPrice + ' — cycle will resolve within 5 seconds')
-      onBotOrder(order)
-      if (botCloseTimer.current) window.clearTimeout(botCloseTimer.current)
-      botCloseTimer.current = window.setTimeout(() => {
-        void onBotClose?.(order.id)
-      }, BOT_RESULT_DELAY_MS)
-    } catch {
-      setAutoTradingEnabled(false)
-      setPhase('READY')
-      setStatus('Unable to verify bot cycle allowance. Try again.')
-    }
     }
 
     return () => { runBotCycleRef.current = null }
-  }, [accountBalance, accountCurrency, activeBotScan, activePosition, bias, botPositionId, conversionRate, learning, losses, lotSizeValid, multiTimeframe, onBotClose, onBotOrder, parsedLotSize, research, runId, setup, symbol, symbolSpec, tradingContext])
+  }, [accountBalance, accountCurrency, activeBotScan, activePosition, bias, botPositionId, conversionRate, cyclesThisUnit, cycleUnits, learning, lotSizeValid, multiTimeframe, onBotClose, onBotOrder, parsedLotSize, plan.maxDailyCycleUnits, research, runId, setup, symbol, symbolSpec, tradingContext])
 
   useEffect(() => {
     if (phase !== 'RUNNING') return
@@ -290,7 +330,7 @@ export function TradingAgentPanel({
     setStatus('Starting automatic trading for ' + symbol + '…')
     analysisTimer.current = window.setTimeout(() => {
       setPhase('RUNNING')
-      setStatus('Automatic trading is ON. Scanning M1, M5, M15 and M30 for ' + symbol + '… first simulated trade in about 3.5 seconds.')
+      setStatus('Automatic trading is ON. Scanning M1, M5, M15, M30, H1, H4 and D1 for ' + symbol + '… first simulated trade in about 3 seconds.')
     }, 650)
   }
 
@@ -306,7 +346,7 @@ export function TradingAgentPanel({
     setLastResult(null)
     setScanNonce((value) => value + 1)
     setPhase('ANALYZING')
-    setStatus(activePosition ? 'Refreshing market structure, liquidity and setup while monitoring the existing simulated position.' : 'Refreshing M1/M5/M15/M30 market structure, liquidity and setup…')
+    setStatus(activePosition ? 'Refreshing all timeframe structure, liquidity and setup while monitoring the existing simulated position.' : 'Refreshing M1/M5/M15/M30/H1/H4/D1 for the best opportunity…')
     analysisTimer.current = window.setTimeout(() => {
       setPhase('READY')
       setStatus('Analysis refreshed. Start automatic trading when you want the bot to place simulated trades.')
@@ -388,7 +428,7 @@ export function TradingAgentPanel({
             <div className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">AI trade activity</div>
             <div className="mt-1 text-sm font-semibold">{activeBotOrder ? activeBotOrder.type + ' ' + activeBotOrder.symbol + ' is OPEN' : lastResult === 'WIN' ? 'Last round: WIN' : lastResult === 'LOSS' ? 'Last round: LOSS' : 'Waiting for first bot trade'}</div>
           </div>
-          <span className="rounded-full border border-shafx-border px-2.5 py-1 font-mono text-[9px] text-shafx-textMuted">Unit {displayedUnitNumber}/{plan.maxDailyCycleUnits === null ? '∞' : plan.maxDailyCycleUnits} • Round {cyclesThisUnit}/5</span>
+          <span className="rounded-full border border-shafx-border px-2.5 py-1 font-mono text-[9px] text-shafx-textMuted">Unit {displayedUnitNumber}/{plan.maxDailyCycleUnits === null ? '∞' : plan.maxDailyCycleUnits} • Unit {displayedUnitNumber}/{plan.maxDailyCycleUnits === null ? '∞' : plan.maxDailyCycleUnits} • Round {cyclesThisUnit}/5</span>
         </div>
         <div className="mt-3 grid grid-cols-3 gap-2 text-[9px] text-shafx-textMuted">
           <div className="rounded-lg border border-shafx-border bg-shafx-bg px-2 py-2"><span className="block">WIN</span><strong className="mt-0.5 block font-mono text-shafx-success">{wins}</strong></div>
@@ -432,7 +472,7 @@ export function TradingAgentPanel({
               setLotSize(String(next))
             }} className="min-h-11 min-w-11 rounded-xl border border-shafx-border bg-shafx-surface text-base font-semibold">+</button>
           </div>
-          <p className="mt-2 text-[9px] leading-4 text-shafx-textMuted">This lot size is used for each simulated bot round. The Free Bot has 5 units per day. Each unit contains 5 rounds, so the Free Bot can execute up to 25 simulated trade rounds per day.</p>
+          <p className="mt-2 text-[9px] leading-4 text-shafx-textMuted">This lot size is used for each simulated bot round. One unit contains 5 rounds; the Free Bot has 5 units per day, so it can execute up to 25 simulated trade rounds per day.</p>
         </div>
 
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
