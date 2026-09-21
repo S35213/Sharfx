@@ -364,7 +364,7 @@ export function TradingAgentPanel({
     }
 
     return () => { runBotCycleRef.current = null }
-  }, [accountBalance, accountCurrency, activeBotScan, activePosition, autoTradingEnabled, botPositionId, conversionRate, cycleUnits, displayedUnitNumber, learning, lotSizeValid, multiTimeframe, onBotClose, onBotOrder, parsedLotSize, pendingUnitCompletion, phase, plan.maxDailyCycleUnits, research, runId, setup, symbol, symbolSpec, tradingContext, unitRound])
+  }, [accountBalance, accountCurrency, activeBotOrder, activeBotScan, activePosition, autoTradingEnabled, botPositionId, conversionRate, cycleUnits, displayedUnitNumber, learning, lotSizeValid, multiTimeframe, onBotClose, onBotOrder, parsedLotSize, pendingUnitCompletion, phase, plan.maxDailyCycleUnits, research, runId, setup, symbol, symbolSpec, tradingContext, unitRound])
   useEffect(() => {
     if (phase !== 'RUNNING') return
 
