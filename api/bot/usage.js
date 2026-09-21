@@ -51,7 +51,7 @@ export default async function handler(req, res) {
     const plan = normalizeEntitlement(entitlementRows[0])
     const max = policy[plan].max
     const today = new Date().toISOString().slice(0, 10)
-    const isCurrentBotVersion = String(current.run_id || '').startsWith('v2-')
+    const isCurrentBotVersion = String(current.run_id || '').startsWith('v3-')
     const usedCycleUnits = current.usage_day === today && isCurrentBotVersion ? Number(current.used_cycle_units) || 0 : 0
     const currentUnitRound = current.usage_day === today && isCurrentBotVersion ? Number(current.current_unit_round) || 0 : 0
 
