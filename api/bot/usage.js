@@ -51,13 +51,14 @@ export default async function handler(req, res) {
     const plan = normalizeEntitlement(entitlementRows[0])
     const max = policy[plan].max
     const today = new Date().toISOString().slice(0, 10)
-    const usedCycleUnits = current.usage_day === today ? Number(current.used_cycle_units) || 0 : 0
+    const isCurrentBotVersion = String(current.run_id || '').startsWith('v2-')
+    const usedCycleUnits = current.usage_day === today && isCurrentBotVersion ? Number(current.used_cycle_units) || 0 : 0
 
     if (req.method === 'GET') {
       return json(res, 200, {
         ok: true,
         plan,
-        runId: current.run_id,
+        runId: isCurrentBotVersion ? current.run_id : null,
         usedCycleUnits,
         maxCycleUnits: max,
         usageDay: today,
@@ -67,7 +68,7 @@ export default async function handler(req, res) {
     const body = typeof req.body === 'object' && req.body ? req.body : {}
     const runId = String(body.runId || '').slice(0, 100)
     const units = Number(body.units)
-    if (!runId || !Number.isInteger(units) || units < 1 || units > 2) return json(res, 400, { ok: false, error: 'Invalid bot cycle request.' })
+    if (!runId.startsWith('v2-') || !Number.isInteger(units) || units !== 1) return json(res, 400, { ok: false, error: 'Invalid bot unit request.' })
 
     const rpc = await rest('/rpc/consume_shafx_bot_cycle', { method: 'POST', body: JSON.stringify({ p_user_id: user.id, p_run_id: runId, p_units: units }) })
     const rows = await rpc.json().catch(() => [])
