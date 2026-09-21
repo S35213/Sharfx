@@ -24,7 +24,7 @@ interface Props {
   onBotOrder?: (order: TradeOrder) => void
   onBotClose?: (id: string) => void | Promise<void>
   onBotRunningChange?: (running: boolean) => void
-  onReviewSetup?: () => void
+  onReviewSetup?: (setup?: import('../../engine/setup/types').SetupCandidate | null) => void
   scanM1Candles?: OHLCV[]
 }
 
@@ -38,6 +38,7 @@ type Phase = 'READY' | 'ANALYZING' | 'RUNNING'
 const FAST_SCAN_TIMEFRAMES: Timeframe[] = ['M1', 'M5', 'M15', 'M30']
 const BOT_CYCLE_SECONDS = 5 as const
 const BOT_RESULT_DELAY_MS = 4500 as const
+const BOT_START_DELAY_MS = 3500 as const
 const BOT_RISK_MODE: RiskMode = 'SAFE'
 
 export function TradingAgentPanel({
@@ -114,6 +115,7 @@ export function TradingAgentPanel({
   const learning = useMemo(() => learnFromTrades(tradeHistory.filter((trade) => trade.status === 'closed').map((trade) => ({ symbol: trade.symbol, direction: trade.type, profit: trade.profit, riskRewardRatio: trade.riskRewardRatio }))), [tradeHistory])
   const research = useMemo(() => buildAgentResearch({ context: tradingContext, learning, multiTimeframe }), [learning, multiTimeframe, tradingContext])
   const setup = tradingContext.setup.preferredSetup
+  const bestOpportunity = activeBotScan?.setup ?? setup
   const riskAmount = accountBalance * (riskModes[BOT_RISK_MODE].percent / 100)
   const parsedLotSize = Number(lotSize)
   const lotSizeValid = symbolSpec ? Number.isFinite(parsedLotSize) && parsedLotSize >= symbolSpec.minLotSize && parsedLotSize <= symbolSpec.maxLotSize && Math.abs((parsedLotSize / symbolSpec.lotStep) - Math.round(parsedLotSize / symbolSpec.lotStep)) < 1e-8 : false
@@ -212,7 +214,6 @@ export function TradingAgentPanel({
       if (!runId && data.runId) setRunId(data.runId)
       setCycleUnits(Number(data.usedCycleUnits) || 0)
       setCycles((value) => value + 1)
-      if (losses >= 2) return
       if (activePosition || botPositionId) {
         setStatus('Monitoring ' + (activePosition?.type ?? 'simulated') + ' position — waiting for its stop or target')
         return
@@ -265,7 +266,7 @@ export function TradingAgentPanel({
 
   useEffect(() => {
     if (phase !== 'RUNNING') return
-    const kickoff = window.setTimeout(() => { void runBotCycleRef.current?.() }, 250)
+    const kickoff = window.setTimeout(() => { void runBotCycleRef.current?.() }, BOT_START_DELAY_MS)
     const timer = window.setInterval(() => { void runBotCycleRef.current?.() }, BOT_CYCLE_SECONDS * 1000)
     return () => {
       window.clearTimeout(kickoff)
@@ -289,7 +290,7 @@ export function TradingAgentPanel({
     setStatus('Starting automatic trading for ' + symbol + '…')
     analysisTimer.current = window.setTimeout(() => {
       setPhase('RUNNING')
-      setStatus('Automatic trading is ON. The bot will scan M1, M5, M15 and M30 on ' + symbol + ' and place simulated trades when a valid setup qualifies.')
+      setStatus('Automatic trading is ON. Scanning M1, M5, M15 and M30 for ' + symbol + '… first simulated trade in about 3.5 seconds.')
     }, 650)
   }
 
@@ -365,7 +366,7 @@ export function TradingAgentPanel({
           </div>
           <Sparkles className="h-5 w-5 shrink-0 text-shafx-accent" />
         </div>
-        <p className="mt-2 text-[11px] leading-5 text-shafx-textMuted">{setup ? 'Candidate ' + setup.direction + ' around ' + setup.entryPrice + '. ' + setup.rationale.join(' ') : 'No clean setup is available. The bot will wait rather than force a trade.'}</p>
+        <p className="mt-2 text-[11px] leading-5 text-shafx-textMuted">{bestOpportunity ? 'Opportunity found on ' + (activeBotScan?.timeframe ?? timeframe) + ': ' + bestOpportunity.direction + ' • ' + bestOpportunity.confidence.toFixed(0) + '% confidence • entry ' + bestOpportunity.entryPrice + '. ' + bestOpportunity.rationale.join(' ') : 'Scanning M1, M5, M15 and M30 for a qualifying opportunity.'}</p>
         <div className="mt-3 flex items-center gap-2">
           <button
             type="button"
@@ -378,8 +379,33 @@ export function TradingAgentPanel({
           </button>
           {phase === 'RUNNING' && <span className="rounded-xl border border-shafx-success/20 bg-shafx-success/5 px-2.5 py-2 text-[9px] font-semibold text-shafx-success">Auto scan ON</span>}
         </div>
-        {onReviewSetup && <button type="button" onClick={onReviewSetup} className="mt-2 min-h-10 w-full rounded-xl border border-shafx-border bg-shafx-surface px-3 text-[10px] font-semibold text-shafx-textMuted active:bg-shafx-accent/10">Review setup in Market</button>}
+        {onReviewSetup && <button type="button" onClick={() => onReviewSetup(bestOpportunity)} className="mt-2 min-h-10 w-full rounded-xl border border-shafx-border bg-shafx-surface px-3 text-[10px] font-semibold text-shafx-textMuted active:bg-shafx-accent/10">Review setup in Market</button>}
       </div>
+
+        <div className="mt-3 rounded-xl border border-shafx-border bg-shafx-bg p-3.5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">Bot stake</div>
+              <div className="mt-1 text-sm font-semibold">Lot size per round</div>
+            </div>
+            <span className="rounded-lg border border-shafx-border px-2 py-1 font-mono text-[9px] text-shafx-textMuted">1 round = 1 unit</span>
+          </div>
+          <div className="mt-3 flex items-center gap-2">
+            <button type="button" onClick={() => {
+              const next = Math.max(symbolSpec?.minLotSize ?? 0.01, Number((parsedLotSize - (symbolSpec?.lotStep ?? 0.01)).toFixed(4)))
+              setLotSize(String(next))
+            }} className="min-h-11 min-w-11 rounded-xl border border-shafx-border bg-shafx-surface text-base font-semibold">−</button>
+            <label className="flex-1">
+              <span className="sr-only">Bot lot size</span>
+              <input type="number" inputMode="decimal" step={symbolSpec?.lotStep ?? 0.01} min={symbolSpec?.minLotSize ?? 0.01} max={symbolSpec?.maxLotSize ?? 100} value={lotSize} onChange={(event) => setLotSize(event.target.value)} className="min-h-11 w-full rounded-xl border border-shafx-border bg-shafx-surface px-3 text-center font-mono text-sm focus:border-shafx-accent focus:outline-none" aria-label="Bot lot size" />
+            </label>
+            <button type="button" onClick={() => {
+              const next = Math.min(symbolSpec?.maxLotSize ?? 100, Number((parsedLotSize + (symbolSpec?.lotStep ?? 0.01)).toFixed(4)))
+              setLotSize(String(next))
+            }} className="min-h-11 min-w-11 rounded-xl border border-shafx-border bg-shafx-surface text-base font-semibold">+</button>
+          </div>
+          <p className="mt-2 text-[9px] leading-4 text-shafx-textMuted">This lot size is used for each simulated bot round. The Free Bot has 5 units per day, so it can execute up to 5 rounds.</p>
+        </div>
 
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <section className="rounded-xl border border-shafx-accent/25 bg-shafx-accent/[0.045] p-3.5">
