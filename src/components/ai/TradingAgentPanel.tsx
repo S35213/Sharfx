@@ -467,6 +467,43 @@ export function TradingAgentPanel({
         </span>
       </header>
 
+  {showBotActivity && (
+      <section className="mt-3 rounded-xl border border-shafx-success/20 bg-shafx-success/[0.025] p-3.5">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">AI BOT RUN • TRADE ACTIVITY</div>
+            <div className="mt-1 text-sm font-semibold">{activeBotOrder ? activeBotOrder.type + ' ' + activeBotOrder.symbol + ' is OPEN' : lastResult === 'WIN' ? 'Last round: WIN' : lastResult === 'LOSS' ? 'Last round: LOSS' : 'Bot is preparing the next trade…'}</div>
+          </div>
+          <span className="rounded-full border border-shafx-border px-2.5 py-1 font-mono text-[9px] text-shafx-accent bg-shafx-accent/5 border-shafx-accent/30">Unit {displayedUnitNumber}/{plan.maxDailyCycleUnits === null ? '∞' : plan.maxDailyCycleUnits} • Round {unitRound}/5</span>
+        </div>
+        <div className="mt-3 grid grid-cols-3 gap-2 text-[9px] text-shafx-textMuted">
+          <div className="rounded-lg border border-shafx-border bg-shafx-bg px-2 py-2"><span className="block">WIN</span><strong className="mt-0.5 block font-mono text-shafx-success">{wins}</strong></div>
+          <div className="rounded-lg border border-shafx-border bg-shafx-bg px-2 py-2"><span className="block">LOSS</span><strong className="mt-0.5 block font-mono text-shafx-danger">{losses}</strong></div>
+          <div className="rounded-lg border border-shafx-border bg-shafx-bg px-2 py-2"><span className="block">Daily units</span><strong className="mt-0.5 block font-mono text-shafx-text">{cycleUnits}/{plan.maxDailyCycleUnits === null ? '∞' : plan.maxDailyCycleUnits}</strong></div>
+        </div>
+        {activeBotOrder && <div className="mt-3 rounded-xl border border-shafx-success/30 bg-shafx-success/5 p-3">
+          <div className="flex items-center justify-between gap-2"><span className={activeBotOrder.type === 'BUY' ? 'text-lg font-bold text-shafx-success' : 'text-lg font-bold text-shafx-danger'}>{activeBotOrder.type} {activeBotOrder.lotSize.toFixed(2)} LOT</span><span className="font-mono text-sm">{tradeSecondsLeft.toFixed(1)}s</span></div>
+          <div className="mt-2 grid grid-cols-3 gap-2 text-[9px]">
+            <div className="rounded-lg border border-shafx-border bg-shafx-bg p-2"><span className="block text-shafx-textMuted">Entry</span><b className="font-mono">{activeBotOrder.entryPrice}</b></div>
+            <div className="rounded-lg border border-shafx-danger/20 bg-shafx-danger/[0.04] p-2"><span className="block text-shafx-textMuted">Stop Loss</span><b className="font-mono text-shafx-danger">{activeBotOrder.stopLoss}</b></div>
+            <div className="rounded-lg border border-shafx-success/20 bg-shafx-success/[0.04] p-2"><span className="block text-shafx-textMuted">Take Profit</span><b className="font-mono text-shafx-success">{activeBotOrder.takeProfit}</b></div>
+          </div>
+          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-shafx-border"><div className="h-full rounded-full bg-shafx-success" style={{ width: Math.max(0, Math.min(100, ((2500 - tradeSecondsLeft * 1000) / 2500) * 100)) + '%' }} /></div>
+          <div className="mt-2 text-[9px] text-shafx-textMuted">AI simulation is running this {activeBotOrder.type} trade. The round closes automatically, then the next round starts.</div>
+        </div>}
+        {botTrades.length > 0 && <div className="mt-3 space-y-1.5">
+          {botTrades.slice(0, 5).map((trade) => {
+            const profit = trade.profit ?? 0
+            return <div key={trade.id} className="flex items-center justify-between gap-2 rounded-lg border border-shafx-border bg-shafx-bg px-2.5 py-2 text-[9px]">
+              <span className={trade.type === 'BUY' ? 'font-semibold text-shafx-success' : 'font-semibold text-shafx-danger'}>{trade.type} {trade.symbol} • {trade.lotSize.toFixed(2)} lots</span>
+              <span className={profit >= 0 ? 'font-mono text-shafx-success' : 'font-mono text-shafx-danger'}>{profit >= 0 ? '+' : ''}{profit.toFixed(2)} {accountCurrency}</span>
+            </div>
+          })}
+        </div>}
+      </section>
+
+      )
+
       <section className="mt-3 rounded-xl border border-shafx-accent/30 bg-shafx-accent/[0.045] p-3.5">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -569,42 +606,7 @@ export function TradingAgentPanel({
         {onReviewSetup && <button type="button" onClick={() => onReviewSetup(bestOpportunity)} className="mt-2 min-h-10 w-full rounded-xl border border-shafx-border bg-shafx-surface px-3 text-[10px] font-semibold text-shafx-textMuted active:bg-shafx-accent/10">Review AI strategy</button>}
       </div>
 
-  {showBotActivity && (
-      <section className="mt-3 rounded-xl border border-shafx-success/20 bg-shafx-success/[0.025] p-3.5">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <div className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">AI BOT RUN • TRADE ACTIVITY</div>
-            <div className="mt-1 text-sm font-semibold">{activeBotOrder ? activeBotOrder.type + ' ' + activeBotOrder.symbol + ' is OPEN' : lastResult === 'WIN' ? 'Last round: WIN' : lastResult === 'LOSS' ? 'Last round: LOSS' : 'Bot is preparing the next trade…'}</div>
-          </div>
-          <span className="rounded-full border border-shafx-border px-2.5 py-1 font-mono text-[9px] text-shafx-accent bg-shafx-accent/5 border-shafx-accent/30">Unit {displayedUnitNumber}/{plan.maxDailyCycleUnits === null ? '∞' : plan.maxDailyCycleUnits} • Round {unitRound}/5</span>
-        </div>
-        <div className="mt-3 grid grid-cols-3 gap-2 text-[9px] text-shafx-textMuted">
-          <div className="rounded-lg border border-shafx-border bg-shafx-bg px-2 py-2"><span className="block">WIN</span><strong className="mt-0.5 block font-mono text-shafx-success">{wins}</strong></div>
-          <div className="rounded-lg border border-shafx-border bg-shafx-bg px-2 py-2"><span className="block">LOSS</span><strong className="mt-0.5 block font-mono text-shafx-danger">{losses}</strong></div>
-          <div className="rounded-lg border border-shafx-border bg-shafx-bg px-2 py-2"><span className="block">Daily units</span><strong className="mt-0.5 block font-mono text-shafx-text">{cycleUnits}/{plan.maxDailyCycleUnits === null ? '∞' : plan.maxDailyCycleUnits}</strong></div>
-        </div>
-        {activeBotOrder && <div className="mt-3 rounded-xl border border-shafx-success/30 bg-shafx-success/5 p-3">
-          <div className="flex items-center justify-between gap-2"><span className={activeBotOrder.type === 'BUY' ? 'text-lg font-bold text-shafx-success' : 'text-lg font-bold text-shafx-danger'}>{activeBotOrder.type} {activeBotOrder.lotSize.toFixed(2)} LOT</span><span className="font-mono text-sm">{tradeSecondsLeft.toFixed(1)}s</span></div>
-          <div className="mt-2 grid grid-cols-3 gap-2 text-[9px]">
-            <div className="rounded-lg border border-shafx-border bg-shafx-bg p-2"><span className="block text-shafx-textMuted">Entry</span><b className="font-mono">{activeBotOrder.entryPrice}</b></div>
-            <div className="rounded-lg border border-shafx-danger/20 bg-shafx-danger/[0.04] p-2"><span className="block text-shafx-textMuted">Stop Loss</span><b className="font-mono text-shafx-danger">{activeBotOrder.stopLoss}</b></div>
-            <div className="rounded-lg border border-shafx-success/20 bg-shafx-success/[0.04] p-2"><span className="block text-shafx-textMuted">Take Profit</span><b className="font-mono text-shafx-success">{activeBotOrder.takeProfit}</b></div>
-          </div>
-          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-shafx-border"><div className="h-full rounded-full bg-shafx-success" style={{ width: Math.max(0, Math.min(100, ((2500 - tradeSecondsLeft * 1000) / 2500) * 100)) + '%' }} /></div>
-          <div className="mt-2 text-[9px] text-shafx-textMuted">AI simulation is running this {activeBotOrder.type} trade. The round closes automatically, then the next round starts.</div>
-        </div>}
-        {botTrades.length > 0 && <div className="mt-3 space-y-1.5">
-          {botTrades.slice(0, 5).map((trade) => {
-            const profit = trade.profit ?? 0
-            return <div key={trade.id} className="flex items-center justify-between gap-2 rounded-lg border border-shafx-border bg-shafx-bg px-2.5 py-2 text-[9px]">
-              <span className={trade.type === 'BUY' ? 'font-semibold text-shafx-success' : 'font-semibold text-shafx-danger'}>{trade.type} {trade.symbol} • {trade.lotSize.toFixed(2)} lots</span>
-              <span className={profit >= 0 ? 'font-mono text-shafx-success' : 'font-mono text-shafx-danger'}>{profit >= 0 ? '+' : ''}{profit.toFixed(2)} {accountCurrency}</span>
-            </div>
-          })}
-        </div>}
-      </section>
-
-      )}
+}
 
       <div className="mt-3 rounded-xl border border-shafx-border bg-shafx-bg p-3.5">
           <div className="flex items-center justify-between gap-3">
