@@ -344,7 +344,7 @@ export function TradingAgentPanel({
 
   const startAutomaticTrading = (): void => {
     if (!symbolSpec || autoTradingEnabled) return
-    if (usedUnits >= (plan.maxDailyCycleUnits ?? Number.MAX_SAFE_INTEGER)) {
+    if (cycleUnits >= (plan.maxDailyCycleUnits ?? Number.MAX_SAFE_INTEGER)) {
       setStatus('Daily bot units are exhausted.')
       return
     }
@@ -359,16 +359,6 @@ export function TradingAgentPanel({
       setPhase('RUNNING')
       setStatus('Bot running • first simulated trade in about 3 seconds.')
     }, 500)
-  }
-
-  const continueNextUnit = (): void => {
-    if (usedUnits >= (plan.maxDailyCycleUnits ?? Number.MAX_SAFE_INTEGER)) {
-      setStatus('Daily bot units are exhausted.')
-      return
-    }
-    setUnitRound(0)
-    setPendingUnitCompletion(false)
-    startAutomaticTrading()
   }
 
   const stopAutomaticTrading = (): void => {
