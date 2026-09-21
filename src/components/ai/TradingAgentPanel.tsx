@@ -64,7 +64,7 @@ export function TradingAgentPanel({
   const [lotSize, setLotSize] = useState(readStoredLotSize)
   const [phase, setPhase] = useState<Phase>('READY')
   const [autoTradingEnabled, setAutoTradingEnabled] = useState(false)
-  const [, setWins] = useState(0)
+  const [wins, setWins] = useState(0)
   const [losses, setLosses] = useState(0)
   const [cycles, setCycles] = useState(0)
   const [cycleUnits, setCycleUnits] = useState(0)
@@ -388,7 +388,7 @@ export function TradingAgentPanel({
             <div className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">AI trade activity</div>
             <div className="mt-1 text-sm font-semibold">{activeBotOrder ? activeBotOrder.type + ' ' + activeBotOrder.symbol + ' is OPEN' : lastResult === 'WIN' ? 'Last round: WIN' : lastResult === 'LOSS' ? 'Last round: LOSS' : 'Waiting for first bot trade'}</div>
           </div>
-          <span className="rounded-full border border-shafx-border px-2.5 py-1 font-mono text-[9px] text-shafx-textMuted">Round {cyclesThisUnit}/5</span>
+          <span className="rounded-full border border-shafx-border px-2.5 py-1 font-mono text-[9px] text-shafx-textMuted">Unit {displayedUnitNumber}/{plan.maxDailyCycleUnits === null ? '∞' : plan.maxDailyCycleUnits} • Round {cyclesThisUnit}/5</span>
         </div>
         <div className="mt-3 grid grid-cols-3 gap-2 text-[9px] text-shafx-textMuted">
           <div className="rounded-lg border border-shafx-border bg-shafx-bg px-2 py-2"><span className="block">WIN</span><strong className="mt-0.5 block font-mono text-shafx-success">{wins}</strong></div>
