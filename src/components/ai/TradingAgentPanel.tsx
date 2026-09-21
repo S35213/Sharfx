@@ -492,27 +492,30 @@ export function TradingAgentPanel({
         </div>
       </section>
 
-      <div className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">Bot stake</div>
-              <div className="mt-1 text-sm font-semibold">Lot size per round</div>
-            </div>
-            <span className="rounded-lg border border-shafx-border px-2 py-1 font-mono text-[9px] text-shafx-textMuted">5 rounds = 1 unit</span>
+      <div className="mt-3 rounded-xl border border-shafx-border bg-shafx-bg p-3.5">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">Bot stake</div>
+            <div className="mt-1 text-sm font-semibold">Lot size per round</div>
           </div>
-          <div className="mt-3 flex items-center gap-2">
-            <button type="button" onClick={() => {
-              const next = Math.max(symbolSpec?.minLotSize ?? 0.01, Number((parsedLotSize - (symbolSpec?.lotStep ?? 0.01)).toFixed(4)))
-              setLotSize(String(next))
-            }} className="min-h-11 min-w-11 rounded-xl border border-shafx-border bg-shafx-surface text-base font-semibold">−</button>
-            <label className="flex-1">
-              <span className="sr-only">Bot lot size</span>
-              <input type="number" inputMode="decimal" step={symbolSpec?.lotStep ?? 0.01} min={symbolSpec?.minLotSize ?? 0.01} max={symbolSpec?.maxLotSize ?? 100} value={lotSize} onChange={(event) => setLotSize(event.target.value)} className="min-h-11 w-full rounded-xl border border-shafx-border bg-shafx-surface px-3 text-center font-mono text-sm focus:border-shafx-accent focus:outline-none" aria-label="Bot lot size" />
-            </label>
-            <button type="button" onClick={() => {
-              const next = Math.min(symbolSpec?.maxLotSize ?? 100, Number((parsedLotSize + (symbolSpec?.lotStep ?? 0.01)).toFixed(4)))
-              setLotSize(String(next))
-            }} className="min-h-11 min-w-11 rounded-xl border border-shafx-border bg-shafx-surface text-base font-semibold">+</button>
-          </div>
-          <p className="mt-2 text-[9px] leading-4 text-shafx-textMuted">This lot size is used for each simulated bot round. One unit contains 5 rounds; the Free Bot has 5 units per day, so it can execute up to 25 simulated trade rounds per day.</p>
+          <span className="rounded-lg border border-shafx-border px-2 py-1 font-mono text-[9px] text-shafx-textMuted">5 rounds = 1 unit</span>
         </div>
+        <div className="mt-3 flex items-center gap-2">
+          <button type="button" onClick={() => {
+            const next = Math.max(symbolSpec?.minLotSize ?? 0.01, Number((parsedLotSize - (symbolSpec?.lotStep ?? 0.01)).toFixed(4)))
+            setLotSize(String(next))
+          }} className="min-h-11 min-w-11 rounded-xl border border-shafx-border bg-shafx-surface text-base font-semibold">−</button>
+          <label className="flex-1">
+            <span className="sr-only">Bot lot size</span>
+            <input type="number" inputMode="decimal" step={symbolSpec?.lotStep ?? 0.01} min={symbolSpec?.minLotSize ?? 0.01} max={symbolSpec?.maxLotSize ?? 100} value={lotSize} onChange={(event) => setLotSize(event.target.value)} className="min-h-11 w-full rounded-xl border border-shafx-border bg-shafx-surface px-3 text-center font-mono text-sm focus:border-shafx-accent focus:outline-none" aria-label="Bot lot size" />
+          </label>
+          <button type="button" onClick={() => {
+            const next = Math.min(symbolSpec?.maxLotSize ?? 100, Number((parsedLotSize + (symbolSpec?.lotStep ?? 0.01)).toFixed(4)))
+            setLotSize(String(next))
+          }} className="min-h-11 min-w-11 rounded-xl border border-shafx-border bg-shafx-surface text-base font-semibold">+</button>
+        </div>
+        <p className="mt-2 text-[9px] leading-4 text-shafx-textMuted">This lot size is used for each simulated bot round. One unit contains 5 rounds; the Free Bot has 5 units per day, so it can execute up to 25 simulated trade rounds per day.</p>
+      </div>
 
       <div className="mt-3 rounded-xl border border-shafx-border bg-shafx-bg p-3.5">
         <div className="flex items-start justify-between gap-3">
