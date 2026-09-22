@@ -24,7 +24,7 @@ interface Props {
   botPlan?: BotPlan
   botOrderIds?: string[]
   onBotOrder?: (order: TradeOrder) => void
-  onBotClose?: (id: string) => void | Promise<TradeOrder | null>
+  onBotClose?: (id: string, exitPrice?: number) => void | Promise<TradeOrder | null>
   onBotRunningChange?: (running: boolean) => void
   onReviewSetup?: (setup?: import('../../engine/setup/types').SetupCandidate | null) => void
   scanM1Candles?: OHLCV[]
@@ -447,7 +447,7 @@ export function TradingAgentPanel({
         onBotOrder(order)
 
         if (tradeCloseTimer.current) window.clearTimeout(tradeCloseTimer.current)
-        tradeCloseTimer.current = window.setTimeout(() => {
+        tradeCloseTimer.current = window.setTimeout(async () => {
           const rawExitPrice = currentPriceRef.current
           const m1Frame = timeframeFrames.M1 ?? []
           const latestM1 = m1Frame[m1Frame.length - 1]?.close
@@ -472,25 +472,39 @@ export function TradingAgentPanel({
             }
           })()
 
-          const result = profit >= 0 ? 'WIN' : 'LOSS'
+          // The displayed WIN/LOSS must come from a trade that is actually
+          // closed in the parent order store. Previously the bot announced the
+          // result first and fired close asynchronously, allowing an open order
+          // to remain behind in the Market/Orders panels.
+          const closed = await onBotClose?.(order.id, exitPrice)
+          if (!closed) {
+            setStatus('BOT ERROR • round result was calculated but the simulated position did not close.')
+            setLastResult('WAIT')
+            setBotDisplayedOrder(order)
+            setBotPositionId(order.id)
+            setTradeCloseAt(null)
+            setTradeSecondsLeft(0)
+            return
+          }
+
+          const closedProfit = closed.profit ?? profit
+          const result = closedProfit >= 0 ? 'WIN' : 'LOSS'
           processedHistory.current.add(order.id)
           setBotDisplayedOrder(null)
           setBotPositionId(null)
           setTradeCloseAt(null)
           setTradeSecondsLeft(0)
-          setLastProfit(profit)
+          setLastProfit(closedProfit)
           setLastResult(result)
-          if (profit >= 0) {
+          if (closedProfit >= 0) {
             setWins((value) => value + 1)
-            setTotalWon((value) => Number((value + profit).toFixed(2)))
-            setStatus('BOT WIN • ' + order.type + ' ' + order.symbol + ' • +' + profit.toFixed(2) + ' ' + accountCurrency + ' • next cycle')
+            setTotalWon((value) => Number((value + closedProfit).toFixed(2)))
+            setStatus('BOT WIN • ' + order.type + ' ' + order.symbol + ' • +' + closedProfit.toFixed(2) + ' ' + accountCurrency + ' • next cycle')
           } else {
             setLosses((value) => value + 1)
-            setTotalLost((value) => Number((value + Math.abs(profit)).toFixed(2)))
-            setStatus('BOT LOSS • ' + order.type + ' ' + order.symbol + ' • ' + profit.toFixed(2) + ' ' + accountCurrency + ' • next cycle')
+            setTotalLost((value) => Number((value + Math.abs(closedProfit)).toFixed(2)))
+            setStatus('BOT LOSS • ' + order.type + ' ' + order.symbol + ' • ' + closedProfit.toFixed(2) + ' ' + accountCurrency + ' • next cycle')
           }
-
-          void onBotClose?.(order.id)
 
           const sessionRunId = runId ?? 'v3-' + crypto.randomUUID()
           void fetch('/api/bot/usage', {
@@ -520,7 +534,7 @@ export function TradingAgentPanel({
             setAutoTradingEnabled(false)
             setPhase('READY')
             try { window.localStorage.removeItem(botAutostartKey) } catch { /* storage may be unavailable */ }
-            setStatus((profit >= 0 ? 'BOT WIN • ' : 'BOT LOSS • ') + profit.toFixed(2) + ' ' + accountCurrency + ' • UNIT ' + unitNumber + ' COMPLETE 5/5 • TAP RUN UNIT ' + (cycleUnits + 1))
+            setStatus((closedProfit >= 0 ? 'BOT WIN • ' : 'BOT LOSS • ') + closedProfit.toFixed(2) + ' ' + accountCurrency + ' • UNIT ' + unitNumber + ' COMPLETE 5/5 • TAP RUN UNIT ' + (cycleUnits + 1))
           }
         }, BOT_RESULT_DELAY_MS)
       } catch (error) {
