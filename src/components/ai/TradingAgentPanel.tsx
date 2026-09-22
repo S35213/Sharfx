@@ -572,6 +572,10 @@ export function TradingAgentPanel({
     analysisTimer.current = window.setTimeout(() => {
       setPhase('RUNNING')
       setStatus('BOT RUNNING • 10-second simulated round. Circle fills → WIN/LOSS → next cycle.')
+      if (nextRoundTimer.current) window.clearTimeout(nextRoundTimer.current)
+      nextRoundTimer.current = window.setTimeout(() => {
+        void runBotCycleRef.current?.()
+      }, 75)
     }, BOT_START_DELAY_MS)
   }
 
