@@ -109,6 +109,7 @@ const TerminalContent: React.FC = () => {
     toastId.current += 1
     setToast({ id: toastId.current, text })
   }, [])
+  const dismissToast = useCallback(() => setToast(null), [])
 
   useEffect(() => {
     const onChartSettings = (event: Event): void => {
@@ -666,7 +667,7 @@ const TerminalContent: React.FC = () => {
     </main>
     <MobileNav activeTab={mobileTab} onChange={setMobileTab} />
     <footer className="hidden h-7 items-center justify-between border-t border-shafx-border bg-[#080B10] px-4 text-[9px] text-shafx-textMuted lg:flex"><span>SHAFX • {brokerMode ? `Provider workspace • ${activeProviderName}` : 'Simulator workspace'}</span><span>{replayActive ? 'Visual replay active' : liveMarketActive ? 'Provider market stream active' : 'Demo market data'}</span></footer>
-    <Toast toast={toast} onDismiss={() => setToast(null)} />
+    <Toast toast={toast} onDismiss={dismissToast} />
   </div>
 }
 
