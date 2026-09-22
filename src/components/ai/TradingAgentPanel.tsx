@@ -320,15 +320,6 @@ export function TradingAgentPanel({
     setTradeCloseAt(null)
     setTradeSecondsLeft(0)
     const profit = closed.profit ?? 0
-          setRecentBotRounds((rounds) => [{
-            id: order.id,
-            unit: unitNumber,
-            round: nextRound,
-            direction: order.type,
-            symbol: order.symbol,
-            lotSize: order.lotSize,
-            profit,
-          }, ...rounds].slice(0, 10))
     if (profit >= 0) {
       setWins((v) => v + 1)
       setLastResult('WIN')
@@ -408,7 +399,6 @@ export function TradingAgentPanel({
         const unitNumber = unitRound === 0 ? Math.min(cycleUnits + 1, plan.maxDailyCycleUnits ?? cycleUnits + 1) : displayedUnitNumber
 
         const scan = buildFastBotCandidate(timeframeFrames, symbol, currentPrice)
-        const scan = freshBotCandidates[0] ?? null
         setLastResult(null)
         setStatus(scan
           ? 'BOT ANALYSIS • ' + scan.setup.direction + ' on ' + scan.timeframe + ' • confidence ' + scan.setup.confidence + '%'
@@ -683,7 +673,7 @@ export function TradingAgentPanel({
                 <CircularProgress progress={Math.max(0, Math.min(100, ((BOT_RESULT_DELAY_MS - tradeSecondsLeft * 1000) / BOT_RESULT_DELAY_MS) * 100))} label="run" value={Math.max(0, tradeSecondsLeft).toFixed(1) + 's'} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2"><span className={botDisplayedOrder.type === 'BUY' ? 'text-lg font-bold text-shafx-success' : 'text-lg font-bold text-shafx-danger'}>{botDisplayedOrder.type} {botDisplayedOrder.lotSize.toFixed(2)} LOT</span><span className="font-mono text-[9px] uppercase tracking-[0.14em] text-shafx-textMuted">10s active round</span></div>
-                  <div className="mt-2 grid grid-cols-3 gap-2 text-[9px]"><div className="rounded-lg border border-shafx-border bg-shafx-bg p-2"><span className="block text-shafx-textMuted">Entry</span><b className="font-mono">{botDisplayedOrder.entryPrice.toFixed(symbolSpec.pricePrecision)}</b></div><div className="rounded-lg border border-shafx-danger/20 bg-shafx-danger/[0.04] p-2"><span className="block text-shafx-textMuted">Stop Loss</span><b className="font-mono text-shafx-danger">{botDisplayedOrder.stopLoss?.toFixed(symbolSpec.pricePrecision) ?? '—'}</b></div><div className="rounded-lg border border-shafx-success/20 bg-shafx-success/[0.04] p-2"><span className="block text-shafx-textMuted">Take Profit</span><b className="font-mono text-shafx-success">{botDisplayedOrder.takeProfit?.toFixed(symbolSpec.pricePrecision) ?? '—'}</b></div></div>
+                  <div className="mt-2 grid grid-cols-3 gap-2 text-[9px]"><div className="rounded-lg border border-shafx-border bg-shafx-bg p-2"><span className="block text-shafx-textMuted">Entry</span><b className="font-mono">{botDisplayedOrder.entryPrice.toFixed(symbolSpec?.pricePrecision ?? 5)}</b></div><div className="rounded-lg border border-shafx-danger/20 bg-shafx-danger/[0.04] p-2"><span className="block text-shafx-textMuted">Stop Loss</span><b className="font-mono text-shafx-danger">{botDisplayedOrder.stopLoss?.toFixed(symbolSpec?.pricePrecision ?? 5) ?? '—'}</b></div><div className="rounded-lg border border-shafx-success/20 bg-shafx-success/[0.04] p-2"><span className="block text-shafx-textMuted">Take Profit</span><b className="font-mono text-shafx-success">{botDisplayedOrder.takeProfit?.toFixed(symbolSpec?.pricePrecision ?? 5) ?? '—'}</b></div></div>
                   <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-shafx-border"><div className="h-full rounded-full bg-shafx-accent" style={{width: Math.max(0, Math.min(100, ((BOT_RESULT_DELAY_MS - tradeSecondsLeft * 1000) / BOT_RESULT_DELAY_MS) * 100)) + '%'}} /></div>
                   <p className="mt-2 text-[9px] text-shafx-textMuted">10 seconds active → circle reaches 100% → settle from simulated price movement → WIN/LOSS → next 10-second cycle.</p>
                 </div>
