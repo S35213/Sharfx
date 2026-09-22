@@ -8,5 +8,5 @@ export const formatPercent = (value: number): string => `${value >= 0 ? '+' : ''
 export const formatTimestamp = (value: string): string => {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return '—'
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  return date.toLocaleString()
 }
