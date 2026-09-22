@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { ColorType, createChart, type CandlestickData, type IChartApi, type IPriceLine, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts'
-import { Crosshair, Eraser, Maximize2, Minimize2, Ruler } from 'lucide-react'
+import { Crosshair, Eraser, Maximize2, Minimize2, Ruler, RotateCcw } from 'lucide-react'
 import type { CandleTheme, ChartMode } from '../../app/chartSettings'
-import type { OHLCV, Timeframe } from '../../types'
+import { TIMEFRAMES, type OHLCV, type Timeframe } from '../../types'
 
 export interface ChartAnnotation { id: string; price: number; label: string; color: string; lineWidth?: 1 | 2 | 3 | 4 }
 export type ChartToolMode = 'cursor' | 'crosshair' | 'level' | 'measure' | 'alert'
@@ -24,6 +24,7 @@ interface CandlestickChartProps {
   candleTheme?: CandleTheme
   chartMode?: ChartMode
   marketTimestamp?: number
+  onTimeframeChange?: (timeframe: Timeframe) => void
 }
 
 interface UserLevel { id: string; price: number; label: string; color: string; lineWidth?: 1 | 2 | 3 | 4; dashed?: boolean; armed?: boolean }
@@ -48,7 +49,7 @@ const timeframeMeta = (timeframe?: Timeframe, data: CandlestickData[] = []): { l
   return known[seconds] ?? { label: 'Custom', interval: `${Math.round(seconds / 60)}m` }
 }
 
-export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, symbol, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [], candleTheme = 'mt5', chartMode = 'candles', marketTimestamp }) => {
+export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, symbol, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [], candleTheme = 'mt5', chartMode = 'candles', marketTimestamp, onTimeframeChange }) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ShafxSeries | null>(null)
@@ -72,10 +73,17 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     document.addEventListener('fullscreenchange', onFullscreenChange)
     return () => document.removeEventListener('fullscreenchange', onFullscreenChange)
   }, [])
+  useEffect(() => {
+    const chart = chartRef.current
+    if (!chart) return
+    chart.applyOptions({ handleScroll: { vertTouchDrag: isFullscreen } })
+  }, [isFullscreen])
+
   const renderedFirstTimeRef = useRef<number | null>(null)
   const renderedLastTimeRef = useRef<number | null>(null)
   const [crosshairInfo, setCrosshairInfo] = useState<{ price: number; time: string } | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const verticalScaleDragRef = useRef<{ startY: number; top: number; bottom: number } | null>(null)
   const marketBidLineRef = useRef<IPriceLine | null>(null)
   const marketAskLineRef = useRef<IPriceLine | null>(null)
   const followRealtimeRef = useRef(true)
@@ -405,6 +413,52 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     }
   }
 
+  const resetVerticalScale = (): void => {
+    const series = seriesRef.current
+    if (!series) return
+    series.priceScale().applyOptions({
+      autoScale: true,
+      scaleMargins: { top: 0.08, bottom: 0.08 },
+    })
+  }
+
+  const handlePriceAxisPointerDown = (event: React.PointerEvent<HTMLDivElement>): void => {
+    if (!isFullscreen || event.pointerType === 'mouse' && event.button !== 0) return
+    const series = seriesRef.current
+    const scale = series?.priceScale()
+    if (!series || !scale) return
+    const options = scale.options()
+    const margins = options.scaleMargins
+    verticalScaleDragRef.current = {
+      startY: event.clientY,
+      top: margins.top,
+      bottom: margins.bottom,
+    }
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+    event.preventDefault()
+  }
+
+  const handlePriceAxisPointerMove = (event: React.PointerEvent<HTMLDivElement>): void => {
+    const start = verticalScaleDragRef.current
+    const series = seriesRef.current
+    const element = containerRef.current
+    if (!start || !series || !element) return
+    const delta = (event.clientY - start.startY) / Math.max(1, element.clientHeight)
+    const marginDelta = delta * 0.45
+    const top = Math.min(0.46, Math.max(0.02, start.top + marginDelta))
+    const bottom = Math.min(0.46, Math.max(0.02, start.bottom + marginDelta))
+    series.priceScale().applyOptions({
+      autoScale: false,
+      scaleMargins: { top, bottom },
+    })
+    event.preventDefault()
+  }
+
+  const handlePriceAxisPointerUp = (event: React.PointerEvent<HTMLDivElement>): void => {
+    verticalScaleDragRef.current = null
+    event.currentTarget.releasePointerCapture?.(event.pointerId)
+  }
+
   const toggleFullscreen = async (): Promise<void> => {
     const element = containerRef.current
     if (!element || !document.fullscreenEnabled) return
@@ -468,15 +522,33 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     </div>
     <div className="absolute right-3 top-3 z-20 flex items-center gap-1">
       <div className="pointer-events-none hidden items-center gap-1 rounded-xl border border-shafx-border/70 bg-shafx-surface/85 px-1 py-0.5 shadow-md backdrop-blur sm:flex">
-      <span className="rounded-lg px-1.5 py-0.5 text-[8px] font-bold tabular text-shafx-success"><span className="mr-1 text-[8px] uppercase tracking-[0.12em]">SELL</span>{Number.isFinite(displayBid) ? displayBid.toFixed(quotePrecision) : '—'}</span>
-      <span className="h-3.5 w-px bg-shafx-border" />
-      <span className="rounded-lg px-2 py-1 text-[9px] font-bold tabular text-shafx-danger"><span className="mr-1 text-[8px] uppercase tracking-[0.12em]">BUY</span>{Number.isFinite(displayAsk) ? displayAsk.toFixed(quotePrecision) : '—'}</span>
-      <span className="hidden border-l border-shafx-border pl-2 text-[8px] font-semibold tabular text-shafx-textMuted sm:inline">SP {spreadPips.toFixed(1)}p</span>
+        <span className="rounded-lg px-1.5 py-0.5 text-[8px] font-bold tabular text-shafx-success"><span className="mr-1 text-[8px] uppercase tracking-[0.12em]">SELL</span>{Number.isFinite(displayBid) ? displayBid.toFixed(quotePrecision) : '—'}</span>
+        <span className="h-3.5 w-px bg-shafx-border" />
+        <span className="rounded-lg px-2 py-1 text-[9px] font-bold tabular text-shafx-danger"><span className="mr-1 text-[8px] uppercase tracking-[0.12em]">BUY</span>{Number.isFinite(displayAsk) ? displayAsk.toFixed(quotePrecision) : '—'}</span>
+        <span className="hidden border-l border-shafx-border pl-2 text-[8px] font-semibold tabular text-shafx-textMuted sm:inline">SP {spreadPips.toFixed(1)}p</span>
       </div>
       <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => void toggleFullscreen()} aria-label={isFullscreen ? 'Exit fullscreen chart' : 'Open fullscreen chart'} className="flex h-9 w-9 items-center justify-center rounded-xl border border-shafx-border bg-shafx-surface/92 text-shafx-textMuted shadow-md backdrop-blur hover:border-shafx-accent/40 hover:text-shafx-text">
         {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
       </button>
     </div>
+    {isFullscreen && <div className="absolute inset-x-3 top-14 z-30 flex items-center gap-1 overflow-x-auto rounded-xl border border-shafx-border bg-shafx-surface/94 p-1.5 shadow-xl backdrop-blur">
+      <span className="px-1.5 text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted">TF</span>
+      {TIMEFRAMES.map((tf) => <button key={tf} type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => onTimeframeChange?.(tf)} aria-pressed={timeframe === tf} className={`min-h-9 min-w-11 flex-shrink-0 rounded-lg px-2 text-[9px] font-semibold ${timeframe === tf ? 'bg-shafx-accent text-white' : 'text-shafx-textMuted hover:bg-shafx-bg hover:text-shafx-text'}`}>{tf}</button>)}
+      <div className="ml-auto hidden items-center gap-1 sm:flex">
+        <span className="text-[8px] text-shafx-textMuted">Price axis: drag ↑↓</span>
+        <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={resetVerticalScale} className="flex h-9 items-center gap-1 rounded-lg border border-shafx-border px-2 text-[8px] font-semibold text-shafx-textMuted hover:text-shafx-text"><RotateCcw className="h-3 w-3" />Auto</button>
+      </div>
+    </div>}
+
+    {isFullscreen && <div
+      aria-label="Price scale control"
+      className="absolute right-0 top-0 z-20 h-full w-[96px] touch-none"
+      onPointerDown={handlePriceAxisPointerDown}
+      onPointerMove={handlePriceAxisPointerMove}
+      onPointerUp={handlePriceAxisPointerUp}
+      onPointerCancel={handlePriceAxisPointerUp}
+      onDoubleClick={resetVerticalScale}
+    />}
     {toolMode === 'crosshair' && crosshairInfo && <div className="pointer-events-none absolute left-3 bottom-3 z-20 rounded-xl border border-shafx-accent/25 bg-shafx-surface/95 px-3 py-2 text-[9px] shadow-xl"><span className="text-shafx-textMuted">Crosshair</span><strong className="ml-2 font-mono text-shafx-text">{crosshairInfo.price.toFixed(5)}</strong><span className="ml-2 text-shafx-textMuted">{crosshairInfo.time}</span></div>}
     {(toolMode === 'level' || toolMode === 'alert' || toolMode === 'measure') && <div className="pointer-events-none absolute bottom-3 left-3 z-10 flex items-center gap-2 rounded-xl border border-shafx-border bg-shafx-surface/95 px-3 py-2 text-[9px] text-shafx-textMuted shadow-xl"><Crosshair className="h-3.5 w-3.5 text-shafx-accent" />{toolMode === 'level' ? 'Tap chart to place a price level' : toolMode === 'alert' ? 'Tap chart, then confirm the alert price' : measureStart === null ? 'Tap first point to measure' : measureEnd === null ? 'Tap second point to finish' : 'Measure complete'}</div>}
     {alertCandidate !== null && <div className="absolute bottom-3 left-1/2 z-30 -translate-x-1/2 rounded-2xl border border-shafx-warning/30 bg-shafx-surface/98 px-3 py-3 shadow-2xl backdrop-blur"><div className="text-[9px] uppercase tracking-[0.14em] text-shafx-textMuted">Price alert</div><div className="mt-1 font-mono text-sm font-semibold text-shafx-text">{alertCandidate.toFixed(5)}</div><div className="mt-2 flex gap-2"><button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={armAlert} className="min-h-10 rounded-xl bg-shafx-warning px-3 text-[10px] font-semibold text-black">Arm alert</button><button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={cancelAlert} className="min-h-10 rounded-xl border border-shafx-border px-3 text-[10px] text-shafx-textMuted">Cancel</button></div></div>}
