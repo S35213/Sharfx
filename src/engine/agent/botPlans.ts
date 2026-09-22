@@ -11,10 +11,10 @@ export interface BotPlanConfig {
 export const BOT_PLANS: Record<BotPlan, BotPlanConfig> = {
   FREE: {
     label: 'Free Bot',
-    maxDailyCycleUnits: 5,
+    maxDailyCycleUnits: null,
     maxOpenPositions: 1,
     maxCycleSeconds: 10,
-    features: ['All-timeframe opportunity scan', 'Liquidity and setup analysis', '5 daily units × 5 trade rounds per unit'],
+    features: ['All-timeframe opportunity scan', 'Liquidity and setup analysis', 'Unlimited simulator units × 5 trade rounds per unit'],
   },
   REGULAR: {
     label: 'Regular Bot',
