@@ -69,6 +69,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const previousSymbolRef = useRef<string | undefined>(symbol)
   const previousTimeframeRef = useRef<Timeframe | undefined>(timeframe)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [timeframeMenuOpen, setTimeframeMenuOpen] = useState(false)
   const renderedFirstTimeRef = useRef<number | null>(null)
   const renderedLastTimeRef = useRef<number | null>(null)
   const [crosshairInfo, setCrosshairInfo] = useState<{ price: number; time: string } | null>(null)
@@ -416,6 +417,33 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     }
   }
 
+  const goToCurrentCandle = (): void => {
+    const chart = chartRef.current
+    if (!chart || !visualData.length) return
+    chart.timeScale().scrollToRealTime()
+    followRealtimeRef.current = true
+    onToolNotice?.('Current candle centered.')
+  }
+
+  const toggleTimeframeMenu = (event?: React.SyntheticEvent): void => {
+    event?.preventDefault()
+    event?.stopPropagation()
+    setTimeframeMenuOpen((open) => !open)
+  }
+
+  const chooseFullscreenTimeframe = (nextTimeframe: Timeframe): void => {
+    onTimeframeChange?.(nextTimeframe)
+    setTimeframeMenuOpen(false)
+  }
+
+  const handleChartDoubleTap = (event: React.MouseEvent<HTMLDivElement>): void => {
+    if (!isFullscreen) return
+    if (toolMode !== 'cursor' && toolMode !== 'crosshair') return
+    event.preventDefault()
+    event.stopPropagation()
+    setTimeframeMenuOpen((open) => !open)
+  }
+
   const resetVerticalScale = (): void => {
     const series = seriesRef.current
     if (!series) return
@@ -517,7 +545,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
 
   const cancelAlert = (): void => setAlertCandidate(null)
 
-  return <div ref={containerRef} onPointerDown={placeTool} className={`shafx-chart-shell relative w-full overflow-hidden border border-shafx-border bg-shafx-bg ${['level', 'alert', 'measure'].includes(toolMode) ? 'cursor-crosshair' : ''}`} style={{ height, minHeight: 280 }}>
+  return <div ref={containerRef} onPointerDown={placeTool} onDoubleClick={handleChartDoubleTap} className={`shafx-chart-shell relative w-full overflow-hidden border border-shafx-border bg-shafx-bg ${['level', 'alert', 'measure'].includes(toolMode) ? 'cursor-crosshair' : ''}`} style={{ height, minHeight: 280 }}>
     <div className="pointer-events-none absolute left-3 top-3 z-10 hidden items-center gap-2 rounded-xl border border-shafx-border bg-shafx-bg/90 px-2.5 py-1.5 text-[9px] font-semibold backdrop-blur sm:flex"><span className="text-shafx-accent">SHAFX</span><span className="text-shafx-textMuted">•</span><span className="text-shafx-textMuted">{timeframe ?? 'PRICE'} workspace</span></div>
     <div className="pointer-events-none absolute right-3 top-3 z-10 hidden rounded-xl border border-shafx-border bg-shafx-bg/90 px-2.5 py-1.5 text-[9px] font-semibold text-shafx-text backdrop-blur sm:block">{meta.label} <span className="font-normal text-shafx-textMuted">• {meta.interval}</span></div>
     <div className="pointer-events-none absolute left-3 top-3 z-10 rounded-xl border border-shafx-border/70 bg-shafx-surface/88 px-2.5 py-1.5 shadow-md backdrop-blur">
@@ -535,12 +563,24 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
       </button>
     </div>
-    {isFullscreen && <div className="absolute inset-x-3 top-14 z-30 flex items-center gap-1 overflow-x-auto rounded-xl border border-shafx-border bg-shafx-surface/94 p-1.5 shadow-xl backdrop-blur">
-      <span className="px-1.5 text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted">TF</span>
-      {TIMEFRAMES.map((tf) => <button key={tf} type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => onTimeframeChange?.(tf)} aria-pressed={timeframe === tf} className={`min-h-9 min-w-11 flex-shrink-0 rounded-lg px-2 text-[9px] font-semibold ${timeframe === tf ? 'bg-shafx-accent text-white' : 'text-shafx-textMuted hover:bg-shafx-bg hover:text-shafx-text'}`}>{tf}</button>)}
-      <div className="ml-auto hidden items-center gap-1 sm:flex">
-        <span className="text-[8px] text-shafx-textMuted">Price axis: drag ↑↓</span>
-        <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={resetVerticalScale} className="flex h-9 items-center gap-1 rounded-lg border border-shafx-border px-2 text-[8px] font-semibold text-shafx-textMuted hover:text-shafx-text"><RotateCcw className="h-3 w-3" />Auto</button>
+    {isFullscreen && <div className="absolute right-3 top-14 z-30 hidden items-center gap-1 sm:flex">
+      <span className="rounded-xl border border-shafx-border bg-shafx-surface/90 px-2.5 py-1.5 text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted shadow-lg backdrop-blur">Double-tap chart</span>
+    </div>}
+    {isFullscreen && timeframeMenuOpen && <div className="absolute left-1/2 top-1/2 z-40 -translate-x-1/2 -translate-y-1/2">
+      <div className="relative h-[214px] w-[214px] rounded-full border border-shafx-accent/20 bg-shafx-surface/92 shadow-[0_20px_70px_rgba(0,0,0,.45)] backdrop-blur-xl">
+        <div className="absolute inset-[37px] flex flex-col items-center justify-center rounded-full border border-shafx-accent/30 bg-shafx-bg/95">
+          <span className="text-[8px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Timeframe</span>
+          <strong className="mt-1 font-mono text-sm text-shafx-accent">{timeframe}</strong>
+          <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={goToCurrentCandle} className="mt-2 rounded-full border border-shafx-success/30 bg-shafx-success/10 px-2.5 py-1 text-[8px] font-semibold text-shafx-success">NOW</button>
+        </div>
+        {TIMEFRAMES.map((tf, index) => {
+          const angle = (index / TIMEFRAMES.length) * Math.PI * 2 - Math.PI / 2
+          const radius = 82
+          const x = Math.cos(angle) * radius
+          const y = Math.sin(angle) * radius
+          return <button key={tf} type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => chooseFullscreenTimeframe(tf)} aria-pressed={timeframe === tf} className={`absolute left-1/2 top-1/2 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border text-[8px] font-semibold shadow-md transition ${timeframe === tf ? 'border-shafx-accent bg-shafx-accent text-white scale-110' : 'border-shafx-border bg-shafx-bg/95 text-shafx-textMuted hover:border-shafx-accent/40 hover:text-shafx-text'}`} style={{ transform: `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))` }}>{tf}</button>
+        })}
+        <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={resetVerticalScale} aria-label="Reset vertical scale" className="absolute -bottom-10 left-1/2 flex h-8 -translate-x-1/2 items-center gap-1 rounded-full border border-shafx-border bg-shafx-surface/95 px-3 text-[8px] font-semibold text-shafx-textMuted shadow-lg"><RotateCcw className="h-3 w-3" />Auto scale</button>
       </div>
     </div>}
 
