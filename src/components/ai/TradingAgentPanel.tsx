@@ -615,7 +615,7 @@ export function TradingAgentPanel({
         : scanComplete ? (<div className="mt-3 space-y-3">
 
             <div className="rounded-xl border border-shafx-accent/20 bg-shafx-accent/[0.04] p-3">
-              <div className="flex items-center justify-between gap-2"><div className="font-mono text-[9px] font-semibold uppercase tracking-[0.18em] text-shafx-textMuted">MARKET BIAS</div><div className="text-2xl font-black tracking-tight text-shafx-text">{bias}</div></div>
+              <div className="flex items-center justify-between gap-2"><div><div className="font-mono text-[9px] font-semibold uppercase tracking-[0.18em] text-shafx-textMuted">MARKET BIAS</div><div className="text-2xl font-black tracking-tight text-shafx-text">{bias}</div></div><div className="text-right"><div className="font-mono text-[8px] uppercase tracking-[0.16em] text-shafx-textMuted">Directional TFs</div><div className="mt-1 font-mono text-lg font-bold text-shafx-accent">{marketOpportunities.length}/7</div></div></div>
               <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {marketReadRows.map((row) => <div key={row.timeframe} className={row.directionalOpportunity ? 'rounded-lg border border-shafx-accent/25 bg-shafx-accent/[0.06] p-2.5' : 'rounded-lg border border-shafx-border bg-shafx-bg p-2.5'}>
                   <div className="flex items-center justify-between gap-2"><span className="font-mono text-[10px] font-bold text-shafx-text">{row.timeframe}</span><span className={row.bias === 'Bullish' ? 'text-[8px] font-semibold text-shafx-success' : row.bias === 'Bearish' ? 'text-[8px] font-semibold text-shafx-danger' : 'text-[8px] text-shafx-textMuted'}>{row.bias.toUpperCase()}</span></div>
@@ -624,7 +624,25 @@ export function TradingAgentPanel({
                 </div>)}
               </div>
             </div>
-            {bestOpportunity && (<div className="rounded-xl border border-shafx-success/30 bg-shafx-success/[0.055] p-4 text-center"><div className="font-mono text-[9px] font-semibold uppercase tracking-[0.22em] text-shafx-success">OPPORTUNITY FOUND / LOWER-TF PRIORITY</div><div className="mt-1 text-3xl font-semibold">{bestOpportunity.direction}</div><div className="mt-1 font-mono text-base font-semibold uppercase tracking-[0.08em] text-shafx-accent">Execution frame · {activeBotScan?.timeframe ?? timeframe}</div><div className="mt-2 text-7xl font-black leading-none tracking-tight text-shafx-accent sm:text-8xl">{confidenceDisplay}%</div><div className="mt-1 text-[9px] uppercase tracking-[0.16em] text-shafx-textMuted">AI confidence • fresh scan</div><div className="mt-2 text-[10px] text-shafx-textMuted">Entry {bestOpportunity.entryPrice}</div><div className="mt-3 grid grid-cols-3 gap-2 text-[9px]"><div className="rounded-lg border border-shafx-border bg-shafx-bg p-2"><span className="block text-shafx-textMuted">Entry</span><b className="font-mono">{bestOpportunity.entryPrice}</b></div><div className="rounded-lg border border-shafx-danger/20 bg-shafx-danger/[0.04] p-2"><span className="block text-shafx-textMuted">Stop Loss</span><b className="font-mono text-shafx-danger">{bestOpportunity.stopLoss}</b></div><div className="rounded-lg border border-shafx-success/20 bg-shafx-success/[0.04] p-2"><span className="block text-shafx-textMuted">Take Profit</span><b className="font-mono text-shafx-success">{bestOpportunity.takeProfit}</b></div></div><div className="mt-3 text-[9px] text-shafx-textMuted">Fresh result generated from the current simulated market data.</div></div>)}
+            {executableOpportunities.length > 0 && (
+              <div className="rounded-xl border border-shafx-success/25 bg-shafx-success/[0.04] p-3">
+                <div className="font-mono text-[9px] font-semibold uppercase tracking-[0.18em] text-shafx-success">EXECUTION-READY OPPORTUNITIES</div>
+                <div className="mt-2 space-y-2">
+                  {executableOpportunities.map((row) => row.executableSetup && (
+                    <div key={row.timeframe} className="rounded-lg border border-shafx-border bg-shafx-bg p-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <div className="font-mono text-[10px] font-bold text-shafx-text">{row.timeframe} · {row.executableSetup.direction}</div>
+                          <div className="mt-0.5 text-[8px] uppercase tracking-[0.1em] text-shafx-textMuted">Opportunity found</div>
+                        </div>
+                        <div className="font-mono text-lg font-black text-shafx-accent">{row.executableSetup.confidence}%</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {bestOpportunity && (<div className="rounded-xl border border-shafx-success/30 bg-shafx-success/[0.055] p-4 text-center"><div className="font-mono text-[9px] font-semibold uppercase tracking-[0.22em] text-shafx-success">TOP EXECUTION OPPORTUNITY</div><div className="mt-1 text-3xl font-semibold">{bestOpportunity.direction}</div><div className="mt-1 font-mono text-base font-semibold uppercase tracking-[0.08em] text-shafx-accent">Execution frame · {activeBotScan?.timeframe ?? timeframe}</div><div className="mt-2 text-7xl font-black leading-none tracking-tight text-shafx-accent sm:text-8xl">{confidenceDisplay}%</div><div className="mt-1 text-[9px] uppercase tracking-[0.16em] text-shafx-textMuted">AI confidence • fresh scan</div><div className="mt-2 text-[10px] text-shafx-textMuted">Entry {bestOpportunity.entryPrice}</div><div className="mt-3 grid grid-cols-3 gap-2 text-[9px]"><div className="rounded-lg border border-shafx-border bg-shafx-bg p-2"><span className="block text-shafx-textMuted">Entry</span><b className="font-mono">{bestOpportunity.entryPrice}</b></div><div className="rounded-lg border border-shafx-danger/20 bg-shafx-danger/[0.04] p-2"><span className="block text-shafx-textMuted">Stop Loss</span><b className="font-mono text-shafx-danger">{bestOpportunity.stopLoss}</b></div><div className="rounded-lg border border-shafx-success/20 bg-shafx-success/[0.04] p-2"><span className="block text-shafx-textMuted">Take Profit</span><b className="font-mono text-shafx-success">{bestOpportunity.takeProfit}</b></div></div><div className="mt-3 text-[9px] text-shafx-textMuted">Fresh result generated from the current simulated market data.</div></div>)}
           {!bestOpportunity && <div className="rounded-xl border border-shafx-border bg-shafx-surface p-3 text-[10px] text-shafx-textMuted">No execution-ready setup is present right now. The timeframe matrix above still shows directional opportunities.</div>}
         </div>)
         : (<div className="mt-3 rounded-xl border border-shafx-border bg-shafx-surface p-3 text-[10px] text-shafx-textMuted">Tap Scan market for a fresh lower-timeframe-priority scan.</div>)}
