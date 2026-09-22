@@ -234,7 +234,8 @@ export function TradingAgentPanel({
   const setup = tradingContext.setup.preferredSetup
   const bestOpportunity = activeBotScan?.setup ?? setup
   const riskAmount = accountBalance * (riskModes[BOT_RISK_MODE].percent / 100)
-  const displayedUnitNumber = unitRound === BOT_CYCLES_PER_UNIT ? Math.max(1, cycleUnits) : Math.min(cycleUnits + 1, plan.maxDailyCycleUnits ?? cycleUnits + 1)
+  const displayedUnitNumber = pendingUnitCompletion ? Math.max(1, cycleUnits) : Math.max(1, cycleUnits + 1)
+  const nextUnitNumber = Math.max(1, cycleUnits + 1)
   const bestOpportunityRef = useRef(bestOpportunity)
   const showBotActivity = botSessionStarted
   const confidenceDisplay = bestOpportunity ? Math.max(50, Math.min(95, bestOpportunity.confidence)) : 0
@@ -494,10 +495,17 @@ export function TradingAgentPanel({
           }).then(async (response) => {
             const data = await response.json().catch(() => ({}))
             if (response.ok && data.ok) {
+              const serverUsedUnits = Number.isFinite(Number(data.usedCycleUnits)) ? Number(data.usedCycleUnits) : cycleUnits
+              const serverRound = Number.isFinite(Number(data.currentUnitRound)) ? Number(data.currentUnitRound) : nextRound
               setRunId(sessionRunId)
-              setCycleUnits(Number(data.usedCycleUnits) || cycleUnits)
-              setUnitRound(Number(data.currentUnitRound) || nextRound)
-              if (data.completedUnit) setPendingUnitCompletion(true)
+              setCycleUnits(serverUsedUnits)
+              setUnitRound(serverRound)
+              if (data.completedUnit) {
+                setPendingUnitCompletion(true)
+                setAutoTradingEnabled(false)
+                setPhase('READY')
+                setStatus('UNIT ' + unitNumber + ' COMPLETE 5/5 • TAP RUN UNIT ' + (serverUsedUnits + 1))
+              }
             }
           }).catch(() => undefined)
 
@@ -505,7 +513,7 @@ export function TradingAgentPanel({
             setPendingUnitCompletion(true)
             setAutoTradingEnabled(false)
             setPhase('READY')
-            setStatus((profit >= 0 ? 'BOT WIN • ' : 'BOT LOSS • ') + profit.toFixed(2) + ' ' + accountCurrency + ' • UNIT COMPLETE 5/5')
+            setStatus((profit >= 0 ? 'BOT WIN • ' : 'BOT LOSS • ') + profit.toFixed(2) + ' ' + accountCurrency + ' • UNIT ' + unitNumber + ' COMPLETE 5/5 • TAP RUN UNIT ' + (cycleUnits + 1))
           }
         }, BOT_RESULT_DELAY_MS)
       } catch (error) {
@@ -706,15 +714,15 @@ export function TradingAgentPanel({
 
       <section className="relative mt-3 overflow-hidden rounded-2xl border border-shafx-accent/25 bg-[radial-gradient(circle_at_top_right,rgba(124,92,252,.20),transparent_42%),linear-gradient(145deg,#0D121A_0%,#090D14_100%)] p-3.5 shadow-[0_12px_36px_rgba(124,92,252,.10)]">
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-shafx-accent/80 to-transparent" />
-        <div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-2.5"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-shafx-accent/30 bg-shafx-accent/10 text-shafx-accent"><Bot className="h-4 w-4" /></div><div className="min-w-0"><div className="font-mono text-[9px] font-semibold uppercase tracking-[0.22em] text-shafx-accent">FREE BOT / AUTONOMOUS SIM</div><div className="mt-1 text-base font-semibold tracking-tight">{autoTradingEnabled ? 'Bot is running' : 'Bot is stopped'}</div><p className="mt-1 text-[10px] leading-4 text-shafx-textMuted">{autoTradingEnabled ? 'Independent scan → proposal → simulated trade → result. Manual Market Read is not used to drive the bot.' : 'Run starts an independent bot market scan. It uses the configured lot size and the simulator order engine.'}</p></div></div><span className={autoTradingEnabled ? 'rounded-full border border-shafx-success/30 bg-shafx-success/10 px-2.5 py-1 font-mono text-[9px] font-semibold text-shafx-success shadow-[0_0_16px_rgba(34,211,165,.12)]' : 'rounded-full border border-shafx-border bg-shafx-bg px-2.5 py-1 font-mono text-[9px] font-semibold text-shafx-textMuted'}>{autoTradingEnabled ? '● LIVE' : '○ IDLE'}</span></div>
+        <div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-2.5"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-shafx-accent/30 bg-shafx-accent/10 text-shafx-accent"><Bot className="h-4 w-4" /></div><div className="min-w-0"><div className="font-mono text-[9px] font-semibold uppercase tracking-[0.22em] text-shafx-accent">FREE BOT / AUTONOMOUS SIM</div><div className="mt-1 text-base font-semibold tracking-tight">{autoTradingEnabled ? 'Bot is running' : pendingUnitCompletion ? 'Unit ' + displayedUnitNumber + ' complete' : 'Bot is stopped'}</div><p className="mt-1 text-[10px] leading-4 text-shafx-textMuted">{autoTradingEnabled ? 'Independent scan → proposal → simulated trade → result. Manual Market Read is not used to drive the bot.' : 'Run starts an independent bot market scan. It uses the configured lot size and the simulator order engine.'}</p></div></div><span className={autoTradingEnabled ? 'rounded-full border border-shafx-success/30 bg-shafx-success/10 px-2.5 py-1 font-mono text-[9px] font-semibold text-shafx-success shadow-[0_0_16px_rgba(34,211,165,.12)]' : 'rounded-full border border-shafx-border bg-shafx-bg px-2.5 py-1 font-mono text-[9px] font-semibold text-shafx-textMuted'}>{autoTradingEnabled ? '● LIVE' : pendingUnitCompletion ? '✓ COMPLETE' : '○ IDLE'}</span></div>
         <div className="mt-3 rounded-xl border border-shafx-border/80 bg-black/20 p-2.5">
           <div className="flex items-center justify-between gap-2 text-[8px] font-mono uppercase tracking-[0.15em] text-shafx-textMuted"><span>execution profile</span><span className="text-shafx-text">{botRunLotSize?.toFixed(2) ?? lotSize} lot / safe risk</span></div>
           <div className="mt-2 grid grid-cols-5 gap-1.5">
             {(['M1','M5','M15','M30','H1'] as Timeframe[]).map((frame, index) => <span key={frame} className={index < 3 ? 'rounded-md border border-shafx-accent/25 bg-shafx-accent/10 px-1.5 py-1.5 text-center font-mono text-[8px] font-semibold text-shafx-accent' : 'rounded-md border border-shafx-border bg-shafx-bg px-1.5 py-1.5 text-center font-mono text-[8px] text-shafx-textMuted'}>{frame}{index < 3 ? ' · PRI' : ''}</span>)}
           </div>
         </div>
-        <button type="button" disabled={!symbolSpec || phase === 'ANALYZING' || (!autoTradingEnabled && dailyLimitReached)} onClick={autoTradingEnabled ? stopAutomaticTrading : pendingUnitCompletion && !dailyLimitReached ? continueNextUnit : startAutomaticTrading} className={autoTradingEnabled ? 'mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-shafx-danger/30 bg-shafx-danger/10 px-3 text-[10px] font-semibold text-shafx-danger shadow-[0_0_22px_rgba(255,92,117,.06)] active:bg-shafx-danger/20 disabled:opacity-40' : 'mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-shafx-accent to-shafx-primaryHover px-3 text-[10px] font-semibold text-white shadow-[0_8px_28px_rgba(124,92,252,.24)] active:scale-[.99] active:opacity-90 disabled:opacity-40'}>{autoTradingEnabled ? <Square className="h-3.5 w-3.5 fill-current" /> : <Play className="h-3.5 w-3.5 fill-current" />} {autoTradingEnabled ? 'Stop automatic trading' : dailyLimitReached ? 'Daily bot limit reached' : pendingUnitCompletion ? 'Continue next unit' : 'Run independent bot'}</button>
-        <div className="mt-2 grid grid-cols-3 gap-2 text-[9px] text-shafx-textMuted"><div className="rounded-lg border border-shafx-border bg-shafx-bg/80 px-2 py-2"><span className="block uppercase tracking-[0.12em]">Market</span><strong className="mt-0.5 block font-mono text-shafx-text">{symbol}</strong></div><div className="rounded-lg border border-shafx-border bg-shafx-bg/80 px-2 py-2"><span className="block uppercase tracking-[0.12em]">Cadence</span><strong className="mt-0.5 block font-mono text-shafx-text">10s</strong></div><div className="rounded-lg border border-shafx-border bg-shafx-bg/80 px-2 py-2"><span className="block uppercase tracking-[0.12em]">Settle</span><strong className="mt-0.5 block font-mono text-shafx-text">10s</strong></div></div><div className="mt-2 flex items-center justify-between rounded-lg border border-shafx-border bg-shafx-bg/70 px-2.5 py-2 text-[9px]"><span className="uppercase tracking-[0.12em] text-shafx-textMuted">Daily units</span><strong className={dailyLimitReached ? 'font-mono text-shafx-danger' : 'font-mono text-shafx-text'}>{cycleUnits}/{plan.maxDailyCycleUnits === null ? '∞' : plan.maxDailyCycleUnits}</strong></div>
+        <button type="button" disabled={!symbolSpec || phase === 'ANALYZING' || (!autoTradingEnabled && dailyLimitReached)} onClick={autoTradingEnabled ? stopAutomaticTrading : pendingUnitCompletion && !dailyLimitReached ? continueNextUnit : startAutomaticTrading} className={autoTradingEnabled ? 'mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-shafx-danger/30 bg-shafx-danger/10 px-3 text-[10px] font-semibold text-shafx-danger shadow-[0_0_22px_rgba(255,92,117,.06)] active:bg-shafx-danger/20 disabled:opacity-40' : 'mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-shafx-accent to-shafx-primaryHover px-3 text-[10px] font-semibold text-white shadow-[0_8px_28px_rgba(124,92,252,.24)] active:scale-[.99] active:opacity-90 disabled:opacity-40'}>{autoTradingEnabled ? <Square className="h-3.5 w-3.5 fill-current" /> : <Play className="h-3.5 w-3.5 fill-current" />} {autoTradingEnabled ? 'Stop automatic trading' : dailyLimitReached ? 'Daily bot limit reached' : pendingUnitCompletion ? 'Run Unit ' + nextUnitNumber : 'Run independent bot'}</button>
+        <div className="mt-2 grid grid-cols-3 gap-2 text-[9px] text-shafx-textMuted"><div className="rounded-lg border border-shafx-border bg-shafx-bg/80 px-2 py-2"><span className="block uppercase tracking-[0.12em]">Market</span><strong className="mt-0.5 block font-mono text-shafx-text">{symbol}</strong></div><div className="rounded-lg border border-shafx-border bg-shafx-bg/80 px-2 py-2"><span className="block uppercase tracking-[0.12em]">Cadence</span><strong className="mt-0.5 block font-mono text-shafx-text">10s</strong></div><div className="rounded-lg border border-shafx-border bg-shafx-bg/80 px-2 py-2"><span className="block uppercase tracking-[0.12em]">Settle</span><strong className="mt-0.5 block font-mono text-shafx-text">10s</strong></div></div><div className="mt-2 flex items-center justify-between rounded-lg border border-shafx-border bg-shafx-bg/70 px-2.5 py-2 text-[9px]"><span className="uppercase tracking-[0.12em] text-shafx-textMuted">Daily units</span><strong className={dailyLimitReached ? 'font-mono text-shafx-danger' : 'font-mono text-shafx-text'}>{cycleUnits}/{plan.maxDailyCycleUnits === null ? '∞' : plan.maxDailyCycleUnits}</strong></div>{pendingUnitCompletion && <div className="mt-2 rounded-lg border border-shafx-success/20 bg-shafx-success/[0.04] px-2.5 py-2 text-[9px] font-mono text-shafx-success">UNIT {displayedUnitNumber} COMPLETE • 5/5 ROUNDS • NEXT: RUN UNIT {nextUnitNumber}</div>}
       </section>
 
 
