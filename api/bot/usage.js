@@ -34,7 +34,7 @@ const normalizeEntitlement = (row) => {
   const activeStatus = status === 'active' || status === 'trialing'
   return activeStatus && (endsAt === null || Number.isFinite(endsAt) && endsAt > Date.now()) ? requested : 'FREE'
 }
-const policy = { FREE: { max: 5 }, REGULAR: { max: 15 }, PRO: { max: null } }
+const policy = { FREE: { max: null }, REGULAR: { max: 15 }, PRO: { max: null } }
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store')
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY || !process.env.SUPABASE_SERVICE_ROLE_KEY) return json(res, 503, { ok: false, error: 'Bot usage service is not configured.' })
