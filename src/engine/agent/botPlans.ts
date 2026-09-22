@@ -13,7 +13,7 @@ export const BOT_PLANS: Record<BotPlan, BotPlanConfig> = {
     label: 'Free Bot',
     maxDailyCycleUnits: 5,
     maxOpenPositions: 1,
-    maxCycleSeconds: 6,
+    maxCycleSeconds: 10,
     features: ['All-timeframe opportunity scan', 'Liquidity and setup analysis', '5 daily units × 5 trade rounds per unit'],
   },
   REGULAR: {
@@ -33,7 +33,7 @@ export const BOT_PLANS: Record<BotPlan, BotPlanConfig> = {
 }
 
 export const BOT_CYCLES_PER_UNIT = 5 as const
-export const cycleUnitsForSeconds = (seconds: 3 | 5 | 6 | 10): number => seconds === 10 ? 2 : 1
+export const cycleUnitsForSeconds = (seconds: 3 | 5 | 6 | 10): number => seconds === 10 ? 1 : 1
 export const canConsumeCycleUnits = (plan: BotPlan, usedUnits: number, seconds: 3 | 5 | 6 | 10): boolean => {
   if (seconds > BOT_PLANS[plan].maxCycleSeconds) return false
   const max = BOT_PLANS[plan].maxDailyCycleUnits
