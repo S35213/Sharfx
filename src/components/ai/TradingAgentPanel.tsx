@@ -411,7 +411,21 @@ export function TradingAgentPanel({
 
         if (tradeCloseTimer.current) window.clearTimeout(tradeCloseTimer.current)
         tradeCloseTimer.current = window.setTimeout(() => {
-          const exitPrice = currentPriceRef.current
+          const rawExitPrice = currentPriceRef.current
+          const m1Frame = timeframeFrames.M1 ?? []
+          const latestM1 = m1Frame[m1Frame.length - 1]?.close
+          const previousM1 = m1Frame[m1Frame.length - 2]?.close
+          const microDirection = typeof latestM1 === 'number' && typeof previousM1 === 'number'
+            ? Math.sign(latestM1 - previousM1)
+            : 0
+          const minimumMove = Math.max(symbolSpec.pipSize / 10, Math.pow(10, -symbolSpec.pricePrecision))
+          const roundedSamePrice = Number(rawExitPrice.toFixed(symbolSpec.pricePrecision)) === Number(order.entryPrice.toFixed(symbolSpec.pricePrecision))
+          const exitNudgeDirection = microDirection !== 0
+            ? microDirection
+            : order.type === 'BUY' ? 1 : -1
+          const exitPrice = roundedSamePrice
+            ? Number((rawExitPrice + exitNudgeDirection * minimumMove).toFixed(symbolSpec.pricePrecision))
+            : rawExitPrice
           const profit = (() => {
             try {
               return calculatePositionProfit(order, exitPrice, symbolSpec, conversionRate)
@@ -622,7 +636,7 @@ export function TradingAgentPanel({
                   <div className="flex items-center justify-between gap-2"><span className={botDisplayedOrder.type === 'BUY' ? 'text-lg font-bold text-shafx-success' : 'text-lg font-bold text-shafx-danger'}>{botDisplayedOrder.type} {botDisplayedOrder.lotSize.toFixed(2)} LOT</span><span className="font-mono text-[9px] uppercase tracking-[0.14em] text-shafx-textMuted">10s active round</span></div>
                   <div className="mt-2 grid grid-cols-3 gap-2 text-[9px]"><div className="rounded-lg border border-shafx-border bg-shafx-bg p-2"><span className="block text-shafx-textMuted">Entry</span><b className="font-mono">{botDisplayedOrder.entryPrice}</b></div><div className="rounded-lg border border-shafx-danger/20 bg-shafx-danger/[0.04] p-2"><span className="block text-shafx-textMuted">Stop Loss</span><b className="font-mono text-shafx-danger">{botDisplayedOrder.stopLoss}</b></div><div className="rounded-lg border border-shafx-success/20 bg-shafx-success/[0.04] p-2"><span className="block text-shafx-textMuted">Take Profit</span><b className="font-mono text-shafx-success">{botDisplayedOrder.takeProfit}</b></div></div>
                   <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-shafx-border"><div className="h-full rounded-full bg-shafx-accent" style={{width: Math.max(0, Math.min(100, ((BOT_RESULT_DELAY_MS - tradeSecondsLeft * 1000) / BOT_RESULT_DELAY_MS) * 100)) + '%'}} /></div>
-                  <p className="mt-2 text-[9px] text-shafx-textMuted">10 seconds active → circle reaches 100% → immediate WIN/LOSS → next 10-second cycle.</p>
+                  <p className="mt-2 text-[9px] text-shafx-textMuted">10 seconds active → circle reaches 100% → settle from simulated price movement → WIN/LOSS → next 10-second cycle.</p>
                 </div>
               </div>
             </div>
