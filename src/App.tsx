@@ -96,6 +96,15 @@ const TerminalContent: React.FC = () => {
   const accountStreamManager = useRef(new ProviderAccountStreamManager())
   const symbolSpecCache = useRef<Record<string, SymbolSpec>>({})
   const toastId = useRef(0)
+  const openPositionsRef = useRef<TradeOrder[]>([])
+  const positionRefreshTimer = useRef<number | null>(null)
+  const positionRefreshInFlight = useRef(false)
+  const positionRefreshQueued = useRef(false)
+  const currentPriceForPositionsRef = useRef(currentPrice)
+  const selectedSymbolForPositionsRef = useRef(selectedSymbol)
+  const symbolSpecForPositionsRef = useRef<SymbolSpec | null>(symbolSpec)
+  const watchlistForPositionsRef = useRef<MarketPair[]>([])
+  const accountCurrencyForPositionsRef = useRef('USD')
 
   const pushToast = useCallback((text: string) => {
     toastId.current += 1
@@ -473,38 +482,63 @@ const TerminalContent: React.FC = () => {
   }, [closePosition])
 
   useEffect(() => {
-    if (!accountData || openPositions.length === 0) return
-    let cancelled = false
-    const refreshPositions = async (): Promise<void> => {
+    openPositionsRef.current = openPositions
+    currentPriceForPositionsRef.current = displayPrice
+    selectedSymbolForPositionsRef.current = selectedSymbol
+    symbolSpecForPositionsRef.current = symbolSpec
+    watchlistForPositionsRef.current = watchlist
+    accountCurrencyForPositionsRef.current = accountData?.currency ?? 'USD'
+  }, [accountData?.currency, displayPrice, openPositions, selectedSymbol, symbolSpec, watchlist])
+
+  const queuePositionRefresh = useCallback((): void => {
+    if (positionRefreshTimer.current !== null) return
+    positionRefreshTimer.current = window.setTimeout(async () => {
+      positionRefreshTimer.current = null
+      if (positionRefreshInFlight.current) {
+        positionRefreshQueued.current = true
+        return
+      }
+
+      const positions = openPositionsRef.current
+      if (!accountData || positions.length === 0) return
+
+      positionRefreshInFlight.current = true
       try {
-        const prices = new Map(watchlist.map((pair) => [pair.symbol, pair.price]))
-        prices.set(selectedSymbol, displayPrice)
-        const uniqueSymbols = [...new Set(openPositions.map((position) => position.symbol))]
+        const prices = new Map(watchlistForPositionsRef.current.map((pair) => [pair.symbol, pair.price]))
+        prices.set(selectedSymbolForPositionsRef.current, currentPriceForPositionsRef.current)
+        const uniqueSymbols = [...new Set(positions.map((position) => position.symbol))]
         const specs = await Promise.all(uniqueSymbols.map(async (symbol) => {
-          if (symbol === selectedSymbol && symbolSpec) return [symbol, symbolSpec] as const
+          if (symbol === selectedSymbolForPositionsRef.current && symbolSpecForPositionsRef.current) {
+            return [symbol, symbolSpecForPositionsRef.current] as const
+          }
           if (symbolSpecCache.current[symbol]) return [symbol, symbolSpecCache.current[symbol]] as const
           const spec = await marketDataSource.getSymbolSpec(symbol)
           symbolSpecCache.current[symbol] = spec
           return [symbol, spec] as const
         }))
-        if (cancelled) return
+
         const specMap = new Map(specs)
-        const updated = openPositions.map((position) => {
+        const updated = positions.map((position) => {
           const spec = specMap.get(position.symbol)
           const price = prices.get(position.symbol)
-          if (!spec || !price) return position
-          const rate = getConversionRate(spec.quoteCurrency, accountData.currency)
+          if (!spec || typeof price !== 'number') return position
+          const rate = getConversionRate(spec.quoteCurrency, accountCurrencyForPositionsRef.current)
           return markSimulatedPosition(position, { currentPrice: price, symbolSpec: spec, conversionRate: rate })
         })
-        const newlyClosed = updated.filter((position, index) => openPositions[index].status === 'open' && position.status === 'closed')
+
+        const newlyClosed = updated.filter((position, index) => positions[index].status === 'open' && position.status === 'closed')
         const stillOpen = updated.filter((position) => position.status === 'open')
         const realized = newlyClosed.reduce((sum, position) => sum + (position.profit ?? 0), 0)
+
         if (newlyClosed.length > 0) {
           if (isSimulatorMode()) applyDemoProfit(realized)
           setOpenPositions(stillOpen)
           setTradeHistory((prev) => [...newlyClosed, ...prev])
           newlyClosed.forEach((position) => pushToast(`Simulated ${position.type} ${position.symbol} closed automatically.`))
-        } else if (updated.some((position, index) => position.profit !== openPositions[index].profit)) setOpenPositions(updated)
+        } else if (updated.some((position, index) => position.profit !== positions[index].profit)) {
+          setOpenPositions(updated)
+        }
+
         const floatingPL = stillOpen.reduce((sum, position) => sum + (position.profit ?? 0), 0)
         setAccountData((prev) => {
           if (!prev) return prev
@@ -515,12 +549,25 @@ const TerminalContent: React.FC = () => {
           return { ...prev, balance, equity, floatingPL, freeMargin }
         })
       } catch (err) {
-        if (!cancelled) pushToast(err instanceof Error ? err.message : 'Unable to update open positions.')
+        pushToast(err instanceof Error ? err.message : 'Unable to update open positions.')
+      } finally {
+        positionRefreshInFlight.current = false
+        if (positionRefreshQueued.current) {
+          positionRefreshQueued.current = false
+          queuePositionRefresh()
+        }
       }
-    }
-    void refreshPositions()
-    return () => { cancelled = true }
-  }, [accountData?.currency, displayPrice, openPositions, pushToast, selectedSymbol, symbolSpec, watchlist])
+    }, 150)
+  }, [accountData, pushToast])
+
+  useEffect(() => {
+    if (openPositions.length > 0) queuePositionRefresh()
+  }, [displayPrice, openPositions.length, queuePositionRefresh])
+
+  useEffect(() => () => {
+    if (positionRefreshTimer.current !== null) window.clearTimeout(positionRefreshTimer.current)
+  }, [])
+
 
   if (!accountData || !symbolSpec || !marketAnalysis || !aiAnalysis) return <div className="flex h-full items-center justify-center bg-shafx-bg text-shafx-text">Preparing SHAFX workspace…</div>
 
