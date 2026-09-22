@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Activity, Bot, ChevronDown, Play, RefreshCw, ShieldCheck, Sparkles, Square, Wallet } from 'lucide-react'
 import { analyzeLiquidity } from '../../engine/liquidity'
+import { calculatePositionProfit } from '../../engine/simulator/positionManager'
 import { analyzeMarketStructure, findSwingPoints } from '../../engine/marketStructure'
 import { analyzeSetup } from '../../engine/setup'
 import { analyzeSupportResistance } from '../../engine/supportResistance'
@@ -42,7 +43,7 @@ const TIMEFRAME_SCAN_BONUS: Record<Timeframe, number> = { M1: 18, M5: 14, M15: 1
 const BOT_CYCLE_SECONDS = 10 as const
 const BOT_RESULT_DELAY_MS = BOT_CYCLE_SECONDS * 1000
 const BOT_START_DELAY_MS = 1000 as const
-const BOT_RESULT_DISPLAY_MS = 2500 as const
+const BOT_RESULT_DISPLAY_MS = 1000 as const
 
 const buildScanCandidates = (
   frames: Partial<Record<Timeframe, OHLCV[]>>,
@@ -146,6 +147,8 @@ export function TradingAgentPanel({
   const [botPositionId, setBotPositionId] = useState<string | null>(null)
   const [botDisplayedOrder, setBotDisplayedOrder] = useState<TradeOrder | null>(null)
   const [runId, setRunId] = useState<string | null>(null)
+  const botRunLotSizeRef = useRef<number | null>(null)
+  const currentPriceRef = useRef(currentPrice)
   const processedHistory = useRef(new Set<string>())
   const analysisTimer = useRef<number | null>(null)
   const scanInterval = useRef<number | null>(null)
@@ -211,6 +214,10 @@ export function TradingAgentPanel({
   }, [bestOpportunity])
 
   useEffect(() => {
+    currentPriceRef.current = currentPrice
+  }, [currentPrice])
+
+  useEffect(() => {
     const onLotSize = (event: Event): void => {
       const detail = (event as CustomEvent<string>).detail
       if (detail) setLotSize(detail)
@@ -240,6 +247,7 @@ export function TradingAgentPanel({
     setScanPhase('READY')
     setBotPositionId(null)
     setBotDisplayedOrder(null)
+    botRunLotSizeRef.current = null
     setUnitRound(0)
     setPendingUnitCompletion(false)
     setBotSessionStarted(false)
@@ -354,6 +362,7 @@ export function TradingAgentPanel({
         }
 
         const nextRound = unitRound + 1
+        const botLotSize = botRunLotSizeRef.current ?? parsedLotSize
         setLastProfit(null)
         const unitNumber = unitRound === 0 ? Math.min(cycleUnits + 1, plan.maxDailyCycleUnits ?? cycleUnits + 1) : displayedUnitNumber
 
@@ -373,7 +382,7 @@ export function TradingAgentPanel({
           riskPercent: riskModes[BOT_RISK_MODE].percent,
           symbolSpec,
           conversionRate,
-          lotSize: parsedLotSize,
+          lotSize: botLotSize,
           allowSimulationFallback: true,
         })
 
@@ -399,63 +408,55 @@ export function TradingAgentPanel({
         onBotOrder(order)
 
         if (tradeCloseTimer.current) window.clearTimeout(tradeCloseTimer.current)
-        tradeCloseTimer.current = window.setTimeout(async () => {
+        tradeCloseTimer.current = window.setTimeout(() => {
+          const exitPrice = currentPriceRef.current
+          let profit = 0
           try {
-            const closed = await onBotClose?.(order.id)
-            setBotDisplayedOrder(null)
-            if (closed) {
-              processedHistory.current.add(closed.id)
-              const profit = closed.profit ?? 0
-              const result = profit >= 0 ? 'WIN' : 'LOSS'
-              setLastProfit(profit)
-              setLastResult(result)
-              setBotPositionId(null)
-              setTradeCloseAt(null)
-              setTradeSecondsLeft(0)
-              if (profit >= 0) {
-                setWins((value) => value + 1)
-                setStatus('BOT WIN • ' + closed.type + ' ' + closed.symbol + ' • +' + profit.toFixed(2) + ' ' + accountCurrency + ' • preparing next cycle')
-              } else {
-                setLosses((value) => value + 1)
-                setStatus('BOT LOSS • ' + closed.type + ' ' + closed.symbol + ' • ' + profit.toFixed(2) + ' ' + accountCurrency + ' • preparing next cycle')
-              }
-            }
-          } finally {
-            setTradeCloseAt(null)
-            setTradeSecondsLeft(0)
+            profit = calculatePositionProfit(order, exitPrice, symbolSpec, conversionRate)
+          } catch {
+            const directionDelta = (exitPrice - order.entryPrice) * (order.type === 'BUY' ? 1 : -1)
+            profit = Number(directionDelta.toFixed(2))
+          }
 
-            const sessionRunId = runId ?? 'v3-' + crypto.randomUUID()
-            try {
-              const response = await fetch('/api/bot/usage', {
-                method: 'POST',
-                credentials: 'same-origin',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ runId: sessionRunId }),
-              })
-              const data = await response.json().catch(() => ({}))
-              if (response.ok && data.ok) {
-                setRunId(sessionRunId)
-                setCycleUnits(Number(data.usedCycleUnits) || cycleUnits)
-                setUnitRound(Number(data.currentUnitRound) || nextRound)
-              }
-              if (data.completedUnit || nextRound >= BOT_CYCLES_PER_UNIT) {
-                setPendingUnitCompletion(true)
-                setAutoTradingEnabled(false)
-                setPhase('READY')
-                setStatus('UNIT COMPLETE • 5/5 rounds finished • tap Continue next unit')
-              } else {
-                setStatus('RESULT • round settled • next 10-second cycle preparing…')
-              }
-            } catch {
-              if (nextRound >= BOT_CYCLES_PER_UNIT) {
-                setPendingUnitCompletion(true)
-                setAutoTradingEnabled(false)
-                setPhase('READY')
-                setStatus('UNIT COMPLETE locally • server allowance sync needs another pass')
-              } else {
-                setStatus('RESULT • round settled • next 10-second cycle preparing…')
-              }
+          const result = profit >= 0 ? 'WIN' : 'LOSS'
+          processedHistory.current.add(order.id)
+          setBotDisplayedOrder(null)
+          setBotPositionId(null)
+          setTradeCloseAt(null)
+          setTradeSecondsLeft(0)
+          setLastProfit(profit)
+          setLastResult(result)
+          if (profit >= 0) {
+            setWins((value) => value + 1)
+            setStatus('BOT WIN • ' + order.type + ' ' + order.symbol + ' • +' + profit.toFixed(2) + ' ' + accountCurrency + ' • next cycle')
+          } else {
+            setLosses((value) => value + 1)
+            setStatus('BOT LOSS • ' + order.type + ' ' + order.symbol + ' • ' + profit.toFixed(2) + ' ' + accountCurrency + ' • next cycle')
+          }
+
+          void onBotClose?.(order.id)
+
+          const sessionRunId = runId ?? 'v3-' + crypto.randomUUID()
+          void fetch('/api/bot/usage', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ runId: sessionRunId }),
+          }).then(async (response) => {
+            const data = await response.json().catch(() => ({}))
+            if (response.ok && data.ok) {
+              setRunId(sessionRunId)
+              setCycleUnits(Number(data.usedCycleUnits) || cycleUnits)
+              setUnitRound(Number(data.currentUnitRound) || nextRound)
+              if (data.completedUnit) setPendingUnitCompletion(true)
             }
+          }).catch(() => undefined)
+
+          if (nextRound >= BOT_CYCLES_PER_UNIT) {
+            setPendingUnitCompletion(true)
+            setAutoTradingEnabled(false)
+            setPhase('READY')
+            setStatus((profit >= 0 ? 'BOT WIN • ' : 'BOT LOSS • ') + profit.toFixed(2) + ' ' + accountCurrency + ' • UNIT COMPLETE 5/5')
           }
         }, BOT_RESULT_DELAY_MS)
       } catch (error) {
@@ -509,6 +510,7 @@ export function TradingAgentPanel({
     }
     if (analysisTimer.current) window.clearTimeout(analysisTimer.current)
     setPendingUnitCompletion(false)
+    botRunLotSizeRef.current = parsedLotSize
     setBotSessionStarted(true)
     setLastResult(null)
     setBotScanProgress(0)
@@ -616,7 +618,7 @@ export function TradingAgentPanel({
                   <div className="flex items-center justify-between gap-2"><span className={botDisplayedOrder.type === 'BUY' ? 'text-lg font-bold text-shafx-success' : 'text-lg font-bold text-shafx-danger'}>{botDisplayedOrder.type} {botDisplayedOrder.lotSize.toFixed(2)} LOT</span><span className="font-mono text-[9px] uppercase tracking-[0.14em] text-shafx-textMuted">10s active round</span></div>
                   <div className="mt-2 grid grid-cols-3 gap-2 text-[9px]"><div className="rounded-lg border border-shafx-border bg-shafx-bg p-2"><span className="block text-shafx-textMuted">Entry</span><b className="font-mono">{botDisplayedOrder.entryPrice}</b></div><div className="rounded-lg border border-shafx-danger/20 bg-shafx-danger/[0.04] p-2"><span className="block text-shafx-textMuted">Stop Loss</span><b className="font-mono text-shafx-danger">{botDisplayedOrder.stopLoss}</b></div><div className="rounded-lg border border-shafx-success/20 bg-shafx-success/[0.04] p-2"><span className="block text-shafx-textMuted">Take Profit</span><b className="font-mono text-shafx-success">{botDisplayedOrder.takeProfit}</b></div></div>
                   <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-shafx-border"><div className="h-full rounded-full bg-shafx-accent" style={{width: Math.max(0, Math.min(100, ((BOT_RESULT_DELAY_MS - tradeSecondsLeft * 1000) / BOT_RESULT_DELAY_MS) * 100)) + '%'}} /></div>
-                  <p className="mt-2 text-[9px] text-shafx-textMuted">10 seconds active → WIN/LOSS result → next 10-second cycle.</p>
+                  <p className="mt-2 text-[9px] text-shafx-textMuted">10 seconds active → circle reaches 100% → immediate WIN/LOSS → next 10-second cycle.</p>
                 </div>
               </div>
             </div>
@@ -629,7 +631,7 @@ export function TradingAgentPanel({
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-shafx-accent/80 to-transparent" />
         <div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-2.5"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-shafx-accent/30 bg-shafx-accent/10 text-shafx-accent"><Bot className="h-4 w-4" /></div><div className="min-w-0"><div className="font-mono text-[9px] font-semibold uppercase tracking-[0.22em] text-shafx-accent">FREE BOT / AUTONOMOUS SIM</div><div className="mt-1 text-base font-semibold tracking-tight">{autoTradingEnabled ? 'Bot is running' : 'Bot is stopped'}</div><p className="mt-1 text-[10px] leading-4 text-shafx-textMuted">{autoTradingEnabled ? 'Independent scan → proposal → simulated trade → result. Manual Market Read is not used to drive the bot.' : 'Run starts an independent bot market scan. It uses the configured lot size and the simulator order engine.'}</p></div></div><span className={autoTradingEnabled ? 'rounded-full border border-shafx-success/30 bg-shafx-success/10 px-2.5 py-1 font-mono text-[9px] font-semibold text-shafx-success shadow-[0_0_16px_rgba(34,211,165,.12)]' : 'rounded-full border border-shafx-border bg-shafx-bg px-2.5 py-1 font-mono text-[9px] font-semibold text-shafx-textMuted'}>{autoTradingEnabled ? '● LIVE' : '○ IDLE'}</span></div>
         <div className="mt-3 rounded-xl border border-shafx-border/80 bg-black/20 p-2.5">
-          <div className="flex items-center justify-between gap-2 text-[8px] font-mono uppercase tracking-[0.15em] text-shafx-textMuted"><span>execution profile</span><span className="text-shafx-text">{lotSize} lot / safe risk</span></div>
+          <div className="flex items-center justify-between gap-2 text-[8px] font-mono uppercase tracking-[0.15em] text-shafx-textMuted"><span>execution profile</span><span className="text-shafx-text">{botRunLotSizeRef.current?.toFixed(2) ?? lotSize} lot / safe risk</span></div>
           <div className="mt-2 grid grid-cols-5 gap-1.5">
             {(['M1','M5','M15','M30','H1'] as Timeframe[]).map((frame, index) => <span key={frame} className={index < 3 ? 'rounded-md border border-shafx-accent/25 bg-shafx-accent/10 px-1.5 py-1.5 text-center font-mono text-[8px] font-semibold text-shafx-accent' : 'rounded-md border border-shafx-border bg-shafx-bg px-1.5 py-1.5 text-center font-mono text-[8px] text-shafx-textMuted'}>{frame}{index < 3 ? ' · PRI' : ''}</span>)}
           </div>
