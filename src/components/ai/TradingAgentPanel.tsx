@@ -284,7 +284,6 @@ export function TradingAgentPanel({
           return
         }
 
-        const scan = activeBotScan
         const nextRound = unitRound + 1
         const unitNumber = unitRound === 0 ? Math.min(cycleUnits + 1, plan.maxDailyCycleUnits ?? cycleUnits + 1) : displayedUnitNumber
 
@@ -430,7 +429,7 @@ export function TradingAgentPanel({
     setStatus('BOT START • independent bot analysis is warming up…')
     analysisTimer.current = window.setTimeout(() => {
       setPhase('RUNNING')
-      setStatus('BOT RUNNING • first simulated trade in about 1 second.')
+      setStatus('BOT RUNNING • first independent simulated trade will open in under 2 seconds.')
     }, BOT_START_DELAY_MS)
   }
 
