@@ -55,6 +55,26 @@ describe('SimulatorRealtimeMarketEngine', () => {
     expect(snapshot.candles.length).toBeGreaterThanOrEqual(2)
   })
 
+
+  it('uses the same underlying tick path across H1, H4 and D1 views', () => {
+    const h1 = new SimulatorRealtimeMarketEngine(spec, 'H1', seed)
+    const h4 = new SimulatorRealtimeMarketEngine(spec, 'H4', seed)
+    const d1 = new SimulatorRealtimeMarketEngine(spec, 'D1', seed)
+
+    for (let index = 0; index < 40; index += 1) {
+      const a = h1.tickOnce(1)
+      const b = h4.tickOnce(1)
+      const c = d1.tickOnce(1)
+      expect(b.bid).toBe(a.bid)
+      expect(c.bid).toBe(a.bid)
+      expect(b.timestamp).toBe(a.timestamp)
+      expect(c.timestamp).toBe(a.timestamp)
+    }
+
+    expect(h1.snapshot().candles[h1.snapshot().candles.length - 1].time).toBeLessThanOrEqual(h4.snapshot().candles[h4.snapshot().candles.length - 1].time)
+    expect(h4.snapshot().candles[h4.snapshot().candles.length - 1].time).toBeLessThanOrEqual(d1.snapshot().candles[d1.snapshot().candles.length - 1].time)
+  })
+
   it('keeps higher-timeframe candle direction stable while the live close follows the bid', () => {
     const engine = new SimulatorRealtimeMarketEngine(spec, 'H1', seed)
     let snapshot = engine.snapshot()
