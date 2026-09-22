@@ -29,7 +29,6 @@ export const FXMoveMatrix: React.FC<Props> = ({ pairs }) => {
 
   const matrix = useMemo(() => {
     const strength = new Map<string, number>(currencies.map((currency) => [currency, 0]))
-    const samples = new Map<string, number>()
 
     pairs.forEach((pair) => {
       const split = splitPair(pair.symbol)
@@ -38,7 +37,6 @@ export const FXMoveMatrix: React.FC<Props> = ({ pairs }) => {
       if (!Number.isFinite(move)) return
       strength.set(split[0], (strength.get(split[0]) ?? 0) + move / 2)
       strength.set(split[1], (strength.get(split[1]) ?? 0) - move / 2)
-      samples.set(pair.symbol.replace('/', '').toUpperCase(), move)
     })
 
     return currencies.map((row, rowIndex) => currencies.map((column, columnIndex) => {
