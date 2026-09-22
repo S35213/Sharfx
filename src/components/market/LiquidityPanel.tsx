@@ -23,7 +23,7 @@ interface TapeTick {
 const formatExactTime = (timestamp: number): string => {
   const date = new Date(timestamp)
   const pad = (number: number, width = 2): string => String(number).padStart(width, '0')
-  return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${pad(date.getMilliseconds(), 3)}`
 }
 
 const seedTape = (candles: OHLCV[], precision: number): TapeTick[] => {
@@ -44,51 +44,30 @@ const seedTape = (candles: OHLCV[], precision: number): TapeTick[] => {
 export const LiquidityPanel: React.FC<Props> = ({ symbol, price, precision, pipSize = 0.0001, providerDepthAvailable = false, candles = [] }) => {
   const [tape, setTape] = useState<TapeTick[]>(() => seedTape(candles, precision))
   const [tick, setTick] = useState(0)
-  const priceRef = useRef(price)
   const tapeScrollRef = useRef<HTMLDivElement | null>(null)
   const autoScrollTapeRef = useRef(true)
   useEffect(() => {
-    priceRef.current = price
-  }, [price])
-
-  useEffect(() => {
-    setTape(seedTape(candles, precision))
-    setTick(0)
-    autoScrollTapeRef.current = true
-  }, [symbol])
-
-  useEffect(() => {
     let sequence = 0
-    let timeout: number | null = null
-    let cancelled = false
-    const schedule = (): void => {
-      if (cancelled) return
-      const delay = 650 + ((sequence * 431 + symbol.length * 73) % 1050)
-      timeout = window.setTimeout(() => {
-        sequence += 1
-        setTick((value) => value + 1)
-        const tapeElement = tapeScrollRef.current
+    const timer = window.setInterval(() => {
+      sequence += 1
+      setTick((value) => value + 1)
+      const tapeElement = tapeScrollRef.current
       autoScrollTapeRef.current = !tapeElement || tapeElement.scrollHeight - tapeElement.scrollTop - tapeElement.clientHeight < 28
       setTape((previous) => {
         const now = Date.now()
-        const last = previous[previous.length - 1]
+        const last = previous[0]
         const lastSide = last?.side ?? 'SELL'
         const wave = Math.sin(sequence * 1.21 + symbol.length)
         const side: TapeSide = sequence % 4 === 0 ? (lastSide === 'BUY' ? 'SELL' : 'BUY') : wave >= 0 ? 'BUY' : 'SELL'
         const drift = pipSize * (0.28 * Math.sin(sequence * 0.91) + 0.12 * Math.cos(sequence * 0.37))
-        const nextPrice = Number((Math.max(pipSize / 10, priceRef.current + drift)).toFixed(precision))
+        const nextPrice = Number((Math.max(pipSize / 10, price + drift)).toFixed(precision))
         const lots = Number((0.05 + ((sequence * 13) % 85) / 100).toFixed(2))
         const next: TapeTick = { id: `live-${symbol}-${now}-${sequence}`, time: now, side, lots, price: nextPrice }
         return [...previous, next].slice(-18)
       })
-      schedule()
-    }
-    schedule()
-    return () => {
-      cancelled = true
-      if (timeout !== null) window.clearTimeout(timeout)
-    }
-  }, [pipSize, precision, symbol])
+    }, 850)
+    return () => window.clearInterval(timer)
+  }, [pipSize, precision, price, symbol])
 
   useEffect(() => {
     if (!autoScrollTapeRef.current) return
@@ -168,8 +147,8 @@ export const LiquidityPanel: React.FC<Props> = ({ symbol, price, precision, pipS
 
     <div className="border-t border-shafx-border">
       <div className="flex items-center justify-between gap-2 px-3 py-2.5">
-        <div className="flex items-center gap-2"><Activity className="h-3.5 w-3.5 text-shafx-accent" /><div><div className="text-[10px] font-semibold">Time & sales</div><div className="text-[8px] text-shafx-textMuted">Simulated tick stream • session timestamps</div></div></div>
-        <span className="text-[8px] font-semibold text-shafx-success">STREAM {tick}</span>
+        <div className="flex items-center gap-2"><Activity className="h-3.5 w-3.5 text-shafx-accent" /><div><div className="text-[10px] font-semibold">Time & sales</div><div className="text-[8px] text-shafx-textMuted">Synthetic tick stream • exact simulated execution time</div></div></div>
+        <span className="text-[8px] font-semibold text-shafx-success">TICK {tick}</span>
       </div>
       <div className="grid grid-cols-2 gap-2 px-3 pb-2 text-[9px]">
         <div className="rounded-lg border border-shafx-success/20 bg-shafx-success/5 p-2"><span className="block text-shafx-textMuted">Buy orders</span><strong className="mt-0.5 block font-mono text-shafx-success">{tapeBuyCount} • {tapeBuyLots.toFixed(2)} lots</strong></div>
