@@ -24,7 +24,6 @@ const bucketStart = (time: number, timeframe: Timeframe): number => timeframe ==
 const finitePositive = (value: number): boolean => Number.isFinite(value) && value > 0
 
 const aggregate = (base: OHLCV[], timeframe: Timeframe, precision: number, limit = 300): OHLCV[] => {
-  const interval = TIMEFRAME_SECONDS[timeframe]
   const groups = new Map<number, OHLCV>()
 
   for (const candle of base) {
