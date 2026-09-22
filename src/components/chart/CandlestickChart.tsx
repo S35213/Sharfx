@@ -251,15 +251,13 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
 
     const lastIndex = visualData.length - 1
     if (rangeNeedsReset) {
-      // A timeframe change must clear the user's previous horizontal zoom.
-      // Lightweight Charts keeps horizontal zoom in the time scale's
-      // barSpacing state, so changing the logical range alone can leave an
-      // earlier D1/H4 pinch-zoom affecting the new M1 view. Reset the actual
-      // time scale first, then explicitly restore SHAFX's normal spacing.
+      // Every timeframe gets the same normal, zoomed-out starting view.
+      // Never carry the previous timeframe's pinch/bar-spacing zoom into the
+      // new timeframe. The user can zoom in manually after switching.
       chart.timeScale().resetTimeScale()
       chart.timeScale().applyOptions({
-        barSpacing: 9,
-        minBarSpacing: 3,
+        barSpacing: 6,
+        minBarSpacing: 0.5,
         rightOffset: 7,
       })
       chart.timeScale().scrollToRealTime()
