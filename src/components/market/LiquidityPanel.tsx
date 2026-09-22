@@ -26,19 +26,87 @@ const formatExactTime = (timestamp: number): string => {
   return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
 }
 
+const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value))
+
+interface FlowProfile {
+  momentum: number
+  activity: number
+}
+
+const buildFlowProfile = (candles: OHLCV[]): FlowProfile => {
+  const recent = candles.slice(-12)
+  if (recent.length === 0) return { momentum: 0, activity: 0.35 }
+
+  let weightedMomentum = 0
+  let weightTotal = 0
+  let rangeTotal = 0
+  let priceTotal = 0
+
+  recent.forEach((candle, index) => {
+    const range = Math.max(Math.abs(candle.high - candle.low), Number.EPSILON)
+    const body = candle.close - candle.open
+    const weight = index + 1
+    weightedMomentum += clamp(body / range, -1, 1) * weight
+    weightTotal += weight
+    rangeTotal += range
+    priceTotal += Math.max(Math.abs(candle.close), Number.EPSILON)
+  })
+
+  const momentum = clamp(weightedMomentum / Math.max(1, weightTotal), -1, 1)
+  const averageRangePct = (rangeTotal / recent.length) / Math.max(Number.EPSILON, priceTotal / recent.length)
+  const activity = clamp(averageRangePct / 0.0012, 0.18, 1)
+
+  return { momentum, activity }
+}
+
+const randomNormal = (): number => {
+  const u = Math.max(Number.EPSILON, Math.random())
+  const v = Math.max(Number.EPSILON, Math.random())
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v)
+}
+
+const chooseFlowSide = (profile: FlowProfile, lastSide: TapeSide | null): TapeSide => {
+  const persistence = lastSide === 'BUY' ? 0.06 : lastSide === 'SELL' ? -0.06 : 0
+  const marketPressure = profile.momentum * 0.28
+  const noise = clamp(randomNormal() * 0.10, -0.20, 0.20)
+  const buyProbability = clamp(0.5 + marketPressure + persistence + noise, 0.12, 0.88)
+  return Math.random() < buyProbability ? 'BUY' : 'SELL'
+}
+
+const chooseLotSize = (profile: FlowProfile): number => {
+  const median = 0.08 + profile.activity * 0.22
+  const raw = Math.exp(Math.log(median) + randomNormal() * 0.72)
+  return Number(clamp(raw, 0.03, 2.5).toFixed(2))
+}
+
+const chooseNextDelay = (profile: FlowProfile): number => {
+  // Variable event cadence: active periods cluster closer together; quiet periods spread out.
+  const meanDelay = 2600 - profile.activity * 1200
+  const exponentialGap = -Math.log(Math.max(1e-6, 1 - Math.random())) * meanDelay
+  return Math.round(clamp(900 + exponentialGap, 900, 10000))
+}
+
 const seedTape = (candles: OHLCV[], precision: number): TapeTick[] => {
   const latest = Date.now()
-  return candles.slice(-9).flatMap((candle, index) => {
-    const span = Math.max(Math.abs(candle.close - candle.open), Number.EPSILON)
-    const primarySide: TapeSide = candle.close >= candle.open ? 'BUY' : 'SELL'
-    const secondarySide: TapeSide = primarySide === 'BUY' ? 'SELL' : 'BUY'
-    const baseLots = 0.08 + ((index * 17) % 48) / 100
-    const baseTime = latest - (8 - index) * 1100
-    return [
-      { id: `seed-${candle.time}-a`, time: baseTime, side: primarySide, lots: Number(baseLots.toFixed(2)), price: Number((candle.open + (candle.close - candle.open) * 0.35).toFixed(precision)) },
-      { id: `seed-${candle.time}-b`, time: baseTime + 500, side: secondarySide, lots: Number((baseLots * (0.7 + span / Math.max(span, 0.0000001) * 0.3)).toFixed(2)), price: Number((candle.close - (candle.close - candle.open) * 0.15).toFixed(precision)) },
-    ]
-  }).sort((a, b) => a.time - b.time).slice(-18)
+  const profile = buildFlowProfile(candles)
+  let cursor = latest
+  let lastSide: TapeSide | null = null
+
+  return candles.slice(-12).reverse().flatMap((candle, index) => {
+    const gap = 900 + ((index * 701) % 2600)
+    cursor -= gap
+    const side = chooseFlowSide(profile, lastSide)
+    lastSide = side
+    const lotSize = chooseLotSize(profile)
+    const close = Number(candle.close.toFixed(precision))
+    const offset = Math.abs(candle.close - candle.open) * (0.15 + Math.random() * 0.35)
+    const tapePrice = Number(clamp(
+      side === 'BUY' ? close + offset : close - offset,
+      Math.min(candle.low, candle.high),
+      Math.max(candle.low, candle.high),
+    ).toFixed(precision))
+    return [{ id: `seed-${candle.time}-${index}`, time: cursor, side, lots: lotSize, price: tapePrice }]
+  }).reverse()
 }
 
 export const LiquidityPanel: React.FC<Props> = ({ symbol, price, precision, pipSize = 0.0001, providerDepthAvailable = false, candles = [] }) => {
@@ -46,28 +114,62 @@ export const LiquidityPanel: React.FC<Props> = ({ symbol, price, precision, pipS
   const [tick, setTick] = useState(0)
   const tapeScrollRef = useRef<HTMLDivElement | null>(null)
   const autoScrollTapeRef = useRef(true)
+  const priceRef = useRef(price)
+  const flowProfileRef = useRef<FlowProfile>(buildFlowProfile(candles))
+  const lastSideRef = useRef<TapeSide | null>(tape[0]?.side ?? null)
+
+  useEffect(() => {
+    priceRef.current = price
+    flowProfileRef.current = buildFlowProfile(candles)
+  }, [candles, price])
+
   useEffect(() => {
     let sequence = 0
-    const timer = window.setInterval(() => {
-      sequence += 1
-      setTick((value) => value + 1)
-      const tapeElement = tapeScrollRef.current
-      autoScrollTapeRef.current = !tapeElement || tapeElement.scrollHeight - tapeElement.scrollTop - tapeElement.clientHeight < 28
-      setTape((previous) => {
-        const now = Date.now()
-        const last = previous[0]
-        const lastSide = last?.side ?? 'SELL'
-        const wave = Math.sin(sequence * 1.21 + symbol.length)
-        const side: TapeSide = sequence % 4 === 0 ? (lastSide === 'BUY' ? 'SELL' : 'BUY') : wave >= 0 ? 'BUY' : 'SELL'
-        const drift = pipSize * (0.28 * Math.sin(sequence * 0.91) + 0.12 * Math.cos(sequence * 0.37))
-        const nextPrice = Number((Math.max(pipSize / 10, price + drift)).toFixed(precision))
-        const lots = Number((0.05 + ((sequence * 13) % 85) / 100).toFixed(2))
-        const next: TapeTick = { id: `live-${symbol}-${now}-${sequence}`, time: now, side, lots, price: nextPrice }
-        return [...previous, next].slice(-18)
-      })
-    }, 850)
-    return () => window.clearInterval(timer)
-  }, [pipSize, precision, price, symbol])
+    let cancelled = false
+    let timeout: number | null = null
+
+    const scheduleNext = (): void => {
+      if (cancelled) return
+      const delay = chooseNextDelay(flowProfileRef.current)
+      timeout = window.setTimeout(() => {
+        sequence += 1
+        const profile = flowProfileRef.current
+        const side = chooseFlowSide(profile, lastSideRef.current)
+        const lots = chooseLotSize(profile)
+        lastSideRef.current = side
+        setTick((value) => value + 1)
+
+        const tapeElement = tapeScrollRef.current
+        autoScrollTapeRef.current = !tapeElement || tapeElement.scrollHeight - tapeElement.scrollTop - tapeElement.clientHeight < 28
+
+        setTape((previous) => {
+          const now = Date.now()
+          const drift = pipSize * (
+            0.22 * Math.sin(sequence * 0.77) +
+            0.14 * Math.cos(sequence * 1.13) +
+            (side === 'BUY' ? 0.10 : -0.10)
+          )
+          const nextPrice = Number(Math.max(pipSize / 10, priceRef.current + drift).toFixed(precision))
+          const next: TapeTick = {
+            id: `live-${symbol}-${now}-${sequence}`,
+            time: now,
+            side,
+            lots,
+            price: nextPrice,
+          }
+          return [...previous, next].slice(-18)
+        })
+
+        scheduleNext()
+      }, delay)
+    }
+
+    scheduleNext()
+    return () => {
+      cancelled = true
+      if (timeout !== null) window.clearTimeout(timeout)
+    }
+  }, [pipSize, precision, symbol])
 
   useEffect(() => {
     if (!autoScrollTapeRef.current) return
@@ -147,12 +249,12 @@ export const LiquidityPanel: React.FC<Props> = ({ symbol, price, precision, pipS
 
     <div className="border-t border-shafx-border">
       <div className="flex items-center justify-between gap-2 px-3 py-2.5">
-        <div className="flex items-center gap-2"><Activity className="h-3.5 w-3.5 text-shafx-accent" /><div><div className="text-[10px] font-semibold">Time & sales</div><div className="text-[8px] text-shafx-textMuted">Synthetic tick stream • exact simulated execution time</div></div></div>
-        <span className="text-[8px] font-semibold text-shafx-success">TICK {tick}</span>
+        <div className="flex items-center gap-2"><Activity className="h-3.5 w-3.5 text-shafx-accent" /><div><div className="text-[10px] font-semibold">Time & sales</div><div className="text-[8px] text-shafx-textMuted">Synthetic market-print stream • variable event cadence • market-coupled flow</div></div></div>
+        <span className="text-[8px] font-semibold text-shafx-success">EVENT {tick}</span>
       </div>
       <div className="grid grid-cols-2 gap-2 px-3 pb-2 text-[9px]">
-        <div className="rounded-lg border border-shafx-success/20 bg-shafx-success/5 p-2"><span className="block text-shafx-textMuted">Buy orders</span><strong className="mt-0.5 block font-mono text-shafx-success">{tapeBuyCount} • {tapeBuyLots.toFixed(2)} lots</strong></div>
-        <div className="rounded-lg border border-shafx-danger/20 bg-shafx-danger/5 p-2"><span className="block text-shafx-textMuted">Sell orders</span><strong className="mt-0.5 block font-mono text-shafx-danger">{tapeSellCount} • {tapeSellLots.toFixed(2)} lots</strong></div>
+        <div className="rounded-lg border border-shafx-success/20 bg-shafx-success/5 p-2"><span className="block text-shafx-textMuted">Buy prints</span><strong className="mt-0.5 block font-mono text-shafx-success">{tapeBuyCount} • {tapeBuyLots.toFixed(2)} lots</strong></div>
+        <div className="rounded-lg border border-shafx-danger/20 bg-shafx-danger/5 p-2"><span className="block text-shafx-textMuted">Sell prints</span><strong className="mt-0.5 block font-mono text-shafx-danger">{tapeSellCount} • {tapeSellLots.toFixed(2)} lots</strong></div>
       </div>
       <div ref={tapeScrollRef} className="max-h-[250px] space-y-1 overflow-y-auto px-3 pb-3">
         <div className="grid grid-cols-[76px_46px_1fr_84px] gap-1 px-2 text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted"><span>Time</span><span>Side</span><span>Volume</span><span className="text-right">Price</span></div>
@@ -170,6 +272,6 @@ export const LiquidityPanel: React.FC<Props> = ({ symbol, price, precision, pipS
       <div className="rounded-lg border border-shafx-border bg-shafx-bg p-2"><span className="block text-shafx-textMuted">Ask depth</span><strong className="mt-1 block font-mono text-shafx-danger">{askTotal}</strong></div>
       <div className="rounded-lg border border-shafx-border bg-shafx-bg p-2"><span className="block text-shafx-textMuted">Imbalance</span><strong className={`mt-1 block font-mono ${imbalance >= 0 ? 'text-shafx-success' : 'text-shafx-danger'}`}>{imbalance >= 0 ? '+' : ''}{imbalance.toFixed(1)}%</strong></div>
     </footer>
-    <div className="border-t border-shafx-border px-4 py-2 text-[9px] leading-relaxed text-shafx-textMuted"><Waves className="mr-1 inline h-3 w-3 text-shafx-accent" />{providerDepthAvailable ? 'Depth is supplied by the connected provider adapter.' : 'All tick, volume and participant-side activity above is synthetic simulator data; real Time & Sales and real depth require normalized provider tick/depth data.'}</div>
+    <div className="border-t border-shafx-border px-4 py-2 text-[9px] leading-relaxed text-shafx-textMuted"><Waves className="mr-1 inline h-3 w-3 text-shafx-accent" />{providerDepthAvailable ? 'Depth is supplied by the connected provider adapter.' : 'All event timing, volume and participant-side activity above is synthetic simulator data; real Time & Sales and real depth require normalized provider tick/depth data.'}</div>
   </section>
 }
