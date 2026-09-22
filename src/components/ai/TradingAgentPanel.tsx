@@ -191,7 +191,6 @@ export function TradingAgentPanel({
   const nextRoundTimer = useRef<number | null>(null)
   const runInFlightRef = useRef(false)
   const runBotCycleRef = useRef<(() => Promise<void>) | null>(null)
-  const resumedOrderRef = useRef<string | null>(null)
 
   const tradingContext = useMemo(() => {
     const swings = findSwingPoints(candles, 2)
@@ -600,8 +599,6 @@ export function TradingAgentPanel({
 
   useEffect(() => {
     if (!resumePendingRef.current || !autoTradingEnabled || phase !== 'RUNNING' || !activeBotOrder) return
-    if (resumedOrderRef.current === activeBotOrder.id) return
-    resumedOrderRef.current = activeBotOrder.id
     resumePendingRef.current = false
     setBotPositionId(activeBotOrder.id)
     setBotDisplayedOrder(activeBotOrder)
