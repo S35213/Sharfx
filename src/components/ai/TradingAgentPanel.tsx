@@ -634,6 +634,20 @@ export function TradingAgentPanel({
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ runId: runId ?? 'v3-' + crypto.randomUUID() }),
+      }).then(async (response) => {
+        const data = await response.json().catch(() => ({}))
+        if (!response.ok || !data.ok) return
+        const used = Number.isFinite(Number(data.usedCycleUnits)) ? Number(data.usedCycleUnits) : cycleUnits
+        const round = Number.isFinite(Number(data.currentUnitRound)) ? Number(data.currentUnitRound) : unitRound + 1
+        setCycleUnits(used)
+        setUnitRound(round)
+        if (data.completedUnit) {
+          setPendingUnitCompletion(true)
+          setAutoTradingEnabled(false)
+          setPhase('READY')
+          try { window.localStorage.removeItem(botAutostartKey) } catch { /* storage may be unavailable */ }
+          setStatus('UNIT COMPLETE 5/5 • TAP RUN UNIT ' + (used + 1))
+        }
       }).catch(() => undefined)
     }, BOT_RESULT_DELAY_MS)
   }, [activeBotOrder, autoTradingEnabled, onBotClose, phase, runId])
