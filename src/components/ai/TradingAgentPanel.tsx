@@ -377,7 +377,7 @@ export function TradingAgentPanel({
 
       try {
         if (!autoTradingEnabled || phase !== 'RUNNING') return
-        if (resumePendingRef.current && !activeBotOrder && !botPositionId && !botDisplayedOrder) resumePendingRef.current = false
+        if (resumePending && !activeBotOrder && !botPositionId && !botDisplayedOrder) setResumePending(false)
         if (activeBotOrder || botPositionId || botDisplayedOrder) {
           setStatus('MONITORING • waiting for the current simulated bot round to close')
           return
@@ -557,7 +557,7 @@ export function TradingAgentPanel({
   }, [autoTradingEnabled, botDisplayedOrder, botPositionId, lastResult, pendingUnitCompletion, phase])
 
   const resumeStartedRef = useRef(false)
-  const resumePendingRef = useRef(false)
+  const [resumePending, setResumePending] = useState(false)
 
   useEffect(() => {
     if (resumeStartedRef.current) return
@@ -581,7 +581,7 @@ export function TradingAgentPanel({
         setLastResult(null)
         setAutoTradingEnabled(true)
         setPhase('ANALYZING')
-        resumePendingRef.current = true
+        setResumePending(true)
         setStatus('BOT RESUMING • restoring Unit ' + (serverUsedUnits + 1) + ' Round ' + (serverRound + 1) + '…')
         if (analysisTimer.current) window.clearTimeout(analysisTimer.current)
         analysisTimer.current = window.setTimeout(() => {
@@ -598,8 +598,8 @@ export function TradingAgentPanel({
   }, [botAutostartKey, parsedLotSize])
 
   useEffect(() => {
-    if (!resumePendingRef.current || !autoTradingEnabled || phase !== 'RUNNING' || !activeBotOrder) return
-    resumePendingRef.current = false
+    if (!resumePending || !autoTradingEnabled || phase !== 'RUNNING' || !activeBotOrder) return
+    setResumePending(false)
     setBotPositionId(activeBotOrder.id)
     setBotDisplayedOrder(activeBotOrder)
     setTradeCloseAt(Date.now() + BOT_RESULT_DELAY_MS)
@@ -647,7 +647,7 @@ export function TradingAgentPanel({
         }
       }).catch(() => undefined)
     }, BOT_RESULT_DELAY_MS)
-  }, [activeBotOrder, autoTradingEnabled, onBotClose, phase, runId])
+  }, [activeBotOrder, autoTradingEnabled, onBotClose, phase, resumePending, runId])
   useEffect(() => () => {
     if (analysisTimer.current) window.clearTimeout(analysisTimer.current)
     if (marketScanTimer.current) window.clearTimeout(marketScanTimer.current)
