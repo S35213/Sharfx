@@ -34,7 +34,7 @@ export const BOT_PLANS: Record<BotPlan, BotPlanConfig> = {
 
 export const BOT_CYCLES_PER_UNIT = 5 as const
 export const cycleUnitsForSeconds = (seconds: 3 | 5 | 6 | 10): number => seconds === 10 ? 2 : 1
-export const canConsumeCycleUnits = (plan: BotPlan, usedUnits: number, seconds: 3 | 5 | 10): boolean => {
+export const canConsumeCycleUnits = (plan: BotPlan, usedUnits: number, seconds: 3 | 5 | 6 | 10): boolean => {
   if (seconds > BOT_PLANS[plan].maxCycleSeconds) return false
   const max = BOT_PLANS[plan].maxDailyCycleUnits
   return max === null || usedUnits + cycleUnitsForSeconds(seconds) <= max
