@@ -39,9 +39,9 @@ type Phase = 'READY' | 'ANALYZING' | 'RUNNING'
 const SCAN_TIMEFRAMES: Timeframe[] = ['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1']
 const SCAN_SEQUENCE: Timeframe[] = ['M1', 'M5', 'M15', 'M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1']
 const TIMEFRAME_SCAN_BONUS: Record<Timeframe, number> = { M1: 18, M5: 14, M15: 10, M30: 5, H1: 2, H4: 0, D1: -1 }
-const BOT_CYCLE_SECONDS = 3 as const
-const BOT_RESULT_DELAY_MS = 1500 as const
-const BOT_START_DELAY_MS = 300 as const
+const BOT_CYCLE_SECONDS = 6 as const
+const BOT_RESULT_DELAY_MS = 5000 as const
+const BOT_START_DELAY_MS = 1000 as const
 
 const buildScanCandidates = (
   frames: Partial<Record<Timeframe, OHLCV[]>>,
@@ -72,6 +72,32 @@ const buildScanCandidates = (
 }
 const BOT_RISK_MODE: RiskMode = 'SAFE'
 
+interface CircularProgressProps {
+  progress: number
+  label: string
+  value: string
+}
+
+function CircularProgress({ progress, label, value }: CircularProgressProps) {
+  const bounded = Math.max(0, Math.min(100, progress))
+  const radius = 27
+  const circumference = 2 * Math.PI * radius
+  const offset = circumference * (1 - bounded / 100)
+
+  return (
+    <div className="relative h-20 w-20 shrink-0" aria-label={label}>
+      <svg viewBox="0 0 64 64" className="-rotate-90 h-20 w-20">
+        <circle cx="32" cy="32" r={radius} fill="none" stroke="currentColor" strokeWidth="4" className="text-shafx-border" />
+        <circle cx="32" cy="32" r={radius} fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" className="text-shafx-accent transition-[stroke-dashoffset] duration-100" style={{ strokeDasharray: circumference, strokeDashoffset: offset }} />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="font-mono text-sm font-bold text-shafx-text">{value}</span>
+        <span className="font-mono text-[7px] uppercase tracking-[0.14em] text-shafx-textMuted">{label}</span>
+      </div>
+    </div>
+  )
+}
+
 export function TradingAgentPanel({
   symbol,
   timeframe,
@@ -96,6 +122,7 @@ export function TradingAgentPanel({
   const [lotSize, setLotSize] = useState(readStoredLotSize)
   const [phase, setPhase] = useState<Phase>('READY')
   const [scanPhase, setScanPhase] = useState<Phase>('READY')
+  const [botScanProgress, setBotScanProgress] = useState(0)
   const [autoTradingEnabled, setAutoTradingEnabled] = useState(false)
   const [wins, setWins] = useState(0)
   const [losses, setLosses] = useState(0)
@@ -109,6 +136,7 @@ export function TradingAgentPanel({
   const [scanSeconds, setScanSeconds] = useState(0)
   const [scanComplete, setScanComplete] = useState(false)
   const [scanNonce, setScanNonce] = useState(0)
+  const [scanSnapshot, setScanSnapshot] = useState(0)
   const [lastResult, setLastResult] = useState<'WIN' | 'LOSS' | 'WAIT' | null>(null)
   const [status, setStatus] = useState('Ready to scan')
   const [bias, setBias] = useState('Neutral')
@@ -140,6 +168,26 @@ export function TradingAgentPanel({
     [currentPrice, scanNonce, symbol, timeframeFrames],
   )
   const activeBotScan = fastScanCandidates[0] ?? null
+  const marketReadRows = useMemo(() => SCAN_TIMEFRAMES.map((scanTimeframe) => {
+    const frameCandles = timeframeFrames[scanTimeframe] ?? []
+    if (frameCandles.length < 5) return { timeframe: scanTimeframe, bias: 'Neutral' as const, structure: 'Insufficient data', directionalOpportunity: false, executableSetup: null }
+    const swings = findSwingPoints(frameCandles, 2)
+    const structure = analyzeMarketStructure(frameCandles, 2)
+    const tolerance = symbol.includes('JPY') ? 0.1 : 0.001
+    const supportResistance = analyzeSupportResistance(frameCandles, tolerance, swings)
+    const liquidity = analyzeLiquidity(frameCandles, swings, tolerance)
+    const framePrice = frameCandles[frameCandles.length - 1]?.close ?? currentPrice
+    const setupResult = analyzeSetup({ currentPrice: framePrice, structure, supportResistance, liquidity })
+    return {
+      timeframe: scanTimeframe,
+      bias: structure.bias,
+      structure: structure.status,
+      directionalOpportunity: structure.bias === 'Bullish' || structure.bias === 'Bearish',
+      executableSetup: setupResult.preferredSetup,
+    }
+  }), [currentPrice, symbol, timeframeFrames, scanSnapshot])
+  const marketOpportunities = marketReadRows.filter((row) => row.directionalOpportunity)
+  const executableOpportunities = marketReadRows.filter((row) => row.executableSetup)
   const botTrades = useMemo(() => tradeHistory.filter((trade) => botOrderIds.includes(trade.id)).sort((a, b) => new Date(b.closeTime ?? b.openTime).getTime() - new Date(a.closeTime ?? a.openTime).getTime()), [botOrderIds, tradeHistory])
   const activeBotOrder = activePosition && botOrderIds.includes(activePosition.id) ? activePosition : null
 
@@ -255,6 +303,23 @@ export function TradingAgentPanel({
     const timer = window.setInterval(updateCountdown, 100)
     return () => window.clearInterval(timer)
   }, [tradeCloseAt])
+
+
+  useEffect(() => {
+    if (phase !== 'ANALYZING') {
+      if (phase === 'RUNNING') setBotScanProgress(100)
+      else setBotScanProgress(0)
+      return
+    }
+    const startedAt = Date.now()
+    const updateProgress = (): void => {
+      setBotScanProgress(Math.min(100, ((Date.now() - startedAt) / BOT_START_DELAY_MS) * 100))
+    }
+    updateProgress()
+    const timer = window.setInterval(updateProgress, 50)
+    return () => window.clearInterval(timer)
+  }, [phase])
+
 
   useEffect(() => {
     runBotCycleRef.current = async (): Promise<void> => {
@@ -424,12 +489,13 @@ export function TradingAgentPanel({
     setPendingUnitCompletion(false)
     setBotSessionStarted(true)
     setLastResult(null)
+    setBotScanProgress(0)
     setAutoTradingEnabled(true)
     setPhase('ANALYZING')
-    setStatus('BOT START • independent bot analysis is warming up…')
+    setStatus('BOT SCAN • refreshing all timeframes independently…')
     analysisTimer.current = window.setTimeout(() => {
       setPhase('RUNNING')
-      setStatus('BOT RUNNING • first independent simulated trade will open in under 2 seconds.')
+      setStatus('BOT RUNNING • 5-second simulated round. Next cycle follows automatically.')
     }, BOT_START_DELAY_MS)
   }
 
@@ -462,6 +528,7 @@ export function TradingAgentPanel({
     setScanPhase('ANALYZING')
     setScanFrame('M1')
     setScanNonce((value) => value + 1)
+    setScanSnapshot((value) => value + 1)
     let index = 0
     scanInterval.current = window.setInterval(() => {
       index = Math.min(index + 1, SCAN_SEQUENCE.length - 1)
