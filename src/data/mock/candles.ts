@@ -49,7 +49,6 @@ const generateBaseM1 = (symbol: string, startPrice: number, pipSize: number, pre
 }
 
 const aggregate = (base: OHLCV[], timeframe: Timeframe, precision: number): OHLCV[] => {
-  const interval = INTERVAL_SECONDS[timeframe]
   if (interval === 60) return base
   const groups = new Map<number, OHLCV>()
   for (const candle of base) {
