@@ -25,6 +25,7 @@ const weights: Record<Timeframe, number> = {
   H1: 3,
   H4: 4,
   D1: 5,
+  W1: 6,
 }
 
 const chooseLookback = (candles: OHLCV[]): number => {
@@ -34,7 +35,7 @@ const chooseLookback = (candles: OHLCV[]): number => {
 }
 
 export const analyzeMultiTimeframeBias = (frames: Partial<Record<Timeframe, OHLCV[]>>): MultiTimeframeResult => {
-  const order: Timeframe[] = ['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1']
+  const order: Timeframe[] = ['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1', 'W1']
   const biases = order
     .filter((timeframe) => (frames[timeframe]?.length ?? 0) > 0)
     .map((timeframe) => {
