@@ -98,6 +98,7 @@ const TerminalContent: React.FC = () => {
   const symbolSpecCache = useRef<Record<string, SymbolSpec>>({})
   const toastId = useRef(0)
   const openPositionsRef = useRef<TradeOrder[]>([])
+  const tradeHistoryRef = useRef<TradeOrder[]>([])
   const positionRefreshInFlight = useRef(false)
   const currentPriceForPositionsRef = useRef(currentPrice)
   const selectedSymbolForPositionsRef = useRef(selectedSymbol)
@@ -390,8 +391,14 @@ const TerminalContent: React.FC = () => {
   }, [pushToast])
 
   const closePosition = useCallback(async (id: string): Promise<TradeOrder | null> => {
-    const order = openPositions.find((item) => item.id === id)
-    if (!order || !accountData) return null
+    // Bot settlement and the 500ms automatic-position monitor can race each
+    // other. Always read the latest refs, and make a second close request
+    // idempotent by returning an already-closed trade from history.
+    const order = openPositionsRef.current.find((item) => item.id === id)
+    if (!order) {
+      return tradeHistoryRef.current.find((item) => item.id === id && item.status === 'closed') ?? null
+    }
+    if (!accountData) return null
     try {
       let spec: SymbolSpec
       let exitPrice: number | undefined
@@ -408,8 +415,12 @@ const TerminalContent: React.FC = () => {
       const closed = closeSimulatedPosition(order, { exitPrice, conversionRate: rate }, spec)
       const realized = closed.profit ?? 0
       if (isSimulatorMode()) applyDemoProfit(realized)
-      setOpenPositions((prev) => prev.filter((item) => item.id !== id))
-      setTradeHistory((prev) => [closed, ...prev])
+      const nextOpenPositions = openPositionsRef.current.filter((item) => item.id !== id)
+      openPositionsRef.current = nextOpenPositions
+      setOpenPositions(nextOpenPositions)
+      const nextTradeHistory = [closed, ...tradeHistoryRef.current.filter((item) => item.id !== id)]
+      tradeHistoryRef.current = nextTradeHistory
+      setTradeHistory(nextTradeHistory)
       setAccountData((prev) => {
         if (!prev) return prev
         const balance = Number((prev.balance + realized).toFixed(2))
@@ -423,7 +434,7 @@ const TerminalContent: React.FC = () => {
       pushToast(err instanceof Error ? err.message : 'Unable to close simulated position.')
       return null
     }
-  }, [accountData, displayPrice, openPositions, pushToast, selectedSymbol, symbolSpec])
+  }, [accountData, displayPrice, pushToast, selectedSymbol, symbolSpec])
 
   const handleClosePosition = useCallback(async (id: string): Promise<void> => {
     await closePosition(id)
@@ -497,12 +508,13 @@ const TerminalContent: React.FC = () => {
 
   useEffect(() => {
     openPositionsRef.current = openPositions
+    tradeHistoryRef.current = tradeHistory
     currentPriceForPositionsRef.current = displayPrice
     selectedSymbolForPositionsRef.current = selectedSymbol
     symbolSpecForPositionsRef.current = symbolSpec
     watchlistForPositionsRef.current = watchlist
     accountCurrencyForPositionsRef.current = accountData?.currency ?? 'USD'
-  }, [accountData?.currency, displayPrice, openPositions, selectedSymbol, symbolSpec, watchlist])
+  }, [accountData?.currency, displayPrice, openPositions, selectedSymbol, symbolSpec, tradeHistory, watchlist])
 
   useEffect(() => {
     const media = window.matchMedia('(max-width: 1023px)')
