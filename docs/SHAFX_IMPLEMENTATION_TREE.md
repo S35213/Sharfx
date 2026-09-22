@@ -211,7 +211,7 @@
 
 **Last verified:** 2026-09-22
 
-**Current main:** `7052300ff4a3f65f67e4b2380f1f55718a070e03` (runtime-warning cleanup documentation after production verification; this commit follows the React/Vite/Vitest upgrade and WHATWG request-query changes).
+**Current main:** `326bcb0585bfdf6403df09bd097da4592882c299` (runtime-warning cleanup, dependency upgrade, WHATWG request-query changes, and simplified Vercel install step; latest production deployment is READY).
 
 **Current branch for continuation:** `main`
 
