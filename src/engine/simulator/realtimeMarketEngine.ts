@@ -124,36 +124,36 @@ export class SimulatorRealtimeMarketEngine {
     const last = this.m1Candles[this.m1Candles.length - 1]
     const distanceFromOpen = last ? this.bid - last.open : 0
 
-    // The previous simulator used fast sine waves, so even H1/H4 candles
-    // could cross their open and flip colour several times per minute. A real
-    // study feed should behave more like a smooth market path: persistent
-    // directional drift, small micro-noise, and slower regime changes as the
-    // selected timeframe increases.
-    const profile: Record<Timeframe, { cycleSeconds: number; pipsPerSecond: number; inertia: number }> = {
-      M1: { cycleSeconds: 90, pipsPerSecond: 0.12, inertia: 0.975 },
-      M5: { cycleSeconds: 240, pipsPerSecond: 0.095, inertia: 0.985 },
-      M15: { cycleSeconds: 600, pipsPerSecond: 0.085, inertia: 0.99 },
-      M30: { cycleSeconds: 1200, pipsPerSecond: 0.075, inertia: 0.992 },
-      H1: { cycleSeconds: 2400, pipsPerSecond: 0.065, inertia: 0.994 },
-      H4: { cycleSeconds: 7200, pipsPerSecond: 0.055, inertia: 0.996 },
-      D1: { cycleSeconds: 14400, pipsPerSecond: 0.05, inertia: 0.997 },
+    // One quote/tick stream drives every timeframe. MT5 builds higher timeframes
+    // from the same underlying minute/tick data; changing from H1 to H4 or D1
+    // changes the bar grouping, not the frequency of incoming price updates.
+    // Keep the simulator market feed independent of the selected display timeframe.
+    const marketProfile = {
+      cycleSeconds: 1200,
+      pipsPerTick: 0.095,
+      inertia: 0.985,
     }
-    const selectedProfile = profile[this.timeframe]
     const slowWave =
-      Math.sin((this.simulatedTime / selectedProfile.cycleSeconds) * Math.PI * 2 + this.phase) * 0.78 +
-      Math.sin((this.simulatedTime / (selectedProfile.cycleSeconds * 0.63)) * Math.PI * 2 + this.phase * 0.71) * 0.22
-    const microNoise = Math.sin(this.tick * 0.17 + this.phase * 1.7) * 0.05
-    const pullback = -Math.sign(distanceFromOpen) * Math.min(Math.abs(distanceFromOpen) / pip, 12) * 0.012
-    const signal = slowWave + microNoise + pullback
+      Math.sin((this.simulatedTime / marketProfile.cycleSeconds) * Math.PI * 2 + this.phase) * 0.68 +
+      Math.sin((this.simulatedTime / (marketProfile.cycleSeconds * 0.41)) * Math.PI * 2 + this.phase * 0.71) * 0.18
+    const microWave =
+      Math.sin(this.tick * 1.91 + this.phase * 1.7) * 0.10 +
+      Math.sin(this.tick * 3.37 + this.phase * 0.43) * 0.05
+    const pullback = -Math.sign(distanceFromOpen) * Math.min(Math.abs(distanceFromOpen) / pip, 14) * 0.010
+    const signal = slowWave + microWave + pullback
 
-    this.momentum = this.momentum * selectedProfile.inertia + signal * (1 - selectedProfile.inertia)
+    this.momentum = this.momentum * marketProfile.inertia + signal * (1 - marketProfile.inertia)
     if (this.momentum > 0.06) this.lastDirection = 1
     else if (this.momentum < -0.06) this.lastDirection = -1
 
-    const moveInPips = selectedProfile.pipsPerSecond * (0.72 + Math.min(1, Math.abs(this.momentum)) * 0.28)
+    const impulse =
+      marketProfile.pipsPerTick *
+      (0.84 + Math.min(1, Math.abs(this.momentum)) * 0.24 + Math.sin(this.tick * 2.71 + this.phase) * 0.10)
+    const signedImpulse = Math.max(0.035, Math.abs(impulse))
+
     const next = Math.max(
       pip / 10,
-      Number((this.bid + this.lastDirection * pip * moveInPips).toFixed(this.spec.pricePrecision)),
+      Number((this.bid + this.lastDirection * pip * signedImpulse).toFixed(this.spec.pricePrecision)),
     )
 
     this.bid = next
