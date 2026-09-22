@@ -483,7 +483,7 @@ export function TradingAgentPanel({
       nextRoundTimer.current = timer
     }
 
-    scheduleNextRound(BOT_START_DELAY_MS)
+    scheduleNextRound(lastResult ? BOT_RESULT_DISPLAY_MS : BOT_START_DELAY_MS)
     return () => {
       cancelled = true
       if (nextRoundTimer.current) {
@@ -491,7 +491,7 @@ export function TradingAgentPanel({
         nextRoundTimer.current = null
       }
     }
-  }, [autoTradingEnabled, botDisplayedOrder, botPositionId, pendingUnitCompletion, phase])
+  }, [autoTradingEnabled, botDisplayedOrder, botPositionId, lastResult, pendingUnitCompletion, phase])
 
   useEffect(() => () => {
     if (analysisTimer.current) window.clearTimeout(analysisTimer.current)
