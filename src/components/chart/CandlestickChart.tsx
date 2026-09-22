@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { ColorType, createChart, type CandlestickData, type IChartApi, type IPriceLine, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts'
-import { Crosshair, Eraser, Ruler } from 'lucide-react'
+import { Crosshair, Eraser, Maximize2, Minimize2, Ruler } from 'lucide-react'
 import type { CandleTheme, ChartMode } from '../../app/chartSettings'
 import type { OHLCV, Timeframe } from '../../types'
 
@@ -67,9 +67,15 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const viewInitializedRef = useRef(false)
   const previousSymbolRef = useRef<string | undefined>(symbol)
   const previousTimeframeRef = useRef<Timeframe | undefined>(timeframe)
+  useEffect(() => {
+    const onFullscreenChange = (): void => setIsFullscreen(document.fullscreenElement === containerRef.current)
+    document.addEventListener('fullscreenchange', onFullscreenChange)
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange)
+  }, [])
   const renderedFirstTimeRef = useRef<number | null>(null)
   const renderedLastTimeRef = useRef<number | null>(null)
   const [crosshairInfo, setCrosshairInfo] = useState<{ price: number; time: string } | null>(null)
+  const [isFullscreen, setIsFullscreen] = useState(false)
   const marketBidLineRef = useRef<IPriceLine | null>(null)
   const marketAskLineRef = useRef<IPriceLine | null>(null)
   const followRealtimeRef = useRef(true)
@@ -399,6 +405,17 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     }
   }
 
+  const toggleFullscreen = async (): Promise<void> => {
+    const element = containerRef.current
+    if (!element || !document.fullscreenEnabled) return
+    try {
+      if (document.fullscreenElement === element) await document.exitFullscreen()
+      else await element.requestFullscreen()
+    } catch {
+      onToolNotice?.('Fullscreen chart is not available on this browser.')
+    }
+  }
+
   const clearDrawings = (): void => {
     setUserLevels([])
     setArmedAlerts([])
@@ -443,17 +460,22 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const cancelAlert = (): void => setAlertCandidate(null)
 
   return <div ref={containerRef} onPointerDown={placeTool} className={`shafx-chart-shell relative w-full overflow-hidden border border-shafx-border bg-shafx-bg ${['level', 'alert', 'measure'].includes(toolMode) ? 'cursor-crosshair' : ''}`} style={{ height, minHeight: 280 }}>
-    <div className="pointer-events-none absolute left-3 top-3 z-10 flex items-center gap-2 rounded-xl border border-shafx-border bg-shafx-bg/90 px-2.5 py-1.5 text-[9px] font-semibold backdrop-blur"><span className="text-shafx-accent">SHAFX</span><span className="text-shafx-textMuted">•</span><span className="text-shafx-textMuted">{timeframe ?? 'PRICE'} workspace</span></div>
-    <div className="pointer-events-none absolute right-3 top-3 z-10 rounded-xl border border-shafx-border bg-shafx-bg/90 px-2.5 py-1.5 text-[9px] font-semibold text-shafx-text backdrop-blur">{meta.label} <span className="font-normal text-shafx-textMuted">• {meta.interval}</span></div>
-    <div className="pointer-events-none absolute left-3 top-12 z-10 rounded-xl border border-shafx-border/70 bg-shafx-surface/85 px-2 py-1 shadow-md backdrop-blur">
+    <div className="pointer-events-none absolute left-3 top-3 z-10 hidden items-center gap-2 rounded-xl border border-shafx-border bg-shafx-bg/90 px-2.5 py-1.5 text-[9px] font-semibold backdrop-blur sm:flex"><span className="text-shafx-accent">SHAFX</span><span className="text-shafx-textMuted">•</span><span className="text-shafx-textMuted">{timeframe ?? 'PRICE'} workspace</span></div>
+    <div className="pointer-events-none absolute right-3 top-3 z-10 hidden rounded-xl border border-shafx-border bg-shafx-bg/90 px-2.5 py-1.5 text-[9px] font-semibold text-shafx-text backdrop-blur sm:block">{meta.label} <span className="font-normal text-shafx-textMuted">• {meta.interval}</span></div>
+    <div className="pointer-events-none absolute left-3 top-3 z-10 rounded-xl border border-shafx-border/70 bg-shafx-surface/88 px-2.5 py-1.5 shadow-md backdrop-blur">
       <span className="text-[8px] font-semibold uppercase tracking-[0.12em] text-shafx-textMuted">{chartMode === 'candles' ? 'Candles' : chartMode === 'bars' ? 'Bars' : chartMode === 'wave' ? 'Wave' : 'Area'}</span>
       {countdown !== null && <span className="ml-2 font-mono text-[9px] font-semibold tabular text-shafx-accent">Close {formatCountdown(countdown)}</span>}
     </div>
-    <div className="pointer-events-none absolute right-3 top-12 z-10 flex items-center gap-1 rounded-xl border border-shafx-border/70 bg-shafx-surface/85 px-1 py-0.5 shadow-md backdrop-blur">
+    <div className="absolute right-3 top-3 z-20 flex items-center gap-1">
+      <div className="pointer-events-none hidden items-center gap-1 rounded-xl border border-shafx-border/70 bg-shafx-surface/85 px-1 py-0.5 shadow-md backdrop-blur sm:flex">
       <span className="rounded-lg px-1.5 py-0.5 text-[8px] font-bold tabular text-shafx-success"><span className="mr-1 text-[8px] uppercase tracking-[0.12em]">SELL</span>{Number.isFinite(displayBid) ? displayBid.toFixed(quotePrecision) : '—'}</span>
       <span className="h-3.5 w-px bg-shafx-border" />
       <span className="rounded-lg px-2 py-1 text-[9px] font-bold tabular text-shafx-danger"><span className="mr-1 text-[8px] uppercase tracking-[0.12em]">BUY</span>{Number.isFinite(displayAsk) ? displayAsk.toFixed(quotePrecision) : '—'}</span>
       <span className="hidden border-l border-shafx-border pl-2 text-[8px] font-semibold tabular text-shafx-textMuted sm:inline">SP {spreadPips.toFixed(1)}p</span>
+      </div>
+      <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => void toggleFullscreen()} aria-label={isFullscreen ? 'Exit fullscreen chart' : 'Open fullscreen chart'} className="flex h-9 w-9 items-center justify-center rounded-xl border border-shafx-border bg-shafx-surface/92 text-shafx-textMuted shadow-md backdrop-blur hover:border-shafx-accent/40 hover:text-shafx-text">
+        {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+      </button>
     </div>
     {toolMode === 'crosshair' && crosshairInfo && <div className="pointer-events-none absolute left-3 bottom-3 z-20 rounded-xl border border-shafx-accent/25 bg-shafx-surface/95 px-3 py-2 text-[9px] shadow-xl"><span className="text-shafx-textMuted">Crosshair</span><strong className="ml-2 font-mono text-shafx-text">{crosshairInfo.price.toFixed(5)}</strong><span className="ml-2 text-shafx-textMuted">{crosshairInfo.time}</span></div>}
     {(toolMode === 'level' || toolMode === 'alert' || toolMode === 'measure') && <div className="pointer-events-none absolute bottom-3 left-3 z-10 flex items-center gap-2 rounded-xl border border-shafx-border bg-shafx-surface/95 px-3 py-2 text-[9px] text-shafx-textMuted shadow-xl"><Crosshair className="h-3.5 w-3.5 text-shafx-accent" />{toolMode === 'level' ? 'Tap chart to place a price level' : toolMode === 'alert' ? 'Tap chart, then confirm the alert price' : measureStart === null ? 'Tap first point to measure' : measureEnd === null ? 'Tap second point to finish' : 'Measure complete'}</div>}
