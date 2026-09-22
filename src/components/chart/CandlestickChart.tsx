@@ -68,21 +68,22 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const viewInitializedRef = useRef(false)
   const previousSymbolRef = useRef<string | undefined>(symbol)
   const previousTimeframeRef = useRef<Timeframe | undefined>(timeframe)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const renderedFirstTimeRef = useRef<number | null>(null)
+  const renderedLastTimeRef = useRef<number | null>(null)
+  const [crosshairInfo, setCrosshairInfo] = useState<{ price: number; time: string } | null>(null)
+
   useEffect(() => {
     const onFullscreenChange = (): void => setIsFullscreen(document.fullscreenElement === containerRef.current)
     document.addEventListener('fullscreenchange', onFullscreenChange)
     return () => document.removeEventListener('fullscreenchange', onFullscreenChange)
   }, [])
+
   useEffect(() => {
     const chart = chartRef.current
     if (!chart) return
     chart.applyOptions({ handleScroll: { vertTouchDrag: isFullscreen } })
   }, [isFullscreen])
-
-  const renderedFirstTimeRef = useRef<number | null>(null)
-  const renderedLastTimeRef = useRef<number | null>(null)
-  const [crosshairInfo, setCrosshairInfo] = useState<{ price: number; time: string } | null>(null)
-  const [isFullscreen, setIsFullscreen] = useState(false)
   const verticalScaleDragRef = useRef<{ startY: number; top: number; bottom: number } | null>(null)
   const verticalScaleMarginsRef = useRef({ top: 0.08, bottom: 0.08 })
   const marketBidLineRef = useRef<IPriceLine | null>(null)
