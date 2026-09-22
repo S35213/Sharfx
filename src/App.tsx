@@ -263,19 +263,31 @@ const TerminalContent: React.FC = () => {
   useEffect(() => {
     if (isBrokerMode() || !symbolSpec || !simulatedEngineRef.current) return
 
-    const timer = window.setInterval(() => {
-      const engine = simulatedEngineRef.current
-      if (!engine) return
+    let cancelled = false
+    let timeout: number | null = null
 
-      const snapshot = engine.tickOnce(1)
-      setSimulatedCandles(snapshot.candles)
-      setSimulatedM1Candles(snapshot.m1Candles.slice(-3000))
-      setSimulatedPrice(snapshot.bid)
-      setMarketTimestamp(snapshot.timestamp)
-      setCurrentPrice(snapshot.bid)
-    }, 1000)
+    const scheduleTick = (): void => {
+      if (cancelled) return
+      const delay = 420 + Math.round(Math.random() * 360)
+      timeout = window.setTimeout(() => {
+        const engine = simulatedEngineRef.current
+        if (!engine || cancelled) return
 
-    return () => window.clearInterval(timer)
+        const snapshot = engine.tickOnce(1)
+        setSimulatedCandles(snapshot.candles)
+        setSimulatedM1Candles(snapshot.m1Candles.slice(-3000))
+        setSimulatedPrice(snapshot.bid)
+        setMarketTimestamp(snapshot.timestamp)
+        setCurrentPrice(snapshot.bid)
+        scheduleTick()
+      }, delay)
+    }
+
+    scheduleTick()
+    return () => {
+      cancelled = true
+      if (timeout !== null) window.clearTimeout(timeout)
+    }
   }, [selectedSymbol, symbolSpec, timeframe])
 
 
