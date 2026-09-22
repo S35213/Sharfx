@@ -42,7 +42,7 @@ const TIMEFRAME_SCAN_BONUS: Record<Timeframe, number> = { M1: 18, M5: 14, M15: 1
 const BOT_CYCLE_SECONDS = 10 as const
 const BOT_RESULT_DELAY_MS = BOT_CYCLE_SECONDS * 1000
 const BOT_START_DELAY_MS = 1000 as const
-const BOT_RESULT_DISPLAY_MS = 1200 as const
+const BOT_RESULT_DISPLAY_MS = 2500 as const
 
 const buildScanCandidates = (
   frames: Partial<Record<Timeframe, OHLCV[]>>,
@@ -445,9 +445,6 @@ export function TradingAgentPanel({
                 setStatus('UNIT COMPLETE • 5/5 rounds finished • tap Continue next unit')
               } else {
                 setStatus('RESULT • round settled • next 10-second cycle preparing…')
-                window.setTimeout(() => {
-                  if (autoTradingEnabled && phase === 'RUNNING') runBotCycleRef.current?.()
-                }, BOT_RESULT_DISPLAY_MS)
               }
             } catch {
               if (nextRound >= BOT_CYCLES_PER_UNIT) {
@@ -457,9 +454,6 @@ export function TradingAgentPanel({
                 setStatus('UNIT COMPLETE locally • server allowance sync needs another pass')
               } else {
                 setStatus('RESULT • round settled • next 10-second cycle preparing…')
-                window.setTimeout(() => {
-                  if (autoTradingEnabled && phase === 'RUNNING') runBotCycleRef.current?.()
-                }, BOT_RESULT_DISPLAY_MS)
               }
             }
           }
@@ -476,12 +470,14 @@ export function TradingAgentPanel({
     return () => { runBotCycleRef.current = null }
   }, [accountBalance, accountCurrency, activeBotOrder, activePosition, autoTradingEnabled, botPositionId, conversionRate, cycleUnits, displayedUnitNumber, learning, lotSizeValid, multiTimeframe, onBotClose, onBotOrder, parsedLotSize, pendingUnitCompletion, phase, plan.maxDailyCycleUnits, research, runId, setup, symbol, symbolSpec, timeframeFrames, tradingContext, unitRound])
   useEffect(() => {
-    if (phase !== 'RUNNING') return
+    if (phase !== 'RUNNING' || !autoTradingEnabled || pendingUnitCompletion) return
+    if (botDisplayedOrder || botPositionId) return
 
     let cancelled = false
     const scheduleNextRound = (delay: number): void => {
+      if (nextRoundTimer.current) window.clearTimeout(nextRoundTimer.current)
       const timer = window.setTimeout(async () => {
-        if (cancelled || phase !== 'RUNNING') return
+        if (cancelled) return
         await runBotCycleRef.current?.()
       }, delay)
       nextRoundTimer.current = timer
@@ -495,7 +491,7 @@ export function TradingAgentPanel({
         nextRoundTimer.current = null
       }
     }
-  }, [phase])
+  }, [autoTradingEnabled, botDisplayedOrder, botPositionId, pendingUnitCompletion, phase])
 
   useEffect(() => () => {
     if (analysisTimer.current) window.clearTimeout(analysisTimer.current)
@@ -686,10 +682,10 @@ export function TradingAgentPanel({
 
       <section className="mt-3 grid gap-3 sm:grid-cols-2">
         <div className="rounded-xl border border-shafx-accent/25 bg-shafx-accent/[0.045] p-3.5"><div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-shafx-accent" /><div><div className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">Automatic protection</div><div className="text-sm font-semibold">{riskModes[BOT_RISK_MODE].label} simulation mode</div></div></div><div className="mt-3 grid grid-cols-2 gap-2 text-[10px]"><div className="rounded-lg border border-shafx-border bg-shafx-bg px-2.5 py-2"><span className="text-shafx-textMuted">Balance</span><div className="mt-0.5 font-mono text-xs">${accountBalance.toFixed(2)}</div></div><div className="rounded-lg border border-shafx-border bg-shafx-bg px-2.5 py-2"><span className="text-shafx-textMuted">Max risk</span><div className="mt-0.5 font-mono text-xs text-shafx-danger">${riskAmount.toFixed(2)}</div></div></div><p className="mt-3 text-[9px] text-shafx-textMuted">BUY/SELL direction automatically receives the matching Stop Loss and Take Profit from the selected AI setup.</p></div>
-        <div className="rounded-xl border border-shafx-border bg-shafx-bg p-3.5"><div className="flex items-center justify-between gap-3"><div><div className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">Bot cycle</div><div className="mt-1 text-sm font-semibold">6s automatic cycle</div></div><Wallet className="h-4 w-4 text-shafx-accent" /></div><div className="mt-3 rounded-lg border border-shafx-border px-2.5 py-2 text-[10px] text-shafx-textMuted"><span>Allowance</span><span className="float-right font-mono text-shafx-text">{cycleUnits}{plan.maxDailyCycleUnits === null ? ' / ∞' : ' / ' + plan.maxDailyCycleUnits}</span></div><div className="mt-2 text-[9px] text-shafx-textMuted">Unit {displayedUnitNumber} • Round {unitRound}/5</div></div>
+        <div className="rounded-xl border border-shafx-border bg-shafx-bg p-3.5"><div className="flex items-center justify-between gap-3"><div><div className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">Bot cycle</div><div className="mt-1 text-sm font-semibold">10s automatic cycle</div></div><Wallet className="h-4 w-4 text-shafx-accent" /></div><div className="mt-3 rounded-lg border border-shafx-border px-2.5 py-2 text-[10px] text-shafx-textMuted"><span>Allowance</span><span className="float-right font-mono text-shafx-text">{cycleUnits}{plan.maxDailyCycleUnits === null ? ' / ∞' : ' / ' + plan.maxDailyCycleUnits}</span></div><div className="mt-2 text-[9px] text-shafx-textMuted">Unit {displayedUnitNumber} • Round {unitRound}/5</div></div>
       </section>
 
-      <section className="mt-3 rounded-xl border border-shafx-border bg-shafx-bg p-3"><div className="flex items-center justify-between gap-3"><span className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">Current status</span><span className="text-[9px] text-shafx-textMuted">Round {unitRound}/5</span></div><p className="mt-1.5 text-[11px] text-shafx-text">{status}</p><p className="mt-1 text-[9px] text-shafx-textMuted">Manual Scan = 10 seconds with lower-timeframe priority. Run shows a 1-second scan phase, then a 5-second active round and starts the next 6-second cycle automatically.</p></section>
+      <section className="mt-3 rounded-xl border border-shafx-border bg-shafx-bg p-3"><div className="flex items-center justify-between gap-3"><span className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-textMuted">Current status</span><span className="text-[9px] text-shafx-textMuted">Round {unitRound}/5</span></div><p className="mt-1.5 text-[11px] text-shafx-text">{status}</p><p className="mt-1 text-[9px] text-shafx-textMuted">Manual Scan = 10 seconds with lower-timeframe priority. Run shows a short scan phase, then a 10-second active round, shows WIN/LOSS, and starts the next round automatically.</p></section>
 
       <button type="button" onClick={() => setDetailsOpen((open) => !open)} className="mt-3 flex min-h-12 w-full items-center justify-between rounded-xl border border-shafx-border bg-shafx-bg px-3 text-xs text-shafx-textMuted"><span>Advanced analysis</span><ChevronDown className={detailsOpen ? 'h-4 w-4 rotate-180 transition-transform' : 'h-4 w-4'} /></button>
       {detailsOpen && <div className="mt-2 space-y-2 rounded-xl border border-shafx-border bg-shafx-bg p-3 text-[10px] text-shafx-textMuted"><div>Learning: {learning.summary}</div><div>Research agreement: {research.agreement.toFixed(0)}%.</div><div>Current price: {currentPrice}</div><div>{riskModes[BOT_RISK_MODE].description}.</div><div>Multi-timeframe context is used before a simulated order is considered.</div></div>}
