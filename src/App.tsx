@@ -390,7 +390,7 @@ const TerminalContent: React.FC = () => {
     pushToast('SHAFX Bot opened simulated ' + order.type + ' ' + order.symbol + '.')
   }, [pushToast])
 
-  const closePosition = useCallback(async (id: string): Promise<TradeOrder | null> => {
+  const closePosition = useCallback(async (id: string, requestedExitPrice?: number): Promise<TradeOrder | null> => {
     // Bot settlement and the 500ms automatic-position monitor can race each
     // other. Always read the latest refs, and make a second close request
     // idempotent by returning an already-closed trade from history.
@@ -404,7 +404,7 @@ const TerminalContent: React.FC = () => {
       let exitPrice: number | undefined
       if (order.symbol === selectedSymbol && symbolSpec) {
         spec = symbolSpec
-        exitPrice = displayPrice
+        exitPrice = requestedExitPrice ?? displayPrice
       } else {
         const [fetchedSpec, wl] = await Promise.all([marketDataSource.getSymbolSpec(order.symbol), marketDataSource.getWatchlist()])
         spec = fetchedSpec
@@ -424,7 +424,7 @@ const TerminalContent: React.FC = () => {
       setAccountData((prev) => {
         if (!prev) return prev
         const balance = Number((prev.balance + realized).toFixed(2))
-        const floatingPL = openPositions.filter((item) => item.id !== id && item.status === 'open').reduce((sum, item) => sum + (item.profit ?? 0), 0)
+        const floatingPL = openPositionsRef.current.filter((item) => item.id !== id && item.status === 'open').reduce((sum, item) => sum + (item.profit ?? 0), 0)
         const equity = Number((balance + floatingPL).toFixed(2))
         return { ...prev, balance, equity, floatingPL, freeMargin: Number((equity - prev.usedMargin).toFixed(2)) }
       })
@@ -502,8 +502,8 @@ const TerminalContent: React.FC = () => {
     }
   }, [accountData, displayPrice, openPositions, pushToast, selectedSymbol, symbolSpec, watchlist])
 
-  const handleBotClose = useCallback(async (id: string): Promise<TradeOrder | null> => {
-    return closePosition(id)
+  const handleBotClose = useCallback(async (id: string, exitPrice?: number): Promise<TradeOrder | null> => {
+    return closePosition(id, exitPrice)
   }, [closePosition])
 
   useEffect(() => {
