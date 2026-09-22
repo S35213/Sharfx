@@ -2,7 +2,9 @@ import type { OHLCV, Timeframe } from '../../types'
 
 interface GenerateOptions { count: number; startPrice: number; pipSize: number; pricePrecision: number; timeframe: Timeframe; seed: number }
 
-const INTERVAL_SECONDS: Record<Timeframe, number> = { M1: 60, M5: 300, M15: 900, M30: 1800, H1: 3600, H4: 14400, D1: 86400 }
+const INTERVAL_SECONDS: Record<Timeframe, number> = { M1: 60, M5: 300, M15: 900, M30: 1800, H1: 3600, H4: 14400, D1: 86400, W1: 604800 }
+const MONDAY_WEEK_ANCHOR_SECONDS = 345600
+const bucketStart = (time: number, timeframe: Timeframe): number => timeframe === 'W1' ? Math.floor((time - MONDAY_WEEK_ANCHOR_SECONDS) / 604800) * 604800 + MONDAY_WEEK_ANCHOR_SECONDS : Math.floor(time / INTERVAL_SECONDS[timeframe]) * INTERVAL_SECONDS[timeframe]
 const PRICE_BY_SYMBOL: Record<string, number> = { 'EUR/USD': 1.08542, 'GBP/USD': 1.26315, 'USD/JPY': 149.85, 'USD/CHF': 0.8842, 'AUD/USD': 0.6512, 'USD/CAD': 1.3625, 'NZD/USD': 0.6085, 'XAU/USD': 2650.00 }
 const PRECISION_BY_SYMBOL: Record<string, number> = { 'USD/JPY': 3, 'XAU/USD': 2 }
 const BASE_M1_COUNT = 60000
@@ -51,7 +53,7 @@ const aggregate = (base: OHLCV[], timeframe: Timeframe, precision: number): OHLC
   if (interval === 60) return base
   const groups = new Map<number, OHLCV>()
   for (const candle of base) {
-    const bucket = Math.floor(candle.time / interval) * interval
+    const bucket = bucketStart(candle.time, timeframe)
     const current = groups.get(bucket)
     if (!current) {
       groups.set(bucket, { time: bucket, open: candle.open, high: candle.high, low: candle.low, close: candle.close, volume: candle.volume ?? 0 })
