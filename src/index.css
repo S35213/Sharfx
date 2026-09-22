@@ -13,8 +13,9 @@
 
 * { box-sizing: border-box; }
 html, body, #root { min-height: 100%; margin: 0; }
-html, body { min-width: 320px; background: #070A0F; font-family: Arial, Helvetica, sans-serif; }
+html, body { min-width: 320px; min-height: 100dvh; background: #070A0F; font-family: Arial, Helvetica, sans-serif; }
 body { overflow: hidden; }
+.shafx-chart-stage { height: clamp(420px, 70dvh, 760px); max-height: 760px; }
 button, input, select { font: inherit; }
 button { -webkit-tap-highlight-color: transparent; }
 input::placeholder { color: #667285; }
@@ -28,6 +29,11 @@ input::placeholder { color: #667285; }
 @media (max-width: 1023px) {
   body { overflow: auto; }
   .shafx-chart-shell { min-height: 52vh !important; }
+  .shafx-chart-stage { height: clamp(420px, 70dvh, 720px); }
+}
+
+@media (orientation: landscape) and (max-width: 1023px) {
+  .shafx-chart-stage { height: min(calc(100dvh - 140px), 700px); max-height: 700px; }
 }
 
 @media (max-width: 639px) {
