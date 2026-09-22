@@ -19,13 +19,12 @@ export const MobileNav: React.FC<MobileNavProps> = ({ activeTab, onChange }) => 
 
   useEffect(() => {
     let lastY = window.scrollY
-    let lastTouchY: number | null = null
     let ticking = false
 
     const applyDirection = (delta: number, currentY: number): void => {
       if (!settings.autoHideNavigation || currentY <= 16) setHidden(false)
-      else if (delta > 8) setHidden(true)
-      else if (delta < -8) setHidden(false)
+      else if (delta > 16) setHidden(true)
+      else if (delta < -16) setHidden(false)
     }
 
     const onScroll = (): void => {
@@ -39,32 +38,8 @@ export const MobileNav: React.FC<MobileNavProps> = ({ activeTab, onChange }) => 
       })
     }
 
-    const onTouchStart = (event: TouchEvent): void => {
-      lastTouchY = event.touches[0]?.clientY ?? null
-    }
-
-    const onTouchMove = (event: TouchEvent): void => {
-      const currentTouchY = event.touches[0]?.clientY
-      if (currentTouchY === undefined || lastTouchY === null) return
-      const delta = lastTouchY - currentTouchY
-      if (Math.abs(delta) > 8) {
-        applyDirection(delta, window.scrollY)
-        lastTouchY = currentTouchY
-      }
-    }
-
-    const onTouchEnd = (): void => { lastTouchY = null }
-
     window.addEventListener('scroll', onScroll, { passive: true })
-    window.addEventListener('touchstart', onTouchStart, { passive: true })
-    window.addEventListener('touchmove', onTouchMove, { passive: true })
-    window.addEventListener('touchend', onTouchEnd, { passive: true })
-    return () => {
-      window.removeEventListener('scroll', onScroll)
-      window.removeEventListener('touchstart', onTouchStart)
-      window.removeEventListener('touchmove', onTouchMove)
-      window.removeEventListener('touchend', onTouchEnd)
-    }
+    return () => window.removeEventListener('scroll', onScroll)
   }, [settings.autoHideNavigation])
 
   useEffect(() => {
@@ -77,7 +52,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({ activeTab, onChange }) => 
   }, [])
 
   return (
-    <nav aria-label="Terminal navigation" className={hidden ? 'fixed inset-x-0 bottom-0 z-[70] translate-y-full border-t border-shafx-border bg-[#080C12]/98 px-2 pb-[env(safe-area-inset-bottom)] shadow-[0_-18px_44px_rgba(0,0,0,.42)] backdrop-blur-xl transition-transform duration-200 lg:hidden' : 'fixed inset-x-0 bottom-0 z-[70] translate-y-0 border-t border-shafx-border bg-[#080C12]/98 px-2 pb-[env(safe-area-inset-bottom)] shadow-[0_-18px_44px_rgba(0,0,0,.42)] backdrop-blur-xl transition-transform duration-200 lg:hidden'}>
+    <nav aria-label="Terminal navigation" className={hidden ? 'fixed inset-x-0 bottom-0 z-[70] translate-y-full border-t border-shafx-border bg-[#080C12]/98 px-2 pb-[env(safe-area-inset-bottom)] shadow-[0_-18px_44px_rgba(0,0,0,.42)] backdrop-blur-xl transition-transform duration-300 ease-out lg:hidden' : 'fixed inset-x-0 bottom-0 z-[70] translate-y-0 border-t border-shafx-border bg-[#080C12]/98 px-2 pb-[env(safe-area-inset-bottom)] shadow-[0_-18px_44px_rgba(0,0,0,.42)] backdrop-blur-xl transition-transform duration-200 lg:hidden'}>
       <div className="mx-auto grid max-w-xl grid-cols-4 gap-1.5 px-1 py-1.5">
         {items.map(({ id, label, icon: Icon }) => {
           const active = activeTab === id
