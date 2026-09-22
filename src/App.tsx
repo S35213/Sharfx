@@ -559,7 +559,7 @@ const TerminalContent: React.FC = () => {
           queuePositionRefresh()
         }
       }
-    }, 150)
+    }, 250)
   }, [pushToast])
 
   useEffect(() => {
