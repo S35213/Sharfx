@@ -147,7 +147,6 @@ export function TradingAgentPanel({
   scanM1Candles = [],
 }: Props) {
   const plan = BOT_PLANS[botPlan]
-  const dailyLimitReached = plan.maxDailyCycleUnits !== null && cycleUnits >= plan.maxDailyCycleUnits
   const readStoredLotSize = (): string => typeof window !== 'undefined' ? window.sessionStorage.getItem('shafx-simulator-lot-size') || '0.10' : '0.10'
   const [lotSize, setLotSize] = useState(readStoredLotSize)
   const [phase, setPhase] = useState<Phase>('READY')
@@ -160,6 +159,7 @@ export function TradingAgentPanel({
   const [wins, setWins] = useState(0)
   const [losses, setLosses] = useState(0)
   const [cycleUnits, setCycleUnits] = useState(0)
+  const dailyLimitReached = plan.maxDailyCycleUnits !== null && cycleUnits >= plan.maxDailyCycleUnits
   const [unitRound, setUnitRound] = useState(0)
   const [pendingUnitCompletion, setPendingUnitCompletion] = useState(false)
   const [botSessionStarted, setBotSessionStarted] = useState(false)
