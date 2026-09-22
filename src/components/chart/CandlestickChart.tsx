@@ -425,12 +425,6 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     onToolNotice?.('Current candle centered.')
   }
 
-  const toggleTimeframeMenu = (event?: React.SyntheticEvent): void => {
-    event?.preventDefault()
-    event?.stopPropagation()
-    setTimeframeMenuOpen((open) => !open)
-  }
-
   const chooseFullscreenTimeframe = (nextTimeframe: Timeframe): void => {
     onTimeframeChange?.(nextTimeframe)
     setTimeframeMenuOpen(false)
