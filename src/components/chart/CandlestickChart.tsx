@@ -518,10 +518,19 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     const element = containerRef.current
     if (!element || !document.fullscreenEnabled) return
     try {
-      if (document.fullscreenElement === element) await document.exitFullscreen()
-      else await element.requestFullscreen()
+      if (document.fullscreenElement === element) {
+        await document.exitFullscreen()
+        return
+      }
+      if (document.fullscreenEnabled && typeof element.requestFullscreen === 'function') {
+        await element.requestFullscreen()
+      } else {
+        setIsFullscreen(true)
+        onToolNotice?.('Using SHAFX full-screen workspace on this browser.')
+      }
     } catch {
-      onToolNotice?.('Fullscreen chart is not available on this browser.')
+      setIsFullscreen(true)
+      onToolNotice?.('Using SHAFX full-screen workspace on this browser.')
     }
   }
 
@@ -580,7 +589,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
 
   const cancelAlert = (): void => setAlertCandidate(null)
 
-  return <div ref={containerRef} onPointerDownCapture={handleChartPointerDown} onPointerMoveCapture={handleChartPointerMove} onPointerUpCapture={handleChartPointerUp} onPointerDown={placeTool} className={`shafx-chart-shell relative w-full overflow-hidden border border-shafx-border bg-shafx-bg ${['level', 'alert', 'measure'].includes(toolMode) ? 'cursor-crosshair' : ''}`} style={{ height, minHeight: 280 }}>
+  return <div ref={containerRef} onPointerDownCapture={handleChartPointerDown} onPointerMoveCapture={handleChartPointerMove} onPointerUpCapture={handleChartPointerUp} onPointerDown={placeTool} className={`shafx-chart-shell relative w-full overflow-hidden border border-shafx-border bg-shafx-bg ${['level', 'alert', 'measure'].includes(toolMode) ? 'cursor-crosshair' : ''} ${isFullscreen ? 'fixed inset-0 z-[200] h-[100dvh] w-screen' : ''}`} style={{ height: isFullscreen ? '100dvh' : height, minHeight: 280 }}>
     <div className="pointer-events-none absolute left-3 top-3 z-10 hidden items-center gap-2 rounded-xl border border-shafx-border bg-shafx-bg/90 px-2.5 py-1.5 text-[9px] font-semibold backdrop-blur sm:flex"><span className="text-shafx-accent">SHAFX</span><span className="text-shafx-textMuted">•</span><span className="text-shafx-textMuted">{timeframe ?? 'PRICE'} workspace</span></div>
     <div className="pointer-events-none absolute right-3 top-3 z-10 hidden rounded-xl border border-shafx-border bg-shafx-bg/90 px-2.5 py-1.5 text-[9px] font-semibold text-shafx-text backdrop-blur sm:block">{meta.label} <span className="font-normal text-shafx-textMuted">• {meta.interval}</span></div>
     <div className="pointer-events-none absolute left-3 top-3 z-10 rounded-xl border border-shafx-border/70 bg-shafx-surface/88 px-2.5 py-1.5 shadow-md backdrop-blur">
@@ -598,7 +607,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
       </button>
     </div>
-    {isFullscreen && <div className="absolute right-3 top-14 z-30 hidden items-center gap-1 sm:flex">
+    {isFullscreen && <div className="absolute right-3 top-14 z-30 flex items-center gap-1">
       <span className="rounded-xl border border-shafx-border bg-shafx-surface/90 px-2.5 py-1.5 text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted shadow-lg backdrop-blur">Double-tap anywhere for timeframes</span>
     </div>}
     {isFullscreen && timeframeMenuOpen && <div className="absolute left-1/2 top-1/2 z-40 -translate-x-1/2 -translate-y-1/2">
