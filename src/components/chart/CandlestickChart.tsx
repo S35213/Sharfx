@@ -85,6 +85,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const previousSymbolRef = useRef<string | undefined>(symbol)
   const previousTimeframeRef = useRef<Timeframe | undefined>(timeframe)
   const tapGestureRef = useRef<{ startX: number; startY: number; moved: boolean }>({ startX: 0, startY: 0, moved: false })
+  const chartInteractionRef = useRef(false)
   const lastTapRef = useRef<{ time: number; x: number; y: number; pointerType: string } | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [timeframeMenuOpen, setTimeframeMenuOpen] = useState(false)
@@ -129,6 +130,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       timeScale: { borderColor: '#202A38', timeVisible: true, secondsVisible: false, rightOffset: 7, barSpacing: 3.5, minBarSpacing: 0.5 },
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
       handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true },
+      kineticScroll: { touch: true, mouse: false },
     })
     const colors = candleColors[candleTheme]
     const precision = Math.max(2, Math.round(Math.log10(1 / Math.max(pipSize, 0.00001))))
@@ -173,8 +175,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
 
   useEffect(() => {
     const series = seriesRef.current
-    const chart = chartRef.current
-    if (!series || !chart) return
+    if (!series) return
     const colors = candleColors[candleTheme]
 
     if (chartMode === 'wave') {
@@ -193,15 +194,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         wickDownColor: colors.down,
       })
     }
-
-    // Re-apply the current visual dataset immediately. This makes a theme or
-    // chart-mode selection repaint in-place instead of waiting for a browser
-    // refresh or an unrelated timeframe change.
-    series.setData(visualData)
-    chart.applyOptions({})
-    const el = containerRef.current
-    if (el) chart.resize(el.clientWidth, Math.max(280, el.clientHeight), true)
-  }, [candleTheme, chartMode, visualData])
+  }, [candleTheme, chartMode])
 
   useEffect(() => {
     const chart = chartRef.current
@@ -238,9 +231,10 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     const previousLastIndex = latestIndexRef.current
     const visibleRange = chart.timeScale().getVisibleLogicalRange()
     const wasFollowingRealtime =
-      followRealtimeRef.current ||
-      !visibleRange ||
-      (previousLastIndex >= 0 && visibleRange.to >= previousLastIndex - 1)
+      !chartInteractionRef.current &&
+      (followRealtimeRef.current ||
+        !visibleRange ||
+        (previousLastIndex >= 0 && visibleRange.to >= previousLastIndex - 1))
     const isNewBar = previousLastTime !== null && lastTime > previousLastTime
 
     if (canUpdateLatestBar) {
@@ -456,6 +450,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   }
 
   const handleChartPointerDown = (event: React.PointerEvent<HTMLDivElement>): void => {
+    chartInteractionRef.current = true
     tapGestureRef.current = { startX: event.clientX, startY: event.clientY, moved: false }
   }
 
@@ -464,8 +459,13 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     if (!gesture) return
     if (Math.hypot(event.clientX - gesture.startX, event.clientY - gesture.startY) > 18) gesture.moved = true
   }
+  const handleChartPointerCancel = (): void => {
+    chartInteractionRef.current = false
+    lastTapRef.current = null
+  }
 
   const handleChartPointerUp = (event: React.PointerEvent<HTMLDivElement>): void => {
+    chartInteractionRef.current = false
     if (!isFullscreen || (toolMode !== 'cursor' && toolMode !== 'crosshair')) return
     if (event.pointerType === 'mouse' && event.button !== 0) return
     const target = event.target
@@ -626,7 +626,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
 
   const cancelAlert = (): void => setAlertCandidate(null)
 
-  return <div ref={containerRef} onPointerDownCapture={handleChartPointerDown} onPointerMoveCapture={handleChartPointerMove} onPointerUpCapture={handleChartPointerUp} onPointerDown={placeTool} className={`shafx-chart-shell relative w-full overflow-hidden border border-shafx-border bg-shafx-bg ${['level', 'alert', 'measure'].includes(toolMode) ? 'cursor-crosshair' : ''} ${isFullscreen ? 'fixed inset-0 z-[200] h-[100dvh] w-screen' : ''}`} style={{ height: isFullscreen ? '100dvh' : height, minHeight: 280 }}>
+  return <div ref={containerRef} onPointerDownCapture={handleChartPointerDown} onPointerMoveCapture={handleChartPointerMove} onPointerUpCapture={handleChartPointerUp} onPointerCancel={handleChartPointerCancel} onPointerDown={placeTool} className={`shafx-chart-shell relative w-full overflow-hidden border border-shafx-border bg-shafx-bg ${['level', 'alert', 'measure'].includes(toolMode) ? 'cursor-crosshair' : ''} ${isFullscreen ? 'fixed inset-0 z-[200] h-[100dvh] w-screen' : ''}`} style={{ height: isFullscreen ? '100dvh' : height, minHeight: 280 }}>
     <div className="pointer-events-none absolute left-3 top-3 z-10 hidden items-center gap-2 rounded-xl border border-shafx-border bg-shafx-bg/90 px-2.5 py-1.5 text-[9px] font-semibold backdrop-blur sm:flex"><span className="text-shafx-accent">SHAFX</span><span className="text-shafx-textMuted">•</span><span className="text-shafx-textMuted">{timeframe ?? 'PRICE'} workspace</span></div>
     <div className="pointer-events-none absolute right-3 top-3 z-10 hidden rounded-xl border border-shafx-border bg-shafx-bg/90 px-2.5 py-1.5 text-[9px] font-semibold text-shafx-text backdrop-blur sm:block">{meta.label} <span className="font-normal text-shafx-textMuted">• {meta.interval}</span></div>
     <div className="pointer-events-none absolute left-3 top-3 z-10 rounded-xl border border-shafx-border/70 bg-shafx-surface/88 px-2.5 py-1.5 shadow-md backdrop-blur">
