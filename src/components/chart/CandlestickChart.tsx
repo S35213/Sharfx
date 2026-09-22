@@ -442,7 +442,6 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       from: Math.max(0, lastIndex - visibleBars + 1),
       to: lastIndex + 7,
     })
-    chart.timeScale().scrollToPosition(0, false)
     followRealtimeRef.current = true
     setTimeframeMenuOpen(false)
     onToolNotice?.('Current candle centered.')
@@ -510,7 +509,6 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const resetChartView = (): void => {
     resetVerticalScale()
     goToCurrentCandle()
-    onToolNotice?.('Chart view reset to the current candle.')
   }
 
   const handlePriceAxisPointerDown = (event: React.PointerEvent<HTMLDivElement>): void => {
