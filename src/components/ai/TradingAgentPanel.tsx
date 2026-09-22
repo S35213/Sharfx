@@ -146,6 +146,7 @@ export function TradingAgentPanel({
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [botPositionId, setBotPositionId] = useState<string | null>(null)
   const [botDisplayedOrder, setBotDisplayedOrder] = useState<TradeOrder | null>(null)
+  const [botRunLotSize, setBotRunLotSize] = useState<number | null>(null)
   const [runId, setRunId] = useState<string | null>(null)
   const botRunLotSizeRef = useRef<number | null>(null)
   const currentPriceRef = useRef(currentPrice)
@@ -248,6 +249,7 @@ export function TradingAgentPanel({
     setBotPositionId(null)
     setBotDisplayedOrder(null)
     botRunLotSizeRef.current = null
+    setBotRunLotSize(null)
     setUnitRound(0)
     setPendingUnitCompletion(false)
     setBotSessionStarted(false)
@@ -410,13 +412,14 @@ export function TradingAgentPanel({
         if (tradeCloseTimer.current) window.clearTimeout(tradeCloseTimer.current)
         tradeCloseTimer.current = window.setTimeout(() => {
           const exitPrice = currentPriceRef.current
-          let profit = 0
-          try {
-            profit = calculatePositionProfit(order, exitPrice, symbolSpec, conversionRate)
-          } catch {
-            const directionDelta = (exitPrice - order.entryPrice) * (order.type === 'BUY' ? 1 : -1)
-            profit = Number(directionDelta.toFixed(2))
-          }
+          const profit = (() => {
+            try {
+              return calculatePositionProfit(order, exitPrice, symbolSpec, conversionRate)
+            } catch {
+              const directionDelta = (exitPrice - order.entryPrice) * (order.type === 'BUY' ? 1 : -1)
+              return Number(directionDelta.toFixed(2))
+            }
+          })()
 
           const result = profit >= 0 ? 'WIN' : 'LOSS'
           processedHistory.current.add(order.id)
@@ -511,6 +514,7 @@ export function TradingAgentPanel({
     if (analysisTimer.current) window.clearTimeout(analysisTimer.current)
     setPendingUnitCompletion(false)
     botRunLotSizeRef.current = parsedLotSize
+    setBotRunLotSize(parsedLotSize)
     setBotSessionStarted(true)
     setLastResult(null)
     setBotScanProgress(0)
@@ -631,7 +635,7 @@ export function TradingAgentPanel({
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-shafx-accent/80 to-transparent" />
         <div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-2.5"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-shafx-accent/30 bg-shafx-accent/10 text-shafx-accent"><Bot className="h-4 w-4" /></div><div className="min-w-0"><div className="font-mono text-[9px] font-semibold uppercase tracking-[0.22em] text-shafx-accent">FREE BOT / AUTONOMOUS SIM</div><div className="mt-1 text-base font-semibold tracking-tight">{autoTradingEnabled ? 'Bot is running' : 'Bot is stopped'}</div><p className="mt-1 text-[10px] leading-4 text-shafx-textMuted">{autoTradingEnabled ? 'Independent scan → proposal → simulated trade → result. Manual Market Read is not used to drive the bot.' : 'Run starts an independent bot market scan. It uses the configured lot size and the simulator order engine.'}</p></div></div><span className={autoTradingEnabled ? 'rounded-full border border-shafx-success/30 bg-shafx-success/10 px-2.5 py-1 font-mono text-[9px] font-semibold text-shafx-success shadow-[0_0_16px_rgba(34,211,165,.12)]' : 'rounded-full border border-shafx-border bg-shafx-bg px-2.5 py-1 font-mono text-[9px] font-semibold text-shafx-textMuted'}>{autoTradingEnabled ? '● LIVE' : '○ IDLE'}</span></div>
         <div className="mt-3 rounded-xl border border-shafx-border/80 bg-black/20 p-2.5">
-          <div className="flex items-center justify-between gap-2 text-[8px] font-mono uppercase tracking-[0.15em] text-shafx-textMuted"><span>execution profile</span><span className="text-shafx-text">{botRunLotSizeRef.current?.toFixed(2) ?? lotSize} lot / safe risk</span></div>
+          <div className="flex items-center justify-between gap-2 text-[8px] font-mono uppercase tracking-[0.15em] text-shafx-textMuted"><span>execution profile</span><span className="text-shafx-text">{botRunLotSize?.toFixed(2) ?? lotSize} lot / safe risk</span></div>
           <div className="mt-2 grid grid-cols-5 gap-1.5">
             {(['M1','M5','M15','M30','H1'] as Timeframe[]).map((frame, index) => <span key={frame} className={index < 3 ? 'rounded-md border border-shafx-accent/25 bg-shafx-accent/10 px-1.5 py-1.5 text-center font-mono text-[8px] font-semibold text-shafx-accent' : 'rounded-md border border-shafx-border bg-shafx-bg px-1.5 py-1.5 text-center font-mono text-[8px] text-shafx-textMuted'}>{frame}{index < 3 ? ' · PRI' : ''}</span>)}
           </div>
