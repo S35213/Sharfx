@@ -73,6 +73,33 @@ const buildScanCandidates = (
   }).sort((a, b) => b.score - a.score)
 }
 const BOT_RISK_MODE: RiskMode = 'SAFE'
+const buildFastBotCandidate = (
+  frames: Partial<Record<Timeframe, OHLCV[]>>,
+  symbol: string,
+  currentPrice: number,
+) => {
+  const all = buildScanCandidates(frames, symbol, currentPrice)
+  const fast = all.filter((candidate) => candidate.timeframe === 'M1' || candidate.timeframe === 'M5' || candidate.timeframe === 'M15')
+  if (fast.length === 0) return all[0] ?? null
+  const m1 = frames.M1 ?? []
+  const latest = m1[m1.length - 1]?.close
+  const previous = m1[m1.length - 2]?.close
+  const microDirection = typeof latest === 'number' && typeof previous === 'number' ? Math.sign(latest - previous) : 0
+  return [...fast]
+    .map((candidate) => ({
+      candidate,
+      score: candidate.score + (
+        microDirection > 0 && candidate.setup.direction === 'BUY'
+          ? 28
+          : microDirection < 0 && candidate.setup.direction === 'SELL'
+            ? 28
+            : microDirection === 0
+              ? 0
+              : -18
+      ),
+    }))
+    .sort((a, b) => b.score - a.score)[0]?.candidate ?? fast[0]
+}
 
 interface CircularProgressProps {
   progress: number
@@ -126,6 +153,9 @@ export function TradingAgentPanel({
   const [scanPhase, setScanPhase] = useState<Phase>('READY')
   const [botScanProgress, setBotScanProgress] = useState(0)
   const [autoTradingEnabled, setAutoTradingEnabled] = useState(false)
+  const [totalWon, setTotalWon] = useState(0)
+  const [totalLost, setTotalLost] = useState(0)
+  const [recentBotRounds, setRecentBotRounds] = useState<Array<{ id: string; unit: number; round: number; direction: TradeOrder['type']; symbol: string; lotSize: number; profit: number }>>([])
   const [wins, setWins] = useState(0)
   const [losses, setLosses] = useState(0)
   const [cycleUnits, setCycleUnits] = useState(0)
@@ -290,6 +320,15 @@ export function TradingAgentPanel({
     setTradeCloseAt(null)
     setTradeSecondsLeft(0)
     const profit = closed.profit ?? 0
+          setRecentBotRounds((rounds) => [{
+            id: order.id,
+            unit: unitNumber,
+            round: nextRound,
+            direction: order.type,
+            symbol: order.symbol,
+            lotSize: order.lotSize,
+            profit,
+          }, ...rounds].slice(0, 10))
     if (profit >= 0) {
       setWins((v) => v + 1)
       setLastResult('WIN')
@@ -368,7 +407,7 @@ export function TradingAgentPanel({
         setLastProfit(null)
         const unitNumber = unitRound === 0 ? Math.min(cycleUnits + 1, plan.maxDailyCycleUnits ?? cycleUnits + 1) : displayedUnitNumber
 
-        const freshBotCandidates = buildScanCandidates(timeframeFrames, symbol, currentPrice)
+        const scan = buildFastBotCandidate(timeframeFrames, symbol, currentPrice)
         const scan = freshBotCandidates[0] ?? null
         setLastResult(null)
         setStatus(scan
@@ -445,9 +484,11 @@ export function TradingAgentPanel({
           setLastResult(result)
           if (profit >= 0) {
             setWins((value) => value + 1)
+            setTotalWon((value) => Number((value + profit).toFixed(2)))
             setStatus('BOT WIN • ' + order.type + ' ' + order.symbol + ' • +' + profit.toFixed(2) + ' ' + accountCurrency + ' • next cycle')
           } else {
             setLosses((value) => value + 1)
+            setTotalLost((value) => Number((value + Math.abs(profit)).toFixed(2)))
             setStatus('BOT LOSS • ' + order.type + ' ' + order.symbol + ' • ' + profit.toFixed(2) + ' ' + accountCurrency + ' • next cycle')
           }
 
@@ -529,6 +570,9 @@ export function TradingAgentPanel({
     setPendingUnitCompletion(false)
     botRunLotSizeRef.current = parsedLotSize
     setBotRunLotSize(parsedLotSize)
+    setTotalWon(0)
+    setTotalLost(0)
+    setRecentBotRounds([])
     setBotSessionStarted(true)
     setLastResult(null)
     setBotScanProgress(0)
@@ -612,6 +656,11 @@ export function TradingAgentPanel({
         <section className="mt-3 rounded-xl border border-shafx-accent/25 bg-shafx-accent/[0.04] p-3.5">
           <div className="flex items-start justify-between gap-3"><div><div className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-accent">AI BOT RUN • TRADE ACTIVITY</div><div className={lastResult === 'WIN' ? 'mt-1 text-sm font-bold text-shafx-success' : lastResult === 'LOSS' ? 'mt-1 text-sm font-bold text-shafx-danger' : 'mt-1 text-sm font-semibold'}>{botDisplayedOrder ? botDisplayedOrder.type + ' ' + botDisplayedOrder.symbol + ' is OPEN' : lastResult === 'WIN' ? 'BOT WIN • ' + ((lastProfit ?? 0) >= 0 ? '+' : '') + (lastProfit ?? 0).toFixed(2) + ' ' + accountCurrency : lastResult === 'LOSS' ? 'BOT LOSS • ' + (lastProfit ?? 0).toFixed(2) + ' ' + accountCurrency : autoTradingEnabled ? (phase === 'RUNNING' ? 'Bot running • 10s cycle' : 'Bot scanning • refreshing market data…') : 'Bot run finished'}</div></div><span className="rounded-full border border-shafx-accent/25 bg-shafx-accent/5 px-2.5 py-1 font-mono text-[9px] text-shafx-accent">Unit {displayedUnitNumber}/{plan.maxDailyCycleUnits === null ? '∞' : plan.maxDailyCycleUnits} • Round {unitRound}/5 • {lotSize} lot</span></div>
           <div className="mt-3 grid grid-cols-3 gap-2 text-[9px]"><div className="rounded-lg border border-shafx-border bg-shafx-bg px-2 py-2"><span className="block text-shafx-textMuted">WIN</span><strong className="mt-0.5 block font-mono text-shafx-success">{wins}</strong></div><div className="rounded-lg border border-shafx-border bg-shafx-bg px-2 py-2"><span className="block text-shafx-textMuted">LOSS</span><strong className="mt-0.5 block font-mono text-shafx-danger">{losses}</strong></div><div className="rounded-lg border border-shafx-border bg-shafx-bg px-2 py-2"><span className="block text-shafx-textMuted">Daily units</span><strong className="mt-0.5 block font-mono">{cycleUnits}/{plan.maxDailyCycleUnits === null ? '∞' : plan.maxDailyCycleUnits}</strong></div></div>
+           <div className="mt-2 grid grid-cols-3 gap-2 text-[9px]">
+             <div className="rounded-lg border border-shafx-success/20 bg-shafx-success/[0.045] px-2.5 py-2"><span className="block text-shafx-textMuted">TOTAL WON</span><strong className="mt-0.5 block font-mono text-shafx-success">+{totalWon.toFixed(2)} {accountCurrency}</strong></div>
+             <div className="rounded-lg border border-shafx-danger/20 bg-shafx-danger/[0.045] px-2.5 py-2"><span className="block text-shafx-textMuted">TOTAL LOST</span><strong className="mt-0.5 block font-mono text-shafx-danger">-{totalLost.toFixed(2)} {accountCurrency}</strong></div>
+             <div className="rounded-lg border border-shafx-accent/20 bg-shafx-accent/[0.045] px-2.5 py-2"><span className="block text-shafx-textMuted">NET</span><strong className={totalWon - totalLost >= 0 ? 'mt-0.5 block font-mono text-shafx-success' : 'mt-0.5 block font-mono text-shafx-danger'}>{(totalWon - totalLost >= 0 ? '+' : '') + (totalWon - totalLost).toFixed(2)} {accountCurrency}</strong></div>
+           </div>
           {lastResult && !botDisplayedOrder && (
             <div className={lastResult === 'WIN' ? 'mt-3 rounded-xl border border-shafx-success/30 bg-shafx-success/[0.07] px-3 py-2.5' : lastResult === 'LOSS' ? 'mt-3 rounded-xl border border-shafx-danger/30 bg-shafx-danger/[0.07] px-3 py-2.5' : 'mt-3 rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2.5'}>
               <div className="flex items-center justify-between gap-2">
@@ -634,14 +683,29 @@ export function TradingAgentPanel({
                 <CircularProgress progress={Math.max(0, Math.min(100, ((BOT_RESULT_DELAY_MS - tradeSecondsLeft * 1000) / BOT_RESULT_DELAY_MS) * 100))} label="run" value={Math.max(0, tradeSecondsLeft).toFixed(1) + 's'} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2"><span className={botDisplayedOrder.type === 'BUY' ? 'text-lg font-bold text-shafx-success' : 'text-lg font-bold text-shafx-danger'}>{botDisplayedOrder.type} {botDisplayedOrder.lotSize.toFixed(2)} LOT</span><span className="font-mono text-[9px] uppercase tracking-[0.14em] text-shafx-textMuted">10s active round</span></div>
-                  <div className="mt-2 grid grid-cols-3 gap-2 text-[9px]"><div className="rounded-lg border border-shafx-border bg-shafx-bg p-2"><span className="block text-shafx-textMuted">Entry</span><b className="font-mono">{botDisplayedOrder.entryPrice}</b></div><div className="rounded-lg border border-shafx-danger/20 bg-shafx-danger/[0.04] p-2"><span className="block text-shafx-textMuted">Stop Loss</span><b className="font-mono text-shafx-danger">{botDisplayedOrder.stopLoss}</b></div><div className="rounded-lg border border-shafx-success/20 bg-shafx-success/[0.04] p-2"><span className="block text-shafx-textMuted">Take Profit</span><b className="font-mono text-shafx-success">{botDisplayedOrder.takeProfit}</b></div></div>
+                  <div className="mt-2 grid grid-cols-3 gap-2 text-[9px]"><div className="rounded-lg border border-shafx-border bg-shafx-bg p-2"><span className="block text-shafx-textMuted">Entry</span><b className="font-mono">{botDisplayedOrder.entryPrice.toFixed(symbolSpec.pricePrecision)}</b></div><div className="rounded-lg border border-shafx-danger/20 bg-shafx-danger/[0.04] p-2"><span className="block text-shafx-textMuted">Stop Loss</span><b className="font-mono text-shafx-danger">{botDisplayedOrder.stopLoss?.toFixed(symbolSpec.pricePrecision) ?? '—'}</b></div><div className="rounded-lg border border-shafx-success/20 bg-shafx-success/[0.04] p-2"><span className="block text-shafx-textMuted">Take Profit</span><b className="font-mono text-shafx-success">{botDisplayedOrder.takeProfit?.toFixed(symbolSpec.pricePrecision) ?? '—'}</b></div></div>
                   <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-shafx-border"><div className="h-full rounded-full bg-shafx-accent" style={{width: Math.max(0, Math.min(100, ((BOT_RESULT_DELAY_MS - tradeSecondsLeft * 1000) / BOT_RESULT_DELAY_MS) * 100)) + '%'}} /></div>
                   <p className="mt-2 text-[9px] text-shafx-textMuted">10 seconds active → circle reaches 100% → settle from simulated price movement → WIN/LOSS → next 10-second cycle.</p>
                 </div>
               </div>
             </div>
           )}
-          {botTrades.length > 0 && (<div className="mt-3 space-y-1.5">{botTrades.slice(0, 5).map((trade) => { const profit = trade.profit ?? 0; return <div key={trade.id} className="flex items-center justify-between gap-2 rounded-lg border border-shafx-border bg-shafx-bg px-2.5 py-2 text-[9px]"><span className={trade.type === 'BUY' ? 'font-semibold text-shafx-success' : 'font-semibold text-shafx-danger'}>{trade.type} {trade.symbol} • {trade.lotSize.toFixed(2)} lots</span><span className={profit >= 0 ? 'font-mono text-shafx-success' : 'font-mono text-shafx-danger'}>{profit >= 0 ? '+' : ''}{profit.toFixed(2)} {accountCurrency}</span></div> })}</div>)}
+           {(recentBotRounds.length > 0 || botTrades.length > 0) && (
+             <div className="mt-3 rounded-xl border border-shafx-border bg-shafx-bg/70 p-2.5">
+               <div className="font-mono text-[9px] font-semibold uppercase tracking-[0.17em] text-shafx-textMuted">CYCLE RESULTS</div>
+               <div className="mt-2 space-y-1.5">
+                 {recentBotRounds.length > 0 ? recentBotRounds.slice(0, 5).map((round) => (
+                   <div key={round.id} className="flex items-center justify-between gap-2 rounded-lg border border-shafx-border bg-shafx-surface px-2.5 py-2 text-[9px]">
+                     <span className="min-w-0 truncate"><span className="font-mono text-shafx-text">U{round.unit} R{round.round}</span> <span className={round.direction === 'BUY' ? 'font-semibold text-shafx-success' : 'font-semibold text-shafx-danger'}>{round.direction} {round.symbol}</span> <span className="text-shafx-textMuted">• {round.lotSize.toFixed(2)} lot</span></span>
+                     <span className={round.profit >= 0 ? 'shrink-0 font-mono text-shafx-success' : 'shrink-0 font-mono text-shafx-danger'}>{round.profit >= 0 ? '+' : ''}{round.profit.toFixed(2)} {accountCurrency}</span>
+                   </div>
+                 )) : botTrades.slice(0, 5).map((trade) => {
+                   const profit = trade.profit ?? 0
+                   return <div key={trade.id} className="flex items-center justify-between gap-2 rounded-lg border border-shafx-border bg-shafx-surface px-2.5 py-2 text-[9px]"><span className={trade.type === 'BUY' ? 'font-semibold text-shafx-success' : 'font-semibold text-shafx-danger'}>{trade.type} {trade.symbol} • {trade.lotSize.toFixed(2)} lots</span><span className={profit >= 0 ? 'font-mono text-shafx-success' : 'font-mono text-shafx-danger'}>{profit >= 0 ? '+' : ''}{profit.toFixed(2)} {accountCurrency}</span></div>
+                 })}
+               </div>
+             </div>
+           )}
         </section>
       )}
 
