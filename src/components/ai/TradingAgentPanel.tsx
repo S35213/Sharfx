@@ -191,6 +191,8 @@ export function TradingAgentPanel({
   const nextRoundTimer = useRef<number | null>(null)
   const runInFlightRef = useRef(false)
   const runBotCycleRef = useRef<(() => Promise<void>) | null>(null)
+  const resumeStartedRef = useRef(false)
+  const [resumePending, setResumePending] = useState(false)
 
   const tradingContext = useMemo(() => {
     const swings = findSwingPoints(candles, 2)
@@ -531,7 +533,7 @@ export function TradingAgentPanel({
     }
 
     return () => { runBotCycleRef.current = null }
-  }, [accountBalance, accountCurrency, activeBotOrder, activePosition, autoTradingEnabled, botPositionId, conversionRate, cycleUnits, displayedUnitNumber, learning, lotSizeValid, multiTimeframe, onBotClose, onBotOrder, parsedLotSize, pendingUnitCompletion, phase, plan.maxDailyCycleUnits, research, runId, setup, symbol, symbolSpec, timeframeFrames, tradingContext, unitRound])
+  }, [accountBalance, accountCurrency, activeBotOrder, activePosition, autoTradingEnabled, botPositionId, conversionRate, cycleUnits, displayedUnitNumber, learning, lotSizeValid, multiTimeframe, onBotClose, onBotOrder, parsedLotSize, pendingUnitCompletion, phase, plan.maxDailyCycleUnits, research, resumePending, runId, setup, symbol, symbolSpec, timeframeFrames, tradingContext, unitRound])
   useEffect(() => {
     if (phase !== 'RUNNING' || !autoTradingEnabled || pendingUnitCompletion) return
     if (botDisplayedOrder || botPositionId) return
@@ -555,9 +557,6 @@ export function TradingAgentPanel({
       }
     }
   }, [autoTradingEnabled, botDisplayedOrder, botPositionId, lastResult, pendingUnitCompletion, phase])
-
-  const resumeStartedRef = useRef(false)
-  const [resumePending, setResumePending] = useState(false)
 
   useEffect(() => {
     if (resumeStartedRef.current) return
