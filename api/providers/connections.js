@@ -15,10 +15,12 @@ import { binanceRequest, loadBinanceConnection, normalizeBinanceAccount, normali
 const json = (res, status, body) => res.status(status).json(body)
 const timeframeMap = { M1: 'M1', M5: 'M5', M15: 'M15', M30: 'M30', H1: 'H1', H4: 'H4', D1: 'D' }
 const instrumentOf = (value) => String(value || '').trim().replace('/', '_').toUpperCase()
+const requestQuery = (req) => new URL(req.url || '/', 'http://shafx.local').searchParams
 
 const handleOandaGet = async (req, res, user) => {
-  const action = String(req.query.action || '')
-  const connectionId = typeof req.query.connectionId === 'string' ? req.query.connectionId : ''
+  const query = requestQuery(req)
+  const action = String(query.action || '')
+  const connectionId = typeof query.connectionId === 'string' ? query.connectionId : ''
   if (!connectionId) return json(res, 400, { ok: false, error: 'OANDA connectionId is required.' })
   const { connection, token } = await loadOandaConnection(req, connectionId)
   const environment = connection.environment
@@ -28,7 +30,7 @@ const handleOandaGet = async (req, res, user) => {
     await syncProviderAccounts({ connectionId: connection.id, userId: user.id, providerId: 'oanda', accounts })
     return json(res, 200, { ok: true, accounts })
   }
-  const accountId = typeof req.query.accountId === 'string' ? req.query.accountId : ''
+  const accountId = typeof query.accountId === 'string' ? query.accountId : ''
   if (!accountId) return json(res, 400, { ok: false, error: 'OANDA accountId is required.' })
   if (action === 'account') {
     const account = normalizeOandaSummary(await oandaRequest({ environment, token, path: '/v3/accounts/' + encodeURIComponent(accountId) + '/summary' }), environment)
@@ -39,17 +41,17 @@ const handleOandaGet = async (req, res, user) => {
   if (action === 'orders') return json(res, 200, { ok: true, orders: normalizeOandaOrders(await oandaRequest({ environment, token, path: '/v3/accounts/' + encodeURIComponent(accountId) + '/pendingOrders' })) })
   if (action === 'instruments') return json(res, 200, { ok: true, instruments: normalizeOandaInstruments(await oandaRequest({ environment, token, path: '/v3/accounts/' + encodeURIComponent(accountId) + '/instruments' })) })
   if (action === 'quote') {
-    const symbol = instrumentOf(req.query.symbol)
+    const symbol = instrumentOf(query.symbol)
     if (!symbol) return json(res, 400, { ok: false, error: 'OANDA symbol is required.' })
     const payload = await oandaRequest({ environment, token, path: '/v3/accounts/' + encodeURIComponent(accountId) + '/pricing', query: { instruments: symbol } })
     return json(res, 200, { ok: true, quote: normalizeOandaQuote(payload, symbol.replace('_', '/')) })
   }
   if (action === 'candles') {
-    const symbol = instrumentOf(req.query.symbol)
-    const timeframe = String(req.query.timeframe || 'M5')
+    const symbol = instrumentOf(query.symbol)
+    const timeframe = String(query.timeframe || 'M5')
     const granularity = timeframeMap[timeframe]
     if (!symbol || !granularity) return json(res, 400, { ok: false, error: 'OANDA symbol/timeframe is invalid.' })
-    const limit = Math.max(1, Math.min(5000, Math.trunc(Number(req.query.limit) || 200)))
+    const limit = Math.max(1, Math.min(5000, Math.trunc(Number(query.limit) || 200)))
     const payload = await oandaRequest({ environment, token, path: '/v3/instruments/' + encodeURIComponent(symbol) + '/candles', query: { granularity, count: limit, price: 'M' } })
     return json(res, 200, { ok: true, candles: normalizeOandaCandles(payload, symbol.replace('_', '/'), timeframe) })
   }
@@ -57,8 +59,9 @@ const handleOandaGet = async (req, res, user) => {
 }
 
 const handleBinanceGet = async (req, res, user) => {
-  const action = String(req.query.action || '')
-  const connectionId = typeof req.query.connectionId === 'string' ? req.query.connectionId : ''
+  const query = requestQuery(req)
+  const action = String(query.action || '')
+  const connectionId = typeof query.connectionId === 'string' ? query.connectionId : ''
   const connectionActions = new Set(['accounts', 'account', 'orders'])
   if (connectionActions.has(action)) {
     if (!connectionId) return json(res, 400, { ok: false, error: 'Binance connectionId is required.' })
@@ -69,7 +72,7 @@ const handleBinanceGet = async (req, res, user) => {
       await syncProviderAccounts({ connectionId: connection.id, userId: user.id, providerId: 'binance', accounts: [account] })
       return json(res, 200, { ok: true, accounts: [account] })
     }
-    const accountId = typeof req.query.accountId === 'string' ? req.query.accountId : ''
+    const accountId = typeof query.accountId === 'string' ? query.accountId : ''
     if (!accountId) return json(res, 400, { ok: false, error: 'Binance accountId is required.' })
     if (action === 'account') {
       const account = normalizeBinanceAccount(await binanceRequest({ environment, apiKey: credentials.apiKey, apiSecret: credentials.apiSecret, path: '/api/v3/account', signed: true }), environment)
@@ -77,14 +80,14 @@ const handleBinanceGet = async (req, res, user) => {
       return json(res, 200, { ok: true, account })
     }
     if (action === 'orders') {
-      const symbol = String(req.query.symbol || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase()
+      const symbol = String(query.symbol || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase()
       const payload = await binanceRequest({ environment, apiKey: credentials.apiKey, apiSecret: credentials.apiSecret, path: '/api/v3/openOrders', query: symbol ? { symbol } : {}, signed: true })
       return json(res, 200, { ok: true, orders: normalizeBinanceOrders(payload) })
     }
   }
 
-  const symbol = String(req.query.symbol || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase()
-  const connectionIdForMarket = typeof req.query.connectionId === 'string' ? req.query.connectionId : ''
+  const symbol = String(query.symbol || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase()
+  const connectionIdForMarket = typeof query.connectionId === 'string' ? query.connectionId : ''
   if (!connectionIdForMarket) return json(res, 400, { ok: false, error: 'Binance connectionId is required for market data.' })
   const marketConnection = await getProviderConnection(user.id, connectionIdForMarket, false)
   if (!marketConnection || marketConnection.provider_id !== 'binance') return json(res, 404, { ok: false, error: 'Binance connection not found.' })
@@ -98,27 +101,28 @@ const handleBinanceGet = async (req, res, user) => {
     if (!symbol) return json(res, 400, { ok: false, error: 'Binance symbol is required.' })
     const payload = await binanceRequest({ environment, path: '/api/v3/ticker/bookTicker', query: { symbol } })
     const ticker = await binanceRequest({ environment, path: '/api/v3/ticker/price', query: { symbol } })
-    return json(res, 200, { ok: true, quote: normalizeBinanceQuote({ ...payload, lastPrice: ticker?.price }, String(req.query.displaySymbol || symbol)) })
+    return json(res, 200, { ok: true, quote: normalizeBinanceQuote({ ...payload, lastPrice: ticker?.price }, String(query.displaySymbol || symbol)) })
   }
   if (action === 'candles') {
     if (!symbol) return json(res, 400, { ok: false, error: 'Binance symbol is required.' })
-    const interval = String(req.query.interval || '5m')
-    const limit = Math.max(1, Math.min(1500, Math.trunc(Number(req.query.limit) || 200)))
+    const interval = String(query.interval || '5m')
+    const limit = Math.max(1, Math.min(1500, Math.trunc(Number(query.limit) || 200)))
     const payload = await binanceRequest({ environment, path: '/api/v3/klines', query: { symbol, interval, limit } })
-    return json(res, 200, { ok: true, candles: normalizeBinanceCandles(payload, String(req.query.displaySymbol || symbol), String(req.query.timeframe || 'M5')) })
+    return json(res, 200, { ok: true, candles: normalizeBinanceCandles(payload, String(query.displaySymbol || symbol), String(query.timeframe || 'M5')) })
   }
   return json(res, 400, { ok: false, error: 'Unsupported Binance data action.' })
 }
 
 export default async function handler(req, res) {
+  const query = requestQuery(req)
   res.setHeader('Cache-Control', 'no-store')
   try {
     const user = await getShafxUser(req)
     if (!user) return json(res, 401, { ok: false, error: 'SHAFX sign-in is required.' })
 
     if (req.method === 'GET') {
-      if (req.query.providerId === 'oanda' && req.query.action) return await handleOandaGet(req, res, user)
-      if (req.query.providerId === 'binance' && req.query.action) return await handleBinanceGet(req, res, user)
+      if (query.providerId === 'oanda' && query.action) return await handleOandaGet(req, res, user)
+      if (query.providerId === 'binance' && query.action) return await handleBinanceGet(req, res, user)
       return json(res, 200, { ok: true, connections: await listProviderConnections(user.id) })
     }
 
