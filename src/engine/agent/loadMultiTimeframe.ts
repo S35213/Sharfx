@@ -10,13 +10,15 @@ const TIMEFRAME_SECONDS: Record<Timeframe, number> = {
   H1: 3600,
   H4: 14400,
   D1: 86400,
+  W1: 604800,
 }
+const MONDAY_WEEK_ANCHOR_SECONDS = 345600
+const bucketStart = (time: number, timeframe: Timeframe): number => timeframe === 'W1' ? Math.floor((time - MONDAY_WEEK_ANCHOR_SECONDS) / 604800) * 604800 + MONDAY_WEEK_ANCHOR_SECONDS : Math.floor(time / TIMEFRAME_SECONDS[timeframe]) * TIMEFRAME_SECONDS[timeframe]
 
 const aggregateFromM1 = (base: OHLCV[], timeframe: Timeframe): OHLCV[] => {
-  const interval = TIMEFRAME_SECONDS[timeframe]
   const groups = new Map<number, OHLCV>()
   for (const candle of base) {
-    const bucket = Math.floor(candle.time / interval) * interval
+    const bucket = bucketStart(candle.time, timeframe)
     const existing = groups.get(bucket)
     if (!existing) {
       groups.set(bucket, {
