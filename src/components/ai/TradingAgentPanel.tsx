@@ -39,8 +39,8 @@ const riskModes: Record<RiskMode, { label: string; percent: number; description:
 }
 type Phase = 'READY' | 'ANALYZING' | 'RUNNING'
 const SCAN_TIMEFRAMES: Timeframe[] = ['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1']
-const SCAN_SEQUENCE: Timeframe[] = ['M1', 'M5', 'M15', 'M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1']
-const TIMEFRAME_SCAN_BONUS: Record<Timeframe, number> = { M1: 18, M5: 14, M15: 10, M30: 5, H1: 2, H4: 0, D1: -1 }
+const SCAN_SEQUENCE: Timeframe[] = ['M1', 'M5', 'M15', 'M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1', 'W1']
+const TIMEFRAME_SCAN_BONUS: Record<Timeframe, number> = { M1: 18, M5: 14, M15: 10, M30: 5, H1: 2, H4: 0, D1: -1, W1: -2 }
 const BOT_CYCLE_SECONDS = 10 as const
 const BOT_RESULT_DELAY_MS = BOT_CYCLE_SECONDS * 1000
 const BOT_START_DELAY_MS = 1000 as const
@@ -776,7 +776,7 @@ export function TradingAgentPanel({
           {!activeBotOrder && autoTradingEnabled && phase === 'ANALYZING' && (
             <div className="mt-3 flex items-center gap-3 rounded-xl border border-shafx-accent/20 bg-shafx-accent/[0.045] p-3">
               <CircularProgress progress={botScanProgress} label="scan" value={Math.round(botScanProgress) + '%'} />
-              <div className="min-w-0"><div className="font-mono text-[9px] uppercase tracking-[0.18em] text-shafx-accent">BOT SCANNING</div><div className="mt-1 text-sm font-semibold">Refreshing M1 / M5 / M15 / M30 / H1 / H4 / D1</div><p className="mt-1 text-[9px] text-shafx-textMuted">Independent from the manual Market Read.</p></div>
+              <div className="min-w-0"><div className="font-mono text-[9px] uppercase tracking-[0.18em] text-shafx-accent">BOT SCANNING</div><div className="mt-1 text-sm font-semibold">Refreshing M1 / M5 / M15 / M30 / H1 / H4 / D1 / W1</div><p className="mt-1 text-[9px] text-shafx-textMuted">Independent from the manual Market Read.</p></div>
             </div>
           )}
           {botDisplayedOrder && (
