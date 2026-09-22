@@ -44,6 +44,17 @@ import type { AccountData, AIAnalysis, MarketAnalysis, MarketPair, OHLCV, Simula
 
 const isBrokerMode = (): boolean => typeof window !== 'undefined' && window.sessionStorage.getItem('shafx-trading-mode') === 'broker'
 const isSimulatorMode = (): boolean => !isBrokerMode()
+const BOT_AUTORUN_KEY = 'shafx-bot-autostart'
+const BOT_ORDER_IDS_KEY = 'shafx-bot-order-ids'
+const readStoredBotOrderIds = (): string[] => {
+  if (typeof window === 'undefined') return []
+  try {
+    const value = JSON.parse(window.localStorage.getItem(BOT_ORDER_IDS_KEY) ?? '[]')
+    return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : []
+  } catch {
+    return []
+  }
+}
 
 const TerminalContent: React.FC = () => {
   const { selectedSymbol, setSelectedSymbol, timeframe, setTimeframe } = useTerminal()
@@ -73,7 +84,7 @@ const TerminalContent: React.FC = () => {
   const [openPositions, setOpenPositions] = useState<TradeOrder[]>([])
   const [pendingOrders, setPendingOrders] = useState<TradeOrder[]>([])
   const [tradeHistory, setTradeHistory] = useState<TradeOrder[]>([])
-  const [botOrderIds, setBotOrderIds] = useState<string[]>([])
+  const [botOrderIds, setBotOrderIds] = useState<string[]>(readStoredBotOrderIds)
   const [botRunning, setBotRunning] = useState(false)
   const [chartSettings, setChartSettings] = useState<ChartWorkspaceSettings>(() => readChartWorkspaceSettings())
   const [toast, setToast] = useState<ToastMessage | null>(null)
@@ -346,9 +357,13 @@ const TerminalContent: React.FC = () => {
     } catch (err) { pushToast(err instanceof Error ? err.message : 'Unable to place simulated order.') }
   }, [pushToast])
   const handleBotOrder = useCallback((order: TradeOrder): void => {
-    setBotOrderIds((prev) => prev.includes(order.id) ? prev : [...prev, order.id])
+    setBotOrderIds((prev) => {
+      const next = prev.includes(order.id) ? prev : [...prev, order.id]
+      try { window.localStorage.setItem(BOT_ORDER_IDS_KEY, JSON.stringify(next)) } catch { /* storage may be unavailable */ }
+      return next
+    })
     setOpenPositions((prev) => prev.some((item) => item.id === order.id) ? prev : [...prev, order])
-    pushToast(`SHAFX Bot opened simulated ${order.type} ${order.symbol}.`)
+    pushToast('SHAFX Bot opened simulated ' + order.type + ' ' + order.symbol + '.')
   }, [pushToast])
 
   const closePosition = useCallback(async (id: string): Promise<TradeOrder | null> => {
@@ -515,7 +530,7 @@ const TerminalContent: React.FC = () => {
   const showHistory = mobileTab === 'history'
   const showAccount = mobileTab === 'account'
   const liveControl = <ProviderLiveControl providerId={activeProviderId} connection={activeMarketConnection} symbol={selectedSymbol} timeframe={timeframe} onUpdate={handleLiveUpdate} onActiveChange={handleLiveActiveChange} />
-  const botProps = { symbol: selectedSymbol, timeframe, candles: chartCandles, botOrderIds, scanM1Candles: simulatedM1Candles, currentPrice: displayPrice, activePosition, tradeHistory, accountBalance: accountData.balance, accountCurrency: accountData.currency, symbolSpec, conversionRate, botPlan: user?.botPlan ?? 'FREE' as const, onBotOrder: handleBotOrder, onBotClose: handleBotClose, onBotRunningChange: setBotRunning, onReviewSetup: reviewAISetup }
+  const botProps = { symbol: selectedSymbol, timeframe, candles: chartCandles, botOrderIds, scanM1Candles: simulatedM1Candles, currentPrice: displayPrice, activePosition, tradeHistory, accountBalance: accountData.balance, accountCurrency: accountData.currency, symbolSpec, conversionRate, botPlan: user?.botPlan ?? 'FREE' as const, botAutostartKey: BOT_AUTORUN_KEY, onBotOrder: handleBotOrder, onBotClose: handleBotClose, onBotRunningChange: setBotRunning, onReviewSetup: reviewAISetup }
 
   const openMobileDock = (next: WorkspaceDock): void => {
     setMobileDockOpen((open) => dock === next ? !open : true)
