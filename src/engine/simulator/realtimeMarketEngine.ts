@@ -109,10 +109,8 @@ export class SimulatorRealtimeMarketEngine {
 
   private displayCandles(): OHLCV[] {
     // The candle close is always the simulator bid. Higher timeframes are
-    // still aggregated from the same M1 stream, but the stream itself uses a
-    // slower, smoother price path as the timeframe grows. This keeps BUY/SELL
-    // and the live candle on one source of truth instead of letting the quote
-    // drift away from the candle body.
+    // still aggregated from the same M1 stream. The quote heartbeat is shared
+    // across timeframes; only the bar grouping changes as the chart timeframe changes.
     return aggregate(this.m1Candles, this.timeframe, this.spec.pricePrecision, 300)
   }
 
