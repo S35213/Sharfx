@@ -186,6 +186,7 @@ export function TradingAgentPanel({
   const processedHistory = useRef(new Set<string>())
   const analysisTimer = useRef<number | null>(null)
   const scanInterval = useRef<number | null>(null)
+  const marketScanTimer = useRef<number | null>(null)
   const tradeCloseTimer = useRef<number | null>(null)
   const nextRoundTimer = useRef<number | null>(null)
   const runInFlightRef = useRef(false)
@@ -377,6 +378,7 @@ export function TradingAgentPanel({
 
       try {
         if (!autoTradingEnabled || phase !== 'RUNNING') return
+        if (resumePendingRef.current && !activeBotOrder && !botPositionId && !botDisplayedOrder) resumePendingRef.current = false
         if (activeBotOrder || botPositionId || botDisplayedOrder) {
           setStatus('MONITORING • waiting for the current simulated bot round to close')
           return
@@ -555,12 +557,17 @@ export function TradingAgentPanel({
     }
   }, [autoTradingEnabled, botDisplayedOrder, botPositionId, lastResult, pendingUnitCompletion, phase])
 
+  const resumeStartedRef = useRef(false)
+  const resumePendingRef = useRef(false)
+
   useEffect(() => {
+    if (resumeStartedRef.current) return
+    resumeStartedRef.current = true
     let cancelled = false
     const resume = async (): Promise<void> => {
       if (typeof window === 'undefined' || window.localStorage.getItem(botAutostartKey) !== '1') return
       try {
-        const response = await fetch('/api/bot/usage', { method: 'GET', credentials: 'same-origin' })
+        const response = await fetch('/api/bot/usage', { method: 'GET', credentials: 'same-origin', cache: 'no-store' })
         const data = await response.json().catch(() => ({}))
         if (cancelled || !response.ok || !data.ok) return
         const serverUsedUnits = Number.isFinite(Number(data.usedCycleUnits)) ? Number(data.usedCycleUnits) : 0
@@ -575,94 +582,64 @@ export function TradingAgentPanel({
         setLastResult(null)
         setAutoTradingEnabled(true)
         setPhase('ANALYZING')
+        resumePendingRef.current = true
         setStatus('BOT RESUMING • restoring Unit ' + (serverUsedUnits + 1) + ' Round ' + (serverRound + 1) + '…')
-        if (activeBotOrder && resumedOrderRef.current !== activeBotOrder.id) {
-          resumedOrderRef.current = activeBotOrder.id
-          setBotPositionId(activeBotOrder.id)
-          setBotDisplayedOrder(activeBotOrder)
-          setTradeCloseAt(Date.now() + BOT_CYCLE_SECONDS * 1000)
-          setTradeSecondsLeft(BOT_CYCLE_SECONDS)
-          setStatus('BOT RESUMING • settling the restored simulated trade, then continuing automatically…')
-          if (tradeCloseTimer.current) window.clearTimeout(tradeCloseTimer.current)
-          tradeCloseTimer.current = window.setTimeout(async () => {
-            const closed = await onBotClose?.(activeBotOrder.id)
-            if (!closed) return
-            const nextRound = serverRound + 1
-            const unitNumber = serverRound === 0 ? serverUsedUnits + 1 : displayedUnitNumber
-            setBotDisplayedOrder(null)
-            setBotPositionId(null)
-            setTradeCloseAt(null)
-            setTradeSecondsLeft(0)
-            setLastProfit(closed.profit ?? 0)
-            setLastResult((closed.profit ?? 0) >= 0 ? 'WIN' : 'LOSS')
-            if ((closed.profit ?? 0) >= 0) {
-              setWins((value) => value + 1)
-              setTotalWon((value) => Number((value + (closed.profit ?? 0)).toFixed(2)))
-            } else {
-              setLosses((value) => value + 1)
-              setTotalLost((value) => Number((value + Math.abs(closed.profit ?? 0)).toFixed(2)))
-            }
-            const sessionRunId = runId ?? 'v3-' + crypto.randomUUID()
-            try {
-              const usageResponse = await fetch('/api/bot/usage', {
-                method: 'POST',
-                credentials: 'same-origin',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ runId: sessionRunId }),
-              })
-              const usageData = await usageResponse.json().catch(() => ({}))
-              if (usageResponse.ok && usageData.ok) {
-                const used = Number.isFinite(Number(usageData.usedCycleUnits)) ? Number(usageData.usedCycleUnits) : serverUsedUnits
-                const round = Number.isFinite(Number(usageData.currentUnitRound)) ? Number(usageData.currentUnitRound) : nextRound
-                setCycleUnits(used)
-                setUnitRound(round)
-                setRunId(sessionRunId)
-                if (usageData.completedUnit) {
-                  setPendingUnitCompletion(true)
-                  setAutoTradingEnabled(false)
-                  setPhase('READY')
-                  try { window.localStorage.removeItem(botAutostartKey) } catch { /* storage may be unavailable */ }
-                  setStatus('UNIT ' + unitNumber + ' COMPLETE 5/5 • TAP RUN UNIT ' + (used + 1))
-                  return
-                }
-              } else {
-                setCycleUnits(serverUsedUnits)
-                setUnitRound(nextRound)
-              }
-            } catch {
-              setCycleUnits(serverUsedUnits)
-              setUnitRound(nextRound)
-            }
-            setStatus('BOT ' + ((closed.profit ?? 0) >= 0 ? 'WIN' : 'LOSS') + ' • restored round settled • next cycle starting…')
-            setPhase('RUNNING')
-            setAutoTradingEnabled(true)
-            if (nextRoundTimer.current) window.clearTimeout(nextRoundTimer.current)
-            nextRoundTimer.current = window.setTimeout(() => {
-              if (!cancelled) void runBotCycleRef.current?.()
-            }, BOT_RESULT_DISPLAY_MS)
-          }, BOT_CYCLE_SECONDS * 1000)
-          return
-        }
         if (analysisTimer.current) window.clearTimeout(analysisTimer.current)
         analysisTimer.current = window.setTimeout(() => {
           if (cancelled) return
           setPhase('RUNNING')
           setStatus('BOT RUNNING • resumed 10-second cycle')
-          if (nextRoundTimer.current) window.clearTimeout(nextRoundTimer.current)
-          nextRoundTimer.current = window.setTimeout(() => {
-            if (!cancelled) void runBotCycleRef.current?.()
-          }, 75)
         }, BOT_START_DELAY_MS)
       } catch {
-        // A failed resume should not erase the saved intent; the next mount can retry.
+        // Keep the saved run intent so a later reload can retry cleanly.
       }
     }
     void resume()
     return () => { cancelled = true }
-  }, [activeBotOrder, botAutostartKey, displayedUnitNumber, onBotClose, parsedLotSize, runId])
+  }, [botAutostartKey, parsedLotSize])
 
+  useEffect(() => {
+    if (!resumePendingRef.current || !autoTradingEnabled || phase !== 'RUNNING' || !activeBotOrder) return
+    if (resumedOrderRef.current === activeBotOrder.id) return
+    resumedOrderRef.current = activeBotOrder.id
+    resumePendingRef.current = false
+    setBotPositionId(activeBotOrder.id)
+    setBotDisplayedOrder(activeBotOrder)
+    setTradeCloseAt(Date.now() + BOT_RESULT_DELAY_MS)
+    setTradeSecondsLeft(BOT_CYCLE_SECONDS)
+    setStatus('BOT RESUMING • settling restored simulated trade, then continuing…')
+    if (tradeCloseTimer.current) window.clearTimeout(tradeCloseTimer.current)
+    tradeCloseTimer.current = window.setTimeout(async () => {
+      const closed = await onBotClose?.(activeBotOrder.id)
+      if (!closed) return
+      const profit = closed.profit ?? 0
+      setLastProfit(profit)
+      setLastResult(profit >= 0 ? 'WIN' : 'LOSS')
+      if (profit >= 0) {
+        setWins((value) => value + 1)
+        setTotalWon((value) => Number((value + profit).toFixed(2)))
+      } else {
+        setLosses((value) => value + 1)
+        setTotalLost((value) => Number((value + Math.abs(profit)).toFixed(2)))
+      }
+      setBotPositionId(null)
+      setBotDisplayedOrder(null)
+      setTradeCloseAt(null)
+      setTradeSecondsLeft(0)
+      setPhase('RUNNING')
+      setAutoTradingEnabled(true)
+      setStatus('BOT ' + (profit >= 0 ? 'WIN' : 'LOSS') + ' • restored round settled • next cycle starting…')
+      void fetch('/api/bot/usage', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId: runId ?? 'v3-' + crypto.randomUUID() }),
+      }).catch(() => undefined)
+    }, BOT_RESULT_DELAY_MS)
+  }, [activeBotOrder, autoTradingEnabled, onBotClose, phase, runId])
   useEffect(() => () => {
     if (analysisTimer.current) window.clearTimeout(analysisTimer.current)
+    if (marketScanTimer.current) window.clearTimeout(marketScanTimer.current)
     if (scanInterval.current) window.clearInterval(scanInterval.current)
     if (nextRoundTimer.current) window.clearTimeout(nextRoundTimer.current)
     if (tradeCloseTimer.current) window.clearTimeout(tradeCloseTimer.current)
@@ -721,7 +698,7 @@ export function TradingAgentPanel({
   }
 
   const rescanBot = (): void => {
-    if (analysisTimer.current) window.clearTimeout(analysisTimer.current)
+    if (marketScanTimer.current) window.clearTimeout(marketScanTimer.current)
     if (scanInterval.current) window.clearInterval(scanInterval.current)
     setLastResult(null)
     setScanComplete(false)
@@ -741,7 +718,7 @@ export function TradingAgentPanel({
       }
     }, 1000)
     setStatus(activePosition ? 'Refreshing lower-timeframe structure, liquidity and setup…' : 'Scanning M1/M5/M15 first, then M30/H1/H4/D1…')
-    analysisTimer.current = window.setTimeout(() => {
+    marketScanTimer.current = window.setTimeout(() => {
       if (scanInterval.current) window.clearInterval(scanInterval.current)
       scanInterval.current = null
       setScanSeconds(10)
