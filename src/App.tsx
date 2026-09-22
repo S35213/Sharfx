@@ -578,7 +578,7 @@ const TerminalContent: React.FC = () => {
 
   const dockContent = {
     insights: <div className="space-y-3"><FXMoveMatrix pairs={watchlist} /><MarketAnalysisPanel analysis={marketAnalysis} pricePrecision={symbolSpec.pricePrecision} /><AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={chartCandles} setup={aiSetup} onReviewSetup={reviewAISetup} /></div>,
-    liquidity: <LiquidityPanel symbol={selectedSymbol} price={displayPrice} precision={symbolSpec.pricePrecision} pipSize={symbolSpec.pipSize} candles={chartCandles} />,
+    liquidity: <LiquidityPanel key={selectedSymbol} symbol={selectedSymbol} price={displayPrice} precision={symbolSpec.pricePrecision} pipSize={symbolSpec.pipSize} candles={chartCandles} />,
     orders: <div className="space-y-3">
       {brokerMode && activeProviderDescriptor ? <ProviderCapabilityPanel descriptor={activeProviderDescriptor} environment={activeProviderSelection?.environment ?? 'demo'} /> : <OrderPanel key={selectedSymbol + ':' + symbolSpec.pricePrecision + ':' + symbolSpec.lotStep} symbol={selectedSymbol} currentPrice={displayPrice} accountBalance={accountData.balance} accountCurrency={accountData.currency} symbolSpec={symbolSpec} conversionRate={conversionRate} onSubmitOrder={handleOrderSubmit} aiSetup={reviewedSetup ?? aiSetup} autoApplyAISetup={reviewedSetup !== null} />}
       {isSimulatorMode() && (
