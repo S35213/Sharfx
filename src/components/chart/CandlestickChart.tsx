@@ -251,16 +251,18 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
 
     const lastIndex = visualData.length - 1
     if (rangeNeedsReset) {
-      const width = containerRef.current?.clientWidth ?? 1000
-      // A timeframe change is a deliberate view reset. Use a fixed number of
-      // bars for the new timeframe instead of inheriting the previous zoom.
-      // Do not call scrollToRealTime() here because it can restore the chart's
-      // previous bar-spacing/visible-range behavior and collapse a new M1/M5
-      // view into an unexpectedly tiny number of candles.
-      const visibleBars = visibleBarsForTimeframe(timeframe, width)
-      const from = Math.max(0, lastIndex - visibleBars + 1)
-      const to = lastIndex + 7
-      chart.timeScale().setVisibleLogicalRange({ from, to })
+      // A timeframe change must clear the user's previous horizontal zoom.
+      // Lightweight Charts keeps horizontal zoom in the time scale's
+      // barSpacing state, so changing the logical range alone can leave an
+      // earlier D1/H4 pinch-zoom affecting the new M1 view. Reset the actual
+      // time scale first, then explicitly restore SHAFX's normal spacing.
+      chart.timeScale().resetTimeScale()
+      chart.timeScale().applyOptions({
+        barSpacing: 9,
+        minBarSpacing: 3,
+        rightOffset: 7,
+      })
+      chart.timeScale().scrollToRealTime()
       verticalScaleMarginsRef.current = { top: 0.08, bottom: 0.08 }
       series.priceScale().applyOptions({ autoScale: true, scaleMargins: { top: 0.08, bottom: 0.08 } })
       followRealtimeRef.current = true
