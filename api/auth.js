@@ -26,7 +26,7 @@ async function updateSecurityProfile(userId, patch) { try { await rest(`/shafx_p
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store')
   if (!configured()) return json(res, 503, { ok: false, error: 'SHAFX identity is not configured on this deployment.' })
-  const action = typeof req.query.action === 'string' ? req.query.action : ''
+  const action = new URL(req.url || '/', 'http://shafx.local').searchParams.get('action') || ''
   try {
     if (action === 'logout') { const { user } = await currentUser(req, res); if (user) await securityEvent({ user_id: user.id, event_type: 'logout', decision: 'allow', risk_score: 0, fingerprint: securityFingerprint(req), metadata: {} }); clearSessionCookie(res); return json(res, 200, { ok: true }) }
     if (action === 'me') { const { user } = await currentUser(req, res); if (!user) return json(res, 401, { ok: false, error: 'Not signed in' }); const result = await publicUser(user); if (!result) return json(res, 403, { ok: false, error: 'SHAFX account profile is missing.' }); if (result.status !== 'active') { clearSessionCookie(res); return json(res, 403, { ok: false, error: result.status === 'banned' ? 'This SHAFX account has been banned.' : 'This SHAFX account is suspended.', status: result.status }) } return json(res, 200, { ok: true, user: result }) }
