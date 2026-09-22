@@ -16,7 +16,10 @@ const TIMEFRAME_SECONDS: Record<Timeframe, number> = {
   H1: 3600,
   H4: 14400,
   D1: 86400,
+  W1: 604800,
 }
+const MONDAY_WEEK_ANCHOR_SECONDS = 345600
+const bucketStart = (time: number, timeframe: Timeframe): number => timeframe === 'W1' ? Math.floor((time - MONDAY_WEEK_ANCHOR_SECONDS) / 604800) * 604800 + MONDAY_WEEK_ANCHOR_SECONDS : Math.floor(time / TIMEFRAME_SECONDS[timeframe]) * TIMEFRAME_SECONDS[timeframe]
 
 const finitePositive = (value: number): boolean => Number.isFinite(value) && value > 0
 
@@ -25,7 +28,7 @@ const aggregate = (base: OHLCV[], timeframe: Timeframe, precision: number, limit
   const groups = new Map<number, OHLCV>()
 
   for (const candle of base) {
-    const bucket = Math.floor(candle.time / interval) * interval
+    const bucket = bucketStart(candle.time, timeframe)
     const current = groups.get(bucket)
 
     if (!current) {
@@ -83,7 +86,7 @@ export class SimulatorRealtimeMarketEngine {
     this.m1Candles = initialM1Candles
       .filter((candle) => finitePositive(candle.open) && finitePositive(candle.high) && finitePositive(candle.low) && finitePositive(candle.close))
       .sort((a, b) => a.time - b.time)
-      .slice(-12000)
+      .slice(-60000)
       .map((candle) => {
         const bodyHigh = Math.max(candle.open, candle.close)
         const bodyLow = Math.min(candle.open, candle.close)
