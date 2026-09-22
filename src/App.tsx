@@ -105,6 +105,7 @@ const TerminalContent: React.FC = () => {
   const symbolSpecForPositionsRef = useRef<SymbolSpec | null>(symbolSpec)
   const watchlistForPositionsRef = useRef<MarketPair[]>([])
   const accountCurrencyForPositionsRef = useRef('USD')
+  const accountReadyForPositionsRef = useRef(false)
 
   const pushToast = useCallback((text: string) => {
     toastId.current += 1
@@ -488,6 +489,7 @@ const TerminalContent: React.FC = () => {
     symbolSpecForPositionsRef.current = symbolSpec
     watchlistForPositionsRef.current = watchlist
     accountCurrencyForPositionsRef.current = accountData?.currency ?? 'USD'
+    accountReadyForPositionsRef.current = Boolean(accountData)
   }, [accountData?.currency, displayPrice, openPositions, selectedSymbol, symbolSpec, watchlist])
 
   const queuePositionRefresh = useCallback((): void => {
@@ -500,7 +502,7 @@ const TerminalContent: React.FC = () => {
       }
 
       const positions = openPositionsRef.current
-      if (!accountData || positions.length === 0) return
+      if (!accountReadyForPositionsRef.current || positions.length === 0) return
 
       positionRefreshInFlight.current = true
       try {
@@ -558,7 +560,7 @@ const TerminalContent: React.FC = () => {
         }
       }
     }, 150)
-  }, [accountData, pushToast])
+  }, [pushToast])
 
   useEffect(() => {
     if (openPositions.length > 0) queuePositionRefresh()
