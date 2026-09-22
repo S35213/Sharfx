@@ -351,7 +351,7 @@ const TerminalContent: React.FC = () => {
     pushToast(`SHAFX Bot opened simulated ${order.type} ${order.symbol}.`)
   }, [pushToast])
 
-  const handleClosePosition = useCallback(async (id: string): Promise<TradeOrder | null> => {
+  const closePosition = useCallback(async (id: string): Promise<TradeOrder | null> => {
     const order = openPositions.find((item) => item.id === id)
     if (!order || !accountData) return null
     try {
@@ -380,9 +380,13 @@ const TerminalContent: React.FC = () => {
     }
   }, [accountData, displayPrice, openPositions, pushToast, selectedSymbol])
 
+  const handleClosePosition = useCallback(async (id: string): Promise<void> => {
+    await closePosition(id)
+  }, [closePosition])
+
   const handleBotClose = useCallback(async (id: string): Promise<TradeOrder | null> => {
-    return handleClosePosition(id)
-  }, [handleClosePosition])
+    return closePosition(id)
+  }, [closePosition])
 
   useEffect(() => {
     if (!accountData || openPositions.length === 0) return
