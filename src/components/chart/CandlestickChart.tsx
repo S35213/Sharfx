@@ -240,7 +240,18 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       // previous zoom ratio because that can make M1/M5 appear artificially
       // zoomed-in after switching from H1/H4 (or vice versa). Start wide;
       // the user can then zoom in manually.
-      const visibleBars = width < 640 ? 140 : 180
+      const barsByTimeframe: Record<Timeframe, number> = {
+        M1: 260,
+        M5: 230,
+        M15: 210,
+        M30: 190,
+        H1: 170,
+        H4: 145,
+        D1: 120,
+        W1: 90,
+      }
+      const baseVisibleBars = barsByTimeframe[timeframe ?? 'H1']
+      const visibleBars = width < 640 ? Math.round(baseVisibleBars * 0.82) : baseVisibleBars
       const from = Math.max(0, lastIndex - visibleBars + 1)
       const to = lastIndex + 7
       chart.timeScale().setVisibleLogicalRange({ from, to })
@@ -453,6 +464,15 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       return
     }
 
+    // Once the radial menu is open, a single tap anywhere that is not one of
+    // the timeframe/utility buttons dismisses it. A new double-tap is required
+    // to open it again.
+    if (timeframeMenuOpen) {
+      lastTapRef.current = null
+      setTimeframeMenuOpen(false)
+      return
+    }
+
     const now = performance.now()
     const previous = lastTapRef.current
     const distance = previous ? Math.hypot(event.clientX - previous.x, event.clientY - previous.y) : Number.POSITIVE_INFINITY
@@ -461,7 +481,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       event.preventDefault()
       event.stopPropagation()
       lastTapRef.current = null
-      setTimeframeMenuOpen((open) => !open)
+      setTimeframeMenuOpen(true)
       return
     }
     lastTapRef.current = { time: now, x: event.clientX, y: event.clientY, pointerType: event.pointerType }
