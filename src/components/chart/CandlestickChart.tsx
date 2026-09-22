@@ -84,6 +84,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const [crosshairInfo, setCrosshairInfo] = useState<{ price: number; time: string } | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const verticalScaleDragRef = useRef<{ startY: number; top: number; bottom: number } | null>(null)
+  const verticalScaleMarginsRef = useRef({ top: 0.08, bottom: 0.08 })
   const marketBidLineRef = useRef<IPriceLine | null>(null)
   const marketAskLineRef = useRef<IPriceLine | null>(null)
   const followRealtimeRef = useRef(true)
@@ -243,7 +244,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       // retaining the intentionally wide zoom. History remains user-controlled
       // after this initial positioning.
       chart.timeScale().scrollToRealTime()
-      series.priceScale().applyOptions({ autoScale: true })
+      verticalScaleMarginsRef.current = { top: 0.08, bottom: 0.08 }
+      series.priceScale().applyOptions({ autoScale: true, scaleMargins: { top: 0.08, bottom: 0.08 } })
       followRealtimeRef.current = true
     } else if (isNewBar && wasFollowingRealtime) {
       // Only follow the newest bar when the user is already at the live edge.
@@ -416,6 +418,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const resetVerticalScale = (): void => {
     const series = seriesRef.current
     if (!series) return
+    verticalScaleMarginsRef.current = { top: 0.08, bottom: 0.08 }
     series.priceScale().applyOptions({
       autoScale: true,
       scaleMargins: { top: 0.08, bottom: 0.08 },
@@ -427,8 +430,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     const series = seriesRef.current
     const scale = series?.priceScale()
     if (!series || !scale) return
-    const options = scale.options()
-    const margins = options.scaleMargins
+    const margins = verticalScaleMarginsRef.current
     verticalScaleDragRef.current = {
       startY: event.clientY,
       top: margins.top,
@@ -447,6 +449,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     const marginDelta = delta * 0.45
     const top = Math.min(0.46, Math.max(0.02, start.top + marginDelta))
     const bottom = Math.min(0.46, Math.max(0.02, start.bottom + marginDelta))
+    verticalScaleMarginsRef.current = { top, bottom }
     series.priceScale().applyOptions({
       autoScale: false,
       scaleMargins: { top, bottom },
