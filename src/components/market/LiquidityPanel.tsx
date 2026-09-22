@@ -55,7 +55,7 @@ export const LiquidityPanel: React.FC<Props> = ({ symbol, price, precision, pipS
     setTape(seedTape(candles, precision))
     setTick(0)
     autoScrollTapeRef.current = true
-  }, [symbol, candles, precision])
+  }, [symbol])
 
   useEffect(() => {
     let sequence = 0
@@ -71,7 +71,7 @@ export const LiquidityPanel: React.FC<Props> = ({ symbol, price, precision, pipS
       autoScrollTapeRef.current = !tapeElement || tapeElement.scrollHeight - tapeElement.scrollTop - tapeElement.clientHeight < 28
       setTape((previous) => {
         const now = Date.now()
-        const last = previous[0]
+        const last = previous[previous.length - 1]
         const lastSide = last?.side ?? 'SELL'
         const wave = Math.sin(sequence * 1.21 + symbol.length)
         const side: TapeSide = sequence % 4 === 0 ? (lastSide === 'BUY' ? 'SELL' : 'BUY') : wave >= 0 ? 'BUY' : 'SELL'
