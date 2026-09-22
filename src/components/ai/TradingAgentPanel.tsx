@@ -88,7 +88,7 @@ function CircularProgress({ progress, label, value }: CircularProgressProps) {
     <div className="relative h-20 w-20 shrink-0" aria-label={label}>
       <svg viewBox="0 0 64 64" className="-rotate-90 h-20 w-20">
         <circle cx="32" cy="32" r={radius} fill="none" stroke="currentColor" strokeWidth="4" className="text-shafx-border" />
-        <circle cx="32" cy="32" r={radius} fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" className="text-shafx-accent transition-[stroke-dashoffset] duration-100" style={{ strokeDasharray: circumference, strokeDashoffset: offset }} />
+        <circle cx="32" cy="32" r={radius} fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" className="text-shafx-accent transition-[stroke-dashoffset] duration-100" strokeDasharray={circumference} strokeDashoffset={offset} />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <span className="font-mono text-sm font-bold text-shafx-text">{value}</span>
