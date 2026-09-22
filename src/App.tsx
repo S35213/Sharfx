@@ -260,8 +260,9 @@ const TerminalContent: React.FC = () => {
   }, [openPositions, tradeHistory])
 
   const visibleCandles = useMemo(() => replayCount > 0 && replayCount < candles.length ? candles.slice(0, replayCount) : candles, [candles, replayCount])
+  const replayActive = replayCount > 0 && replayCount < candles.length
   useEffect(() => {
-    if (isBrokerMode() || !symbolSpec || !simulatedEngineRef.current) return
+    if (isBrokerMode() || !symbolSpec || !simulatedEngineRef.current || replayActive) return
 
     let cancelled = false
     let timeout: number | null = null
@@ -291,20 +292,19 @@ const TerminalContent: React.FC = () => {
   }, [selectedSymbol, symbolSpec, timeframe])
 
 
-  const replayActive = !isSimulatorMode() && !liveMarketActive && visibleCandles.length > 0 && visibleCandles.length < candles.length
-  const chartCandles = liveMarketActive && liveCandles.length > 0
-    ? liveCandles
-    : isSimulatorMode() && simulatedCandles.length > 0
-      ? simulatedCandles
-      : replayActive
-        ? visibleCandles
+  const chartCandles = replayActive
+    ? visibleCandles
+    : liveMarketActive && liveCandles.length > 0
+      ? liveCandles
+      : isSimulatorMode() && simulatedCandles.length > 0
+        ? simulatedCandles
         : visibleCandles
-  const displayPrice = liveMarketActive && liveCandles.length > 0
-    ? (liveCandles[liveCandles.length - 1]?.close ?? currentPrice)
-    : isSimulatorMode()
-      ? simulatedPrice
-      : replayActive
-        ? (visibleCandles[visibleCandles.length - 1]?.close ?? currentPrice)
+  const displayPrice = replayActive
+    ? (visibleCandles[visibleCandles.length - 1]?.close ?? currentPrice)
+    : liveMarketActive && liveCandles.length > 0
+      ? (liveCandles[liveCandles.length - 1]?.close ?? currentPrice)
+      : isSimulatorMode()
+        ? simulatedPrice
         : currentPrice
   // The chart's primary price is always the latest candle close. This keeps the
   // simulated Bid/Sell stream and the candle OHLC data on one source of truth.
