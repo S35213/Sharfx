@@ -115,7 +115,7 @@ export const SimulationPulse: React.FC<Props> = ({ selectedSymbol, openPositions
       cancelled = true
       if (timeout !== null) window.clearTimeout(timeout)
     }
-  }, [initialPrice, pricePrecision, selectedSymbol])
+  }, [pricePrecision, selectedSymbol])
 
   useEffect(() => {
     if (!autoScrollTapeRef.current) return
