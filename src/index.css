@@ -13,9 +13,9 @@
 
 * { box-sizing: border-box; }
 html, body, #root { min-height: 100%; margin: 0; }
-html, body { min-width: 320px; min-height: 100dvh; background: #070A0F; font-family: Arial, Helvetica, sans-serif; }
+html, body { min-width: 320px; min-height: 100svh; background: #070A0F; font-family: Arial, Helvetica, sans-serif; }
 body { overflow: hidden; }
-.shafx-chart-stage { height: clamp(420px, 70dvh, 760px); max-height: 760px; }
+.shafx-chart-stage { height: clamp(420px, 70svh, 760px); max-height: 760px; }
 button, input, select { font: inherit; }
 button { -webkit-tap-highlight-color: transparent; }
 input::placeholder { color: #667285; }
@@ -28,18 +28,18 @@ input::placeholder { color: #667285; }
 
 @media (max-width: 1023px) {
   body { overflow: auto; }
-  .shafx-chart-shell { min-height: 52vh !important; }
-  .shafx-chart-stage { height: clamp(420px, 70dvh, 720px); }
+  .shafx-chart-shell { min-height: 52svh !important; }
+  .shafx-chart-stage { height: clamp(420px, 70svh, 720px); }
 }
 
 @media (orientation: landscape) and (max-width: 1023px) {
-  .shafx-chart-stage { height: min(calc(100dvh - 140px), 700px); max-height: 700px; }
+  .shafx-chart-stage { height: min(calc(100svh - 140px), 700px); max-height: 700px; }
 }
 
 @media (max-width: 639px) {
   button, a, input, select, textarea { touch-action: manipulation; }
   .shafx-mobile-content { padding-bottom: calc(5.75rem + env(safe-area-inset-bottom)); }
-  .shafx-chart-shell { min-height: 48vh !important; }
+  .shafx-chart-shell { min-height: 48svh !important; }
   main.shafx-mobile-content { padding-bottom: calc(6.5rem + env(safe-area-inset-bottom)); }
 }
 
