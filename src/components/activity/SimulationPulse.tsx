@@ -173,13 +173,13 @@ export const SimulationPulse: React.FC<Props> = ({ selectedSymbol, openPositions
         <div className="flex items-center justify-between gap-2">
           <div>
             <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Market order tape</div>
-            <div className="text-[9px] text-shafx-textMuted">Synthetic {selectedSymbol} simulator flow • updates every ~1s</div>
+            <div className="text-[9px] text-shafx-textMuted">Synthetic {selectedSymbol} simulator flow • variable event cadence • market-bias coupled</div>
           </div>
           <span className="rounded-full border border-shafx-warning/20 bg-shafx-warning/5 px-2 py-1 text-[8px] font-semibold text-shafx-warning">SIMULATED</span>
         </div>
         <div className="mt-2 grid grid-cols-2 gap-2">
           <div className="rounded-lg border border-shafx-success/20 bg-shafx-success/5 p-2"><span className="block text-[8px] text-shafx-textMuted">BUY</span><strong className="font-mono text-xs text-shafx-success">{marketTicks.filter((tick) => tick.side === 'BUY').length} prints • {marketTicks.filter((tick) => tick.side === 'BUY').reduce((sum, tick) => sum + tick.lots, 0).toFixed(2)} lots</strong></div>
-          <div className="rounded-lg border border-shafx-danger/20 bg-shafx-danger/5 p-2"><span className="block text-[8px] text-shafx-textMuted">SELL</span><strong className="font-mono text-xs text-shafx-danger">{marketTicks.filter((tick) => tick.side === 'SELL').length} orders • {marketTicks.filter((tick) => tick.side === 'SELL').reduce((sum, tick) => sum + tick.lots, 0).toFixed(2)} lots</strong></div>
+          <div className="rounded-lg border border-shafx-danger/20 bg-shafx-danger/5 p-2"><span className="block text-[8px] text-shafx-textMuted">SELL</span><strong className="font-mono text-xs text-shafx-danger">{marketTicks.filter((tick) => tick.side === 'SELL').length} prints • {marketTicks.filter((tick) => tick.side === 'SELL').reduce((sum, tick) => sum + tick.lots, 0).toFixed(2)} lots</strong></div>
         </div>
         <div ref={tapeScrollRef} className="mt-2 max-h-[250px] space-y-1 overflow-y-auto">
           {marketTicks.map((tick) => <div key={tick.id} className="grid grid-cols-[76px_46px_1fr_74px] items-center gap-1 rounded-lg border border-shafx-border/70 bg-shafx-surface/60 px-2 py-1.5 text-[9px]">
