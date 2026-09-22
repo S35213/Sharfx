@@ -157,7 +157,7 @@ const TerminalContent: React.FC = () => {
         setCandles(cands)
         setLiveCandles([])
         if (!isBrokerMode()) {
-          const m1 = await marketDataSource.getCandles(selectedSymbol, 'M1', 12000)
+          const m1 = await marketDataSource.getCandles(selectedSymbol, 'M1', 60000)
           const sameSymbolContinuation = simulatedEngineRef.current !== null && simulatedEngineSymbolRef.current === selectedSymbol
           const carryBid = sameSymbolContinuation ? simulatedPriceRef.current : (m1[m1.length - 1]?.close ?? acc.balance)
           const carryTimestamp = sameSymbolContinuation ? marketTimestamp : m1[m1.length - 1]?.time
@@ -612,7 +612,7 @@ const TerminalContent: React.FC = () => {
     research: <div className="space-y-3"><ReplayPanel candles={candles} replayCount={replayCount || candles.length} onReplayCountChange={setReplayCount} /><BacktestPanel symbol={selectedSymbol} candles={candles} symbolSpec={symbolSpec} initialBalance={accountData.balance} accountCurrency={accountData.currency} conversionRate={conversionRate} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /><TradingJournalPanel tradeHistory={tradeHistory} currency={accountData.currency} /></div>,
   }[dock]
 
-  return <div className="min-h-screen w-full min-w-0 overflow-x-hidden bg-shafx-bg text-shafx-text lg:flex lg:h-[calc(100vh-28px)] lg:flex-col lg:overflow-hidden">
+  return <div className="min-h-[100dvh] w-full min-w-0 overflow-x-hidden bg-shafx-bg text-shafx-text lg:flex lg:h-[calc(100vh-28px)] lg:flex-col lg:overflow-hidden">
     <TopNav symbol={selectedSymbol} price={displayPrice} pricePrecision={symbolSpec.pricePrecision} timeframe={timeframe} onTimeframeChange={setTimeframe} pairs={watchlist} onSelectPair={setSelectedSymbol} view={mobileTab} />
     <main className="shafx-mobile-content flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-visible lg:flex-row lg:overflow-hidden">
       <WorkspaceRail tool={chartTool} onToolChange={(next) => setChartTool(next)} dock={dock} onDockChange={setDock} />
@@ -631,7 +631,7 @@ const TerminalContent: React.FC = () => {
             <div className="flex items-center gap-1.5"><span className="hidden text-[9px] uppercase tracking-[0.15em] text-shafx-textMuted sm:block">Feed</span>{liveControl}<button type="button" onClick={() => setDock(dock === 'orders' ? 'insights' : 'orders')} className="flex min-h-10 items-center gap-1.5 rounded-xl border border-shafx-border bg-shafx-bg px-2.5 text-[9px] font-semibold hover:border-shafx-accent/40"><SlidersHorizontal className="h-3.5 w-3.5 text-shafx-accent" />Trade</button></div>
           </div>
           <MobileChartTools tool={chartTool} onToolChange={setChartTool} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} />
-          <div className="relative h-[72vh] min-h-[540px] max-h-[760px] p-2 sm:h-[66vh] sm:min-h-[520px] sm:max-h-[820px] sm:p-3 lg:h-auto lg:min-h-[560px] lg:flex-1">
+          <div className="shafx-chart-stage relative min-h-0 p-2 sm:p-3 lg:flex-1">
             <CandlestickChart data={chartCandles} symbol={selectedSymbol} timeframe={timeframe} annotations={chartAnnotations} tradeLines={tradeLines} bidPrice={chartLastPrice} askPrice={chartAskPrice} toolMode={chartToolMode} pipSize={symbolSpec.pipSize} onToolNotice={pushToast} showGrid={chartSettings.showGrid} showPriceLabels={chartSettings.showPriceLabels} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} marketTimestamp={marketTimestamp} onTimeframeChange={setTimeframe} />
             <div className="pointer-events-none absolute bottom-5 right-5 z-10 hidden items-center gap-1.5 rounded-xl border border-shafx-border bg-shafx-surface/90 px-2.5 py-1.5 text-[9px] text-shafx-textMuted backdrop-blur sm:flex"><Maximize2 className="h-3 w-3 text-shafx-accent" />Scroll / pinch to navigate</div>
           </div>
