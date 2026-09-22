@@ -4,7 +4,7 @@ import { DEFAULT_SYMBOL } from '../data/mock/symbols'
 
 const SELECTED_SYMBOL_KEY = 'shafx-terminal-symbol'
 const TIMEFRAME_KEY = 'shafx-terminal-timeframe'
-const VALID_TIMEFRAMES: Timeframe[] = ['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1']
+const VALID_TIMEFRAMES: Timeframe[] = ['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1', 'W1']
 
 const readStored = <T,>(key: string, fallback: T, validate?: (value: unknown) => value is T): T => {
   if (typeof window === 'undefined') return fallback
