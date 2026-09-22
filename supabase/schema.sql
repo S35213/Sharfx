@@ -98,7 +98,7 @@ create trigger on_auth_user_created_shafx_bot after insert on auth.users for eac
 insert into public.shafx_bot_entitlements(user_id, plan, subscription_status) select id, 'FREE', 'active' from auth.users on conflict (user_id) do nothing;
 insert into public.shafx_bot_usage(user_id, used_cycle_units, current_unit_round, usage_day) select id, 0, 0, (now() at time zone 'UTC')::date from auth.users on conflict (user_id) do nothing;
 
--- Daily bot allowance: Free=5 units/day, Regular=15 units/day, Pro=unlimited while active.
+-- Daily bot allowance: Free=unlimited simulator units, Regular=15 units/day, Pro=unlimited while active.
 drop function if exists public.consume_shafx_bot_cycle(uuid,text,integer);
 drop function if exists public.consume_shafx_bot_round(uuid,text);
 create function public.consume_shafx_bot_round(p_user_id uuid, p_run_id text)
@@ -142,7 +142,8 @@ begin
   where e.user_id = p_user_id;
 
   if v_plan is null then v_plan := 'FREE'; end if;
-  v_max := case v_plan when 'PRO' then null when 'REGULAR' then 15 else 5 end;
+  -- Simulator testing: FREE is unlimited. REGULAR remains capped at 15 units.
+  v_max := case v_plan when 'PRO' then null when 'REGULAR' then 15 else null end;
 
   insert into public.shafx_bot_usage(user_id, run_id, used_cycle_units, current_unit_round, usage_day)
   values (p_user_id, p_run_id, 0, 0, v_day)
