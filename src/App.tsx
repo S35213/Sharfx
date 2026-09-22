@@ -355,9 +355,16 @@ const TerminalContent: React.FC = () => {
     const order = openPositions.find((item) => item.id === id)
     if (!order || !accountData) return null
     try {
-      const [spec, wl] = await Promise.all([marketDataSource.getSymbolSpec(order.symbol), marketDataSource.getWatchlist()])
-      const pair = wl.find((item) => item.symbol === order.symbol)
-      const exitPrice = order.symbol === selectedSymbol ? displayPrice : pair?.price
+      let spec: SymbolSpec
+      let exitPrice: number | undefined
+      if (order.symbol === selectedSymbol && symbolSpec) {
+        spec = symbolSpec
+        exitPrice = displayPrice
+      } else {
+        const [fetchedSpec, wl] = await Promise.all([marketDataSource.getSymbolSpec(order.symbol), marketDataSource.getWatchlist()])
+        spec = fetchedSpec
+        exitPrice = wl.find((item) => item.symbol === order.symbol)?.price
+      }
       if (!exitPrice) throw new Error('No simulated market price is available for this position.')
       const rate = getConversionRate(spec.quoteCurrency, accountData.currency)
       const closed = closeSimulatedPosition(order, { exitPrice, conversionRate: rate }, spec)
@@ -378,7 +385,7 @@ const TerminalContent: React.FC = () => {
       pushToast(err instanceof Error ? err.message : 'Unable to close simulated position.')
       return null
     }
-  }, [accountData, displayPrice, openPositions, pushToast, selectedSymbol])
+  }, [accountData, displayPrice, openPositions, pushToast, selectedSymbol, symbolSpec])
 
   const handleClosePosition = useCallback(async (id: string): Promise<void> => {
     await closePosition(id)
