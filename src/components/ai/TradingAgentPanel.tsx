@@ -28,6 +28,7 @@ interface Props {
   onBotRunningChange?: (running: boolean) => void
   onReviewSetup?: (setup?: import('../../engine/setup/types').SetupCandidate | null) => void
   scanM1Candles?: OHLCV[]
+  botAutostartKey?: string
 }
 
 type RiskMode = 'SAFE' | 'NORMAL' | 'RISK'
@@ -145,6 +146,7 @@ export function TradingAgentPanel({
   onBotRunningChange,
   onReviewSetup,
   scanM1Candles = [],
+  botAutostartKey = 'shafx-bot-autostart',
 }: Props) {
   const plan = BOT_PLANS[botPlan]
   const readStoredLotSize = (): string => typeof window !== 'undefined' ? window.sessionStorage.getItem('shafx-simulator-lot-size') || '0.10' : '0.10'
@@ -513,6 +515,7 @@ export function TradingAgentPanel({
             setPendingUnitCompletion(true)
             setAutoTradingEnabled(false)
             setPhase('READY')
+            try { window.localStorage.removeItem(botAutostartKey) } catch { /* storage may be unavailable */ }
             setStatus((profit >= 0 ? 'BOT WIN • ' : 'BOT LOSS • ') + profit.toFixed(2) + ' ' + accountCurrency + ' • UNIT ' + unitNumber + ' COMPLETE 5/5 • TAP RUN UNIT ' + (cycleUnits + 1))
           }
         }, BOT_RESULT_DELAY_MS)
@@ -551,6 +554,45 @@ export function TradingAgentPanel({
     }
   }, [autoTradingEnabled, botDisplayedOrder, botPositionId, lastResult, pendingUnitCompletion, phase])
 
+  useEffect(() => {
+    let cancelled = false
+    const resume = async (): Promise<void> => {
+      if (typeof window === 'undefined' || window.localStorage.getItem(botAutostartKey) !== '1') return
+      try {
+        const response = await fetch('/api/bot/usage', { method: 'GET', credentials: 'same-origin' })
+        const data = await response.json().catch(() => ({}))
+        if (cancelled || !response.ok || !data.ok) return
+        const serverUsedUnits = Number.isFinite(Number(data.usedCycleUnits)) ? Number(data.usedCycleUnits) : 0
+        const serverRound = Number.isFinite(Number(data.currentUnitRound)) ? Number(data.currentUnitRound) : 0
+        if (serverRound >= BOT_CYCLES_PER_UNIT) return
+        setCycleUnits(serverUsedUnits)
+        setUnitRound(serverRound)
+        setPendingUnitCompletion(false)
+        setBotSessionStarted(true)
+        botRunLotSizeRef.current = parsedLotSize
+        setBotRunLotSize(parsedLotSize)
+        setLastResult(null)
+        setAutoTradingEnabled(true)
+        setPhase('ANALYZING')
+        setStatus('BOT RESUMING • restoring Unit ' + (serverUsedUnits + 1) + ' Round ' + (serverRound + 1) + '…')
+        if (analysisTimer.current) window.clearTimeout(analysisTimer.current)
+        analysisTimer.current = window.setTimeout(() => {
+          if (cancelled) return
+          setPhase('RUNNING')
+          setStatus('BOT RUNNING • resumed 10-second cycle')
+          if (nextRoundTimer.current) window.clearTimeout(nextRoundTimer.current)
+          nextRoundTimer.current = window.setTimeout(() => {
+            if (!cancelled) void runBotCycleRef.current?.()
+          }, 75)
+        }, BOT_START_DELAY_MS)
+      } catch {
+        // A failed resume should not erase the saved intent; the next mount can retry.
+      }
+    }
+    void resume()
+    return () => { cancelled = true }
+  }, [botAutostartKey, parsedLotSize])
+
   useEffect(() => () => {
     if (analysisTimer.current) window.clearTimeout(analysisTimer.current)
     if (scanInterval.current) window.clearInterval(scanInterval.current)
@@ -561,6 +603,7 @@ export function TradingAgentPanel({
 
   const startAutomaticTrading = (): void => {
     if (!symbolSpec || autoTradingEnabled) return
+    try { window.localStorage.setItem(botAutostartKey, '1') } catch { /* storage may be unavailable */ }
     if (cycleUnits >= (plan.maxDailyCycleUnits ?? Number.MAX_SAFE_INTEGER)) {
       setStatus('Daily bot units are exhausted.')
       return
@@ -601,6 +644,7 @@ export function TradingAgentPanel({
   }
 
   const stopAutomaticTrading = (): void => {
+    try { window.localStorage.removeItem(botAutostartKey) } catch { /* storage may be unavailable */ }
     if (analysisTimer.current) window.clearTimeout(analysisTimer.current)
     if (nextRoundTimer.current) window.clearTimeout(nextRoundTimer.current)
     setAutoTradingEnabled(false)
