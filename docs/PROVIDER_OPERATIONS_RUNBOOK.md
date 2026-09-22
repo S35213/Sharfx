@@ -44,7 +44,7 @@ Confirm:
 
 ## 8. Node runtime warning
 
-SHAFX pins Vercel builds/functions to Node 24 in package.json. DEP0169 still appears in /api/auth runtime logs after the pin and no direct url.parse call exists in repository source. Treat the warning as an unresolved runtime/platform path until the source of the call is identified; do not suppress it blindly.
+SHAFX pins Vercel builds/functions to Node 24 in package.json and uses the WHATWG `URL` API for request query parsing in the auth and provider-connections handlers. The latest READY production deployment was exercised on 2026-09-22 and produced no warning/error runtime logs for those routes. Historical Vercel error aggregation may still show DEP0169 entries from older deployments; do not treat those historical entries as evidence of a current source-level `url.parse` call.
 
 ## 9. Release gate
 
