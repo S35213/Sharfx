@@ -351,9 +351,9 @@ const TerminalContent: React.FC = () => {
     pushToast(`SHAFX Bot opened simulated ${order.type} ${order.symbol}.`)
   }, [pushToast])
 
-  const handleClosePosition = useCallback(async (id: string): Promise<void> => {
+  const handleClosePosition = useCallback(async (id: string): Promise<TradeOrder | null> => {
     const order = openPositions.find((item) => item.id === id)
-    if (!order || !accountData) return
+    if (!order || !accountData) return null
     try {
       const [spec, wl] = await Promise.all([marketDataSource.getSymbolSpec(order.symbol), marketDataSource.getWatchlist()])
       const pair = wl.find((item) => item.symbol === order.symbol)
@@ -373,11 +373,15 @@ const TerminalContent: React.FC = () => {
         return { ...prev, balance, equity, floatingPL, freeMargin: Number((equity - prev.usedMargin).toFixed(2)) }
       })
       pushToast(`Simulated ${closed.type} ${closed.symbol} closed at ${exitPrice.toFixed(spec.pricePrecision)}.`)
-    } catch (err) { pushToast(err instanceof Error ? err.message : 'Unable to close simulated position.') }
+      return closed
+    } catch (err) {
+      pushToast(err instanceof Error ? err.message : 'Unable to close simulated position.')
+      return null
+    }
   }, [accountData, displayPrice, openPositions, pushToast, selectedSymbol])
 
-  const handleBotClose = useCallback(async (id: string): Promise<void> => {
-    await handleClosePosition(id)
+  const handleBotClose = useCallback(async (id: string): Promise<TradeOrder | null> => {
+    return handleClosePosition(id)
   }, [handleClosePosition])
 
   useEffect(() => {
