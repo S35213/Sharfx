@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { Grid2x2, Info } from 'lucide-react'
 import type { MarketPair } from '../../types'
 
-interface Props { pairs: MarketPair[]; selectedSymbol?: string }
+interface Props { pairs: MarketPair[] }
 
 const currencies = ['USD', 'EUR', 'GBP', 'JPY', 'CHF', 'AUD', 'CAD', 'NZD']
 
@@ -28,27 +28,27 @@ export const FXMoveMatrix: React.FC<Props> = ({ pairs }) => {
   }, [])
 
   const matrix = useMemo(() => {
-    const strength = new Map<string, number>(currencies.map((currency) => [currency, 0] as const))
+    const strength: Record<string, number> = {}
+    currencies.forEach((currency) => { strength[currency] = 0 })
+
     pairs.forEach((pair) => {
       const split = splitPair(pair.symbol)
       if (!split) return
       const move = Number(pair.changePercent)
       if (!Number.isFinite(move)) return
-      strength.set(split[0], (strength.get(split[0]) ?? 0) + move / 2)
-      strength.set(split[1], (strength.get(split[1]) ?? 0) - move / 2)
+      strength[split[0]] += move / 2
+      strength[split[1]] -= move / 2
     })
 
     return currencies.map((row, rowIndex) => currencies.map((column, columnIndex) => {
       if (row === column) return null
       const rowDrift = Math.sin(tick * 0.72 + rowIndex * 0.63) * 0.018
       const columnDrift = Math.sin(tick * 0.72 + columnIndex * 0.63) * 0.018
-      return Number(((strength.get(row) ?? 0) - (strength.get(column) ?? 0) + rowDrift - columnDrift).toFixed(2))
+      return Number((strength[row] - strength[column] + rowDrift - columnDrift).toFixed(2))
     }))
   }, [pairs, tick])
 
   const covered = matrix.flat().filter((value): value is number => value !== null).length
-  const selected = splitPair(selectedSymbol ?? '')
-  const isSelectedCell = (row: string, column: string): boolean => Boolean(selected && ((selected[0] === row && selected[1] === column) || (selected[0] === column && selected[1] === row)))
 
   return <section className="rounded-2xl border border-shafx-border bg-shafx-surface">
     <header className="flex items-start justify-between gap-3 border-b border-shafx-border px-4 py-3">
@@ -63,14 +63,13 @@ export const FXMoveMatrix: React.FC<Props> = ({ pairs }) => {
           <div className="flex h-10 items-center font-semibold text-shafx-textMuted">{row}</div>
           {currencies.map((column, columnIndex) => {
             const value = matrix[rowIndex][columnIndex]
-            const selectedCell = isSelectedCell(row, column)
-            return <div key={column} className={`flex h-10 items-center justify-center rounded-lg border font-mono tabular transition-colors ${selectedCell ? 'border-shafx-accent bg-shafx-accent/10 text-shafx-accent' : value === null ? 'border-shafx-border bg-shafx-bg/50 text-shafx-textMuted' : `border-shafx-border ${tone(value)}`}`}>
+            return <div key={column} className={`flex h-10 items-center justify-center rounded-lg border border-shafx-border font-mono tabular ${value === null ? 'bg-shafx-bg/50 text-shafx-textMuted' : tone(value)}`}>
               {row === column ? '—' : value === null ? '·' : `${value > 0 ? '+' : ''}${value.toFixed(2)}%`}
             </div>
           })}
         </React.Fragment>)}
       </div>
     </div>
-    <div className="flex items-start gap-2 border-t border-shafx-border px-4 py-2.5 text-[9px] leading-4 text-shafx-textMuted"><Info className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-shafx-accent" />Cells are fully populated from the loaded FX pair returns; cross-pair cells are inferred from the relative currency move model and remain simulated.</div>
+    <div className="flex items-start gap-2 border-t border-shafx-border px-4 py-2.5 text-[9px] leading-4 text-shafx-textMuted"><Info className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-shafx-accent" />All non-diagonal cells are derived from the loaded FX pair returns; cross-pair cells use a relative currency-move model and remain simulated.</div>
   </section>
 }
