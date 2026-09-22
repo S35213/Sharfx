@@ -23,7 +23,7 @@ interface Props {
   botPlan?: BotPlan
   botOrderIds?: string[]
   onBotOrder?: (order: TradeOrder) => void
-  onBotClose?: (id: string) => void | Promise<void>
+  onBotClose?: (id: string) => void | Promise<TradeOrder | null>
   onBotRunningChange?: (running: boolean) => void
   onReviewSetup?: (setup?: import('../../engine/setup/types').SetupCandidate | null) => void
   scanM1Candles?: OHLCV[]
@@ -138,6 +138,7 @@ export function TradingAgentPanel({
   const [scanNonce, setScanNonce] = useState(0)
   const [scanSnapshot, setScanSnapshot] = useState(0)
   const [lastResult, setLastResult] = useState<'WIN' | 'LOSS' | 'WAIT' | null>(null)
+  const [lastProfit, setLastProfit] = useState<number | null>(null)
   const [status, setStatus] = useState('Ready to scan')
   const [bias, setBias] = useState('Neutral')
   const [detailsOpen, setDetailsOpen] = useState(false)
@@ -350,6 +351,7 @@ export function TradingAgentPanel({
         }
 
         const nextRound = unitRound + 1
+        setLastProfit(null)
         const unitNumber = unitRound === 0 ? Math.min(cycleUnits + 1, plan.maxDailyCycleUnits ?? cycleUnits + 1) : displayedUnitNumber
 
         const freshBotCandidates = buildScanCandidates(timeframeFrames, symbol, currentPrice)
@@ -395,7 +397,24 @@ export function TradingAgentPanel({
         if (tradeCloseTimer.current) window.clearTimeout(tradeCloseTimer.current)
         tradeCloseTimer.current = window.setTimeout(async () => {
           try {
-            await onBotClose?.(order.id)
+            const closed = await onBotClose?.(order.id)
+            if (closed) {
+              processedHistory.current.add(closed.id)
+              const profit = closed.profit ?? 0
+              const result = profit >= 0 ? 'WIN' : 'LOSS'
+              setLastProfit(profit)
+              setLastResult(result)
+              setBotPositionId(null)
+              setTradeCloseAt(null)
+              setTradeSecondsLeft(0)
+              if (profit >= 0) {
+                setWins((value) => value + 1)
+                setStatus('BOT WIN • ' + closed.type + ' ' + closed.symbol + ' • +' + profit.toFixed(2) + ' ' + accountCurrency + ' • preparing next cycle')
+              } else {
+                setLosses((value) => value + 1)
+                setStatus('BOT LOSS • ' + closed.type + ' ' + closed.symbol + ' • ' + profit.toFixed(2) + ' ' + accountCurrency + ' • preparing next cycle')
+              }
+            }
           } finally {
             setTradeCloseAt(null)
             setTradeSecondsLeft(0)
@@ -568,8 +587,17 @@ export function TradingAgentPanel({
 
       {showBotActivity && (
         <section className="mt-3 rounded-xl border border-shafx-accent/25 bg-shafx-accent/[0.04] p-3.5">
-          <div className="flex items-start justify-between gap-3"><div><div className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-accent">AI BOT RUN • TRADE ACTIVITY</div><div className="mt-1 text-sm font-semibold">{activeBotOrder ? activeBotOrder.type + ' ' + activeBotOrder.symbol + ' is OPEN' : lastResult === 'WIN' ? 'Last round: WIN' : lastResult === 'LOSS' ? 'Last round: LOSS' : autoTradingEnabled ? (phase === 'RUNNING' ? 'Bot running • next 5s round cycle' : 'Bot scanning • refreshing market data…') : 'Bot run finished'}</div></div><span className="rounded-full border border-shafx-accent/25 bg-shafx-accent/5 px-2.5 py-1 font-mono text-[9px] text-shafx-accent">Unit {displayedUnitNumber}/{plan.maxDailyCycleUnits === null ? '∞' : plan.maxDailyCycleUnits} • Round {unitRound}/5 • {lotSize} lot</span></div>
+          <div className="flex items-start justify-between gap-3"><div><div className="text-[9px] font-semibold uppercase tracking-[0.15em] text-shafx-accent">AI BOT RUN • TRADE ACTIVITY</div><div className={lastResult === 'WIN' ? 'mt-1 text-sm font-bold text-shafx-success' : lastResult === 'LOSS' ? 'mt-1 text-sm font-bold text-shafx-danger' : 'mt-1 text-sm font-semibold'}>{activeBotOrder ? activeBotOrder.type + ' ' + activeBotOrder.symbol + ' is OPEN' : lastResult === 'WIN' ? 'BOT WIN • ' + ((lastProfit ?? 0) >= 0 ? '+' : '') + (lastProfit ?? 0).toFixed(2) + ' ' + accountCurrency : lastResult === 'LOSS' ? 'BOT LOSS • ' + (lastProfit ?? 0).toFixed(2) + ' ' + accountCurrency : autoTradingEnabled ? (phase === 'RUNNING' ? 'Bot running • next 5s round cycle' : 'Bot scanning • refreshing market data…') : 'Bot run finished'}</div></div><span className="rounded-full border border-shafx-accent/25 bg-shafx-accent/5 px-2.5 py-1 font-mono text-[9px] text-shafx-accent">Unit {displayedUnitNumber}/{plan.maxDailyCycleUnits === null ? '∞' : plan.maxDailyCycleUnits} • Round {unitRound}/5 • {lotSize} lot</span></div>
           <div className="mt-3 grid grid-cols-3 gap-2 text-[9px]"><div className="rounded-lg border border-shafx-border bg-shafx-bg px-2 py-2"><span className="block text-shafx-textMuted">WIN</span><strong className="mt-0.5 block font-mono text-shafx-success">{wins}</strong></div><div className="rounded-lg border border-shafx-border bg-shafx-bg px-2 py-2"><span className="block text-shafx-textMuted">LOSS</span><strong className="mt-0.5 block font-mono text-shafx-danger">{losses}</strong></div><div className="rounded-lg border border-shafx-border bg-shafx-bg px-2 py-2"><span className="block text-shafx-textMuted">Daily units</span><strong className="mt-0.5 block font-mono">{cycleUnits}/{plan.maxDailyCycleUnits === null ? '∞' : plan.maxDailyCycleUnits}</strong></div></div>
+          {lastResult && !activeBotOrder && (
+            <div className={lastResult === 'WIN' ? 'mt-3 rounded-xl border border-shafx-success/30 bg-shafx-success/[0.07] px-3 py-2.5' : lastResult === 'LOSS' ? 'mt-3 rounded-xl border border-shafx-danger/30 bg-shafx-danger/[0.07] px-3 py-2.5' : 'mt-3 rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2.5'}>
+              <div className="flex items-center justify-between gap-2">
+                <span className={lastResult === 'WIN' ? 'font-mono text-sm font-black text-shafx-success' : 'font-mono text-sm font-black text-shafx-danger'}>{lastResult === 'WIN' ? 'BOT WIN' : 'BOT LOSS'}</span>
+                <span className="font-mono text-sm font-bold">{(lastProfit ?? 0) >= 0 ? '+' : ''}{(lastProfit ?? 0).toFixed(2)} {accountCurrency}</span>
+              </div>
+              <div className="mt-1 text-[9px] text-shafx-textMuted">Round settled. Next cycle will start automatically until 5/5 rounds are complete.</div>
+            </div>
+          )}
 
           {!activeBotOrder && autoTradingEnabled && phase === 'ANALYZING' && (
             <div className="mt-3 flex items-center gap-3 rounded-xl border border-shafx-accent/20 bg-shafx-accent/[0.045] p-3">
