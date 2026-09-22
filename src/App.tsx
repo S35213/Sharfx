@@ -390,6 +390,68 @@ const TerminalContent: React.FC = () => {
   const handleClosePosition = useCallback(async (id: string): Promise<void> => {
     await closePosition(id)
   }, [closePosition])
+  const handleBulkClose = useCallback(async (mode: 'winning' | 'losing' | 'all'): Promise<void> => {
+    if (!isSimulatorMode() || !accountData || openPositions.length === 0) return
+
+    const targets = mode === 'all'
+      ? openPositions
+      : openPositions.filter((position) => mode === 'winning' ? (position.profit ?? 0) > 0 : (position.profit ?? 0) < 0)
+
+    if (targets.length === 0) {
+      pushToast(mode === 'winning' ? 'No profitable open positions to close.' : mode === 'losing' ? 'No losing open positions to close.' : 'No open positions to close.')
+      return
+    }
+
+    try {
+      const prices = new Map(watchlist.map((pair) => [pair.symbol, pair.price]))
+      prices.set(selectedSymbol, displayPrice)
+
+      const uniqueSymbols = [...new Set(targets.map((position) => position.symbol))]
+      const specs = await Promise.all(uniqueSymbols.map(async (symbol) => {
+        if (symbol === selectedSymbol && symbolSpec) return [symbol, symbolSpec] as const
+        if (symbolSpecCache.current[symbol]) return [symbol, symbolSpecCache.current[symbol]] as const
+        const spec = await marketDataSource.getSymbolSpec(symbol)
+        symbolSpecCache.current[symbol] = spec
+        return [symbol, spec] as const
+      }))
+
+      const specMap = new Map(specs)
+      const idsToClose = new Set(targets.map((position) => position.id))
+      const closed: TradeOrder[] = []
+
+      for (const position of targets) {
+        const spec = specMap.get(position.symbol)
+        const exitPrice = prices.get(position.symbol)
+        if (!spec || typeof exitPrice !== 'number' || !Number.isFinite(exitPrice)) continue
+        const rate = getConversionRate(spec.quoteCurrency, accountData.currency)
+        closed.push(closeSimulatedPosition(position, { exitPrice, conversionRate: rate }, spec))
+      }
+
+      if (closed.length === 0) {
+        pushToast('No selected positions could be closed at current simulated prices.')
+        return
+      }
+
+      const realized = Number(closed.reduce((sum, position) => sum + (position.profit ?? 0), 0).toFixed(2))
+      if (isSimulatorMode()) applyDemoProfit(realized)
+      setOpenPositions((prev) => prev.filter((position) => !idsToClose.has(position.id)))
+      setTradeHistory((prev) => [...closed, ...prev])
+      setAccountData((prev) => {
+        if (!prev) return prev
+        const remaining = openPositions.filter((position) => !idsToClose.has(position.id))
+        const floatingPL = remaining.reduce((sum, position) => sum + (position.profit ?? 0), 0)
+        const balance = Number((prev.balance + realized).toFixed(2))
+        const equity = Number((balance + floatingPL).toFixed(2))
+        return { ...prev, balance, equity, floatingPL, freeMargin: Number((equity - prev.usedMargin).toFixed(2)) }
+      })
+
+      const sign = realized >= 0 ? '+' : ''
+      const label = mode === 'all' ? 'all' : mode === 'winning' ? 'winning' : 'losing'
+      pushToast(`Closed ${closed.length} ${label} position${closed.length === 1 ? '' : 's'} • ${sign}${realized.toFixed(2)} ${accountData.currency}.`)
+    } catch (err) {
+      pushToast(err instanceof Error ? err.message : 'Unable to bulk close simulated positions.')
+    }
+  }, [accountData, displayPrice, openPositions, pushToast, selectedSymbol, symbolSpec, watchlist])
 
   const handleBotClose = useCallback(async (id: string): Promise<TradeOrder | null> => {
     return closePosition(id)
@@ -463,7 +525,7 @@ const TerminalContent: React.FC = () => {
   const dockContent = {
     insights: <div className="space-y-3"><FXMoveMatrix pairs={watchlist} /><MarketAnalysisPanel analysis={marketAnalysis} pricePrecision={symbolSpec.pricePrecision} /><AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={chartCandles} setup={aiSetup} onReviewSetup={reviewAISetup} /></div>,
     liquidity: <LiquidityPanel symbol={selectedSymbol} price={displayPrice} precision={symbolSpec.pricePrecision} pipSize={symbolSpec.pipSize} candles={chartCandles} />,
-    orders: <div className="space-y-3">{brokerMode && activeProviderDescriptor ? <ProviderCapabilityPanel descriptor={activeProviderDescriptor} environment={activeProviderSelection?.environment ?? 'demo'} /> : <OrderPanel key={selectedSymbol + ':' + symbolSpec.pricePrecision + ':' + symbolSpec.lotStep} symbol={selectedSymbol} currentPrice={displayPrice} accountBalance={accountData.balance} accountCurrency={accountData.currency} symbolSpec={symbolSpec} conversionRate={conversionRate} onSubmitOrder={handleOrderSubmit} aiSetup={reviewedSetup ?? aiSetup} autoApplyAISetup={reviewedSetup !== null} />}<div className="min-h-[280px]"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} /></div></div>,
+    orders: <div className="space-y-3">{brokerMode && activeProviderDescriptor ? <ProviderCapabilityPanel descriptor={activeProviderDescriptor} environment={activeProviderSelection?.environment ?? 'demo'} /> : <OrderPanel key={selectedSymbol + ':' + symbolSpec.pricePrecision + ':' + symbolSpec.lotStep} symbol={selectedSymbol} currentPrice={displayPrice} accountBalance={accountData.balance} accountCurrency={accountData.currency} symbolSpec={symbolSpec} conversionRate={conversionRate} onSubmitOrder={handleOrderSubmit} aiSetup={reviewedSetup ?? aiSetup} autoApplyAISetup={reviewedSetup !== null} />}<div className="min-h-[280px]"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} onBulkClose={handleBulkClose} /></div></div>,
     agent: <div className="space-y-3"><SimulationPulse key={selectedSymbol} selectedSymbol={selectedSymbol} openPositions={openPositions} tradeHistory={tradeHistory} botOrderIds={botOrderIds} botRunning={botRunning} /><SimulationFlowChart key={selectedSymbol} selectedSymbol={selectedSymbol} openPositions={openPositions} tradeHistory={tradeHistory} /><TradingAgentPanel {...botProps} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /></div>,
     research: <div className="space-y-3"><ReplayPanel candles={candles} replayCount={replayCount || candles.length} onReplayCountChange={setReplayCount} /><BacktestPanel symbol={selectedSymbol} candles={candles} symbolSpec={symbolSpec} initialBalance={accountData.balance} accountCurrency={accountData.currency} conversionRate={conversionRate} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /><TradingJournalPanel tradeHistory={tradeHistory} currency={accountData.currency} /></div>,
   }[dock]
@@ -497,7 +559,7 @@ const TerminalContent: React.FC = () => {
             <button type="button" onClick={() => openMobileDock('orders')} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Risk</span><div className="mt-1 text-xs font-semibold">Open trade workspace</div></button>
             <button type="button" onClick={() => openMobileDock('research')} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Research</span><div className="mt-1 text-xs font-semibold">Replay • Backtest</div></button>
           </div>
-          <div className="hidden h-56 flex-shrink-0 border-t border-shafx-border bg-shafx-surface/25 p-2 lg:block"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} /></div>
+          <div className="hidden h-56 flex-shrink-0 border-t border-shafx-border bg-shafx-surface/25 p-2 lg:block"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} onBulkClose={handleBulkClose} /></div>
 
           {mobileDockOpen && <div id="mobile-market-workspace" className="border-t border-shafx-border bg-shafx-surface p-3 lg:hidden">
             <div className="mb-3 flex items-center justify-between gap-3">
@@ -510,7 +572,7 @@ const TerminalContent: React.FC = () => {
       </section>
 
       <aside className={`${showAgent ? '' : 'hidden'} w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden`}><SimulationPulse key={selectedSymbol} selectedSymbol={selectedSymbol} openPositions={openPositions} tradeHistory={tradeHistory} botOrderIds={botOrderIds} botRunning={botRunning} /><div className="mt-3"><SimulationFlowChart key={selectedSymbol} selectedSymbol={selectedSymbol} openPositions={openPositions} tradeHistory={tradeHistory} /><div className="mt-3"><TradingAgentPanel {...botProps} />{brokerMode && activeProviderId === 'deriv' && <div className="mt-3"><DerivCashierLinks /></div>}</div></div></aside>
-      <aside className={`${showHistory ? '' : 'hidden'} w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden`}><div className="space-y-3"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /><SimulationFlowChart key={selectedSymbol} selectedSymbol={selectedSymbol} openPositions={openPositions} tradeHistory={tradeHistory} /><TradingJournalPanel tradeHistory={tradeHistory} currency={accountData.currency} /></div></aside>
+      <aside className={`${showHistory ? '' : 'hidden'} w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden`}><div className="space-y-3"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} onBulkClose={handleBulkClose} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /><SimulationFlowChart key={selectedSymbol} selectedSymbol={selectedSymbol} openPositions={openPositions} tradeHistory={tradeHistory} /><TradingJournalPanel tradeHistory={tradeHistory} currency={accountData.currency} /></div></aside>
       <aside className={`${showAccount ? '' : 'hidden'} w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden`}><div className="space-y-3"><AccountPanel account={accountData} />{brokerMode && activeProviderId === 'deriv' && <DerivCashierLinks />}</div></aside>
 
       <aside className="hidden w-[clamp(300px,28vw,420px)] min-w-0 flex-shrink-0 flex-col overflow-hidden border-l border-shafx-border bg-shafx-surface/50 lg:flex">
