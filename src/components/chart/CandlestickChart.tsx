@@ -40,12 +40,12 @@ const prepareData = (data: OHLCV[]): CandlestickData[] => {
 
 const timeframeMeta = (timeframe?: Timeframe, data: CandlestickData[] = []): { label: string; interval: string } => {
   if (timeframe) {
-    const labels: Record<Timeframe, string> = { M1: '1m', M5: '5m', M15: '15m', M30: '30m', H1: '1h', H4: '4h', D1: '1d' }
+    const labels: Record<Timeframe, string> = { M1: '1m', M5: '5m', M15: '15m', M30: '30m', H1: '1h', H4: '4h', D1: '1d', W1: '1w' }
     return { label: timeframe, interval: labels[timeframe] }
   }
   if (data.length < 2) return { label: '—', interval: 'candle' }
   const seconds = Number(data[1].time) - Number(data[0].time)
-  const known: Record<number, { label: string; interval: string }> = { 60: { label: 'M1', interval: '1m' }, 300: { label: 'M5', interval: '5m' }, 900: { label: 'M15', interval: '15m' }, 1800: { label: 'M30', interval: '30m' }, 3600: { label: 'H1', interval: '1h' }, 14400: { label: 'H4', interval: '4h' }, 86400: { label: 'D1', interval: '1d' } }
+  const known: Record<number, { label: string; interval: string }> = { 60: { label: 'M1', interval: '1m' }, 300: { label: 'M5', interval: '5m' }, 900: { label: 'M15', interval: '15m' }, 1800: { label: 'M30', interval: '30m' }, 3600: { label: 'H1', interval: '1h' }, 14400: { label: 'H4', interval: '4h' }, 86400: { label: 'D1', interval: '1d' }, 604800: { label: 'W1', interval: '1w' } }
   return known[seconds] ?? { label: 'Custom', interval: `${Math.round(seconds / 60)}m` }
 }
 
@@ -68,6 +68,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const viewInitializedRef = useRef(false)
   const previousSymbolRef = useRef<string | undefined>(symbol)
   const previousTimeframeRef = useRef<Timeframe | undefined>(timeframe)
+  const tapGestureRef = useRef<{ startX: number; startY: number; moved: boolean }>({ startX: 0, startY: 0, moved: false })
+  const lastTapRef = useRef<{ time: number; x: number; y: number; pointerType: string } | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [timeframeMenuOpen, setTimeframeMenuOpen] = useState(false)
   const renderedFirstTimeRef = useRef<number | null>(null)
@@ -430,12 +432,39 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     setTimeframeMenuOpen(false)
   }
 
-  const handleChartDoubleTap = (event: React.MouseEvent<HTMLDivElement>): void => {
-    if (!isFullscreen) return
-    if (toolMode !== 'cursor' && toolMode !== 'crosshair') return
-    event.preventDefault()
-    event.stopPropagation()
-    setTimeframeMenuOpen((open) => !open)
+  const handleChartPointerDown = (event: React.PointerEvent<HTMLDivElement>): void => {
+    tapGestureRef.current = { startX: event.clientX, startY: event.clientY, moved: false }
+  }
+
+  const handleChartPointerMove = (event: React.PointerEvent<HTMLDivElement>): void => {
+    const gesture = tapGestureRef.current
+    if (!gesture) return
+    if (Math.hypot(event.clientX - gesture.startX, event.clientY - gesture.startY) > 18) gesture.moved = true
+  }
+
+  const handleChartPointerUp = (event: React.PointerEvent<HTMLDivElement>): void => {
+    if (!isFullscreen || (toolMode !== 'cursor' && toolMode !== 'crosshair')) return
+    if (event.pointerType === 'mouse' && event.button !== 0) return
+    const target = event.target
+    if (target instanceof Element && target.closest('button')) return
+    const gesture = tapGestureRef.current
+    if (!gesture || gesture.moved) {
+      lastTapRef.current = null
+      return
+    }
+
+    const now = performance.now()
+    const previous = lastTapRef.current
+    const distance = previous ? Math.hypot(event.clientX - previous.x, event.clientY - previous.y) : Number.POSITIVE_INFINITY
+    const isDoubleTap = Boolean(previous && previous.pointerType === event.pointerType && now - previous.time <= 420 && distance <= 32)
+    if (isDoubleTap) {
+      event.preventDefault()
+      event.stopPropagation()
+      lastTapRef.current = null
+      setTimeframeMenuOpen((open) => !open)
+      return
+    }
+    lastTapRef.current = { time: now, x: event.clientX, y: event.clientY, pointerType: event.pointerType }
   }
 
   const resetVerticalScale = (): void => {
@@ -510,8 +539,20 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const displayBid = Number.isFinite(bidPrice) && Number(bidPrice) > 0 ? Number(bidPrice) : lastClose
   const displayAsk = Number.isFinite(askPrice) && Number(askPrice) > 0 ? Number(askPrice) : displayBid
   const spreadPips = Number.isFinite(displayBid) && Number.isFinite(displayAsk) && pipSize > 0 ? (displayAsk - displayBid) / pipSize : 0
-  const timeframeSeconds: Record<Timeframe, number> = { M1: 60, M5: 300, M15: 900, M30: 1800, H1: 3600, H4: 14400, D1: 86400 }
-  const countdown = timeframe && Number.isFinite(marketTimestamp) ? Math.max(0, timeframeSeconds[timeframe] - (Math.floor(Number(marketTimestamp)) % timeframeSeconds[timeframe])) : null
+  const timeframeSeconds: Record<Timeframe, number> = { M1: 60, M5: 300, M15: 900, M30: 1800, H1: 3600, H4: 14400, D1: 86400, W1: 604800 }
+  const weekStart = (timestamp: number): number => {
+    const date = new Date(timestamp * 1000)
+    const day = date.getUTCDay()
+    const daysSinceMonday = day === 0 ? 6 : day - 1
+    date.setUTCDate(date.getUTCDate() - daysSinceMonday)
+    date.setUTCHours(0, 0, 0, 0)
+    return Math.floor(date.getTime() / 1000)
+  }
+  const countdown = timeframe && Number.isFinite(marketTimestamp)
+    ? timeframe === 'W1'
+      ? Math.max(0, weekStart(Number(marketTimestamp)) + timeframeSeconds.W1 - Math.floor(Number(marketTimestamp)))
+      : Math.max(0, timeframeSeconds[timeframe] - (Math.floor(Number(marketTimestamp)) % timeframeSeconds[timeframe]))
+    : null
   const formatCountdown = (seconds: number): string => {
     if (seconds >= 86400) return `${Math.floor(seconds / 86400)}d ${Math.floor((seconds % 86400) / 3600)}h`
     if (seconds >= 3600) return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`
@@ -539,7 +580,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
 
   const cancelAlert = (): void => setAlertCandidate(null)
 
-  return <div ref={containerRef} onPointerDown={placeTool} onDoubleClick={handleChartDoubleTap} className={`shafx-chart-shell relative w-full overflow-hidden border border-shafx-border bg-shafx-bg ${['level', 'alert', 'measure'].includes(toolMode) ? 'cursor-crosshair' : ''}`} style={{ height, minHeight: 280 }}>
+  return <div ref={containerRef} onPointerDownCapture={handleChartPointerDown} onPointerMoveCapture={handleChartPointerMove} onPointerUpCapture={handleChartPointerUp} onPointerDown={placeTool} className={`shafx-chart-shell relative w-full overflow-hidden border border-shafx-border bg-shafx-bg ${['level', 'alert', 'measure'].includes(toolMode) ? 'cursor-crosshair' : ''}`} style={{ height, minHeight: 280 }}>
     <div className="pointer-events-none absolute left-3 top-3 z-10 hidden items-center gap-2 rounded-xl border border-shafx-border bg-shafx-bg/90 px-2.5 py-1.5 text-[9px] font-semibold backdrop-blur sm:flex"><span className="text-shafx-accent">SHAFX</span><span className="text-shafx-textMuted">•</span><span className="text-shafx-textMuted">{timeframe ?? 'PRICE'} workspace</span></div>
     <div className="pointer-events-none absolute right-3 top-3 z-10 hidden rounded-xl border border-shafx-border bg-shafx-bg/90 px-2.5 py-1.5 text-[9px] font-semibold text-shafx-text backdrop-blur sm:block">{meta.label} <span className="font-normal text-shafx-textMuted">• {meta.interval}</span></div>
     <div className="pointer-events-none absolute left-3 top-3 z-10 rounded-xl border border-shafx-border/70 bg-shafx-surface/88 px-2.5 py-1.5 shadow-md backdrop-blur">
@@ -558,10 +599,10 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       </button>
     </div>
     {isFullscreen && <div className="absolute right-3 top-14 z-30 hidden items-center gap-1 sm:flex">
-      <span className="rounded-xl border border-shafx-border bg-shafx-surface/90 px-2.5 py-1.5 text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted shadow-lg backdrop-blur">Double-tap chart</span>
+      <span className="rounded-xl border border-shafx-border bg-shafx-surface/90 px-2.5 py-1.5 text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted shadow-lg backdrop-blur">Double-tap anywhere for timeframes</span>
     </div>}
     {isFullscreen && timeframeMenuOpen && <div className="absolute left-1/2 top-1/2 z-40 -translate-x-1/2 -translate-y-1/2">
-      <div className="relative h-[214px] w-[214px] rounded-full border border-shafx-accent/20 bg-shafx-surface/92 shadow-[0_20px_70px_rgba(0,0,0,.45)] backdrop-blur-xl">
+      <div className="relative h-[236px] w-[236px] rounded-full border border-shafx-accent/20 bg-shafx-surface/92 shadow-[0_20px_70px_rgba(0,0,0,.45)] backdrop-blur-xl">
         <div className="absolute inset-[37px] flex flex-col items-center justify-center rounded-full border border-shafx-accent/30 bg-shafx-bg/95">
           <span className="text-[8px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Timeframe</span>
           <strong className="mt-1 font-mono text-sm text-shafx-accent">{timeframe}</strong>
@@ -569,7 +610,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         </div>
         {TIMEFRAMES.map((tf, index) => {
           const angle = (index / TIMEFRAMES.length) * Math.PI * 2 - Math.PI / 2
-          const radius = 82
+          const radius = 94
           const x = Math.cos(angle) * radius
           const y = Math.sin(angle) * radius
           return <button key={tf} type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => chooseFullscreenTimeframe(tf)} aria-pressed={timeframe === tf} className={`absolute left-1/2 top-1/2 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border text-[8px] font-semibold shadow-md transition ${timeframe === tf ? 'border-shafx-accent bg-shafx-accent text-white scale-110' : 'border-shafx-border bg-shafx-bg/95 text-shafx-textMuted hover:border-shafx-accent/40 hover:text-shafx-text'}`} style={{ transform: `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))` }}>{tf}</button>
