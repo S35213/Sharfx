@@ -90,6 +90,7 @@ const TerminalContent: React.FC = () => {
   const [toast, setToast] = useState<ToastMessage | null>(null)
   const [chartTool, setChartTool] = useState<WorkspaceTool>('cursor')
   const [dock, setDock] = useState<WorkspaceDock>('insights')
+  const [isCompactViewport, setIsCompactViewport] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches)
 
   const accountInitialized = useRef(false)
   const simulatorInitialized = useRef(false)
@@ -489,9 +490,19 @@ const TerminalContent: React.FC = () => {
   }, [accountData?.currency, displayPrice, openPositions, selectedSymbol, symbolSpec, watchlist])
 
   useEffect(() => {
-    if (!accountData || openPositions.length === 0 || positionRefreshInFlight.current) return
-    const timer = window.setTimeout(async () => {
-      if (positionRefreshInFlight.current) return
+    const media = window.matchMedia('(max-width: 1023px)')
+    const onChange = (): void => setIsCompactViewport(media.matches)
+    onChange()
+    media.addEventListener?.('change', onChange)
+    return () => media.removeEventListener?.('change', onChange)
+  }, [])
+
+  useEffect(() => {
+    if (!accountData || openPositions.length === 0) return
+    let cancelled = false
+
+    const refreshPositions = async (): Promise<void> => {
+      if (cancelled || document.visibilityState !== 'visible' || positionRefreshInFlight.current) return
       const positions = openPositionsRef.current
       if (positions.length === 0) return
       positionRefreshInFlight.current = true
@@ -506,6 +517,7 @@ const TerminalContent: React.FC = () => {
           symbolSpecCache.current[symbol] = spec
           return [symbol, spec] as const
         }))
+        if (cancelled) return
         const specMap = new Map(specs)
         const updated = positions.map((position) => {
           const spec = specMap.get(position.symbol)
@@ -535,13 +547,19 @@ const TerminalContent: React.FC = () => {
           return { ...prev, balance, equity, floatingPL, freeMargin }
         })
       } catch (err) {
-        pushToast(err instanceof Error ? err.message : 'Unable to update open positions.')
+        if (!cancelled) pushToast(err instanceof Error ? err.message : 'Unable to update open positions.')
       } finally {
         positionRefreshInFlight.current = false
       }
-    }, 250)
-    return () => window.clearTimeout(timer)
-  }, [accountData?.currency, displayPrice, openPositions.length, pushToast, selectedSymbol, symbolSpec, watchlist])
+    }
+
+    void refreshPositions()
+    const timer = window.setInterval(() => { void refreshPositions() }, 500)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [accountData?.currency, openPositions.length, pushToast])
 
   if (!accountData || !symbolSpec || !marketAnalysis || !aiAnalysis) return <div className="flex h-full items-center justify-center bg-shafx-bg text-shafx-text">Preparing SHAFX workspace…</div>
 
@@ -578,7 +596,7 @@ const TerminalContent: React.FC = () => {
       )}
       <div className="min-h-[280px]"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} onBulkClose={handleBulkClose} /></div>
     </div>,
-    agent: <div className="space-y-3"><SimulationPulse key={selectedSymbol} selectedSymbol={selectedSymbol} openPositions={openPositions} tradeHistory={tradeHistory} botOrderIds={botOrderIds} botRunning={botRunning} /><SimulationFlowChart key={selectedSymbol} selectedSymbol={selectedSymbol} openPositions={openPositions} tradeHistory={tradeHistory} /><TradingAgentPanel {...botProps} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /></div>,
+    agent: isCompactViewport ? null : <div className="space-y-3"><SimulationPulse key={selectedSymbol} selectedSymbol={selectedSymbol} openPositions={openPositions} tradeHistory={tradeHistory} botOrderIds={botOrderIds} botRunning={botRunning} /><SimulationFlowChart key={selectedSymbol} selectedSymbol={selectedSymbol} openPositions={openPositions} tradeHistory={tradeHistory} /><TradingAgentPanel {...botProps} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /></div>,
     research: <div className="space-y-3"><ReplayPanel candles={candles} replayCount={replayCount || candles.length} onReplayCountChange={setReplayCount} /><BacktestPanel symbol={selectedSymbol} candles={candles} symbolSpec={symbolSpec} initialBalance={accountData.balance} accountCurrency={accountData.currency} conversionRate={conversionRate} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /><TradingJournalPanel tradeHistory={tradeHistory} currency={accountData.currency} /></div>,
   }[dock]
 
@@ -623,7 +641,7 @@ const TerminalContent: React.FC = () => {
         </div>
       </section>
 
-      <aside className={`${showAgent ? '' : 'hidden'} w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden`}><SimulationPulse key={selectedSymbol} selectedSymbol={selectedSymbol} openPositions={openPositions} tradeHistory={tradeHistory} botOrderIds={botOrderIds} botRunning={botRunning} /><div className="mt-3"><SimulationFlowChart key={selectedSymbol} selectedSymbol={selectedSymbol} openPositions={openPositions} tradeHistory={tradeHistory} /><div className="mt-3"><TradingAgentPanel {...botProps} />{brokerMode && activeProviderId === 'deriv' && <div className="mt-3"><DerivCashierLinks /></div>}</div></div></aside>
+      <aside className={`${showAgent && isCompactViewport ? '' : 'hidden'} w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden`}><SimulationPulse key={selectedSymbol} selectedSymbol={selectedSymbol} openPositions={openPositions} tradeHistory={tradeHistory} botOrderIds={botOrderIds} botRunning={botRunning} /><SimulationFlowChart key={selectedSymbol} selectedSymbol={selectedSymbol} openPositions={openPositions} tradeHistory={tradeHistory} /><div className="mt-3"><TradingAgentPanel {...botProps} />{brokerMode && activeProviderId === 'deriv' && <div className="mt-3"><DerivCashierLinks /></div>}</div></aside>
       <aside className={`${showHistory ? '' : 'hidden'} w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden`}><div className="space-y-3"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} onBulkClose={handleBulkClose} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /><SimulationFlowChart key={selectedSymbol} selectedSymbol={selectedSymbol} openPositions={openPositions} tradeHistory={tradeHistory} /><TradingJournalPanel tradeHistory={tradeHistory} currency={accountData.currency} /></div></aside>
       <aside className={`${showAccount ? '' : 'hidden'} w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden`}><div className="space-y-3"><AccountPanel account={accountData} />{brokerMode && activeProviderId === 'deriv' && <DerivCashierLinks />}</div></aside>
 
