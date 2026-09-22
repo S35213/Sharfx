@@ -175,9 +175,9 @@
 - [x] Audit-event schema exists.
 - [x] Auth rate limits exist.
 - [x] Build/lint/test/audit CI exists.
-- [~] Production Vercel deployment remains on the last READY main deployment while newer UI commits wait for Vercel deployment quota recovery.
+- [x] Production Vercel deployment is READY on the current main commit after the latest SHAFX cleanup/upgrade.
 - [x] OANDA's initial Vercel Hobby 12-function deployment limit was fixed by consolidating its routes into the generic provider endpoint; the last READY production deployment and preview deployments were verified through Vercel. Newer main deployments are currently rate-limited by the Hobby plan.
-- [!] Node DEP0169 deprecation warning persists in production `/api/auth` runtime logs. Direct repository search finds no `url.parse`; Node 24 is pinned in `package.json`, and Vercel documents Node 24 as supported, so the remaining warning has not been traced to SHAFX source and is not safe to suppress blindly.
+- [x] Latest production deployment was exercised on `/api/auth` and produced no warning/error runtime logs; auth and provider-connections request query parsing now uses the WHATWG `URL` API. Historical DEP0169 aggregation remains from older deployments.
 - [x] Private owner console includes live provider connection health, account inventory and recent audit events.
 - [~] Connection expiry/health state is stored and surfaced; generic session refresh helper exists but automation remains provider-specific.
 - [~] Provider health alert evaluator and operations runbook exist; external notification delivery is not wired.
@@ -198,8 +198,8 @@
 - [x] GitHub SHAFX CI passes on the merged UI overhaul PR heads #9 and #10.
 - [x] GitHub Provider Architecture CI passes on the merged UI overhaul PR heads #9 and #10.
 - [x] Supabase provider migration is applied.
-- [~] Last known production deployment is READY, but new deployments are currently blocked by the Vercel Hobby deployment-rate quota.
-- [~] Last READY production build had no build errors; current `main` build is pending CI/Vercel quota recovery.
+- [x] Latest production deployment for current `main` is READY and aliases `shafx.vercel.app`.
+- [x] Latest production build completed successfully after the React/Vite/Vitest upgrade.
 - [~] Public/protected production paths and concurrency behavior are verified; authenticated connection flow still requires a real SHAFX user session.
 - [ ] Deriv connection flow passes with a real test account.
 - [ ] Multiple Deriv accounts pass simultaneously.
@@ -209,12 +209,12 @@
 
 ## Current checkpoint
 
-**Last verified:** 2026-09-20
+**Last verified:** 2026-09-22
 
-**Current main:** `00b500c05ff82ff73ce72f8202ecbd1ac0794a32` (realtime simulator tick/candle synchronization + realtime chart-follow fix). The last verified READY production deployment still points to an older main commit because new Vercel deployments are currently rate-limited on the Hobby plan.
+**Current main:** `7052300ff4a3f65f67e4b2380f1f55718a070e03` (runtime-warning cleanup documentation after production verification; this commit follows the React/Vite/Vitest upgrade and WHATWG request-query changes).
 
 **Current branch for continuation:** `main`
 
-**Current state:** Provider foundation, Supabase registry, Deriv, OANDA, generic connector/onboarding primitives, Binance read-only pack, concurrent account streaming/cache/retry, health/telemetry primitives, funding dispatcher, FIX/custom gateway boundaries, and the synchronized simulator realtime chart feed are present on `main`. Latest SHAFX CI and Provider Architecture CI pass. Remaining hard gates are real external provider credentials/sandbox tests, concrete IBKR/cTrader/MT4/MT5 provider packs, production telemetry/alert delivery, and the unresolved Vercel runtime deprecation warning. New Vercel deployments are presently blocked by the Hobby deployment-rate quota.
+**Current state:** Provider foundation, Supabase registry, Deriv, OANDA, generic connector/onboarding primitives, Binance read-only pack, concurrent account streaming/cache/retry, health/telemetry primitives, funding dispatcher, FIX/custom gateway boundaries, synchronized simulator realtime chart feed, bot-instance stabilization, and the current dependency/runtime cleanup are present on `main`. Remaining hard gates are real external provider credentials/sandbox tests, concrete IBKR/cTrader/MT4/MT5 provider packs, production telemetry/alert delivery, and live provider execution certification.
 
 **Handoff rule:** Never replace this tree with a new checklist. Update this file in the same branch/commit chain as work progresses. Only mark an item `[x]` after verification.
