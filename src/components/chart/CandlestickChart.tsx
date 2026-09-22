@@ -49,6 +49,22 @@ const timeframeMeta = (timeframe?: Timeframe, data: CandlestickData[] = []): { l
   return known[seconds] ?? { label: 'Custom', interval: `${Math.round(seconds / 60)}m` }
 }
 
+const VISIBLE_BARS_BY_TIMEFRAME: Record<Timeframe, number> = {
+  M1: 260,
+  M5: 230,
+  M15: 210,
+  M30: 190,
+  H1: 170,
+  H4: 145,
+  D1: 120,
+  W1: 90,
+}
+
+const visibleBarsForTimeframe = (nextTimeframe: Timeframe | undefined, width: number): number => {
+  const base = VISIBLE_BARS_BY_TIMEFRAME[nextTimeframe ?? 'H1']
+  return width < 640 ? Math.max(40, Math.round(base * 0.82)) : base
+}
+
 export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, symbol, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [], candleTheme = 'mt5', chartMode = 'candles', marketTimestamp, onTimeframeChange }) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<IChartApi | null>(null)
@@ -236,29 +252,15 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     const lastIndex = visualData.length - 1
     if (rangeNeedsReset) {
       const width = containerRef.current?.clientWidth ?? 1000
-      // A timeframe change is a deliberate view reset. Do not preserve the
-      // previous zoom ratio because that can make M1/M5 appear artificially
-      // zoomed-in after switching from H1/H4 (or vice versa). Start wide;
-      // the user can then zoom in manually.
-      const barsByTimeframe: Record<Timeframe, number> = {
-        M1: 260,
-        M5: 230,
-        M15: 210,
-        M30: 190,
-        H1: 170,
-        H4: 145,
-        D1: 120,
-        W1: 90,
-      }
-      const baseVisibleBars = barsByTimeframe[timeframe ?? 'H1']
-      const visibleBars = width < 640 ? Math.round(baseVisibleBars * 0.82) : baseVisibleBars
+      // A timeframe change is a deliberate view reset. Use a fixed number of
+      // bars for the new timeframe instead of inheriting the previous zoom.
+      // Do not call scrollToRealTime() here because it can restore the chart's
+      // previous bar-spacing/visible-range behavior and collapse a new M1/M5
+      // view into an unexpectedly tiny number of candles.
+      const visibleBars = visibleBarsForTimeframe(timeframe, width)
       const from = Math.max(0, lastIndex - visibleBars + 1)
       const to = lastIndex + 7
       chart.timeScale().setVisibleLogicalRange({ from, to })
-      // A timeframe change should always land on the newest candle while
-      // retaining the intentionally wide zoom. History remains user-controlled
-      // after this initial positioning.
-      chart.timeScale().scrollToRealTime()
       verticalScaleMarginsRef.current = { top: 0.08, bottom: 0.08 }
       series.priceScale().applyOptions({ autoScale: true, scaleMargins: { top: 0.08, bottom: 0.08 } })
       followRealtimeRef.current = true
@@ -433,8 +435,16 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const goToCurrentCandle = (): void => {
     const chart = chartRef.current
     if (!chart || !visualData.length) return
-    chart.timeScale().scrollToRealTime()
+    const width = containerRef.current?.clientWidth ?? 1000
+    const lastIndex = visualData.length - 1
+    const visibleBars = visibleBarsForTimeframe(timeframe, width)
+    chart.timeScale().setVisibleLogicalRange({
+      from: Math.max(0, lastIndex - visibleBars + 1),
+      to: lastIndex + 7,
+    })
+    chart.timeScale().scrollToPosition(0, false)
     followRealtimeRef.current = true
+    setTimeframeMenuOpen(false)
     onToolNotice?.('Current candle centered.')
   }
 
@@ -495,6 +505,12 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       autoScale: true,
       scaleMargins: { top: 0.08, bottom: 0.08 },
     })
+  }
+
+  const resetChartView = (): void => {
+    resetVerticalScale()
+    goToCurrentCandle()
+    onToolNotice?.('Chart view reset to the current candle.')
   }
 
   const handlePriceAxisPointerDown = (event: React.PointerEvent<HTMLDivElement>): void => {
@@ -644,7 +660,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
           const y = Math.sin(angle) * radius
           return <button key={tf} type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => chooseFullscreenTimeframe(tf)} aria-pressed={timeframe === tf} className={`absolute left-1/2 top-1/2 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border text-[8px] font-semibold shadow-md transition ${timeframe === tf ? 'border-shafx-accent bg-shafx-accent text-white scale-110' : 'border-shafx-border bg-shafx-bg/95 text-shafx-textMuted hover:border-shafx-accent/40 hover:text-shafx-text'}`} style={{ transform: `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))` }}>{tf}</button>
         })}
-        <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={resetVerticalScale} aria-label="Reset vertical scale" className="absolute -bottom-10 left-1/2 flex h-8 -translate-x-1/2 items-center gap-1 rounded-full border border-shafx-border bg-shafx-surface/95 px-3 text-[8px] font-semibold text-shafx-textMuted shadow-lg"><RotateCcw className="h-3 w-3" />Auto scale</button>
+        <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={resetChartView} aria-label="Reset chart view to current candle" className="absolute -bottom-10 left-1/2 flex h-8 -translate-x-1/2 items-center gap-1 rounded-full border border-shafx-border bg-shafx-surface/95 px-3 text-[8px] font-semibold text-shafx-textMuted shadow-lg"><RotateCcw className="h-3 w-3" />Reset view</button>
       </div>
     </div>}
 
