@@ -289,7 +289,7 @@ const TerminalContent: React.FC = () => {
       cancelled = true
       if (timeout !== null) window.clearTimeout(timeout)
     }
-  }, [selectedSymbol, symbolSpec, timeframe])
+  }, [replayActive, selectedSymbol, symbolSpec, timeframe])
 
 
   const chartCandles = replayActive
@@ -308,7 +308,7 @@ const TerminalContent: React.FC = () => {
         : currentPrice
   // The chart's primary price is always the latest candle close. This keeps the
   // simulated Bid/Sell stream and the candle OHLC data on one source of truth.
-  const chartLastPrice = isSimulatorMode() ? simulatedPrice : (chartCandles[chartCandles.length - 1]?.close ?? displayPrice)
+  const chartLastPrice = replayActive ? (visibleCandles[visibleCandles.length - 1]?.close ?? displayPrice) : isSimulatorMode() ? simulatedPrice : (chartCandles[chartCandles.length - 1]?.close ?? displayPrice)
   const chartSpread = symbolSpec ? symbolSpec.pipSize * 0.8 : 0.00008
   const chartAskPrice = Number((chartLastPrice + chartSpread).toFixed(symbolSpec?.pricePrecision ?? 5))
   const conversionRate = symbolSpec ? getConversionRate(symbolSpec.quoteCurrency, accountData?.currency ?? 'USD') : undefined
