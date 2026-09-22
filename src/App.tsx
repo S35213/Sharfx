@@ -364,7 +364,9 @@ const TerminalContent: React.FC = () => {
     setMobileTab('market')
     setDock('orders')
     setMobileDockOpen(true)
-    window.setTimeout(() => document.getElementById('mobile-market-workspace')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60)
+    window.requestAnimationFrame(() => {
+      document.getElementById('mobile-market-workspace')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    })
   }, [aiSetup])
 
   const handleLiveUpdate = useCallback((nextCandles: OHLCV[], price: number, epoch: number): void => { setLiveCandles(nextCandles); setCurrentPrice(price); setMarketTimestamp(Math.floor(epoch / 1000)) }, [])
