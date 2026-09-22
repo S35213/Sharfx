@@ -525,7 +525,23 @@ const TerminalContent: React.FC = () => {
   const dockContent = {
     insights: <div className="space-y-3"><FXMoveMatrix pairs={watchlist} /><MarketAnalysisPanel analysis={marketAnalysis} pricePrecision={symbolSpec.pricePrecision} /><AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={chartCandles} setup={aiSetup} onReviewSetup={reviewAISetup} /></div>,
     liquidity: <LiquidityPanel symbol={selectedSymbol} price={displayPrice} precision={symbolSpec.pricePrecision} pipSize={symbolSpec.pipSize} candles={chartCandles} />,
-    orders: <div className="space-y-3">{brokerMode && activeProviderDescriptor ? <ProviderCapabilityPanel descriptor={activeProviderDescriptor} environment={activeProviderSelection?.environment ?? 'demo'} /> : <OrderPanel key={selectedSymbol + ':' + symbolSpec.pricePrecision + ':' + symbolSpec.lotStep} symbol={selectedSymbol} currentPrice={displayPrice} accountBalance={accountData.balance} accountCurrency={accountData.currency} symbolSpec={symbolSpec} conversionRate={conversionRate} onSubmitOrder={handleOrderSubmit} aiSetup={reviewedSetup ?? aiSetup} autoApplyAISetup={reviewedSetup !== null} />}<div className="min-h-[280px]"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} onBulkClose={handleBulkClose} /></div></div>,
+    orders: <div className="space-y-3">
+      {brokerMode && activeProviderDescriptor ? <ProviderCapabilityPanel descriptor={activeProviderDescriptor} environment={activeProviderSelection?.environment ?? 'demo'} /> : <OrderPanel key={selectedSymbol + ':' + symbolSpec.pricePrecision + ':' + symbolSpec.lotStep} symbol={selectedSymbol} currentPrice={displayPrice} accountBalance={accountData.balance} accountCurrency={accountData.currency} symbolSpec={symbolSpec} conversionRate={conversionRate} onSubmitOrder={handleOrderSubmit} aiSetup={reviewedSetup ?? aiSetup} autoApplyAISetup={reviewedSetup !== null} />}
+      {isSimulatorMode() && (
+        <div className="rounded-xl border border-shafx-border bg-shafx-surface/80 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <div><div className="font-mono text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Position management</div><div className="mt-1 text-[10px] text-shafx-textMuted">{openPositions.length} open positions</div></div>
+            <span className="font-mono text-[9px] text-shafx-textMuted">SIMULATOR</span>
+          </div>
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            <button type="button" onClick={() => void handleBulkClose('winning')} disabled={!openPositions.some((position) => (position.profit ?? 0) > 0)} className="min-h-10 rounded-lg border border-shafx-success/25 bg-shafx-success/[0.05] px-2 text-[9px] font-semibold text-shafx-success disabled:opacity-35">Close winning</button>
+            <button type="button" onClick={() => void handleBulkClose('losing')} disabled={!openPositions.some((position) => (position.profit ?? 0) < 0)} className="min-h-10 rounded-lg border border-shafx-danger/25 bg-shafx-danger/[0.05] px-2 text-[9px] font-semibold text-shafx-danger disabled:opacity-35">Close losing</button>
+            <button type="button" onClick={() => void handleBulkClose('all')} disabled={openPositions.length === 0} className="min-h-10 rounded-lg border border-shafx-border bg-shafx-bg px-2 text-[9px] font-semibold text-shafx-text disabled:opacity-35">Close all</button>
+          </div>
+        </div>
+      )}
+      <div className="min-h-[280px]"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} onBulkClose={handleBulkClose} /></div>
+    </div>,
     agent: <div className="space-y-3"><SimulationPulse key={selectedSymbol} selectedSymbol={selectedSymbol} openPositions={openPositions} tradeHistory={tradeHistory} botOrderIds={botOrderIds} botRunning={botRunning} /><SimulationFlowChart key={selectedSymbol} selectedSymbol={selectedSymbol} openPositions={openPositions} tradeHistory={tradeHistory} /><TradingAgentPanel {...botProps} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /></div>,
     research: <div className="space-y-3"><ReplayPanel candles={candles} replayCount={replayCount || candles.length} onReplayCountChange={setReplayCount} /><BacktestPanel symbol={selectedSymbol} candles={candles} symbolSpec={symbolSpec} initialBalance={accountData.balance} accountCurrency={accountData.currency} conversionRate={conversionRate} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /><TradingJournalPanel tradeHistory={tradeHistory} currency={accountData.currency} /></div>,
   }[dock]
