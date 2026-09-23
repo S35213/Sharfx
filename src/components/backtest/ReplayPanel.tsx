@@ -1,4 +1,5 @@
-import { CheckCircle2, Pause, Play, RotateCcw, SkipBack, SkipForward } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Activity as ActivityIcon, CheckCircle2, Pause, Play, RotateCcw, SkipBack, SkipForward } from 'lucide-react'
 import type { OHLCV } from '../../types'
 
 interface Props {
@@ -16,8 +17,30 @@ export function ReplayPanel({ candles, replayCount, onReplayCountChange }: Props
   const canStepForward = active < max
   const progress = max > minimum ? ((active - minimum) / (max - minimum)) * 100 : 100
   const isComplete = active >= max
+  const [playing, setPlaying] = useState(false)
+  const playTimer = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (!playing || isComplete) return
+    playTimer.current = window.setTimeout(() => setCount(active + step), 550)
+    return () => { if (playTimer.current !== null) window.clearTimeout(playTimer.current) }
+  }, [active, isComplete, playing])
+
+  useEffect(() => () => { if (playTimer.current !== null) window.clearTimeout(playTimer.current) }, [])
+
+  useEffect(() => {
+    if (isComplete) setPlaying(false)
+  }, [isComplete])
 
   const setCount = (count: number): void => onReplayCountChange(Math.min(max, Math.max(minimum, count)))
+  const restart = (): void => {
+    setPlaying(false)
+    setCount(minimum)
+  }
+  const togglePlay = (): void => {
+    if (isComplete) setCount(minimum)
+    setPlaying((value) => !value)
+  }
 
   if (candles.length < 20) return null
 
@@ -38,16 +61,17 @@ export function ReplayPanel({ candles, replayCount, onReplayCountChange }: Props
         </div>
         <div className="mt-2 h-1 overflow-hidden rounded-full bg-shafx-border"><div className="h-full rounded-full bg-shafx-primary transition-[width] duration-200" style={{ width: progress + '%' }} /></div>
         <input type="range" min={minimum} max={max} value={active} onChange={(event) => setCount(Number(event.target.value))} className="mt-3 w-full" aria-label="Visible replay candles" />
-        <div className="mt-3 grid grid-cols-3 gap-2">
-          <button type="button" onClick={() => setCount(minimum)} disabled={!canStepBack} className="flex min-h-10 items-center justify-center gap-1 rounded border border-shafx-border px-2 text-xs text-shafx-text disabled:opacity-40" aria-label="Restart visual replay"><RotateCcw className="h-3.5 w-3.5" />Start</button>
-          <button type="button" onClick={() => setCount(active - step)} disabled={!canStepBack} className="flex min-h-10 items-center justify-center gap-1 rounded border border-shafx-border px-2 text-xs text-shafx-text disabled:opacity-40" aria-label="Previous replay candle"><SkipBack className="h-3.5 w-3.5" />Previous</button>
-          <button type="button" onClick={() => setCount(active + step)} disabled={!canStepForward} className="flex min-h-10 items-center justify-center gap-1 rounded bg-shafx-primary px-2 text-xs font-semibold text-white disabled:opacity-40" aria-label="Next replay candle">Next<SkipForward className="h-3.5 w-3.5" /></button>
+        <div className="mt-3 grid grid-cols-4 gap-2">
+          <button type="button" onClick={restart} className="flex min-h-10 items-center justify-center gap-1 rounded border border-shafx-border px-2 text-xs text-shafx-text" aria-label="Restart visual replay"><RotateCcw className="h-3.5 w-3.5" />Restart</button>
+          <button type="button" onClick={() => { setPlaying(false); setCount(active - step) }} disabled={!canStepBack} className="flex min-h-10 items-center justify-center gap-1 rounded border border-shafx-border px-2 text-xs text-shafx-text disabled:opacity-40" aria-label="Previous replay candle"><SkipBack className="h-3.5 w-3.5" />Prev</button>
+          <button type="button" onClick={togglePlay} className="flex min-h-10 items-center justify-center gap-1 rounded bg-shafx-primary px-2 text-xs font-semibold text-white" aria-label={playing ? 'Pause visual replay' : 'Run visual replay'}>{playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}{playing ? 'Pause' : 'Run'}</button>
+          <button type="button" onClick={() => { setPlaying(false); setCount(active + step) }} disabled={!canStepForward} className="flex min-h-10 items-center justify-center gap-1 rounded border border-shafx-primary/40 bg-shafx-primary/10 px-2 text-xs font-semibold text-shafx-primary disabled:opacity-40" aria-label="Next replay candle">Next<SkipForward className="h-3.5 w-3.5" /></button>
         </div>
       </div>
 
       <div className="mt-3 flex items-center justify-between text-[10px] text-shafx-textMuted">
         <span className={isComplete ? 'flex items-center gap-1 text-shafx-success' : 'text-shafx-textMuted'}>{isComplete && <CheckCircle2 className="h-3 w-3" />}{isComplete ? 'Replay complete' : 'Next updates the chart'}</span>
-        <span className="flex items-center gap-1"><Pause className="h-3 w-3" />Manual stepping</span>
+        <span className="flex items-center gap-1">{playing ? <><ActivityIcon />Playing every 0.55s</> : <><Pause className="h-3 w-3" />Paused • use Run or Next</>}</span>
       </div>
       <p className="mt-3 text-[10px] text-shafx-textMuted">SIMULATED — NOT FINANCIAL ADVICE. Replay uses simulated historical candles only.</p>
     </section>
