@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState, useEffect } from 'react'
 import { BarChart3, ChevronDown, Play, RotateCcw, TrendingDown, TrendingUp } from 'lucide-react'
 import { analyzeLiquidity } from '../../engine/liquidity'
 import { analyzeMarketStructure, findSwingPoints } from '../../engine/marketStructure'
@@ -23,6 +23,9 @@ export function BacktestPanel({ symbol, candles, symbolSpec, initialBalance, acc
   const [running, setRunning] = useState(false)
   const [range, setRange] = useState(120)
   const [showTrades, setShowTrades] = useState(false)
+  const [runMessage, setRunMessage] = useState('Ready')
+  const runTimer = useRef<number | null>(null)
+  useEffect(() => () => { if (runTimer.current) window.clearTimeout(runTimer.current) }, [])
 
   const maxRange = Math.max(20, candles.length - 1)
   const effectiveRange = Math.min(range, maxRange)
@@ -74,14 +77,24 @@ export function BacktestPanel({ symbol, candles, symbolSpec, initialBalance, acc
   const run = (): void => {
     if (candles.length < 20 || running) return
     setRunning(true)
-    try {
-      const startIndex = Math.max(1, candles.length - effectiveRange)
-      const backtest = runBacktest(candles, { initialBalance, accountCurrency, symbolSpec, conversionRate, startIndex, endIndex: candles.length - 1 }, signalProvider)
-      setResult(backtest)
-      setShowTrades(false)
-    } finally {
-      setRunning(false)
-    }
+    setResult(null)
+    setShowTrades(false)
+    setRunMessage('Loading historical candles…')
+    if (runTimer.current) window.clearTimeout(runTimer.current)
+    runTimer.current = window.setTimeout(() => {
+      try {
+        setRunMessage('Scanning structure, liquidity and setups…')
+        const startIndex = Math.max(1, candles.length - effectiveRange)
+        const backtest = runBacktest(candles, { initialBalance, accountCurrency, symbolSpec, conversionRate, startIndex, endIndex: candles.length - 1 }, signalProvider)
+        setResult(backtest)
+        setRunMessage(backtest.totalTrades === 0 ? 'Replay completed • no qualifying trades in this window.' : 'Replay completed • results updated.')
+      } catch (error) {
+        setRunMessage(error instanceof Error ? 'Replay failed • ' + error.message : 'Replay failed.')
+      } finally {
+        setRunning(false)
+        runTimer.current = null
+      }
+    }, 320)
   }
 
   return (
@@ -100,9 +113,10 @@ export function BacktestPanel({ symbol, candles, symbolSpec, initialBalance, acc
           <span className="font-mono text-shafx-text">{effectiveRange} candles</span>
         </div>
         <input id="backtest-range" type="range" min="20" max={maxRange} value={effectiveRange} onChange={(event) => setRange(Number(event.target.value))} className="mt-3 w-full" aria-label="Replay window in candles" />
-        <button type="button" onClick={run} disabled={running || candles.length < 20} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded bg-shafx-primary px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">
-          <Play className="h-3.5 w-3.5" />{running ? 'Running replay…' : 'Run strategy replay'}
+        <button type="button" onClick={run} disabled={running || candles.length < 20} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-shafx-primary px-3 py-2 text-xs font-semibold text-white transition-transform active:scale-[.99] disabled:cursor-not-allowed disabled:opacity-50">
+          <Play className={running ? 'h-3.5 w-3.5 animate-pulse' : 'h-3.5 w-3.5'} />{running ? 'Running replay…' : 'Run strategy replay'}
         </button>
+        <p className="mt-2 text-[9px] text-shafx-textMuted">{runMessage}</p>
       </div>
 
       {result && analytics ? <div className="mt-3 space-y-3">
