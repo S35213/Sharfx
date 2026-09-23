@@ -151,7 +151,6 @@ export function TradingAgentPanel({
   const readStoredLotSize = (): string => typeof window !== 'undefined' ? window.sessionStorage.getItem('shafx-simulator-lot-size') || '0.10' : '0.10'
   const [lotSize, setLotSize] = useState(readStoredLotSize)
   const [phase, setPhase] = useState<Phase>('READY')
-  const [botScanProgress, setBotScanProgress] = useState(0)
   const [autoTradingEnabled, setAutoTradingEnabled] = useState(false)
   const [wins, setWins] = useState(0)
   const [losses, setLosses] = useState(0)
