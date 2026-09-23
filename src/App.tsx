@@ -74,6 +74,7 @@ const TerminalContent: React.FC = () => {
   const simulatedEngineSymbolRef = useRef<string | null>(null)
   const [liveMarketActive, setLiveMarketActive] = useState(false)
   const [replayCount, setReplayCount] = useState(0)
+  const lastReplayCountRef = useRef(0)
   const [mobileTab, setMobileTab] = useState<MobileNavTab>('market')
   const [mobileDockOpen, setMobileDockOpen] = useState(false)
   const [accountData, setAccountData] = useState<AccountData | null>(null)
@@ -261,8 +262,13 @@ const TerminalContent: React.FC = () => {
     setDemoTradeHistory(tradeHistory)
   }, [openPositions, tradeHistory])
 
+  const replayWorkspaceActive = dock === 'research' && (!isCompactViewport || mobileDockOpen)
   const visibleCandles = useMemo(() => replayCount > 0 && replayCount < candles.length ? candles.slice(0, replayCount) : candles, [candles, replayCount])
-  const replayActive = replayCount > 0 && replayCount < candles.length
+  const replayActive = replayWorkspaceActive && replayCount > 0 && replayCount < candles.length
+  const handleReplayCountChange = useCallback((count: number): void => {
+    setReplayCount(count)
+    if (count > 0 && count < candles.length) lastReplayCountRef.current = count
+  }, [candles.length])
   useEffect(() => {
     if (isBrokerMode() || !symbolSpec || !simulatedEngineRef.current || replayActive) return
 
@@ -599,8 +605,13 @@ const TerminalContent: React.FC = () => {
   const botProps = { symbol: selectedSymbol, timeframe, candles: chartCandles, botOrderIds, scanM1Candles: simulatedM1Candles, currentPrice: displayPrice, activePosition, tradeHistory, accountBalance: accountData.balance, accountCurrency: accountData.currency, symbolSpec, conversionRate, botPlan: user?.botPlan ?? 'FREE' as const, botAutostartKey: BOT_AUTORUN_KEY, onBotOrder: handleBotOrder, onBotClose: handleBotClose, onBotRunningChange: setBotRunning, onReviewSetup: reviewAISetup }
 
   const openMobileDock = (next: WorkspaceDock): void => {
+    const willOpen = dock !== next || !mobileDockOpen
     setMobileDockOpen((open) => dock === next ? !open : true)
     setDock(next)
+    if (next === 'research' && willOpen) {
+      const remembered = lastReplayCountRef.current
+      if (remembered > 0 && remembered < candles.length) setReplayCount(remembered)
+    }
   }
 
   const dockContent = {
@@ -624,7 +635,7 @@ const TerminalContent: React.FC = () => {
       <div className="min-h-[280px]"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} onBulkClose={handleBulkClose} /></div>
     </div>,
     agent: isCompactViewport ? null : <div className="space-y-3"><SimulationPulse key={selectedSymbol} selectedSymbol={selectedSymbol} openPositions={openPositions} tradeHistory={tradeHistory} botOrderIds={botOrderIds} botRunning={botRunning} marketBias={marketAnalysis.bias} marketPrice={displayPrice} pricePrecision={symbolSpec.pricePrecision} /><SimulationFlowChart key={selectedSymbol} selectedSymbol={selectedSymbol} openPositions={openPositions} tradeHistory={tradeHistory} /><TradingAgentPanel {...botProps} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /></div>,
-    research: <div className="space-y-3"><ReplayPanel candles={candles} replayCount={replayCount || candles.length} onReplayCountChange={setReplayCount} /><BacktestPanel symbol={selectedSymbol} candles={candles} symbolSpec={symbolSpec} initialBalance={accountData.balance} accountCurrency={accountData.currency} conversionRate={conversionRate} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /><TradingJournalPanel tradeHistory={tradeHistory} currency={accountData.currency} /></div>,
+    research: <div className="space-y-3"><ReplayPanel candles={candles} replayCount={replayCount || candles.length} onReplayCountChange={handleReplayCountChange} /><BacktestPanel symbol={selectedSymbol} candles={candles} symbolSpec={symbolSpec} initialBalance={accountData.balance} accountCurrency={accountData.currency} conversionRate={conversionRate} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /><TradingJournalPanel tradeHistory={tradeHistory} currency={accountData.currency} /></div>,
   }[dock]
 
   return <div className="min-h-[100svh] w-full min-w-0 overflow-x-hidden bg-shafx-bg text-shafx-text lg:flex lg:h-[calc(100vh-28px)] lg:flex-col lg:overflow-hidden">
@@ -647,7 +658,7 @@ const TerminalContent: React.FC = () => {
           </div>
           <MobileChartTools tool={chartTool} onToolChange={setChartTool} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} />
           <div className="shafx-chart-stage relative min-h-0 p-1 sm:p-2 lg:flex-1">
-            <CandlestickChart data={chartCandles} symbol={selectedSymbol} timeframe={timeframe} annotations={chartAnnotations} tradeLines={tradeLines} bidPrice={chartLastPrice} askPrice={chartAskPrice} toolMode={chartToolMode} pipSize={symbolSpec.pipSize} onToolNotice={pushToast} showGrid={chartSettings.showGrid} showPriceLabels={chartSettings.showPriceLabels} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} marketTimestamp={marketTimestamp} onTimeframeChange={setTimeframe} />
+            <CandlestickChart data={chartCandles} symbol={selectedSymbol} timeframe={timeframe} annotations={chartAnnotations} tradeLines={tradeLines} bidPrice={chartLastPrice} askPrice={chartAskPrice} toolMode={chartToolMode} pipSize={symbolSpec.pipSize} onToolNotice={pushToast} showGrid={chartSettings.showGrid} showPriceLabels={chartSettings.showPriceLabels} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} marketTimestamp={marketTimestamp} onTimeframeChange={setTimeframe} replayMode={replayActive} />
             <div className="pointer-events-none absolute bottom-5 right-5 z-10 hidden items-center gap-1.5 rounded-xl border border-shafx-border bg-shafx-surface/90 px-2.5 py-1.5 text-[9px] text-shafx-textMuted backdrop-blur sm:flex"><Maximize2 className="h-3 w-3 text-shafx-accent" />Scroll / pinch to navigate</div>
           </div>
           <div className="grid grid-cols-2 gap-2 border-t border-shafx-border bg-shafx-surface/55 p-2 sm:grid-cols-4">
