@@ -131,9 +131,15 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         ticksVisible: true,
         minimumHeight: 30,
         uniformDistribution: true,
-        rightOffset: 6,
-        barSpacing: 4,
+        rightOffset: 5,
+        barSpacing: 5,
         minBarSpacing: 1,
+        tickMarkFormatter: (time) => {
+          const seconds = typeof time === 'number' ? time : Number(time)
+          const date = new Date(seconds * 1000)
+          if (!Number.isFinite(date.getTime())) return ''
+          return date.toISOString().slice(11, 16)
+        },
       },
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
       handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true },
