@@ -71,8 +71,10 @@ describe('SimulatorRealtimeMarketEngine', () => {
       expect(c.timestamp).toBe(a.timestamp)
     }
 
-    expect(h1.snapshot().candles[h1.snapshot().candles.length - 1].time).toBeLessThanOrEqual(h4.snapshot().candles[h4.snapshot().candles.length - 1].time)
-    expect(h4.snapshot().candles[h4.snapshot().candles.length - 1].time).toBeLessThanOrEqual(d1.snapshot().candles[d1.snapshot().candles.length - 1].time)
+    // Each higher timeframe groups the same timestamp into a wider bucket,
+    // so its current bucket start can only move backward as the timeframe grows.
+    expect(h1.snapshot().candles[h1.snapshot().candles.length - 1].time).toBeGreaterThanOrEqual(h4.snapshot().candles[h4.snapshot().candles.length - 1].time)
+    expect(h4.snapshot().candles[h4.snapshot().candles.length - 1].time).toBeGreaterThanOrEqual(d1.snapshot().candles[d1.snapshot().candles.length - 1].time)
   })
 
   it('keeps higher-timeframe candle direction stable while the live close follows the bid', () => {
