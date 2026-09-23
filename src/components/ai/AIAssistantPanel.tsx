@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Activity, AlertTriangle, Brain, Eye, Info, Shield, Target } from 'lucide-react'
 import { analyzeLiquidity } from '../../engine/liquidity'
 import { analyzeMarketStructure, findSwingPoints } from '../../engine/marketStructure'
@@ -25,8 +25,7 @@ export function AIAssistantPanel({ symbol, timeframe, candles, setup = null, onR
   const [activityIndex, setActivityIndex] = useState(0)
   const [typedActivity, setTypedActivity] = useState('')
   const [pulse, setPulse] = useState(0)
-  const previousContext = useState<AITradingContext | null>(null)
-  const previousContextRef = useMemo(() => ({ current: previousContext[0] }), [])
+  const previousContextRef = useRef<AITradingContext | null>(null)
 
   const context = useMemo(() => {
     const structure = analyzeMarketStructure(candles, 2)
