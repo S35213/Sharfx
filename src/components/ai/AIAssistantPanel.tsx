@@ -37,7 +37,7 @@ export function AIAssistantPanel({ symbol, timeframe, candles, setup = null, onR
     setActivityIndex(0)
     const timer = window.setInterval(() => setActivityIndex((value) => value + 1), 2400)
     return () => window.clearInterval(timer)
-  }, [context])
+  }, [])
 
 
   const response = useMemo(() => buildTradingResponse(context, events, 'WHAT_IS_HAPPENING'), [context, events])
@@ -48,11 +48,11 @@ export function AIAssistantPanel({ symbol, timeframe, candles, setup = null, onR
     activeSetup
       ? `Setup ${activeSetup.direction} is being monitored at ${activeSetup.confidence}% confluence.`
       : `No execution setup yet — waiting for structure confirmation.`,
-    context.nearestSupport !== null
-      ? `Checking support at ${context.nearestSupport} against the latest price.`
+    context.supportResistance.nearestSupport !== null
+      ? `Checking support at ${context.supportResistance.nearestSupport} against the latest price.`
       : 'Scanning recent candles for a usable support level.',
-    context.nearestResistance !== null
-      ? `Watching resistance at ${context.nearestResistance} for a break or rejection.`
+    context.supportResistance.nearestResistance !== null
+      ? `Watching resistance at ${context.supportResistance.nearestResistance} for a break or rejection.`
       : 'Scanning recent candles for a usable resistance level.',
     events[0]
       ? events[0].description
@@ -69,7 +69,7 @@ export function AIAssistantPanel({ symbol, timeframe, candles, setup = null, onR
         <div className="mt-3 rounded-lg border border-shafx-border bg-shafx-surface px-2.5 py-2 text-[9px] leading-4 text-shafx-text">
           <div className="flex items-center justify-between gap-2"><span className="font-mono text-shafx-accent">LIVE ANALYSIS</span><span className="font-mono text-shafx-textMuted">{context.dataStatus.toUpperCase()} • {timeframe}</span></div>
           <div className="mt-1.5 min-h-8"><span className="font-mono text-shafx-accent">agent&gt;</span> {liveActivity}<span className="ml-1 animate-pulse text-shafx-accent">▍</span></div>
-          <div className="mt-2 grid grid-cols-3 gap-1.5 text-[8px]"><span className="rounded border border-shafx-border bg-shafx-bg px-2 py-1.5">PRICE <b className="font-mono text-shafx-text">{context.currentPrice}</b></span><span className="rounded border border-shafx-border bg-shafx-bg px-2 py-1.5">SUPPORT <b className="font-mono text-shafx-text">{context.nearestSupport ?? '—'}</b></span><span className="rounded border border-shafx-border bg-shafx-bg px-2 py-1.5">RESIST <b className="font-mono text-shafx-text">{context.nearestResistance ?? '—'}</b></span></div>
+          <div className="mt-2 grid grid-cols-3 gap-1.5 text-[8px]"><span className="rounded border border-shafx-border bg-shafx-bg px-2 py-1.5">PRICE <b className="font-mono text-shafx-text">{context.currentPrice}</b></span><span className="rounded border border-shafx-border bg-shafx-bg px-2 py-1.5">SUPPORT <b className="font-mono text-shafx-text">{context.supportResistance.nearestSupport ?? '—'}</b></span><span className="rounded border border-shafx-border bg-shafx-bg px-2 py-1.5">RESIST <b className="font-mono text-shafx-text">{context.supportResistance.nearestResistance ?? '—'}</b></span></div>
         </div>
       </div>
       <Section icon={<Eye className="h-3 w-3" />} label="What the agent sees" text={response.reasoning} />
