@@ -25,6 +25,7 @@ interface CandlestickChartProps {
   chartMode?: ChartMode
   marketTimestamp?: number
   onTimeframeChange?: (timeframe: Timeframe) => void
+  replayMode?: boolean
 }
 
 interface UserLevel { id: string; price: number; label: string; color: string; lineWidth?: 1 | 2 | 3 | 4; dashed?: boolean; armed?: boolean }
@@ -65,7 +66,7 @@ const visibleBarsForTimeframe = (nextTimeframe: Timeframe | undefined, width: nu
   return width < 640 ? Math.max(40, Math.round(base * 0.82)) : base
 }
 
-export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, symbol, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [], candleTheme = 'mt5', chartMode = 'candles', marketTimestamp, onTimeframeChange }) => {
+export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, symbol, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [], candleTheme = 'mt5', chartMode = 'candles', marketTimestamp, onTimeframeChange, replayMode = false }) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ShafxSeries | null>(null)
@@ -123,7 +124,17 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       height: Math.max(280, el.clientHeight),
       crosshair: { mode: 1, vertLine: { color: '#667285', width: 1, style: 2, labelBackgroundColor: '#202A38' }, horzLine: { color: '#667285', width: 1, style: 2, labelBackgroundColor: '#202A38' } },
       rightPriceScale: { borderColor: '#202A38', minimumWidth: el.clientWidth < 640 ? 78 : 94, alignLabels: true, ticksVisible: true, scaleMargins: { top: 0.08, bottom: 0.08 } },
-      timeScale: { borderColor: '#202A38', timeVisible: true, secondsVisible: false, rightOffset: 7, barSpacing: 3.5, minBarSpacing: 0.5 },
+      timeScale: {
+        borderColor: '#202A38',
+        timeVisible: true,
+        secondsVisible: false,
+        ticksVisible: true,
+        minimumHeight: 30,
+        uniformDistribution: true,
+        rightOffset: 6,
+        barSpacing: 4,
+        minBarSpacing: 1,
+      },
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
       handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true },
       kineticScroll: { touch: true, mouse: false },
@@ -650,8 +661,9 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     <div className="pointer-events-none absolute left-3 top-3 z-10 hidden items-center gap-2 rounded-xl border border-shafx-border bg-shafx-bg/90 px-2.5 py-1.5 text-[9px] font-semibold backdrop-blur sm:flex"><span className="text-shafx-accent">SHAFX</span><span className="text-shafx-textMuted">•</span><span className="text-shafx-textMuted">{timeframe ?? 'PRICE'} workspace</span></div>
     <div className="pointer-events-none absolute right-3 top-3 z-10 hidden rounded-xl border border-shafx-border bg-shafx-bg/90 px-2.5 py-1.5 text-[9px] font-semibold text-shafx-text backdrop-blur sm:block">{meta.label} <span className="font-normal text-shafx-textMuted">• {meta.interval}</span></div>
     <div className="pointer-events-none absolute left-3 top-3 z-10 rounded-xl border border-shafx-border/70 bg-shafx-surface/88 px-2.5 py-1.5 shadow-md backdrop-blur">
-      <span className="text-[8px] font-semibold uppercase tracking-[0.12em] text-shafx-textMuted">{chartMode === 'candles' ? 'Candles' : chartMode === 'bars' ? 'Bars' : chartMode === 'wave' ? 'Wave' : 'Area'}</span>
-      {countdown !== null && <span className="ml-2 font-mono text-[9px] font-semibold tabular text-shafx-accent">Close {formatCountdown(countdown)}</span>}
+      <span className="text-[8px] font-semibold uppercase tracking-[0.12em] text-shafx-textMuted">{replayMode ? 'Replay' : (chartMode === 'candles' ? 'Candles' : chartMode === 'bars' ? 'Bars' : chartMode === 'wave' ? 'Wave' : 'Area')}</span>
+      {!replayMode && countdown !== null && <span className="ml-2 font-mono text-[9px] font-semibold tabular text-shafx-accent">Close {formatCountdown(countdown)}</span>}
+      {replayMode && <span className="ml-2 font-mono text-[9px] font-semibold tabular text-shafx-accent">Historical</span>}
     </div>
     <div className="absolute right-3 top-3 z-20 flex items-center gap-1">
       <div className="pointer-events-none hidden items-center gap-1 rounded-xl border border-shafx-border/70 bg-shafx-surface/85 px-1 py-0.5 shadow-md backdrop-blur sm:flex">
