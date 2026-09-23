@@ -25,7 +25,6 @@ interface CandlestickChartProps {
   chartMode?: ChartMode
   marketTimestamp?: number
   onTimeframeChange?: (timeframe: Timeframe) => void
-  replayMode?: boolean
 }
 
 interface UserLevel { id: string; price: number; label: string; color: string; lineWidth?: 1 | 2 | 3 | 4; dashed?: boolean; armed?: boolean }
@@ -66,7 +65,7 @@ const visibleBarsForTimeframe = (nextTimeframe: Timeframe | undefined, width: nu
   return width < 640 ? Math.max(40, Math.round(base * 0.82)) : base
 }
 
-export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, symbol, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [], candleTheme = 'mt5', chartMode = 'candles', marketTimestamp, onTimeframeChange, replayMode = false }) => {
+export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, symbol, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [], candleTheme = 'mt5', chartMode = 'candles', marketTimestamp, onTimeframeChange }) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ShafxSeries | null>(null)
@@ -123,23 +122,28 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       width: el.clientWidth,
       height: Math.max(280, el.clientHeight),
       crosshair: { mode: 1, vertLine: { color: '#667285', width: 1, style: 2, labelBackgroundColor: '#202A38' }, horzLine: { color: '#667285', width: 1, style: 2, labelBackgroundColor: '#202A38' } },
-      rightPriceScale: { borderColor: '#202A38', minimumWidth: el.clientWidth < 640 ? 78 : 94, alignLabels: true, ticksVisible: true, scaleMargins: { top: 0.08, bottom: 0.08 } },
+      rightPriceScale: {
+        borderColor: '#202A38',
+        minimumWidth: el.clientWidth < 640 ? 82 : 96,
+        alignLabels: true,
+        ticksVisible: true,
+        textColor: '#8995A8',
+        entireTextOnly: false,
+        scaleMargins: { top: 0.08, bottom: 0.08 },
+      },
       timeScale: {
         borderColor: '#202A38',
         timeVisible: true,
         secondsVisible: false,
         ticksVisible: true,
+        tickMarkMaxCharacterLength: 5,
         minimumHeight: 30,
         uniformDistribution: true,
         rightOffset: 5,
         barSpacing: 5,
         minBarSpacing: 1,
-        tickMarkFormatter: (time) => {
-          const seconds = typeof time === 'number' ? time : Number(time)
-          const date = new Date(seconds * 1000)
-          if (!Number.isFinite(date.getTime())) return ''
-          return date.toISOString().slice(11, 16)
-        },
+        shiftVisibleRangeOnNewBar: true,
+        lockVisibleTimeRangeOnResize: true,
       },
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
       handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true },
@@ -536,16 +540,13 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     const series = seriesRef.current
     if (!series) return
 
-    event.stopPropagation()
-    event.preventDefault()
-
     const now = performance.now()
-    const isTouchDoubleTap = event.pointerType !== 'mouse' && now - priceAxisLastTapRef.current <= 360
+    const isSecondTap = event.pointerType !== 'mouse' && now - priceAxisLastTapRef.current <= 360
     priceAxisLastTapRef.current = now
 
-    if (isTouchDoubleTap) {
+    if (isSecondTap) {
       resetVerticalScale()
-      event.currentTarget.releasePointerCapture?.(event.pointerId)
+      event.preventDefault()
       return
     }
 
@@ -556,6 +557,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       bottom: margins.bottom,
     }
     event.currentTarget.setPointerCapture?.(event.pointerId)
+    event.preventDefault()
   }
 
   const handlePriceAxisPointerMove = (event: React.PointerEvent<HTMLDivElement>): void => {
@@ -564,26 +566,26 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     const element = containerRef.current
     if (!start || !series || !element) return
 
-    event.stopPropagation()
-    event.preventDefault()
-
     const delta = (event.clientY - start.startY) / Math.max(1, element.clientHeight)
+    const travel = delta * 0.34
 
-    // MetaTrader-style vertical-axis resizing: dragging downward compresses
-    // the candles; dragging upward expands them. The chart is not panned.
-    const marginDelta = delta * 0.45
-    const margin = Math.min(0.46, Math.max(0.02, start.top + marginDelta))
+    // Opposing margins translate the plotted price range vertically while
+    // keeping its height stable, matching the expected price-axis pan
+    // instead of progressively compressing the chart.
+    const top = Math.min(0.46, Math.max(0.02, start.top + travel))
+    const bottom = Math.min(0.46, Math.max(0.02, start.bottom - travel))
 
-    verticalScaleMarginsRef.current = { top: margin, bottom: margin }
+    if (top + bottom > 0.82) return
+
+    verticalScaleMarginsRef.current = { top, bottom }
     series.priceScale().applyOptions({
       autoScale: false,
-      scaleMargins: { top: margin, bottom: margin },
+      scaleMargins: { top, bottom },
     })
+    event.preventDefault()
   }
 
   const handlePriceAxisPointerUp = (event: React.PointerEvent<HTMLDivElement>): void => {
-    event.stopPropagation()
-    event.preventDefault()
     verticalScaleDragRef.current = null
     event.currentTarget.releasePointerCapture?.(event.pointerId)
   }
@@ -663,13 +665,12 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
 
   const cancelAlert = (): void => setAlertCandidate(null)
 
-  return <div ref={containerRef} onPointerDownCapture={handleChartPointerDown} onPointerMoveCapture={handleChartPointerMove} onPointerUpCapture={handleChartPointerUp} onPointerCancel={handleChartPointerCancel} onPointerDown={placeTool} className={`shafx-chart-shell relative w-full overflow-hidden border border-shafx-border bg-shafx-bg touch-pan-y ${['level', 'alert', 'measure'].includes(toolMode) ? 'cursor-crosshair' : ''} ${isFullscreen ? 'fixed inset-0 z-[200] h-[100dvh] w-screen' : ''}`} style={{ height: isFullscreen ? '100dvh' : height, minHeight: 280 }}>
+  return <div ref={containerRef} onPointerDownCapture={handleChartPointerDown} onPointerMoveCapture={handleChartPointerMove} onPointerUpCapture={handleChartPointerUp} onPointerCancel={handleChartPointerCancel} onPointerDown={placeTool} className={`shafx-chart-shell relative w-full overflow-hidden border border-shafx-border bg-shafx-bg overscroll-contain ${['level', 'alert', 'measure'].includes(toolMode) ? 'cursor-crosshair' : ''} ${isFullscreen ? 'fixed inset-0 z-[200] h-[100dvh] w-screen rounded-none border-0 shadow-none' : 'rounded-md'}`} style={{ height: isFullscreen ? '100dvh' : height, minHeight: 280 }}>
     <div className="pointer-events-none absolute left-3 top-3 z-10 hidden items-center gap-2 rounded-xl border border-shafx-border bg-shafx-bg/90 px-2.5 py-1.5 text-[9px] font-semibold backdrop-blur sm:flex"><span className="text-shafx-accent">SHAFX</span><span className="text-shafx-textMuted">•</span><span className="text-shafx-textMuted">{timeframe ?? 'PRICE'} workspace</span></div>
     <div className="pointer-events-none absolute right-3 top-3 z-10 hidden rounded-xl border border-shafx-border bg-shafx-bg/90 px-2.5 py-1.5 text-[9px] font-semibold text-shafx-text backdrop-blur sm:block">{meta.label} <span className="font-normal text-shafx-textMuted">• {meta.interval}</span></div>
     <div className="pointer-events-none absolute left-3 top-3 z-10 rounded-xl border border-shafx-border/70 bg-shafx-surface/88 px-2.5 py-1.5 shadow-md backdrop-blur">
-      <span className="text-[8px] font-semibold uppercase tracking-[0.12em] text-shafx-textMuted">{replayMode ? 'Replay' : (chartMode === 'candles' ? 'Candles' : chartMode === 'bars' ? 'Bars' : chartMode === 'wave' ? 'Wave' : 'Area')}</span>
-      {!replayMode && countdown !== null && <span className="ml-2 font-mono text-[9px] font-semibold tabular text-shafx-accent">Close {formatCountdown(countdown)}</span>}
-      {replayMode && <span className="ml-2 font-mono text-[9px] font-semibold tabular text-shafx-accent">Historical</span>}
+      <span className="text-[8px] font-semibold uppercase tracking-[0.12em] text-shafx-textMuted">{chartMode === 'candles' ? 'Candles' : chartMode === 'bars' ? 'Bars' : chartMode === 'wave' ? 'Wave' : 'Area'}</span>
+      {countdown !== null && <span className="ml-2 font-mono text-[9px] font-semibold tabular text-shafx-accent">Close {formatCountdown(countdown)}</span>}
     </div>
     <div className="absolute right-3 top-3 z-20 flex items-center gap-1">
       <div className="pointer-events-none hidden items-center gap-1 rounded-xl border border-shafx-border/70 bg-shafx-surface/85 px-1 py-0.5 shadow-md backdrop-blur sm:flex">
@@ -704,17 +705,17 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     </div>}
 
     <div
-      aria-label="Price scale"
-      className="absolute right-0 top-10 bottom-8 z-20 w-[82px] touch-none cursor-ns-resize sm:w-[96px]"
+      aria-label="Drag price scale to move the chart vertically"
+      title="Drag price scale up or down"
+      className="absolute right-0 top-12 bottom-7 z-20 w-[82px] touch-none cursor-ns-resize sm:w-[98px]"
       onPointerDown={handlePriceAxisPointerDown}
       onPointerMove={handlePriceAxisPointerMove}
       onPointerUp={handlePriceAxisPointerUp}
       onPointerCancel={handlePriceAxisPointerUp}
-      onDoubleClick={(event) => {
-        event.stopPropagation()
-        resetVerticalScale()
-      }}
-    />
+      onDoubleClick={resetVerticalScale}
+    >
+      <div className="pointer-events-none absolute inset-y-0 left-0 w-px bg-shafx-border/35" />
+    </div>
     {toolMode === 'crosshair' && crosshairInfo && <div className="pointer-events-none absolute left-3 bottom-3 z-20 rounded-xl border border-shafx-accent/25 bg-shafx-surface/95 px-3 py-2 text-[9px] shadow-xl"><span className="text-shafx-textMuted">Crosshair</span><strong className="ml-2 font-mono text-shafx-text">{crosshairInfo.price.toFixed(5)}</strong><span className="ml-2 text-shafx-textMuted">{crosshairInfo.time}</span></div>}
     {(toolMode === 'level' || toolMode === 'alert' || toolMode === 'measure') && <div className="pointer-events-none absolute bottom-3 left-3 z-10 flex items-center gap-2 rounded-xl border border-shafx-border bg-shafx-surface/95 px-3 py-2 text-[9px] text-shafx-textMuted shadow-xl"><Crosshair className="h-3.5 w-3.5 text-shafx-accent" />{toolMode === 'level' ? 'Tap chart to place a price level' : toolMode === 'alert' ? 'Tap chart, then confirm the alert price' : measureStart === null ? 'Tap first point to measure' : measureEnd === null ? 'Tap second point to finish' : 'Measure complete'}</div>}
     {alertCandidate !== null && <div className="absolute bottom-3 left-1/2 z-30 -translate-x-1/2 rounded-2xl border border-shafx-warning/30 bg-shafx-surface/98 px-3 py-3 shadow-2xl backdrop-blur"><div className="text-[9px] uppercase tracking-[0.14em] text-shafx-textMuted">Price alert</div><div className="mt-1 font-mono text-sm font-semibold text-shafx-text">{alertCandidate.toFixed(5)}</div><div className="mt-2 flex gap-2"><button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={armAlert} className="min-h-10 rounded-xl bg-shafx-warning px-3 text-[10px] font-semibold text-black">Arm alert</button><button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={cancelAlert} className="min-h-10 rounded-xl border border-shafx-border px-3 text-[10px] text-shafx-textMuted">Cancel</button></div></div>}
