@@ -39,7 +39,6 @@ const riskModes: Record<RiskMode, { label: string; percent: number; description:
 }
 type Phase = 'READY' | 'ANALYZING' | 'RUNNING'
 const SCAN_TIMEFRAMES: Timeframe[] = ['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1']
-const SCAN_SEQUENCE: Timeframe[] = ['M1', 'M5', 'M15', 'M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1', 'W1']
 const TIMEFRAME_SCAN_BONUS: Record<Timeframe, number> = { M1: 18, M5: 14, M15: 10, M30: 5, H1: 2, H4: 0, D1: -1, W1: -2 }
 const BOT_CYCLE_SECONDS = 10 as const
 const BOT_RESULT_DELAY_MS = BOT_CYCLE_SECONDS * 1000
@@ -169,7 +168,7 @@ function CircularProgress({ progress, label, value }: CircularProgressProps) {
             <span className="text-xs font-semibold text-shafx-text">{phase === 'ANALYZING' ? 'Checking the market…' : 'Watching for the next trade…'}</span>
             <span className="font-mono text-[9px] text-shafx-accent">{symbol}</span>
           </div>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-shafx-border"><div className="h-full rounded-full bg-shafx-accent transition-[width] duration-300" style={{ width: phase === 'ANALYZING' ? Math.max(8, botScanProgress) + '%' : '100%' }} /></div>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-shafx-border"><div className="h-full rounded-full bg-shafx-accent transition-[width] duration-300" style={{ width: phase === 'ANALYZING' ? '42%' : '100%' }} /></div>
           <p className="mt-2 text-[9px] text-shafx-textMuted">The bot checks multiple timeframes automatically before opening a simulated trade.</p>
         </div>
       )}
