@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Activity, AlertTriangle, Brain, Eye, Info, Shield, Target } from 'lucide-react'
+import { Activity, AlertTriangle, Brain, Eye, Shield, Target } from 'lucide-react'
 import { analyzeLiquidity } from '../../engine/liquidity'
 import { analyzeMarketStructure, findSwingPoints } from '../../engine/marketStructure'
 import { analyzeSetup } from '../../engine/setup'
