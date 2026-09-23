@@ -144,7 +144,6 @@ export function TradingAgentPanel({
   onBotOrder,
   onBotClose,
   onBotRunningChange,
-  onReviewSetup,
   scanM1Candles = [],
   botAutostartKey = 'shafx-bot-autostart',
 }: Props) {
