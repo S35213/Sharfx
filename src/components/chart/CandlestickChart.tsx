@@ -142,21 +142,6 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         rightOffset: 7,
         barSpacing: 3.5,
         minBarSpacing: 0.5,
-        tickMarkFormatter: (time) => {
-          const date = typeof time === 'number'
-            ? new Date(time * 1000)
-            : typeof time === 'string'
-              ? new Date(time + 'T00:00:00Z')
-              : new Date(Date.UTC(time.year, time.month - 1, time.day))
-          if (!Number.isFinite(date.getTime())) return null
-          const hasTime = date.getUTCHours() !== 0 || date.getUTCMinutes() !== 0
-          if (hasTime) return date.toISOString().slice(11, 16)
-          return String(date.getUTCDate()).padStart(2, '0') + ' ' + date.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' })
-        },
-      },
-      localization: {
-        locale: 'en-GB',
-        dateFormat: 'dd MMM yy',
       },
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
       handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true },
