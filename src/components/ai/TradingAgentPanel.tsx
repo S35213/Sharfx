@@ -28,6 +28,7 @@ interface Props {
   onBotClose?: (id: string, exitPrice?: number) => void | Promise<TradeOrder | null>
   onBotRunningChange?: (running: boolean) => void
   onReviewSetup?: (setup?: import('../../engine/setup/types').SetupCandidate | null) => void
+  onReviewOpportunity?: (timeframe: Timeframe, setup: import('../../engine/setup/types').SetupCandidate | null) => void
   scanM1Candles?: OHLCV[]
   botAutostartKey?: string
 }
@@ -185,6 +186,7 @@ export function TradingAgentPanel({
   onBotClose,
   onBotRunningChange,
   onReviewSetup,
+  onReviewOpportunity,
   scanM1Candles = [],
   botAutostartKey = 'shafx-bot-autostart',
 }: Props) {
@@ -1047,7 +1049,11 @@ export function TradingAgentPanel({
             {scanPhase === 'ANALYZING' ? 'Scanning market…' : scanComplete ? 'Rescan market' : 'Scan market'}
           </button>
           {onReviewSetup && (
-            <button type="button" disabled={!scanComplete || !selectedOpportunity?.executableSetup} onClick={() => onReviewSetup(selectedOpportunity?.executableSetup ?? null)} className="flex min-h-14 w-full items-center justify-center rounded-xl border border-shafx-success/25 bg-shafx-success/5 px-3 text-[10px] font-semibold text-shafx-success shadow-[0_8px_24px_rgba(34,211,165,.08)] disabled:cursor-not-allowed disabled:opacity-40">
+            <button type="button" disabled={!scanComplete || !selectedOpportunity?.executableSetup || (!onReviewOpportunity && !onReviewSetup)} onClick={() => {
+              if (!selectedOpportunity?.executableSetup) return
+              if (onReviewOpportunity) onReviewOpportunity(selectedOpportunity.timeframe, selectedOpportunity.executableSetup)
+              else onReviewSetup?.(selectedOpportunity.executableSetup)
+            }} className="flex min-h-14 w-full items-center justify-center rounded-xl border border-shafx-success/25 bg-shafx-success/5 px-3 text-[10px] font-semibold text-shafx-success shadow-[0_8px_24px_rgba(34,211,165,.08)] disabled:cursor-not-allowed disabled:opacity-40">
               Review ${selectedOpportunity?.timeframe ?? "selected"} ${selectedOpportunity?.executableSetup?.direction ?? ""} strategy
             </button>
           )}
