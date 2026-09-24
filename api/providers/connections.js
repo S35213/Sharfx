@@ -1,3 +1,4 @@
+import { apiRequestGuard } from '../../server/authSecurity.js'
 import {
   disconnectProviderConnection,
   getShafxUser,
@@ -114,6 +115,8 @@ const handleBinanceGet = async (req, res, user) => {
 }
 
 export default async function handler(req, res) {
+  const guard = await apiRequestGuard(req, 'api:provider-connections', 600)
+  if (!guard.allowed) return res.status(guard.status).json({ ok: false, error: guard.error, retryAfterSeconds: guard.retryAfterSeconds })
   const query = requestQuery(req)
   res.setHeader('Cache-Control', 'no-store')
   try {
