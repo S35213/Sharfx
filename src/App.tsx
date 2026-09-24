@@ -313,7 +313,7 @@ const TerminalContent: React.FC = () => {
         setMarketTimestamp(snapshot.timestamp)
         setCurrentPrice(snapshot.bid)
         scheduleTick()
-      }, delay)
+      }, 1000)
     }
 
     scheduleTick()
