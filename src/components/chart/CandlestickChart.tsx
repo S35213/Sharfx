@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { ColorType, createChart, type CandlestickData, type IChartApi, type IPriceLine, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts'
+import { ColorType, createChart, type CandlestickData, type IChartApi, type IPriceLine, type ISeriesApi, type Time, type UTCTimestamp } from 'lightweight-charts'
 import { Crosshair, Eraser, Maximize2, Minimize2, Ruler, RotateCcw } from 'lucide-react'
 import type { CandleTheme, ChartMode } from '../../app/chartSettings'
 import { TIMEFRAMES, type OHLCV, type Timeframe } from '../../types'
@@ -134,7 +134,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         rightOffset: 5,
         barSpacing: 5,
         minBarSpacing: 1,
-        tickMarkFormatter: (time) => {
+        tickMarkFormatter: (time: Time) => {
           const date = typeof time === 'number'
             ? new Date(time * 1000)
             : new Date(Date.UTC(time.year, time.month - 1, time.day))
