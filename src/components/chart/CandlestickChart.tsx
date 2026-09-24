@@ -116,6 +116,28 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     return () => document.removeEventListener('fullscreenchange', onFullscreenChange)
   }, [])
 
+  // A rotation into mobile landscape should return the terminal to normal document flow.
+  // Fullscreen remains an explicit action via the chart button.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const media = window.matchMedia('(orientation: landscape) and (max-width: 999px)')
+    const leaveBrowserFullscreenOnLandscape = (): void => {
+      if (!media.matches) return
+      if (document.fullscreenElement === containerRef.current) {
+        void document.exitFullscreen().catch(() => undefined)
+      }
+      setIsFullscreen(false)
+      setTimeframeMenuOpen(false)
+    }
+    leaveBrowserFullscreenOnLandscape()
+    media.addEventListener('change', leaveBrowserFullscreenOnLandscape)
+    window.addEventListener('orientationchange', leaveBrowserFullscreenOnLandscape)
+    return () => {
+      media.removeEventListener('change', leaveBrowserFullscreenOnLandscape)
+      window.removeEventListener('orientationchange', leaveBrowserFullscreenOnLandscape)
+    }
+  }, [])
+
   const verticalScaleDragRef = useRef<{ startY: number; top: number; bottom: number } | null>(null)
   const verticalScaleMarginsRef = useRef({ top: 0.08, bottom: 0.08 })
   const priceAxisLastTapRef = useRef<number>(0)
