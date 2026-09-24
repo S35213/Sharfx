@@ -1,3 +1,4 @@
+import { apiRequestGuard } from '../../server/authSecurity.js'
 import { isAdminConfigured, isValidSession } from '../../server/adminAuth.js'
 
 const rest = async (path) => fetch(process.env.SUPABASE_URL + '/rest/v1' + path, {
@@ -21,6 +22,8 @@ const connectionHealth = (row, now = Date.now()) => {
 }
 
 export default async function handler(req, res) {
+  const guard = await apiRequestGuard(req, 'api:admin-overview', 60)
+  if (!guard.allowed) return res.status(guard.status).json({ ok: false, error: guard.error, retryAfterSeconds: guard.retryAfterSeconds })
   if (req.method !== 'GET') return res.status(405).json({ ok: false, error: 'Method not allowed' })
   if (!isAdminConfigured() || !isValidSession(req)) return res.status(401).json({ ok: false, error: 'Owner authentication required' })
 
