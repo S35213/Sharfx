@@ -1,3 +1,4 @@
+import { apiRequestGuard } from '../../server/authSecurity.js'
 import { decryptSession, parseCookies, SESSION_COOKIE } from '../../lib/deriv/oauth.js'
 import {
   getProviderConnection,
@@ -40,6 +41,8 @@ const legacySession = (req) => {
 }
 
 export default async function handler(req, res) {
+  const guard = await apiRequestGuard(req, 'api:deriv-stream', 60)
+  if (!guard.allowed) return res.status(guard.status).json({ ok: false, error: guard.error, retryAfterSeconds: guard.retryAfterSeconds })
   if (req.method !== 'GET') return res.status(405).json({ ok: false, error: 'Method not allowed' })
   res.setHeader('Cache-Control', 'no-store')
 
