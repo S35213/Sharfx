@@ -1,4 +1,4 @@
-import { clearLoginFailures, loginGuard, recordLoginFailure, securityFingerprint, signupGuard } from '../server/authSecurity.js'
+import { clearLoginFailures, loginGuard, otpRequestGuard, otpVerifyGuard, recordLoginFailure, securityFingerprint, signupGuard } from '../server/authSecurity.js'
 
 const json = (res, status, body) => res.status(status).json(body)
 const configured = () => Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY && process.env.SUPABASE_SERVICE_ROLE_KEY)
@@ -30,6 +30,44 @@ export default async function handler(req, res) {
   try {
     if (action === 'logout') { const { user } = await currentUser(req, res); if (user) await securityEvent({ user_id: user.id, event_type: 'logout', decision: 'allow', risk_score: 0, fingerprint: securityFingerprint(req), metadata: {} }); clearSessionCookie(res); return json(res, 200, { ok: true }) }
     if (action === 'me') { const { user } = await currentUser(req, res); if (!user) return json(res, 401, { ok: false, error: 'Not signed in' }); const result = await publicUser(user); if (!result) return json(res, 403, { ok: false, error: 'SHAFX account profile is missing.' }); if (result.status !== 'active') { clearSessionCookie(res); return json(res, 403, { ok: false, error: result.status === 'banned' ? 'This SHAFX account has been banned.' : 'This SHAFX account is suspended.', status: result.status }) } return json(res, 200, { ok: true, user: result }) }
+    if (action === 'request-login-code') {
+      if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'Method not allowed' })
+      const body = typeof req.body === 'object' && req.body ? req.body : {}
+      const email = String(body.email || '').trim().toLowerCase()
+      if (!/^\\S+@\\S+\\.\\S+$/.test(email)) return json(res, 400, { ok: false, error: 'Enter a valid email address.' })
+      const guard = await otpRequestGuard(req, email)
+      if (!guard.allowed) return json(res, guard.status || 429, { ok: false, error: guard.error, retryAfterSeconds: guard.retryAfterSeconds })
+      const response = await supabase('/otp', { method: 'POST', body: JSON.stringify({ email, create_user: false }) })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) return json(res, response.status, { ok: false, error: authError(data, 'Unable to send the login code.') })
+      await securityEvent({ event_type: 'login_code_requested', decision: 'allow', risk_score: 0, fingerprint: securityFingerprint(req), metadata: { email_hash: securityFingerprint({ headers: { ...req.headers, 'x-forwarded-for': email } }) } })
+      return json(res, 200, { ok: true, message: 'A one-time login code has been sent to your email.' })
+    }
+
+    if (action === 'verify-email-code' || action === 'verify-login-code') {
+      if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'Method not allowed' })
+      const body = typeof req.body === 'object' && req.body ? req.body : {}
+      const email = String(body.email || '').trim().toLowerCase()
+      const token = String(body.code || '').trim()
+      if (!/^\\S+@\\S+\\.\\S+$/.test(email)) return json(res, 400, { ok: false, error: 'Enter a valid email address.' })
+      if (!/^\\d{6}$/.test(token)) return json(res, 400, { ok: false, error: 'Enter the 6-digit verification code from your email.' })
+      const guard = await otpVerifyGuard(req, email)
+      if (!guard.allowed) return json(res, guard.status || 429, { ok: false, error: guard.error, retryAfterSeconds: guard.retryAfterSeconds })
+      const response = await supabase('/verify', { method: 'POST', body: JSON.stringify({ email, token, type: 'email' }) })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok || !data.user) {
+        await securityEvent({ event_type: 'otp_verification_failed', decision: 'deny', risk_score: 35, fingerprint: securityFingerprint(req), metadata: { reason: String(data?.code || data?.error || 'invalid_code') } })
+        return json(res, 401, { ok: false, error: authError(data, 'That verification code is invalid or has expired. Request a new code and try again.') })
+      }
+      const result = await publicUser(data.user)
+      if (!result || result.status !== 'active') return json(res, 403, { ok: false, error: 'This SHAFX account is not active.' })
+      if (!data.access_token || !data.refresh_token) return json(res, 500, { ok: false, error: 'Verification succeeded but SHAFX did not receive a session. Please try again.' })
+      setSessionCookies(res, { access_token: data.access_token, refresh_token: data.refresh_token })
+      await updateSecurityProfile(data.user.id, { last_login_at: new Date().toISOString(), failed_login_count: 0 })
+      await securityEvent({ user_id: data.user.id, event_type: action === 'verify-login-code' ? 'login_code_verified' : 'signup_email_verified', decision: 'allow', risk_score: 0, fingerprint: securityFingerprint(req), metadata: {} })
+      return json(res, 200, { ok: true, user: result })
+    }
+
     if (action === 'reset-request') { if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'Method not allowed' }); const body = typeof req.body === 'object' && req.body ? req.body : {}; const email = String(body.email || '').trim().toLowerCase(); if (!/^\S+@\S+\.\S+$/.test(email)) return json(res, 400, { ok: false, error: 'Enter a valid email address.' }); const redirectTo = `${process.env.SHAfx_SITE_URL || 'https://shafx.vercel.app'}/?auth=reset`; const response = await supabase('/recover', { method: 'POST', body: JSON.stringify({ email, redirect_to: redirectTo }) }); const data = await response.json().catch(() => ({})); if (!response.ok) return json(res, response.status, { ok: false, error: authError(data, 'Unable to send the password reset email.') }); await securityEvent({ event_type: 'password_reset_requested', decision: 'allow', risk_score: 0, fingerprint: securityFingerprint(req), metadata: {} }); return json(res, 200, { ok: true, message: 'If that email belongs to a SHAFX account, a password reset email has been sent.' }) }
     if (action === 'update-password') { if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'Method not allowed' }); const body = typeof req.body === 'object' && req.body ? req.body : {}; const token = String(body.token || ''); const password = String(body.password || ''); if (!token) return json(res, 401, { ok: false, error: 'Password reset session is missing or expired. Request a new reset email.' }); if (password.length < 10) return json(res, 400, { ok: false, error: 'Password must be at least 10 characters.' }); const response = await supabase('/user', { method: 'PUT', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ password }) }); const data = await response.json().catch(() => ({})); if (!response.ok) return json(res, response.status, { ok: false, error: authError(data, 'Unable to change your password.') }); await securityEvent({ user_id: data.id, event_type: 'password_reset_completed', decision: 'allow', risk_score: 0, fingerprint: securityFingerprint(req), metadata: {} }); return json(res, 200, { ok: true, message: 'Password changed. You can now sign in to SHAFX.' }) }
     if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'Method not allowed' })
