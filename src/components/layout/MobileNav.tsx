@@ -52,7 +52,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({ activeTab, onChange }) => 
   }, [])
 
   return (
-    <nav aria-label="Terminal navigation" className={"shafx-mobile-nav " + (hidden ? 'fixed inset-x-0 bottom-0 z-[70] translate-y-full border-t border-shafx-border bg-[#080C12]/98 px-2 pb-[env(safe-area-inset-bottom)] shadow-[0_-18px_44px_rgba(0,0,0,.42)] backdrop-blur-xl transition-transform duration-300 ease-out lg:hidden' : 'fixed inset-x-0 bottom-0 z-[70] translate-y-0 border-t border-shafx-border bg-[#080C12]/98 px-2 pb-[env(safe-area-inset-bottom)] shadow-[0_-18px_44px_rgba(0,0,0,.42)] backdrop-blur-xl transition-transform duration-200 lg:hidden' : 'fixed inset-x-0 bottom-0 z-[70] translate-y-0 border-t border-shafx-border bg-[#080C12]/98 px-2 pb-[env(safe-area-inset-bottom)] shadow-[0_-18px_44px_rgba(0,0,0,.42)] backdrop-blur-xl lg:hidden')}>
+    <nav aria-label="Terminal navigation" className={"shafx-mobile-nav fixed inset-x-0 bottom-0 z-[70] border-t border-shafx-border bg-[#080C12]/98 px-2 pb-[env(safe-area-inset-bottom)] shadow-[0_-18px_44px_rgba(0,0,0,.42)] backdrop-blur-xl " + (hidden ? "translate-y-full transition-transform duration-300 ease-out" : "translate-y-0 transition-transform duration-200 ease-out") + " lg:hidden"}>
       <div className="mx-auto grid max-w-xl grid-cols-4 gap-1.5 px-1 py-1.5">
         {items.map(({ id, label, icon: Icon }) => {
           const active = activeTab === id
