@@ -62,7 +62,7 @@ const TerminalContent: React.FC = () => {
   const [currentPrice, setCurrentPrice] = useState(1.08542)
   const [simulatedPrice, setSimulatedPrice] = useState(1.08542)
   const [marketTimestamp, setMarketTimestamp] = useState<number>(0)
-  const marketWallClockRef = useRef<number>(Date.now())
+  const marketWallClockRef = useRef<number>(0)
   const [candles, setCandles] = useState<OHLCV[]>([])
   const [liveCandles, setLiveCandles] = useState<OHLCV[]>([])
   const [simulatedCandles, setSimulatedCandles] = useState<OHLCV[]>([])
@@ -297,6 +297,8 @@ const TerminalContent: React.FC = () => {
 
     let cancelled = false
     let timeout: number | null = null
+
+    marketWallClockRef.current = Date.now()
 
     const scheduleTick = (): void => {
       if (cancelled) return
