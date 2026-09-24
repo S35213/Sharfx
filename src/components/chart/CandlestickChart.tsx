@@ -141,9 +141,20 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
               ? new Date(time + 'T00:00:00Z')
               : new Date(Date.UTC(time.year, time.month - 1, time.day))
           if (!Number.isFinite(date.getTime())) return ''
-          if (date.getUTCHours() === 0 && date.getUTCMinutes() === 0) {
-            return String(date.getUTCDate()).padStart(2, '0') + ' ' + date.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' })
+          const hour = date.getUTCHours()
+          const minute = date.getUTCMinutes()
+          const day = String(date.getUTCDate()).padStart(2, '0')
+          const month = date.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' })
+          if (timeframe === 'D1' || timeframe === 'W1') {
+            return day + ' ' + month
           }
+          if (hour === 0 && minute === 0) {
+            return day + ' ' + month
+          }
+          // Match the MT5-style mobile time axis: intraday charts use the
+          // broker/server clock for each candle, with HH:mm precision. The
+          // platform may skip labels when space is tight, but every rendered
+          // candle remains on its true timeframe boundary.
           return date.toISOString().slice(11, 16)
         },
       },
