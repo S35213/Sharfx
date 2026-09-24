@@ -64,3 +64,41 @@ export const ShafxIntroMark: React.FC<{ className?: string }> = ({ className = '
     </svg>
   </div>
 )
+
+
+export type ShafxBrandTransitionKind = 'welcome' | 'goodbye'
+
+export const SHAFX_BRAND_TRANSITION_EVENT = 'shafx:brand-transition'
+
+export const triggerShafxBrandTransition = (kind: ShafxBrandTransitionKind): void => {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent<{ kind: ShafxBrandTransitionKind }>(SHAFX_BRAND_TRANSITION_EVENT, { detail: { kind } }))
+}
+
+export const ShafxBrandTransition: React.FC<{
+  kind: ShafxBrandTransitionKind
+  onDone: () => void
+}> = ({ kind, onDone }) => {
+  useEffect(() => {
+    const duration = 3150
+    const timer = window.setTimeout(onDone, duration)
+    return () => window.clearTimeout(timer)
+  }, [onDone])
+
+  const welcome = kind === 'welcome'
+  return (
+    <div className={`shafx-brand-transition ${welcome ? 'shafx-brand-transition--welcome' : 'shafx-brand-transition--goodbye'}`} role="status" aria-live="polite">
+      <div className="shafx-brand-transition__grid" />
+      <div className="shafx-brand-transition__scan" />
+      <div className="shafx-brand-transition__halo shafx-brand-transition__halo--one" />
+      <div className="shafx-brand-transition__halo shafx-brand-transition__halo--two" />
+      <div className="shafx-brand-transition__mark">
+        <ShafxIntroMark />
+      </div>
+      <div className="shafx-brand-transition__word"><ShafxWordmark /></div>
+      <div className="shafx-brand-transition__headline">{welcome ? 'WELCOME TO SHARFX' : 'GOODBYE'}</div>
+      <div className="shafx-brand-transition__subline">{welcome ? 'SECURE SESSION ESTABLISHED' : 'SESSION CLOSED • SEE YOU AGAIN'}</div>
+      <div className="shafx-brand-transition__progress" />
+    </div>
+  )
+}

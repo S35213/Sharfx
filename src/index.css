@@ -179,3 +179,173 @@ input::placeholder { color: #667285; }
   .shafx-brand-intro, .shafx-brand-intro * { animation: none !important; transition: none !important; }
   .shafx-brand-intro { opacity: 0; visibility: hidden; pointer-events: none; }
 }
+
+
+/* SHARFX auth/session cinematic transitions */
+.shafx-brand-transition {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 44%, rgba(0, 191, 255, .12), transparent 25%),
+    radial-gradient(circle at 50% 58%, rgba(255, 132, 0, .09), transparent 32%),
+    #04070B;
+  color: #F4F8FC;
+  isolation: isolate;
+  animation: shafx-transition-fade-in .34s ease-out both;
+}
+.shafx-brand-transition::after {
+  content: "";
+  position: absolute;
+  inset: 8%;
+  border: 1px solid rgba(42,141,255,.08);
+  box-shadow: inset 0 0 100px rgba(0,0,0,.32), 0 0 70px rgba(0,164,255,.05);
+  pointer-events: none;
+}
+.shafx-brand-transition__grid {
+  position: absolute;
+  inset: -30%;
+  opacity: .36;
+  background-image:
+    linear-gradient(rgba(34, 150, 255, .055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34, 150, 255, .055) 1px, transparent 1px);
+  background-size: 34px 34px;
+  transform: perspective(900px) rotateX(63deg) translateY(18%);
+  animation: shafx-transition-grid 3.15s ease-out both;
+}
+.shafx-brand-transition__scan {
+  position: absolute;
+  inset: -25% -15%;
+  background: linear-gradient(110deg, transparent 41%, rgba(0, 205, 255, .15) 49%, rgba(255, 158, 0, .16) 51%, transparent 59%);
+  transform: translateX(-85%);
+  mix-blend-mode: screen;
+  animation: shafx-transition-scan 2.15s .18s cubic-bezier(.2,.8,.2,1) both;
+}
+.shafx-brand-transition__halo {
+  position: absolute;
+  width: min(58vw, 500px);
+  height: min(58vw, 500px);
+  border-radius: 50%;
+  border: 1px solid rgba(18, 170, 255, .08);
+  box-shadow: 0 0 80px rgba(0,155,255,.06), inset 0 0 70px rgba(0,155,255,.04);
+  opacity: 0;
+}
+.shafx-brand-transition__halo--one { animation: shafx-halo-one 2.6s .12s ease-out both; }
+.shafx-brand-transition__halo--two { width: min(34vw, 320px); height: min(34vw, 320px); animation: shafx-halo-two 2.25s .45s ease-out both; border-color: rgba(255,154,0,.11); }
+.shafx-brand-transition__mark {
+  position: absolute;
+  width: min(48vw, 330px);
+  height: min(48vw, 330px);
+  top: 23%;
+  left: 50%;
+  transform: translateX(-50%);
+  filter: drop-shadow(0 0 30px rgba(0,170,255,.24));
+  animation: shafx-transition-mark 1.65s .10s cubic-bezier(.18,.9,.18,1) both;
+}
+.shafx-brand-transition__word {
+  position: absolute;
+  left: 50%;
+  top: 55%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  opacity: 0;
+  animation: shafx-transition-word .82s .82s cubic-bezier(.18,.85,.2,1) both;
+}
+.shafx-brand-transition__headline {
+  position: absolute;
+  left: 50%;
+  top: 69%;
+  width: 100%;
+  padding: 0 18px;
+  transform: translateX(-50%);
+  text-align: center;
+  font-size: clamp(17px, 3vw, 34px);
+  font-weight: 800;
+  letter-spacing: .20em;
+  text-indent: .20em;
+  text-transform: uppercase;
+  opacity: 0;
+  animation: shafx-transition-headline .72s 1.25s ease-out both;
+}
+.shafx-brand-transition__subline {
+  position: absolute;
+  left: 50%;
+  top: 76%;
+  width: 100%;
+  padding: 0 18px;
+  transform: translateX(-50%);
+  text-align: center;
+  color: rgba(215,224,234,.58);
+  font-size: clamp(7px, 1vw, 10px);
+  letter-spacing: .30em;
+  text-transform: uppercase;
+  opacity: 0;
+  animation: shafx-transition-subline .62s 1.52s ease-out both;
+}
+.shafx-brand-transition__progress {
+  position: absolute;
+  left: 50%;
+  bottom: 11%;
+  width: min(50vw, 300px);
+  height: 1px;
+  transform: translateX(-50%) scaleX(0);
+  transform-origin: center;
+  background: linear-gradient(90deg, transparent, #16C8FF 35%, #FF9B00 65%, transparent);
+  box-shadow: 0 0 18px rgba(0,195,255,.35);
+  animation: shafx-transition-progress 1.4s 1.22s ease-out both;
+}
+.shafx-brand-transition--goodbye .shafx-brand-transition__mark { animation-duration: 1.35s; }
+.shafx-brand-transition--goodbye .shafx-brand-transition__word { animation-delay: .68s; }
+.shafx-brand-transition--goodbye .shafx-brand-transition__headline { animation-delay: 1.08s; }
+.shafx-brand-transition--goodbye .shafx-brand-transition__subline { animation-delay: 1.34s; }
+
+@keyframes shafx-transition-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes shafx-transition-grid {
+  from { transform: perspective(900px) rotateX(63deg) translateY(26%) scale(1.08); opacity: 0; }
+  to { transform: perspective(900px) rotateX(63deg) translateY(8%) scale(1); opacity: .36; }
+}
+@keyframes shafx-transition-scan {
+  from { transform: translateX(-85%); opacity: 0; }
+  18% { opacity: 1; }
+  to { transform: translateX(85%); opacity: .75; }
+}
+@keyframes shafx-halo-one {
+  0% { opacity: 0; transform: scale(.7); }
+  45% { opacity: .8; }
+  100% { opacity: 0; transform: scale(1.18); }
+}
+@keyframes shafx-halo-two {
+  0% { opacity: 0; transform: scale(.5); }
+  45% { opacity: .55; }
+  100% { opacity: 0; transform: scale(1.12); }
+}
+@keyframes shafx-transition-mark {
+  0% { opacity: 0; transform: translateX(-50%) scale(.62) rotate(-11deg); }
+  55% { opacity: 1; transform: translateX(-50%) scale(1.05) rotate(2deg); }
+  100% { opacity: 1; transform: translateX(-50%) scale(1) rotate(0); }
+}
+@keyframes shafx-transition-word {
+  0% { opacity: 0; transform: translate(-50%, 24px) scale(.94); letter-spacing: .36em; }
+  100% { opacity: 1; transform: translate(-50%, 0) scale(1); letter-spacing: .12em; }
+}
+@keyframes shafx-transition-headline {
+  0% { opacity: 0; transform: translate(-50%, 16px); filter: blur(5px); }
+  100% { opacity: 1; transform: translate(-50%, 0); filter: blur(0); }
+}
+@keyframes shafx-transition-subline {
+  0% { opacity: 0; transform: translate(-50%, 10px); }
+  100% { opacity: 1; transform: translate(-50%, 0); }
+}
+@keyframes shafx-transition-progress {
+  0% { transform: translateX(-50%) scaleX(0); }
+  100% { transform: translateX(-50%) scaleX(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shafx-brand-transition, .shafx-brand-transition * {
+    animation-duration: .01ms !important;
+    animation-delay: 0ms !important;
+  }
+}

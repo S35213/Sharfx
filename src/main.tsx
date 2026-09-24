@@ -2,7 +2,7 @@ import { Component, StrictMode, Suspense, lazy, useEffect, useState, type ErrorI
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import { AuthProvider, useAuth } from './app/AuthContext'
-import { AccountAccessGate } from './components/account/AccountAccessGate'
+import { AccountAccessGate } from './components/account/AccountAccessGate'\nimport { SHAFX_BRAND_TRANSITION_EVENT, ShafxBrandTransition, type ShafxBrandTransitionKind } from './components/brand/ShafxBrand'
 import { clearSessionTradingMode, getStoredTradingMode, type TradingMode } from './app/tradingMode'
 
 const App = lazy(() => import('./App'))
@@ -73,7 +73,7 @@ const EntryGate = () => {
 
   const previewMode = new URLSearchParams(window.location.search).get('preview') === '1'
 
-  if (previewMode) return (
+  if (brandTransition) {\n    return <><ShafxBrandTransition kind={brandTransition} onDone={() => setBrandTransition(null)} /><div className={brandTransition ? 'pointer-events-none' : ''}><AccountAccessGate onEnterTerminal={setMode} /></div></>\n  }\n\n  if (previewMode) return (
     <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-[#070A0F] text-sm text-[#8A93A3]">Loading SHAFX workspace…</div>}>
       <App />
     </Suspense>

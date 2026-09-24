@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { ArrowRight, Bot, KeyRound, LockKeyhole, LogIn, ShieldCheck, Sparkles, UserPlus } from 'lucide-react'
 import { useAuth } from '../../app/AuthContext'
-import { ShafxIntroMark, ShafxBrandMark, ShafxWordmark } from '../brand/ShafxBrand'
+import { ShafxIntroMark, ShafxBrandMark, ShafxWordmark, triggerShafxBrandTransition } from '../brand/ShafxBrand'
 
 type FormMode = 'signin' | 'signup'
 
@@ -18,7 +18,7 @@ async function publicAuthRequest(action: string, body: Record<string, unknown>) 
 }
 
 export const PublicWelcome: React.FC = () => {
-  const [brandIntroVisible, setBrandIntroVisible] = useState(true)
+  const [brandIntroVisible, setBrandIntroVisible] = useState(() => {\n    if (typeof window === 'undefined') return true\n    try {\n      const suppressed = window.sessionStorage.getItem('shafx-suppress-landing-intro') === '1'\n      if (suppressed) window.sessionStorage.removeItem('shafx-suppress-landing-intro')\n      return !suppressed\n    } catch {\n      return true\n    }\n  })
 
   useEffect(() => {
     const timer = window.setTimeout(() => setBrandIntroVisible(false), 2850)
