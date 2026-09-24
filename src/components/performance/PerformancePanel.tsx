@@ -96,7 +96,6 @@ export function PerformancePanel({ tradeHistory, currency, showTrades = false, c
       </div>
     ) : (
       <div className="mt-3 space-y-3">
-      <div className="mt-3 space-y-3">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <Metric label="Net P/L" value={formatCurrency(stats.net, currency)} positive={stats.net >= 0} />
           <Metric label="Win rate" value={formatPercent(stats.winRate)} />
