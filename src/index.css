@@ -14,7 +14,7 @@
 * { box-sizing: border-box; }
 html, body, #root { min-height: 100%; margin: 0; }
 html, body { min-width: 320px; min-height: 100svh; background: #070A0F; font-family: Arial, Helvetica, sans-serif; }
-body { overflow: hidden; }
+body { overflow-x: hidden; overflow-y: auto; }
 .shafx-chart-stage { height: clamp(420px, 70svh, 760px); max-height: 760px; }
 button, input, select { font: inherit; }
 button { -webkit-tap-highlight-color: transparent; }
@@ -40,7 +40,7 @@ input::placeholder { color: #667285; }
     overflow-y: auto;
     height: auto;
     min-height: 100%;
-    overscroll-behavior-y: contain;
+    overscroll-behavior-y: auto;
   }
   #root {
     height: auto;
@@ -66,19 +66,28 @@ input::placeholder { color: #667285; }
     height: auto;
     overflow: visible;
   }
+  /* Keep the workspace in normal document flow in landscape. */
   .shafx-terminal-root .shafx-landscape-secondary {
-    display: none !important;
+    display: block !important;
   }
   .shafx-terminal-root .shafx-chart-stage {
     flex: none;
     width: 100%;
-    height: clamp(340px, 78svh, 620px);
+    height: max(340px, calc(100svh - 64px));
     min-height: 340px;
     max-height: none;
     padding: 2px;
   }
   .shafx-terminal-root .shafx-mobile-nav {
     display: none !important;
+  }
+  .shafx-terminal-root main.shafx-mobile-content,
+  .shafx-terminal-root .shafx-market-section,
+  .shafx-terminal-root .shafx-chart-stage {
+    touch-action: auto;
+  }
+  .shafx-terminal-root .shafx-chart-shell:not(.fixed) {
+    touch-action: pan-y;
   }
   .shafx-terminal-root .shafx-chart-shell {
     min-height: 0 !important;
