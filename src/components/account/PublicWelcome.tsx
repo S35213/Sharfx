@@ -48,7 +48,7 @@ export const PublicWelcome: React.FC = () => {
   const [website, setWebsite] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
-  const { signIn, signUp, requestLoginCode, verifyEmailCode, error } = useAuth()
+  const { signUp, requestLoginCode, verifyEmailCode, error } = useAuth()
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -91,7 +91,7 @@ export const PublicWelcome: React.FC = () => {
         setResetPassword('')
         setResetConfirm('')
       } else if (verificationStep !== 'none') {
-        if (!/^\\d{6}$/.test(verificationCode)) { setMessage('Enter the 6-digit code from your email.'); return }
+        if (!/^\d{6}$/.test(verificationCode)) { setMessage('Enter the 6-digit code from your email.'); return }
         await verifyEmailCode({ email, code: verificationCode, purpose: verificationStep })
         setVerificationStep('none')
         setVerificationCode('')
@@ -135,7 +135,7 @@ export const PublicWelcome: React.FC = () => {
             {resetToken ? <><input value={resetPassword} onChange={(event) => setResetPassword(event.target.value)} type="password" autoComplete="new-password" required minLength={10} placeholder="New password" className="min-h-12 w-full rounded-xl border border-shafx-border bg-shafx-surface px-4 text-sm outline-none focus:border-shafx-accent" /><input value={resetConfirm} onChange={(event) => setResetConfirm(event.target.value)} type="password" autoComplete="new-password" required minLength={10} placeholder="Confirm new password" className="min-h-12 w-full rounded-xl border border-shafx-border bg-shafx-surface px-4 text-sm outline-none focus:border-shafx-accent" /><button disabled={submitting} type="submit" className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-shafx-accent px-4 text-sm font-semibold text-white disabled:opacity-60"><KeyRound className="h-4 w-4" />{submitting ? 'Updating…' : 'Update password'}</button></> : forgotMode ? <><input value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" required placeholder="Email address" className="min-h-12 w-full rounded-xl border border-shafx-border bg-shafx-surface px-4 text-sm outline-none focus:border-shafx-accent" /><button disabled={submitting} type="submit" className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-shafx-accent px-4 text-sm font-semibold text-white disabled:opacity-60"><KeyRound className="h-4 w-4" />{submitting ? 'Sending…' : 'Send reset link'}</button></> : <>
               {verificationStep !== 'none' ? <>
               <input value={email} readOnly type="email" autoComplete="email" required placeholder="Email address" className="min-h-12 w-full rounded-xl border border-shafx-border bg-shafx-surface px-4 text-sm outline-none opacity-80" />
-              <input value={verificationCode} onChange={(event) => setVerificationCode(event.target.value.replace(/\\D/g, '').slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" pattern="\\d{6}" required placeholder="6-digit verification code" className="min-h-12 w-full rounded-xl border border-shafx-border bg-shafx-surface px-4 text-center text-lg font-mono tracking-[0.35em] outline-none focus:border-shafx-accent" />
+              <input value={verificationCode} onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" pattern="\d{6}" required placeholder="6-digit verification code" className="min-h-12 w-full rounded-xl border border-shafx-border bg-shafx-surface px-4 text-center text-lg font-mono tracking-[0.35em] outline-none focus:border-shafx-accent" />
               <button disabled={submitting} type="submit" className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-shafx-accent px-4 text-sm font-semibold text-white disabled:opacity-60"><KeyRound className="h-4 w-4" />{submitting ? 'Verifying…' : 'Verify code'}</button>
               <button type="button" disabled={submitting || verificationStep !== 'login'} onClick={async () => { if (verificationStep !== 'login') return; try { setSubmitting(true); setMessage(null); const result = await requestLoginCode(email); setMessage(result.message || 'A new login code has been sent.'); } catch (err) { setMessage(err instanceof Error ? err.message : 'Unable to send another code.'); } finally { setSubmitting(false) } }} className="w-full py-1 text-[11px] text-shafx-textMuted hover:text-shafx-accent disabled:opacity-50">Resend login code</button>
               <button type="button" onClick={() => { setVerificationStep('none'); setVerificationCode(''); setMessage(null) }} className="w-full py-1 text-[11px] text-shafx-textMuted hover:text-shafx-accent">Use a different email</button>
