@@ -141,20 +141,12 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
               ? new Date(time + 'T00:00:00Z')
               : new Date(Date.UTC(time.year, time.month - 1, time.day))
           if (!Number.isFinite(date.getTime())) return ''
-          const hour = date.getUTCHours()
-          const minute = date.getUTCMinutes()
           const day = String(date.getUTCDate()).padStart(2, '0')
           const month = date.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' })
-          if (timeframe === 'D1' || timeframe === 'W1') {
-            return day + ' ' + month
-          }
-          if (hour === 0 && minute === 0) {
-            return day + ' ' + month
-          }
-          // Match the MT5-style mobile time axis: intraday charts use the
-          // broker/server clock for each candle, with HH:mm precision. The
-          // platform may skip labels when space is tight, but every rendered
-          // candle remains on its true timeframe boundary.
+          // Intraday charts stay on a clock timeline. Calendar dates are only
+          // shown on daily/weekly charts, preventing H1/H4 from displaying
+          // misleading September/October date labels.
+          if (timeframe === 'D1' || timeframe === 'W1') return day + ' ' + month
           return date.toISOString().slice(11, 16)
         },
       },
@@ -684,9 +676,24 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     <div className="pointer-events-none absolute left-3 top-3 z-10 hidden items-center gap-2 rounded-xl border border-shafx-border bg-shafx-bg/90 px-2.5 py-1.5 text-[9px] font-semibold backdrop-blur sm:flex"><span className="text-shafx-accent">SHAFX</span><span className="text-shafx-textMuted">•</span><span className="text-shafx-textMuted">{timeframe ?? 'PRICE'} workspace</span></div>
     <div className="pointer-events-none absolute right-3 top-3 z-10 hidden rounded-xl border border-shafx-border bg-shafx-bg/90 px-2.5 py-1.5 text-[9px] font-semibold text-shafx-text backdrop-blur sm:block">{meta.label} <span className="font-normal text-shafx-textMuted">• {meta.interval}</span></div>
     <div className="pointer-events-none absolute left-3 top-3 z-10 rounded-xl border border-shafx-border/70 bg-shafx-surface/88 px-2.5 py-1.5 shadow-md backdrop-blur">
-      <span className="text-[8px] font-semibold uppercase tracking-[0.12em] text-shafx-textMuted">{replayMode ? 'Replay' : (chartMode === 'candles' ? 'Candles' : chartMode === 'bars' ? 'Bars' : chartMode === 'wave' ? 'Wave' : 'Area')}</span>
-      {!replayMode && countdown !== null && <span className="ml-2 font-mono text-[9px] font-semibold tabular text-shafx-accent">Close {formatCountdown(countdown)}</span>}
-      {replayMode && <span className="ml-2 font-mono text-[9px] font-semibold tabular text-shafx-accent">Historical</span>}
+      <div className="flex items-center gap-2">
+        <span className="text-[8px] font-semibold uppercase tracking-[0.12em] text-shafx-textMuted">{replayMode ? 'Replay' : (chartMode === 'candles' ? 'Candles' : chartMode === 'bars' ? 'Bars' : chartMode === 'wave' ? 'Wave' : 'Area')}</span>
+        {timeframe && !replayMode && <span className="font-mono text-[9px] font-bold tabular text-shafx-text">{(() => {
+          const seconds = Number(marketTimestamp)
+          const interval = timeframeSeconds[timeframe]
+          if (!Number.isFinite(seconds) || !interval) return '—'
+          const start = timeframe === 'W1' ? weekStart(seconds) : Math.floor(seconds / interval) * interval
+          const end = start + interval
+          const format = (value: number): string => {
+            const date = new Date(value * 1000)
+            if (timeframe === 'D1' || timeframe === 'W1') return String(date.getUTCDate()).padStart(2, '0') + ' ' + date.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' })
+            return date.toISOString().slice(11, 16)
+          }
+          return format(start) + ' → ' + format(end)
+        })()}</span>}
+        {!replayMode && countdown !== null && <span className="font-mono text-[8px] font-semibold tabular text-shafx-accent">Close {formatCountdown(countdown)}</span>}
+        {replayMode && <span className="font-mono text-[9px] font-semibold tabular text-shafx-accent">Historical</span>}
+      </div>
     </div>
     <div className="absolute right-3 top-3 z-20 flex items-center gap-1">
       <div className="pointer-events-none hidden items-center gap-1 rounded-xl border border-shafx-border/70 bg-shafx-surface/85 px-1 py-0.5 shadow-md backdrop-blur sm:flex">
