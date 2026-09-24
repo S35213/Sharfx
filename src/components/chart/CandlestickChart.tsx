@@ -692,7 +692,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
           }
           return format(start) + ' → ' + format(end)
         })()}</span>}
-        {!replayMode && marketTimestamp > 0 && <span className="rounded-md border border-shafx-success/20 bg-shafx-success/5 px-1.5 py-0.5 font-mono text-[8px] font-semibold tabular text-shafx-success">NOW {new Date(Number(marketTimestamp) * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</span>}
+        {!replayMode && Number(marketTimestamp) > 0 && <span className="rounded-md border border-shafx-success/20 bg-shafx-success/5 px-1.5 py-0.5 font-mono text-[8px] font-semibold tabular text-shafx-success">NOW {new Date(Number(marketTimestamp) * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</span>}
         {!replayMode && countdown !== null && <span className="font-mono text-[8px] font-semibold tabular text-shafx-accent">Close {formatCountdown(countdown)}</span>}
         {replayMode && <span className="font-mono text-[9px] font-semibold tabular text-shafx-accent">Historical</span>}
       </div>
