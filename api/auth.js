@@ -66,6 +66,7 @@ export default async function handler(req, res) {
     if (action === 'me') { const { user } = await currentUser(req, res); if (!user) return json(res, 401, { ok: false, error: 'Not signed in' }); const result = await publicUser(user); if (!result) return json(res, 403, { ok: false, error: 'SHAFX account profile is missing.' }); if (result.status !== 'active') { clearSessionCookie(res); return json(res, 403, { ok: false, error: result.status === 'banned' ? 'This SHAFX account has been banned.' : 'This SHAFX account is suspended.', status: result.status }) } return json(res, 200, { ok: true, user: result }) }
     if (action === 'request-login-code') {
       if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'Method not allowed' })
+      const body = typeof req.body === 'object' && req.body ? req.body : {}
       const challenge = decodeChallenge(cookie(req, loginChallengeCookie))
       if (!challenge) return json(res, 409, { ok: false, error: 'Your login verification step has expired. Enter your email and password again.' })
       const email = String(body.email || '').trim().toLowerCase()
