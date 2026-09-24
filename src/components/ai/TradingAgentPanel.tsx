@@ -96,7 +96,7 @@ const buildScanCandidates = (
     const liquidity = analyzeLiquidity(frameCandles, swings, tolerance)
     const framePrice = frameCandles[frameCandles.length - 1]?.close ?? currentPrice
     const setupResult = analyzeSetup({ currentPrice: framePrice, structure, supportResistance, liquidity })
-    const preferredSetup = setupResult.preferredSetup ?? buildFallbackSetup(frameCandles, symbol, framePrice, 5)
+    const preferredSetup = setupResult.preferredSetup ?? buildFallbackSetup(frameCandles, symbol, framePrice, symbol.includes('JPY') ? 3 : 5)
     if (!preferredSetup || preferredSetup.status !== 'candidate') return []
     const context = buildTradingContext(symbol, scanTimeframe, frameCandles, structure, supportResistance, liquidity, {
       ...setupResult,
@@ -864,7 +864,7 @@ export function TradingAgentPanel({
               <span className="font-mono">{botRunLotSize?.toFixed(2) ?? lotSize} lot/run</span>
             </div>
             <div className="flex items-center justify-between gap-2">
-              <span>{botRiskCalc?.isValid ? 'Account affordability ceiling' : 'Account-fit calculation waiting for setup'}</span>
+              <span>Account affordability ceiling</span>
               <span className={lotFitsAccount ? 'font-mono text-shafx-success' : 'font-mono text-shafx-danger'}>{accountMarginLotCeiling > 0 ? accountMarginLotCeiling.toFixed(2) + ' lot max' : '—'}</span>
             </div>
           </div>
