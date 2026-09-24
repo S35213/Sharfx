@@ -253,7 +253,7 @@ export function TradingAgentPanel({
   const activeBotScan = fastScanCandidates[0] ?? null
   const marketReadRows = useMemo(() => SCAN_TIMEFRAMES.map((scanTimeframe) => {
     const frameCandles = timeframeFrames[scanTimeframe] ?? []
-    if (frameCandles.length < 5) return { timeframe: scanTimeframe, bias: 'Neutral' as const, structure: 'Insufficient data', directionalOpportunity: false, executableSetup: null }
+    if (frameCandles.length < 5) return { timeframe: scanTimeframe, bias: 'Unclear' as const, structure: 'Insufficient data', flow: 'UNCLEAR', directionalOpportunity: false, executableSetup: null }
     const swings = findSwingPoints(frameCandles, 2)
     const structure = analyzeMarketStructure(frameCandles, 2)
     const tolerance = symbol.includes('JPY') ? 0.1 : 0.001
@@ -270,7 +270,6 @@ export function TradingAgentPanel({
       executableSetup,
     }
   }), [currentPrice, symbol, timeframeFrames, scanSnapshot])
-  const marketOpportunities = marketReadRows.filter((row) => row.directionalOpportunity)
   const executableOpportunities = marketReadRows.filter((row) => row.executableSetup)
   const topOpportunities = executableOpportunities
     .slice()
