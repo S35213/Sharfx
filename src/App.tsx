@@ -670,7 +670,7 @@ const TerminalContent: React.FC = () => {
 
       <aside className="hidden w-[clamp(210px,20vw,280px)] min-w-0 flex-shrink-0 flex-col gap-3 border-r border-shafx-border bg-shafx-surface/40 p-3 lg:flex lg:overflow-y-auto">
         <Watchlist pairs={watchlist} selectedPair={selectedSymbol} onSelectPair={setSelectedSymbol} />
-        <AccountPanel account={accountData} />
+        <AccountPanel account={accountData} activeProviderSelection={activeProviderSelection} brokerMode={brokerMode} />
         {brokerMode && activeProviderId === 'deriv' && <DerivCashierLinks />}
       </aside>
 
