@@ -48,33 +48,37 @@ const BOT_START_DELAY_MS = 1000 as const
 const BOT_RESULT_DISPLAY_MS = 1000 as const
 const SIMULATOR_LEVERAGE = 100
 
-const buildFallbackSetup = (frameCandles: OHLCV[], symbol: string, currentPrice: number, precision: number): import('../../engine/setup/types').SetupCandidate | null => {
-  if (frameCandles.length < 5) return null
-  const latest = frameCandles[frameCandles.length - 1]
-  const previous = frameCandles[frameCandles.length - 2]
-  if (!latest || !previous) return null
-  const momentum = Math.sign(latest.close - previous.close)
-  const recentStart = frameCandles[Math.max(0, frameCandles.length - 5)]?.close ?? latest.close
-  const trend = Math.sign(latest.close - recentStart)
-  const direction = trend !== 0 ? trend : momentum
-  if (direction === 0) return null
-  const buy = direction > 0
+const buildFallbackSetup = (frameCandles: OHLCV[], structureBias: 'Bullish' | 'Bearish' | 'Sideways' | 'Unclear', symbol: string, currentPrice: number, precision: number): import('../../engine/setup/types').SetupCandidate | null => {
+  if ((structureBias !== 'Bullish' && structureBias !== 'Bearish') || frameCandles.length < 8) return null
+  const recent = frameCandles.slice(-8)
+  const latest = recent[recent.length - 1]
+  if (!latest) return null
+  const buy = structureBias === 'Bullish'
+  const directionSign = buy ? 1 : -1
+  const alignedBars = recent.filter((candle) => {
+    const bodyDirection = Math.sign(candle.close - candle.open)
+    return bodyDirection === directionSign || bodyDirection === 0
+  }).length
+  const consistency = alignedBars / recent.length
+  const prior = recent[0]?.close ?? latest.close
+  const move = latest.close - prior
   const pipSize = symbol.includes('JPY') ? 0.01 : 0.0001
   const stopDistance = pipSize * 30
   const rewardDistance = pipSize * 50
   const entryPrice = Number((latest.close || currentPrice).toFixed(precision))
+  const confidence = Math.min(89, Math.max(55, Math.round(54 + consistency * 22 + (Math.sign(move) === directionSign ? 7 : 0))))
   return {
     direction: buy ? 'BUY' : 'SELL',
     status: 'candidate',
-    quality: 'weak',
+    quality: consistency >= 0.75 ? 'moderate' : 'weak',
     entryPrice,
     stopLoss: Number((entryPrice + (buy ? -stopDistance : stopDistance)).toFixed(precision)),
     takeProfit: Number((entryPrice + (buy ? rewardDistance : -rewardDistance)).toFixed(precision)),
     riskRewardRatio: 50 / 30,
     riskDistance: stopDistance,
     rewardDistance,
-    confidence: 52 + (momentum === trend ? 8 : 0),
-    rationale: ['Directional momentum was detected on this timeframe.', 'No strict setup was required for this scanner opportunity; review the strategy before placing a simulated order.'],
+    confidence,
+    rationale: ['Market structure is directional on this timeframe.', `Recent candle direction aligned ${Math.round(consistency * 100)}% with the structural flow.`],
     invalidation: 'The simulated stop loss invalidates this setup.',
     liquidityTarget: null,
   }
@@ -207,6 +211,7 @@ export function TradingAgentPanel({
   const [scanComplete, setScanComplete] = useState(false)
   const [scanNonce, setScanNonce] = useState(0)
   const [scanSnapshot, setScanSnapshot] = useState(0)
+  const [selectedOpportunityTimeframe, setSelectedOpportunityTimeframe] = useState<Timeframe | null>(null)
   const [lastResult, setLastResult] = useState<'WIN' | 'LOSS' | 'WAIT' | null>(null)
   const [lastProfit, setLastProfit] = useState<number | null>(null)
   const [status, setStatus] = useState('Ready to scan')
@@ -265,13 +270,18 @@ export function TradingAgentPanel({
   }), [currentPrice, symbol, timeframeFrames, scanSnapshot])
   const marketOpportunities = marketReadRows.filter((row) => row.directionalOpportunity)
   const executableOpportunities = marketReadRows.filter((row) => row.executableSetup)
+  const topOpportunities = executableOpportunities
+    .slice()
+    .sort((a, b) => (b.executableSetup?.confidence ?? 0) - (a.executableSetup?.confidence ?? 0))
+    .slice(0, 2)
   const activeBotOrder = activePosition && botOrderIds.includes(activePosition.id) ? activePosition : null
 
   const learning = useMemo(() => learnFromTrades(tradeHistory.filter((trade) => trade.status === 'closed').map((trade) => ({ symbol: trade.symbol, direction: trade.type, profit: trade.profit, riskRewardRatio: trade.riskRewardRatio }))), [tradeHistory])
   const research = useMemo(() => buildAgentResearch({ context: tradingContext, learning, multiTimeframe }), [learning, multiTimeframe, tradingContext])
   const setup = tradingContext.setup.preferredSetup
-  const bestOpportunity = activeBotScan?.setup ?? setup
   const displayedUnitNumber = pendingUnitCompletion ? Math.max(1, cycleUnits) : Math.max(1, cycleUnits + 1)
+  const selectedOpportunity = topOpportunities.find((row) => row.timeframe === selectedOpportunityTimeframe) ?? topOpportunities[0] ?? null
+  const bestOpportunity = selectedOpportunity?.executableSetup ?? setup
   const parsedLotSize = Number(lotSize)
   const botRiskSetup = activeBotScan?.setup ?? setup
   const botRiskCalc = useMemo(() => {
@@ -785,8 +795,9 @@ export function TradingAgentPanel({
       setScanSeconds(10)
       setScanComplete(true)
       setScanPhase('READY')
-      setStatus(executableOpportunities.length > 0
-        ? executableOpportunities.length + ' opportunity' + (executableOpportunities.length === 1 ? '' : ' opportunities') + ' found across ' + executableOpportunities.map((row) => row.timeframe).join(', ') + '.'
+      setSelectedOpportunityTimeframe(topOpportunities[0]?.timeframe ?? null)
+      setStatus(topOpportunities.length > 0
+        ? topOpportunities.length + ' strongest timeframe' + (topOpportunities.length === 1 ? '' : 's') + ' ready: ' + topOpportunities.map((row) => row.timeframe).join(' + ') + '.'
         : 'No opportunity found for trade.')
     }, 10000)
   }
@@ -979,31 +990,34 @@ export function TradingAgentPanel({
           </div>
         ) : (
           <div className="mt-3 space-y-3">
-            {scanComplete && executableOpportunities.length > 0 && (
+            {scanComplete && topOpportunities.length > 0 && (
               <div className="rounded-xl border border-shafx-success/20 bg-shafx-success/[0.04] p-3">
                 <div className="flex items-center justify-between gap-2">
                   <div>
                     <div className="font-mono text-[8px] font-semibold uppercase tracking-[0.15em] text-shafx-success">SIGNALS DETECTED</div>
-                    <div className="mt-1 text-sm font-semibold">{executableOpportunities.length} setup{executableOpportunities.length === 1 ? '' : 's'} across the market</div>
+                    <div className="mt-1 text-sm font-semibold">Choose a timeframe to review</div>
                   </div>
-                  <span className="font-mono text-[9px] text-shafx-success">{marketOpportunities.length}/{SCAN_TIMEFRAMES.length} directional</span>
+                  <span className="font-mono text-[9px] text-shafx-success">{topOpportunities.length} strongest</span>
                 </div>
                 <div className="mt-3 space-y-1.5">
-                  {executableOpportunities.map((row) => {
+                  {topOpportunities.map((row) => {
                     const setup = row.executableSetup
                     if (!setup) return null
+                    const selected = selectedOpportunityTimeframe === row.timeframe
                     return (
-                      <div key={row.timeframe} className="flex items-center gap-2 rounded-lg border border-shafx-border bg-shafx-bg px-2.5 py-2.5">
+                      <button key={row.timeframe} type="button" onClick={() => setSelectedOpportunityTimeframe(row.timeframe)} aria-pressed={selected} className={selected
+                        ? 'flex w-full items-center gap-2 rounded-lg border border-shafx-accent/50 bg-shafx-accent/[0.09] px-2.5 py-3 text-left shadow-[0_0_24px_rgba(124,92,252,.08)]'
+                        : 'flex w-full items-center gap-2 rounded-lg border border-shafx-border bg-shafx-bg px-2.5 py-3 text-left'}>
                         <span className={setup.direction === 'BUY' ? 'rounded-md bg-shafx-success/10 px-1.5 py-1 font-mono text-[8px] font-bold text-shafx-success' : 'rounded-md bg-shafx-danger/10 px-1.5 py-1 font-mono text-[8px] font-bold text-shafx-danger'}>{setup.direction}</span>
-                        <div className="min-w-0 flex-1"><div className="font-mono text-[10px] font-bold text-shafx-text">{row.timeframe} detected</div><div className="mt-0.5 text-[8px] text-shafx-textMuted">Entry {setup.entryPrice} • {riskModes[riskMode].label} fit {(() => { const r = calculateRisk({ accountBalance, accountCurrency, riskPercent: riskModes[riskMode].percent, side: setup.direction, entryPrice: setup.entryPrice, stopLoss: setup.stopLoss, takeProfit: setup.takeProfit, symbolSpec: symbolSpec!, conversionRate }); return r.isValid ? r.suggestedLotSize.toFixed(2) + ' lot' : 'blocked' })()}</div></div>
-                        <span className="font-mono text-base font-black text-shafx-accent">{setup.confidence}%</span>
-                      </div>
+                        <div className="min-w-0 flex-1"><div className="font-mono text-[10px] font-bold text-shafx-text">{row.timeframe} setup</div><div className="mt-0.5 text-[8px] text-shafx-textMuted">{row.flow} • Entry {setup.entryPrice}</div></div>
+                        <span className="font-mono text-lg font-black text-shafx-accent">{setup.confidence}%</span>
+                      </button>
                     )
                   })}
                 </div>
               </div>
             )}
-            {scanComplete && executableOpportunities.length === 0 && (
+            {scanComplete && topOpportunities.length === 0 && (
               <div className="rounded-xl border border-shafx-warning/25 bg-shafx-warning/[0.045] p-3">
                 <div className="font-mono text-[9px] font-black uppercase tracking-[0.16em] text-shafx-warning">NO OPPORTUNITY FOUND FOR TRADE</div>
                 <p className="mt-1 text-[8px] leading-4 text-shafx-textMuted">The scanner checked M1, M5, M15, M30, H1, H4, D1 and W1 and did not find a setup that passed the current market and account-risk filters.</p>
@@ -1012,14 +1026,14 @@ export function TradingAgentPanel({
             <div className="rounded-xl border border-shafx-border bg-shafx-bg/60 p-2.5">
               <div className="mb-2 flex items-center justify-between gap-2"><span className="font-mono text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted">TIMEFRAME MAP</span><span className="text-[8px] text-shafx-textMuted">{scanComplete ? 'Fresh results' : 'Ready to scan'}</span></div>
               <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-                {marketReadRows.map((row, index) => (
+                {marketReadRows.map((row) => (
                   <div key={row.timeframe} className={row.executableSetup ? 'rounded-lg border border-shafx-accent/25 bg-shafx-accent/[0.045] px-2 py-2.5' : 'rounded-lg border border-shafx-border bg-shafx-surface px-2 py-2.5'}>
                     <div className="flex items-center justify-between gap-1">
                       <span className="font-mono text-[9px] font-bold text-shafx-text">{row.timeframe}</span>
-                      <span className={row.bias === 'Bullish' ? 'font-mono text-[7px] font-bold text-shafx-success' : row.bias === 'Bearish' ? 'font-mono text-[7px] font-bold text-shafx-danger' : 'font-mono text-[7px] text-shafx-textMuted'}>{row.bias.toUpperCase()}</span>
+                      <span className={row.bias === 'Bullish' ? 'font-mono text-[7px] font-bold text-shafx-success' : row.bias === 'Bearish' ? 'font-mono text-[7px] font-bold text-shafx-danger' : 'font-mono text-[7px] text-shafx-textMuted'}>{row.flow}</span>
                     </div>
-                    <div className="mt-1 text-[7px] text-shafx-textMuted">{index < 4 ? 'LOW TF PRIORITY' : index < 5 ? 'CORE' : 'CONTEXT'}</div>
-                    <div className="mt-1 font-mono text-[8px] text-shafx-textMuted">{row.executableSetup ? row.executableSetup.direction + ' detected' : row.structure}</div>
+                    <div className="mt-1 font-mono text-[8px] text-shafx-text">{row.structure}</div>
+                    <div className="mt-1 font-mono text-[8px] text-shafx-textMuted">{row.executableSetup ? row.executableSetup.direction + ' setup' : row.bias === 'Sideways' ? 'No directional setup' : row.bias === 'Unclear' ? 'Unclear' : 'No setup'}</div>
                   </div>
                 ))}
               </div>
@@ -1033,8 +1047,8 @@ export function TradingAgentPanel({
             {scanPhase === 'ANALYZING' ? 'Scanning market…' : scanComplete ? 'Rescan market' : 'Scan market'}
           </button>
           {onReviewSetup && (
-            <button type="button" disabled={!scanComplete || executableOpportunities.length === 0 || !bestOpportunity} onClick={() => onReviewSetup(bestOpportunity)} className="flex min-h-14 w-full items-center justify-center rounded-xl border border-shafx-success/25 bg-shafx-success/5 px-3 text-[10px] font-semibold text-shafx-success shadow-[0_8px_24px_rgba(34,211,165,.08)] disabled:cursor-not-allowed disabled:opacity-40">
-              Review strategy • open {bestOpportunity?.direction ?? 'trade'} setup
+            <button type="button" disabled={!scanComplete || !selectedOpportunity?.executableSetup} onClick={() => onReviewSetup(selectedOpportunity?.executableSetup ?? null)} className="flex min-h-14 w-full items-center justify-center rounded-xl border border-shafx-success/25 bg-shafx-success/5 px-3 text-[10px] font-semibold text-shafx-success shadow-[0_8px_24px_rgba(34,211,165,.08)] disabled:cursor-not-allowed disabled:opacity-40">
+              Review ${selectedOpportunity?.timeframe ?? "selected"} ${selectedOpportunity?.executableSetup?.direction ?? ""} strategy
             </button>
           )}
         </div>
