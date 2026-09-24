@@ -4,6 +4,12 @@ const WINDOW_SECONDS = 15 * 60
 const MAX_SIGNUPS = 5
 const MAX_SIGNUP_EMAILS = 1
 const MAX_LOGIN_FAILURES = 8
+const API_WINDOW_SECONDS = 60
+const API_DEFAULT_LIMIT = 120
+const OTP_REQUEST_IP_LIMIT = 5
+const OTP_REQUEST_EMAIL_LIMIT = 1
+const OTP_VERIFY_IP_LIMIT = 12
+const OTP_VERIFY_EMAIL_LIMIT = 8
 const DISPOSABLE_DOMAINS = new Set(['mailinator.com','guerrillamail.com','10minutemail.com','tempmail.com','temp-mail.org','yopmail.com','sharklasers.com','guerrillamail.net','getnada.com','throwawaymail.com','dispostable.com'])
 
 function hash(secret, value) {
@@ -20,7 +26,7 @@ function bucketId(req, action, identity = null) {
   return hash(secret, subject)
 }
 
-async function consumeRateLimit(req, action, limit, reset = false, identity = null) {
+async function consumeRateLimit(req, action, limit, reset = false, identity = null, windowSeconds = WINDOW_SECONDS) {
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return { unavailable: true, blocked: false, count: 0, retryAfterSeconds: WINDOW_SECONDS }
   }
@@ -36,7 +42,7 @@ async function consumeRateLimit(req, action, limit, reset = false, identity = nu
       body: JSON.stringify({
         p_bucket_id: bucketId(req, action, identity),
         p_limit: limit,
-        p_window_seconds: WINDOW_SECONDS,
+        p_window_seconds: windowSeconds,
         p_reset: reset,
       }),
     })
@@ -120,4 +126,66 @@ export function clearLoginFailures(req) {
 export function securityFingerprint(req) {
   const secret = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SHAFX_ADMIN_KEY || 'shafx'
   return hash(secret, `${clientIp(req)}:${req.headers?.['user-agent'] || 'unknown'}`)
+}
+
+
+function sessionIdentity(req) {
+  const token = String(cookie(req, 'shafx_session') || '').trim()
+  if (!token) return null
+  const secret = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SHAFX_ADMIN_KEY || 'shafx'
+  return hash(secret, `session:${token}`)
+}
+
+export async function apiRequestGuard(req, action, limit = API_DEFAULT_LIMIT) {
+  const identity = sessionIdentity(req)
+  const bucket = identity
+    ? `api-user:${identity}:${clientIp(req)}`
+    : `api-ip:${clientIp(req)}:${req.headers?.['user-agent'] || 'unknown'}`
+
+  const rate = await consumeRateLimit(req, action, limit, false, bucket, API_WINDOW_SECONDS)
+  if (rate.unavailable) {
+    return {
+      allowed: false,
+      status: 503,
+      error: 'Traffic protection is temporarily unavailable. Please try again later.',
+      retryAfterSeconds: API_WINDOW_SECONDS,
+    }
+  }
+
+  if (rate.blocked) {
+    return {
+      allowed: false,
+      status: 429,
+      error: 'Too many requests. Please slow down and try again.',
+      retryAfterSeconds: rate.retryAfterSeconds,
+    }
+  }
+
+  return { allowed: true, remaining: Math.max(0, limit - rate.count), retryAfterSeconds: 0 }
+}
+
+export async function otpRequestGuard(req, email) {
+  const normalized = String(email || '').trim().toLowerCase()
+  const ipRate = await consumeRateLimit(req, 'otp-request-ip', OTP_REQUEST_IP_LIMIT)
+  if (ipRate.unavailable) return limiterUnavailable()
+  if (ipRate.blocked) return { allowed: false, status: 429, error: 'Too many verification-code requests. Please try again later.', retryAfterSeconds: ipRate.retryAfterSeconds }
+
+  const emailRate = await consumeRateLimit(req, 'otp-request-email', OTP_REQUEST_EMAIL_LIMIT, false, normalized, 60)
+  if (emailRate.unavailable) return limiterUnavailable()
+  if (emailRate.blocked) return { allowed: false, status: 429, error: 'A verification code was recently sent to this email. Please wait before requesting another.', retryAfterSeconds: emailRate.retryAfterSeconds }
+
+  return { allowed: true }
+}
+
+export async function otpVerifyGuard(req, email) {
+  const normalized = String(email || '').trim().toLowerCase()
+  const ipRate = await consumeRateLimit(req, 'otp-verify-ip', OTP_VERIFY_IP_LIMIT)
+  if (ipRate.unavailable) return limiterUnavailable()
+  if (ipRate.blocked) return { allowed: false, status: 429, error: 'Too many code attempts. Please wait before trying again.', retryAfterSeconds: ipRate.retryAfterSeconds }
+
+  const emailRate = await consumeRateLimit(req, 'otp-verify-email', OTP_VERIFY_EMAIL_LIMIT, false, normalized)
+  if (emailRate.unavailable) return limiterUnavailable()
+  if (emailRate.blocked) return { allowed: false, status: 429, error: 'Too many code attempts for this email. Please request a new code later.', retryAfterSeconds: emailRate.retryAfterSeconds }
+
+  return { allowed: true }
 }
