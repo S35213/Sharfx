@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Activity, ChevronDown, Command, MoreVertical, Search, Settings2, ShieldCheck, Wifi } from 'lucide-react'
+import { ChevronDown, Command, MoreVertical, Search, Settings2, ShieldCheck, Wifi } from 'lucide-react'
 import type { MarketPair, Timeframe } from '../../types'
 import { TIMEFRAMES } from '../../types'
 import { formatPrice } from '../../lib/format'
 import { ProviderConnectionControl } from '../market/ProviderConnectionControl'
 import { setStoredTradingMode } from '../../app/tradingMode'
 import { ChartSettingsSheet } from './ChartSettingsSheet'
+import { ShafxBrandMark, ShafxWordmark } from '../brand/ShafxBrand'
 
 type TerminalView = 'market' | 'agent' | 'history' | 'account'
 interface TopNavProps { symbol: string; price: number; pricePrecision: number; timeframe: Timeframe; onTimeframeChange: (tf: Timeframe) => void; pairs: MarketPair[]; onSelectPair: (symbol: string) => void; view?: TerminalView }
@@ -63,15 +64,15 @@ export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, t
   return <header ref={navRef} className="sticky top-0 z-50 border-b border-shafx-border bg-[#080C12]/95 shadow-[0_8px_30px_rgba(0,0,0,.24)] backdrop-blur-xl">
     <div className="flex min-h-[68px] items-center gap-2 px-3 sm:gap-3 sm:px-4 lg:px-5">
       <div className="flex flex-shrink-0 items-center gap-2.5">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-shafx-accent/30 bg-shafx-accent/10 text-shafx-accent"><Activity className="h-4.5 w-4.5" /></div>
-        <div className="hidden lg:block"><div className="text-sm font-semibold tracking-tight">SHAFX</div><div className="text-[8px] uppercase tracking-[0.26em] text-shafx-textMuted">Market workspace</div></div>
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-shafx-accent/30 bg-shafx-accent/[0.08] shadow-[0_0_22px_rgba(22,119,255,.12)]"><ShafxBrandMark size={30} /></div>
+        <div className="hidden lg:block"><ShafxWordmark compact /><div className="text-[8px] uppercase tracking-[0.26em] text-shafx-textMuted">Market workspace</div></div>
       </div>
 
       <div className="hidden h-8 w-px bg-shafx-border sm:block" />
 
       {view === 'market' ? <div className="relative min-w-0 flex-1 md:flex-none">
         <button type="button" onClick={() => setMarketOpen((open) => !open)} className="flex min-h-12 w-full min-w-0 items-center gap-3 rounded-xl border border-shafx-border bg-shafx-surface px-3 text-left transition hover:border-shafx-accent/40 md:w-[260px]" aria-expanded={marketOpen} aria-label="Open Market Watch and choose trading instrument">
-          <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-shafx-bg text-[10px] font-bold text-shafx-textMuted">FX</div>
+          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border border-shafx-accent/20 bg-shafx-bg shadow-[inset_0_0_18px_rgba(22,119,255,.08)]"><ShafxBrandMark size={25} /></div>
           <div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold">{symbol}</div><div className="mt-0.5 hidden text-[9px] text-shafx-textMuted sm:block">Market Watch • {formatPrice(price, pricePrecision)}</div></div>
           <ChevronDown className={`h-4 w-4 flex-shrink-0 text-shafx-textMuted transition-transform ${marketOpen ? 'rotate-180' : ''}`} />
         </button>
@@ -90,7 +91,7 @@ export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, t
             </button>
           })}{filtered.length === 0 && <div className="px-3 py-5 text-center text-xs text-shafx-textMuted">No matching market</div>}</div>
         </div>}
-      </div> : <div className="min-w-0 flex-1"><div className="text-sm font-semibold">{view === 'agent' ? 'SHAFX Bot' : view === 'history' ? 'Trade history' : 'Account'}</div><div className="text-[9px] uppercase tracking-[0.16em] text-shafx-textMuted">{currentMode === 'broker' ? 'Provider workspace' : 'Simulator workspace'}</div></div>}
+      </div> : <div className="min-w-0 flex-1"><div className="text-sm font-semibold">{view === 'agent' ? 'SHARFX Bot' : view === 'history' ? 'Trade history' : 'Account'}</div><div className="text-[9px] uppercase tracking-[0.16em] text-shafx-textMuted">{currentMode === 'broker' ? 'Provider workspace' : 'Simulator workspace'}</div></div>}
 
       {view === 'market' && <div className="hidden items-center gap-2 border-l border-shafx-border pl-4 xl:flex"><span className="font-mono text-sm font-semibold tabular">{formatPrice(price, pricePrecision)}</span><span className="flex items-center gap-1 rounded-full border border-shafx-success/15 bg-shafx-success/5 px-2 py-1 text-[9px] text-shafx-success"><Wifi className="h-3 w-3" />{currentMode === 'broker' ? 'provider' : 'simulation'}</span></div>}
 
@@ -105,14 +106,14 @@ export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, t
           </button>
           {accountOpen && <div className="absolute right-0 top-[calc(100%+8px)] z-[90] w-64 rounded-2xl border border-shafx-border bg-shafx-surface p-2 shadow-2xl">
             <div className="px-2 py-2 text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Environment</div>
-            <button type="button" onClick={() => { setAccountOpen(false); if (currentMode !== 'simulator') switchMode('simulator') }} className={`flex min-h-11 w-full items-center justify-between rounded-xl px-3 text-left text-xs ${currentMode === 'simulator' ? 'bg-shafx-accent/10 text-shafx-accent' : 'hover:bg-shafx-surfaceHover'}`}><span>SHAFX Simulator</span><span className="text-[9px]">CURRENT</span></button>
+            <button type="button" onClick={() => { setAccountOpen(false); if (currentMode !== 'simulator') switchMode('simulator') }} className={`flex min-h-11 w-full items-center justify-between rounded-xl px-3 text-left text-xs ${currentMode === 'simulator' ? 'bg-shafx-accent/10 text-shafx-accent' : 'hover:bg-shafx-surfaceHover'}`}><span>SHARFX Simulator</span><span className="text-[9px]">CURRENT</span></button>
             <button type="button" onClick={() => { setAccountOpen(false); if (currentMode !== 'broker') switchMode('broker') }} className={`mt-1 flex min-h-11 w-full items-center justify-between rounded-xl px-3 text-left text-xs ${currentMode === 'broker' ? 'bg-shafx-accent/10 text-shafx-accent' : 'hover:bg-shafx-surfaceHover'}`}><span>Connected provider</span><span className="text-[9px]">SWITCH</span></button>
             <div className="mt-2 flex items-start gap-2 rounded-xl border border-shafx-border bg-shafx-bg p-2.5 text-[9px] leading-4 text-shafx-textMuted"><ShieldCheck className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-shafx-success" />The terminal shell stays provider-neutral. Provider capability differences are surfaced at the action level.</div>
           </div>}
         </div>
         <div className="hidden md:block"><span className="rounded-xl border border-shafx-border bg-shafx-surface px-3 py-2 text-[9px] font-semibold text-shafx-textMuted">{TIMEFRAMES.includes(timeframe) ? timeframe : '—'}</span></div>
         <div className="relative">
-          <button type="button" onClick={() => setMoreOpen((open) => !open)} aria-expanded={moreOpen} aria-label="Open SHAFX menu" className="flex h-12 w-12 items-center justify-center rounded-xl border border-shafx-border bg-shafx-surface text-shafx-textMuted active:bg-shafx-surfaceHover">
+          <button type="button" onClick={() => setMoreOpen((open) => !open)} aria-expanded={moreOpen} aria-label="Open SHARFX menu" className="flex h-12 w-12 items-center justify-center rounded-xl border border-shafx-border bg-shafx-surface text-shafx-textMuted active:bg-shafx-surfaceHover">
             <MoreVertical className="h-5 w-5" />
           </button>
           {moreOpen && <div className="absolute right-0 top-[calc(100%+8px)] z-[100] w-64 rounded-2xl border border-shafx-border bg-shafx-surface p-2 shadow-2xl">
