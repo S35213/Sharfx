@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { clearLoginFailures, loginGuard, signupGuard } from './authSecurity.js'
+import { apiRequestGuard, clearLoginFailures, loginGuard, otpRequestGuard, signupGuard } from './authSecurity.js'
 
 const request = () => ({
   headers: {
@@ -77,6 +77,42 @@ describe('authSecurity durable limiter', () => {
     expect(result.allowed).toBe(false)
     expect(result.status).toBe(429)
     expect(result.retryAfterSeconds).toBe(847)
+  })
+
+
+  it('uses the dedicated API limiter and returns 429 when a client exceeds the limit', async () => {
+    restoreEnv()
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ blocked: false, request_count: 1, retry_after_seconds: 60 }]), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await apiRequestGuard(request(), 'api:test', 120)
+
+    expect(result.allowed).toBe(true)
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).p_limit).toBe(120)
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).p_window_seconds).toBe(60)
+    expect(fetchMock.mock.calls[0][0]).toContain('/rpc/consume_shafx_api_rate_limit')
+
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify([{ blocked: true, request_count: 121, retry_after_seconds: 42 }]), { status: 200 }))
+    const blocked = await apiRequestGuard(request(), 'api:test', 120)
+    expect(blocked.allowed).toBe(false)
+    expect(blocked.status).toBe(429)
+    expect(blocked.retryAfterSeconds).toBe(42)
+  })
+
+  it('limits OTP requests separately by IP and email', async () => {
+    restoreEnv()
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ blocked: false, attempt_count: 1, retry_after_seconds: 900 }]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ blocked: false, attempt_count: 1, retry_after_seconds: 60 }]), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await otpRequestGuard(request(), 'student@example.com')
+
+    expect(result.allowed).toBe(true)
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).p_limit).toBe(5)
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).p_limit).toBe(1)
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).p_window_seconds).toBe(60)
   })
 
   it('resets the login-failure bucket through the RPC', async () => {
