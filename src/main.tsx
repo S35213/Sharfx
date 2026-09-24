@@ -1,8 +1,9 @@
-import { Component, StrictMode, Suspense, lazy, useEffect, useState, type ErrorInfo, type ReactNode } from 'react'
+import { Component, StrictMode, Suspense, lazy, useEffect, useRef, useState, type ErrorInfo, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import { AuthProvider, useAuth } from './app/AuthContext'
-import { AccountAccessGate } from './components/account/AccountAccessGate'\nimport { SHAFX_BRAND_TRANSITION_EVENT, ShafxBrandTransition, type ShafxBrandTransitionKind } from './components/brand/ShafxBrand'
+import { AccountAccessGate } from './components/account/AccountAccessGate'
+import { SHAFX_BRAND_TRANSITION_EVENT, ShafxBrandTransition, type ShafxBrandTransitionKind } from './components/brand/ShafxBrand'
 import { clearSessionTradingMode, getStoredTradingMode, type TradingMode } from './app/tradingMode'
 
 const App = lazy(() => import('./App'))
@@ -54,8 +55,40 @@ class RootErrorBoundary extends Component<{ children: ReactNode }, { hasError: b
 }
 
 const EntryGate = () => {
-  const { user } = useAuth()
+  const { user, loading } = useAuth()
   const [mode, setMode] = useState<TradingMode | null>(null)
+  const [brandTransition, setBrandTransition] = useState<ShafxBrandTransitionKind | null>(null)
+  const previousUser = useRef<typeof user>(null)
+  const authInitialized = useRef(false)
+
+  useEffect(() => {
+    if (loading) return
+    if (!authInitialized.current) {
+      previousUser.current = user
+      authInitialized.current = true
+      return
+    }
+    if (!previousUser.current && user) setBrandTransition('welcome')
+    if (previousUser.current && !user) {
+      try {
+        window.sessionStorage.setItem('shafx-suppress-landing-intro', '1')
+      } catch {
+        /* storage may be unavailable */
+      }
+      setBrandTransition('goodbye')
+    }
+    previousUser.current = user
+  }, [loading, user])
+
+  useEffect(() => {
+    const onBrandTransition = (event: Event): void => {
+      const detail = (event as CustomEvent<{ kind?: ShafxBrandTransitionKind }>).detail
+      if (detail?.kind === 'welcome' || detail?.kind === 'goodbye') setBrandTransition(detail.kind)
+    }
+    window.addEventListener(SHAFX_BRAND_TRANSITION_EVENT, onBrandTransition)
+    return () => window.removeEventListener(SHAFX_BRAND_TRANSITION_EVENT, onBrandTransition)
+  }, [])
+
 
   useEffect(() => {
     if (!user) {
