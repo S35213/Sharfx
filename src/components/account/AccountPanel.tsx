@@ -175,6 +175,20 @@ export const AccountPanel: React.FC<Props> = ({ account, activeProviderSelection
             <div className="rounded-xl border border-shafx-border bg-shafx-bg/75 p-3"><span className="block text-[8px] uppercase tracking-[0.14em] text-shafx-textMuted">Floating P/L</span><strong className={positive ? 'mt-1 block font-mono text-sm tabular text-shafx-success' : 'mt-1 block font-mono text-sm tabular text-shafx-danger'}>{positive ? '+' : ''}{formatCurrency(account.floatingPL, account.currency)} <span className="text-[8px]">({formatPercent(plPercent)})</span></strong></div>
           </div>
 
+          {brokerMode && (() => {
+            const activeConnection = connected.find((connection) => connection.id === activeProviderSelection?.connectionId)
+            const activeAccounts = activeConnection?.accounts.filter((item) => item.active) ?? []
+            const demoAccount = activeAccounts.find((item) => item.environment === 'demo')
+            const realAccount = activeAccounts.find((item) => item.environment === 'live')
+            if (!demoAccount && !realAccount) return null
+            return <div className="mt-3 rounded-xl border border-shafx-border bg-shafx-bg/60 p-2.5">
+              <div className="mb-2 flex items-center justify-between gap-2"><span className="text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted">Account environment</span><span className="text-[8px] text-shafx-textMuted">Switch account</span></div>
+              <div className="grid grid-cols-2 gap-1.5">
+                {realAccount && <button type="button" onClick={() => selectBrokerAccount(activeConnection!, realAccount.providerAccountId, 'live')} className={activeProviderSelection?.environment === 'live' ? 'min-h-10 rounded-lg bg-shafx-accent text-[9px] font-bold text-white' : 'min-h-10 rounded-lg border border-shafx-border bg-shafx-surface text-[9px] font-semibold text-shafx-textMuted'}>Real<br /><span className="text-[7px] opacity-80">{realAccount.label}</span></button>}
+                {demoAccount && <button type="button" onClick={() => selectBrokerAccount(activeConnection!, demoAccount.providerAccountId, 'demo')} className={activeProviderSelection?.environment === 'demo' ? 'min-h-10 rounded-lg bg-shafx-accent text-[9px] font-bold text-white' : 'min-h-10 rounded-lg border border-shafx-border bg-shafx-surface text-[9px] font-semibold text-shafx-textMuted'}>Demo<br /><span className="text-[7px] opacity-80">{demoAccount.label}</span></button>}
+              </div>
+            </div>
+          })()}
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-shafx-border bg-shafx-bg/60 px-3 py-2.5">
             <div className="min-w-0"><div className="truncate text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted">{brokerMode ? 'Broker account' : 'Simulator account'} ID</div><div className="mt-0.5 truncate font-mono text-[10px] font-semibold">{brokerMode ? activeProviderSelection?.accountId ?? 'Selected account' : accountId}</div></div>
             <button type="button" onClick={copyId} className="flex min-h-9 items-center gap-1.5 rounded-lg border border-shafx-border bg-shafx-surface px-2.5 text-[9px] font-semibold text-shafx-textMuted"><Copy className="h-3 w-3" />{copied ? 'Copied' : 'Copy ID'}</button>
