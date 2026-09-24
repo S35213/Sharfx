@@ -101,7 +101,7 @@ const buildScanCandidates = (
     const liquidity = analyzeLiquidity(frameCandles, swings, tolerance)
     const framePrice = frameCandles[frameCandles.length - 1]?.close ?? currentPrice
     const setupResult = analyzeSetup({ currentPrice: framePrice, structure, supportResistance, liquidity })
-    const preferredSetup = setupResult.preferredSetup ?? buildFallbackSetup(frameCandles, symbol, framePrice, symbol.includes('JPY') ? 3 : 5)
+    const preferredSetup = setupResult.preferredSetup ?? buildFallbackSetup(frameCandles, structure.bias, symbol, framePrice, symbol.includes('JPY') ? 3 : 5)
     if (!preferredSetup || preferredSetup.status !== 'candidate') return []
     const context = buildTradingContext(symbol, scanTimeframe, frameCandles, structure, supportResistance, liquidity, {
       ...setupResult,
@@ -261,7 +261,7 @@ export function TradingAgentPanel({
     const liquidity = analyzeLiquidity(frameCandles, swings, tolerance)
     const framePrice = frameCandles[frameCandles.length - 1]?.close ?? currentPrice
     const setupResult = analyzeSetup({ currentPrice: framePrice, structure, supportResistance, liquidity })
-    const executableSetup = setupResult.preferredSetup ?? buildFallbackSetup(frameCandles, symbol, framePrice, symbolSpec?.pricePrecision ?? 5)
+    const executableSetup = setupResult.preferredSetup ?? buildFallbackSetup(frameCandles, structure.bias, symbol, framePrice, symbolSpec?.pricePrecision ?? (symbol.includes('JPY') ? 3 : 5))
     return {
       timeframe: scanTimeframe,
       bias: structure.bias,
@@ -282,7 +282,6 @@ export function TradingAgentPanel({
   const setup = tradingContext.setup.preferredSetup
   const displayedUnitNumber = pendingUnitCompletion ? Math.max(1, cycleUnits) : Math.max(1, cycleUnits + 1)
   const selectedOpportunity = topOpportunities.find((row) => row.timeframe === selectedOpportunityTimeframe) ?? topOpportunities[0] ?? null
-  const bestOpportunity = selectedOpportunity?.executableSetup ?? setup
   const parsedLotSize = Number(lotSize)
   const botRiskSetup = activeBotScan?.setup ?? setup
   const botRiskCalc = useMemo(() => {
