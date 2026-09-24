@@ -77,7 +77,7 @@ export class SimulatorRealtimeMarketEngine {
   private momentum = 0
   private lastDirection = 1
 
-  constructor(spec: SymbolSpec, timeframe: Timeframe, initialM1Candles: OHLCV[], initialBid?: number, _initialTimestamp?: number) {
+  constructor(spec: SymbolSpec, timeframe: Timeframe, initialM1Candles: OHLCV[], initialBid?: number) {
     if (!initialM1Candles.length) throw new Error('Simulator requires M1 history.')
     this.spec = spec
     this.timeframe = timeframe
