@@ -86,6 +86,7 @@ const TerminalContent: React.FC = () => {
   const [pendingOrders, setPendingOrders] = useState<TradeOrder[]>([])
   const [tradeHistory, setTradeHistory] = useState<TradeOrder[]>([])
   const [botOrderIds, setBotOrderIds] = useState<string[]>(readStoredBotOrderIds)
+  const [botRunning, setBotRunning] = useState(false)
   const [chartSettings, setChartSettings] = useState<ChartWorkspaceSettings>(() => readChartWorkspaceSettings())
   const [toast, setToast] = useState<ToastMessage | null>(null)
   const [chartTool, setChartTool] = useState<WorkspaceTool>('cursor')
@@ -259,11 +260,12 @@ const TerminalContent: React.FC = () => {
               if (key !== activeSelectionKey) return
               setAccountData((prev) => {
                 if (!prev) return prev
-                const floatingPL = prev.floatingPL
-                const equity = Number((snapshot.balance + floatingPL).toFixed(2))
-                const freeMargin = Number((equity - prev.usedMargin).toFixed(2))
-                if (prev.balance === snapshot.balance && prev.currency === snapshot.currency && prev.equity === equity && prev.freeMargin === freeMargin) return prev
-                return { ...prev, balance: snapshot.balance, currency: snapshot.currency, equity, freeMargin }
+                const floatingPL = Number((snapshot.floatingPL ?? prev.floatingPL).toFixed(2))
+                const equity = Number((snapshot.equity ?? (snapshot.balance + floatingPL)).toFixed(2))
+                const usedMargin = Number((snapshot.usedMargin ?? prev.usedMargin).toFixed(2))
+                const freeMargin = Number((snapshot.freeMargin ?? (equity - usedMargin)).toFixed(2))
+                if (prev.balance === snapshot.balance && prev.currency === snapshot.currency && prev.equity === equity && prev.floatingPL === floatingPL && prev.usedMargin === usedMargin && prev.freeMargin === freeMargin) return prev
+                return { ...prev, balance: snapshot.balance, currency: snapshot.currency, equity, floatingPL, usedMargin, freeMargin }
               })
             },
             (status) => { if (key === activeSelectionKey && status === 'error') pushToast(spec.providerId + ' account stream interrupted — SHAFX is reconnecting.') },
@@ -631,7 +633,7 @@ const TerminalContent: React.FC = () => {
   const showHistory = mobileTab === 'history'
   const showAccount = mobileTab === 'account'
   const liveControl = <ProviderLiveControl providerId={activeProviderId} connection={activeMarketConnection} symbol={selectedSymbol} timeframe={timeframe} onUpdate={handleLiveUpdate} onActiveChange={handleLiveActiveChange} />
-  const botProps = { symbol: selectedSymbol, timeframe, candles: chartCandles, botOrderIds, scanM1Candles: simulatedM1Candles, currentPrice: displayPrice, activePosition, tradeHistory, accountBalance: accountData.balance, accountCurrency: accountData.currency, symbolSpec, conversionRate, botPlan: user?.botPlan ?? 'FREE' as const, botAutostartKey: BOT_AUTORUN_KEY, onBotOrder: handleBotOrder, onBotClose: handleBotClose, onReviewSetup: reviewAISetup, onReviewOpportunity: reviewScannerOpportunity }
+  const botProps = { symbol: selectedSymbol, timeframe, candles: chartCandles, botOrderIds, scanM1Candles: simulatedM1Candles, currentPrice: displayPrice, activePosition, tradeHistory, accountBalance: accountData.balance, accountCurrency: accountData.currency, symbolSpec, conversionRate, botPlan: user?.botPlan ?? 'FREE' as const, botAutostartKey: BOT_AUTORUN_KEY, onBotOrder: handleBotOrder, onBotClose: handleBotClose, onBotRunningChange: setBotRunning, onReviewSetup: reviewAISetup, onReviewOpportunity: reviewScannerOpportunity }
 
   const openMobileDock = (next: WorkspaceDock): void => {
     const willOpen = dock !== next || !mobileDockOpen
@@ -642,6 +644,13 @@ const TerminalContent: React.FC = () => {
       if (remembered > 0 && remembered < candles.length) setReplayCount(remembered)
     }
   }
+
+  const accountModeLabel = brokerMode ? (activeProviderSelection?.environment === 'live' ? 'REAL ACCOUNT' : 'DEMO ACCOUNT') : 'DEMO ACCOUNT'
+  const accountModeTone = brokerMode && activeProviderSelection?.environment === 'live' ? 'text-shafx-accent' : 'text-shafx-success'
+  const botFloatingPL = openPositions.filter((position) => botOrderIds.includes(position.id) && position.status === 'open').reduce((sum, position) => sum + (position.profit ?? 0), 0)
+  const botClosedPL = tradeHistory.filter((trade) => botOrderIds.includes(trade.id) && trade.status === 'closed').reduce((sum, trade) => sum + (trade.profit ?? 0), 0)
+  const botTotalPL = Number((botFloatingPL + botClosedPL).toFixed(2))
+  const moneySign = (value: number): string => value >= 0 ? '+' : ''
 
   const dockContent = {
     insights: <div className="space-y-3"><FXMoveMatrix pairs={watchlist} /><MarketAnalysisPanel analysis={marketAnalysis} pricePrecision={symbolSpec.pricePrecision} pipSize={symbolSpec.pipSize} currentPrice={displayPrice} timeframe={timeframe} /><AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={chartCandles} setup={aiSetup} onReviewSetup={reviewAISetup} /></div>,
@@ -680,6 +689,29 @@ const TerminalContent: React.FC = () => {
 
       <section className={`${showMarket ? '' : 'hidden'} min-w-0 flex-1 flex-col overflow-visible lg:flex lg:overflow-hidden`}>
         <WorkspaceStatus provider={activeProviderName} mode={brokerMode ? 'broker' : 'demo'} symbol={selectedSymbol} price={displayPrice} precision={symbolSpec.pricePrecision} live={liveMarketActive} />
+        <div className="border-b border-shafx-border bg-shafx-surface/70 px-2 py-2 sm:px-3">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="rounded-xl border border-shafx-border bg-shafx-bg/80 px-3 py-2">
+              <div className="flex items-center justify-between gap-2"><span className="text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted">Account</span><span className={accountModeTone + " font-mono text-[8px] font-bold"}>{accountModeLabel}</span></div>
+              <div className="mt-1 font-mono text-sm font-bold tabular-nums">{accountData.currency} {accountData.balance.toFixed(2)}</div>
+            </div>
+            <div className="rounded-xl border border-shafx-border bg-shafx-bg/80 px-3 py-2">
+              <div className="text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted">Equity</div>
+              <div className="mt-1 font-mono text-sm font-bold tabular-nums">{accountData.currency} {accountData.equity.toFixed(2)}</div>
+              <div className={accountData.floatingPL >= 0 ? 'text-[8px] text-shafx-success' : 'text-[8px] text-shafx-danger'}>{moneySign(accountData.floatingPL)}{accountData.floatingPL.toFixed(2)} floating</div>
+            </div>
+            <div className="rounded-xl border border-shafx-border bg-shafx-bg/80 px-3 py-2">
+              <div className="flex items-center justify-between gap-2"><span className="text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted">SHAFX Bot</span><span className={botRunning ? 'h-1.5 w-1.5 rounded-full bg-shafx-success animate-pulse' : 'h-1.5 w-1.5 rounded-full bg-shafx-textMuted'} /></div>
+              <div className="mt-1 text-xs font-semibold">{botRunning ? 'Trading' : 'Ready'}</div>
+              <div className={botTotalPL >= 0 ? 'text-[8px] text-shafx-success' : 'text-[8px] text-shafx-danger'}>Bot P/L {moneySign(botTotalPL)}{botTotalPL.toFixed(2)} {accountData.currency}</div>
+            </div>
+            <div className="rounded-xl border border-shafx-border bg-shafx-bg/80 px-3 py-2">
+              <div className="text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted">Free Margin</div>
+              <div className="mt-1 font-mono text-sm font-bold tabular-nums">{accountData.currency} {accountData.freeMargin.toFixed(2)}</div>
+              <div className="text-[8px] text-shafx-textMuted">{openPositions.length} open trade{openPositions.length === 1 ? '' : 's'}</div>
+            </div>
+          </div>
+        </div>
         <div className="flex min-h-0 flex-1 flex-col overflow-visible">
           <div className="flex min-h-10 flex-shrink-0 items-center justify-between gap-2 border-b border-shafx-border bg-shafx-surface/45 px-3 sm:px-4">
             <div className="flex min-w-0 items-center gap-2"><span className="truncate text-xs font-semibold">{selectedSymbol}</span><span className="rounded-md border border-shafx-border bg-shafx-bg px-2 py-1 text-[9px] text-shafx-textMuted">{liveMarketActive ? `LIVE • ${activeProviderName}` : 'SIMULATED MARKET'}</span></div>
