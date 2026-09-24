@@ -28,7 +28,6 @@ import { OrderPanel } from './components/order/OrderPanel'
 import { AccountPanel } from './components/account/AccountPanel'
 import { TradesPanel } from './components/trades/TradesPanel'
 import { Toast, type ToastMessage } from './components/common/Toast'
-import { SimulationPulse } from './components/activity/SimulationPulse'
 import { SimulationFlowChart } from './components/activity/SimulationFlowChart'
 import { CHART_SETTINGS_EVENT, readChartWorkspaceSettings, type ChartWorkspaceSettings } from './app/chartSettings'
 import { marketDataSource } from './data/createMarketDataSource'
@@ -86,7 +85,6 @@ const TerminalContent: React.FC = () => {
   const [pendingOrders, setPendingOrders] = useState<TradeOrder[]>([])
   const [tradeHistory, setTradeHistory] = useState<TradeOrder[]>([])
   const [botOrderIds, setBotOrderIds] = useState<string[]>(readStoredBotOrderIds)
-  const [botRunning, setBotRunning] = useState(false)
   const [chartSettings, setChartSettings] = useState<ChartWorkspaceSettings>(() => readChartWorkspaceSettings())
   const [toast, setToast] = useState<ToastMessage | null>(null)
   const [chartTool, setChartTool] = useState<WorkspaceTool>('cursor')
@@ -602,7 +600,7 @@ const TerminalContent: React.FC = () => {
   const showHistory = mobileTab === 'history'
   const showAccount = mobileTab === 'account'
   const liveControl = <ProviderLiveControl providerId={activeProviderId} connection={activeMarketConnection} symbol={selectedSymbol} timeframe={timeframe} onUpdate={handleLiveUpdate} onActiveChange={handleLiveActiveChange} />
-  const botProps = { symbol: selectedSymbol, timeframe, candles: chartCandles, botOrderIds, scanM1Candles: simulatedM1Candles, currentPrice: displayPrice, activePosition, tradeHistory, accountBalance: accountData.balance, accountCurrency: accountData.currency, symbolSpec, conversionRate, botPlan: user?.botPlan ?? 'FREE' as const, botAutostartKey: BOT_AUTORUN_KEY, onBotOrder: handleBotOrder, onBotClose: handleBotClose, onBotRunningChange: setBotRunning, onReviewSetup: reviewAISetup }
+  const botProps = { symbol: selectedSymbol, timeframe, candles: chartCandles, botOrderIds, scanM1Candles: simulatedM1Candles, currentPrice: displayPrice, activePosition, tradeHistory, accountBalance: accountData.balance, accountCurrency: accountData.currency, symbolSpec, conversionRate, botPlan: user?.botPlan ?? 'FREE' as const, botAutostartKey: BOT_AUTORUN_KEY, onBotOrder: handleBotOrder, onBotClose: handleBotClose, onReviewSetup: reviewAISetup }
 
   const openMobileDock = (next: WorkspaceDock): void => {
     const willOpen = dock !== next || !mobileDockOpen
