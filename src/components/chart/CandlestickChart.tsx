@@ -63,8 +63,20 @@ const VISIBLE_BARS_BY_TIMEFRAME: Record<Timeframe, number> = {
 
 const visibleBarsForTimeframe = (nextTimeframe: Timeframe | undefined, width: number): number => {
   const base = VISIBLE_BARS_BY_TIMEFRAME[nextTimeframe ?? 'H1']
-  return width < 640 ? Math.max(40, Math.round(base * 0.82)) : base
+  return width < 640 ? Math.max(18, Math.round(base * 0.72)) : base
 }
+
+const TIMEFRAME_SECONDS: Record<Timeframe, number> = {
+  M1: 60,
+  M5: 300,
+  M15: 900,
+  M30: 1800,
+  H1: 3600,
+  H4: 14400,
+  D1: 86400,
+  W1: 604800,
+}
+const timeframeSecondsFor = (nextTimeframe: Timeframe): number => TIMEFRAME_SECONDS[nextTimeframe]
 
 export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, symbol, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [], candleTheme = 'mt5', chartMode = 'candles', marketTimestamp, onTimeframeChange, replayMode = false }) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
