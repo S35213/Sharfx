@@ -182,7 +182,6 @@ const TerminalContent: React.FC = () => {
           const m1 = await marketDataSource.getCandles(selectedSymbol, 'M1', 60000)
           const sameSymbolContinuation = simulatedEngineRef.current !== null && simulatedEngineSymbolRef.current === selectedSymbol
           const carryBid = sameSymbolContinuation ? simulatedPriceRef.current : (m1[m1.length - 1]?.close ?? acc.balance)
-          const carryTimestamp = sameSymbolContinuation ? marketTimestamp : m1[m1.length - 1]?.time
           const engine = new SimulatorRealtimeMarketEngine(spec, timeframe, m1, carryBid)
           simulatedEngineRef.current = engine
           simulatedEngineSymbolRef.current = selectedSymbol
