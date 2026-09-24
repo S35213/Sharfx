@@ -61,7 +61,7 @@ async function securityEvent(event) { try { await rest('/shafx_security_events',
 async function updateSecurityProfile(userId, patch) { try { await rest(`/shafx_profiles?id=eq.${encodeURIComponent(userId)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch) }) } catch {} }
 export default async function handler(req, res) {
   const action = new URL(req.url || '/', 'http://shafx.local').searchParams.get('action') || ''
-  const guardedBySpecificFlow = new Set(['login', 'signup', 'request-login-code', 'verify-login-code', 'verify-email-code'])
+  const guardedBySpecificFlow = new Set(['me', 'logout', 'login', 'signup', 'request-login-code', 'verify-login-code', 'verify-email-code'])
   if (!guardedBySpecificFlow.has(action)) {
     const guard = await apiRequestGuard(req, 'api:auth', 120)
     if (!guard.allowed) return res.status(guard.status).json({ ok: false, error: guard.error, retryAfterSeconds: guard.retryAfterSeconds })
