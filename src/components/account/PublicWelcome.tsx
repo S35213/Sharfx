@@ -40,13 +40,15 @@ export const PublicWelcome: React.FC = () => {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [verificationStep, setVerificationStep] = useState<'none' | 'signup' | 'login'>('none')
+  const [verificationCode, setVerificationCode] = useState('')
   const [resetPassword, setResetPassword] = useState('')
   const [resetConfirm, setResetConfirm] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [website, setWebsite] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
-  const { signIn, signUp, error } = useAuth()
+  const { signIn, signUp, requestLoginCode, verifyEmailCode, error } = useAuth()
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -63,6 +65,8 @@ export const PublicWelcome: React.FC = () => {
     setFormMode(mode)
     setForgotMode(false)
     setMessage(null)
+    setVerificationStep('none')
+    setVerificationCode('')
     setShowAuth(true)
   }
 
@@ -86,15 +90,28 @@ export const PublicWelcome: React.FC = () => {
         setPassword('')
         setResetPassword('')
         setResetConfirm('')
+      } else if (verificationStep !== 'none') {
+        if (!/^\\d{6}$/.test(verificationCode)) { setMessage('Enter the 6-digit code from your email.'); return }
+        await verifyEmailCode({ email, code: verificationCode, purpose: verificationStep })
+        setVerificationStep('none')
+        setVerificationCode('')
       } else if (formMode === 'signup') {
         if (password.length < 10) { setMessage('Password must be at least 10 characters.'); return }
         if (password !== confirmPassword) { setMessage('Passwords do not match.'); return }
         const result = await signUp({ displayName, email, password, website })
-        setMessage(result.message || (result.needsEmailConfirmation ? 'Check your email to confirm your SHARFX account, then sign in.' : 'Your SHARFX account is ready.'))
-        if (result.needsEmailConfirmation) setPassword('')
+        if (result.needsEmailConfirmation) {
+          setVerificationStep('signup')
+          setVerificationCode('')
+          setPassword('')
+          setMessage('We sent a one-time verification code to your email. Enter it below to finish creating your account.')
+        } else {
+          setMessage(result.message || 'Your SHARFX account is ready.')
+        }
       } else {
-        await signIn({ email, password })
-        setPassword('')
+        const result = await requestLoginCode(email)
+        setVerificationStep('login')
+        setVerificationCode('')
+        setMessage(result.message || 'We sent a one-time login code to your email.')
       }
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Unable to complete SHARFX account request.')
@@ -104,8 +121,8 @@ export const PublicWelcome: React.FC = () => {
   }
 
   if (showAuth) {
-    const title = resetToken ? 'Create a new password' : forgotMode ? 'Recover your account' : formMode === 'signin' ? 'Welcome back' : 'Create your SHARFX account'
-    const subtitle = resetToken ? 'Set a new password and return to your workspace.' : forgotMode ? 'We will send a secure reset link to your account email.' : formMode === 'signin' ? 'Sign in to open your saved market workspace.' : 'Create your SHARFX identity before choosing a trading environment.'
+    const title = resetToken ? 'Create a new password' : forgotMode ? 'Recover your account' : verificationStep === 'signup' ? 'Verify your email' : verificationStep === 'login' ? 'Enter your login code' : formMode === 'signin' ? 'Welcome back' : 'Create your SHARFX account'
+    const subtitle = resetToken ? 'Set a new password and return to your workspace.' : forgotMode ? 'We will send a secure reset link to your account email.' : verificationStep !== 'none' ? `Enter the 6-digit code sent to ${email}. The code can only be used once and expires according to your Supabase Auth settings.` : formMode === 'signin' ? 'Enter your email and SHARFX will send you a one-time login code.' : 'Create your SHARFX identity before choosing a trading environment.'
 
     return <main className="min-h-[calc(100vh-28px)] overflow-y-auto bg-shafx-bg text-shafx-text">
       <div className="mx-auto flex min-h-[calc(100vh-28px)] w-full max-w-[1480px] items-center justify-center px-4 py-8 sm:px-8">
@@ -113,15 +130,22 @@ export const PublicWelcome: React.FC = () => {
           <button type="button" onClick={() => { setShowAuth(false); setForgotMode(false); setMessage(null) }} className="mb-6 flex items-center gap-2 text-[11px] text-shafx-textMuted hover:text-shafx-text"><ArrowRight className="h-3.5 w-3.5 rotate-180" />Back to SHARFX welcome</button>
           <div className="mb-7 flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-xl border border-shafx-accent/30 bg-shafx-accent/[0.06]"><ShafxBrandMark size={31} /></div><div><div className="font-semibold tracking-tight">SHARFX</div><div className="text-[9px] uppercase tracking-[0.24em] text-shafx-textMuted">Market workspace</div></div></div>
           <div className="mb-7"><div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-shafx-textMuted">Secure access</div><h1 className="mt-2 text-2xl font-semibold tracking-tight">{title}</h1><p className="mt-2 text-sm leading-6 text-shafx-textMuted">{subtitle}</p></div>
-          {!resetToken && !forgotMode && <div className="grid grid-cols-2 rounded-xl border border-shafx-border bg-shafx-surface p-1"><button type="button" onClick={() => { setFormMode('signin'); setMessage(null) }} className={`min-h-11 rounded-lg text-xs font-semibold transition ${formMode === 'signin' ? 'bg-shafx-accent text-white shadow-lg shadow-shafx-accent/10' : 'text-shafx-textMuted hover:text-shafx-text'}`}>Login</button><button type="button" onClick={() => { setFormMode('signup'); setMessage(null) }} className={`min-h-11 rounded-lg text-xs font-semibold transition ${formMode === 'signup' ? 'bg-shafx-accent text-white shadow-lg shadow-shafx-accent/10' : 'text-shafx-textMuted hover:text-shafx-text'}`}>Create account</button></div>}
+          {!resetToken && !forgotMode && verificationStep === 'none' && <div className="grid grid-cols-2 rounded-xl border border-shafx-border bg-shafx-surface p-1"><button type="button" onClick={() => { setFormMode('signin'); setMessage(null); setVerificationStep('none') }} className={`min-h-11 rounded-lg text-xs font-semibold transition ${formMode === 'signin' ? 'bg-shafx-accent text-white shadow-lg shadow-shafx-accent/10' : 'text-shafx-textMuted hover:text-shafx-text'}`}>Login</button><button type="button" onClick={() => { setFormMode('signup'); setMessage(null); setVerificationStep('none') }} className={`min-h-11 rounded-lg text-xs font-semibold transition ${formMode === 'signup' ? 'bg-shafx-accent text-white shadow-lg shadow-shafx-accent/10' : 'text-shafx-textMuted hover:text-shafx-text'}`}>Create account</button></div>}
           <form onSubmit={(event) => void submit(event)} className="mt-5 space-y-3">
             {resetToken ? <><input value={resetPassword} onChange={(event) => setResetPassword(event.target.value)} type="password" autoComplete="new-password" required minLength={10} placeholder="New password" className="min-h-12 w-full rounded-xl border border-shafx-border bg-shafx-surface px-4 text-sm outline-none focus:border-shafx-accent" /><input value={resetConfirm} onChange={(event) => setResetConfirm(event.target.value)} type="password" autoComplete="new-password" required minLength={10} placeholder="Confirm new password" className="min-h-12 w-full rounded-xl border border-shafx-border bg-shafx-surface px-4 text-sm outline-none focus:border-shafx-accent" /><button disabled={submitting} type="submit" className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-shafx-accent px-4 text-sm font-semibold text-white disabled:opacity-60"><KeyRound className="h-4 w-4" />{submitting ? 'Updating…' : 'Update password'}</button></> : forgotMode ? <><input value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" required placeholder="Email address" className="min-h-12 w-full rounded-xl border border-shafx-border bg-shafx-surface px-4 text-sm outline-none focus:border-shafx-accent" /><button disabled={submitting} type="submit" className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-shafx-accent px-4 text-sm font-semibold text-white disabled:opacity-60"><KeyRound className="h-4 w-4" />{submitting ? 'Sending…' : 'Send reset link'}</button></> : <>
+              {verificationStep !== 'none' ? <>
+              <input value={email} readOnly type="email" autoComplete="email" required placeholder="Email address" className="min-h-12 w-full rounded-xl border border-shafx-border bg-shafx-surface px-4 text-sm outline-none opacity-80" />
+              <input value={verificationCode} onChange={(event) => setVerificationCode(event.target.value.replace(/\\D/g, '').slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" pattern="\\d{6}" required placeholder="6-digit verification code" className="min-h-12 w-full rounded-xl border border-shafx-border bg-shafx-surface px-4 text-center text-lg font-mono tracking-[0.35em] outline-none focus:border-shafx-accent" />
+              <button disabled={submitting} type="submit" className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-shafx-accent px-4 text-sm font-semibold text-white disabled:opacity-60"><KeyRound className="h-4 w-4" />{submitting ? 'Verifying…' : 'Verify code'}</button>
+              <button type="button" disabled={submitting || verificationStep !== 'login'} onClick={async () => { if (verificationStep !== 'login') return; try { setSubmitting(true); setMessage(null); const result = await requestLoginCode(email); setMessage(result.message || 'A new login code has been sent.'); } catch (err) { setMessage(err instanceof Error ? err.message : 'Unable to send another code.'); } finally { setSubmitting(false) } }} className="w-full py-1 text-[11px] text-shafx-textMuted hover:text-shafx-accent disabled:opacity-50">Resend login code</button>
+              <button type="button" onClick={() => { setVerificationStep('none'); setVerificationCode(''); setMessage(null) }} className="w-full py-1 text-[11px] text-shafx-textMuted hover:text-shafx-accent">Use a different email</button>
+            </> : <>
               {formMode === 'signup' && <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Full name" className="min-h-12 w-full rounded-xl border border-shafx-border bg-shafx-surface px-4 text-sm outline-none focus:border-shafx-accent" />}
               <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" required placeholder="Email address" className="min-h-12 w-full rounded-xl border border-shafx-border bg-shafx-surface px-4 text-sm outline-none focus:border-shafx-accent" />
-              <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete={formMode === 'signin' ? 'current-password' : 'new-password'} required minLength={formMode === 'signup' ? 10 : 1} placeholder={formMode === 'signup' ? 'Password (minimum 10 characters)' : 'Password'} className="min-h-12 w-full rounded-xl border border-shafx-border bg-shafx-surface px-4 text-sm outline-none focus:border-shafx-accent" />
-              {formMode === 'signup' && <><input value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} type="password" autoComplete="new-password" required minLength={10} placeholder="Confirm password" className="min-h-12 w-full rounded-xl border border-shafx-border bg-shafx-surface px-4 text-sm outline-none focus:border-shafx-accent" /><input aria-hidden="true" tabIndex={-1} autoComplete="off" value={website} onChange={(event) => setWebsite(event.target.value)} className="absolute -left-[10000px] top-auto h-px w-px opacity-0" /></>}
-              <button disabled={submitting} type="submit" className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-shafx-accent px-4 text-sm font-semibold text-white disabled:opacity-60">{formMode === 'signin' ? <LogIn className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}{submitting ? 'Please wait…' : formMode === 'signin' ? 'Login to SHARFX' : 'Create SHARFX account'}<ArrowRight className="h-4 w-4 opacity-70" /></button>
+              {formMode === 'signup' && <><input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="new-password" required minLength={10} placeholder="Password (minimum 10 characters)" className="min-h-12 w-full rounded-xl border border-shafx-border bg-shafx-surface px-4 text-sm outline-none focus:border-shafx-accent" /><input value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} type="password" autoComplete="new-password" required minLength={10} placeholder="Confirm password" className="min-h-12 w-full rounded-xl border border-shafx-border bg-shafx-surface px-4 text-sm outline-none focus:border-shafx-accent" /><input aria-hidden="true" tabIndex={-1} autoComplete="off" value={website} onChange={(event) => setWebsite(event.target.value)} className="absolute -left-[10000px] top-auto h-px w-px opacity-0" /></>}
+              <button disabled={submitting} type="submit" className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-shafx-accent px-4 text-sm font-semibold text-white disabled:opacity-60">{formMode === 'signin' ? <LogIn className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}{submitting ? 'Please wait…' : formMode === 'signin' ? 'Send login code' : 'Create SHARFX account'}<ArrowRight className="h-4 w-4 opacity-70" /></button>
               {formMode === 'signin' && <button type="button" onClick={() => { setForgotMode(true); setMessage(null) }} className="w-full py-1 text-[11px] text-shafx-textMuted hover:text-shafx-accent">Forgot password?</button>}
+            </>}
             </>}
           </form>
           {(message || error) && <div className="mt-4 rounded-xl border border-shafx-border bg-shafx-surface px-3 py-2.5 text-xs leading-5 text-shafx-textMuted">{message || error}</div>}
