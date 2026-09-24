@@ -93,7 +93,6 @@ const TerminalContent: React.FC = () => {
   const [dock, setDock] = useState<WorkspaceDock>('insights')
   const [isCompactViewport, setIsCompactViewport] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 999px)').matches)
   const [isLandscapeCompactViewport, setIsLandscapeCompactViewport] = useState(() => typeof window !== 'undefined' && window.matchMedia('(orientation: landscape) and (max-width: 999px)').matches)
-  const [landscapeChartFocus, setLandscapeChartFocus] = useState(false)
 
   useEffect(() => {
     const compactMedia = window.matchMedia('(max-width: 999px)')
@@ -104,7 +103,6 @@ const TerminalContent: React.FC = () => {
     }
     const onOrientation = (): void => {
       syncViewport()
-      setLandscapeChartFocus(false)
     }
     syncViewport()
     compactMedia.addEventListener('change', syncViewport)
