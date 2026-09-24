@@ -3,9 +3,9 @@ import { ArrowDownRight, ArrowUpRight, Award, BarChart3, Filter, History, Minus,
 import type { TradeOrder } from '../../types'
 import { formatCurrency, formatPercent, formatPrice, formatTimestamp } from '../../lib/format'
 
-interface Props { tradeHistory: TradeOrder[]; currency: string; showTrades?: boolean }
+interface Props { tradeHistory: TradeOrder[]; currency: string; showTrades?: boolean; compactHistory?: boolean; accountLabel?: string; accountType?: 'demo' | 'real'; }
 
-export function PerformancePanel({ tradeHistory, currency, showTrades = false }: Props) {
+export function PerformancePanel({ tradeHistory, currency, showTrades = false, compactHistory = false, accountLabel = 'Current account', accountType = 'demo' }: Props) {
   const stats = useMemo(() => {
     const closed = tradeHistory.filter((trade) => trade.status === 'closed' && Number.isFinite(trade.profit ?? NaN))
     const profits = closed.map((trade) => trade.profit ?? 0)
@@ -55,13 +55,47 @@ export function PerformancePanel({ tradeHistory, currency, showTrades = false }:
       <span className="rounded-lg border border-shafx-border bg-shafx-bg px-2 py-1 font-mono text-[8px] font-semibold uppercase tracking-[0.12em] text-shafx-textMuted">SIMULATOR</span>
     </div>
 
-    {stats.closed.length === 0 ? (
-      <div className="mt-3 rounded-xl border border-dashed border-shafx-border bg-shafx-bg/70 p-5 text-center">
-        <History className="mx-auto h-7 w-7 text-shafx-textMuted" />
-        <p className="mt-2 text-xs font-semibold text-shafx-text">No completed trades yet</p>
-        <p className="mt-1 text-[10px] leading-4 text-shafx-textMuted">Open and close a simulated position to build your history.</p>
+    {compactHistory ? (
+      <div className="mt-3 space-y-3">
+        <div className="flex items-center justify-between gap-2 rounded-xl border border-shafx-border bg-shafx-bg/60 px-3 py-2.5">
+          <div className="min-w-0">
+            <div className="truncate text-[9px] font-semibold uppercase tracking-[0.12em] text-shafx-textMuted">{accountLabel}</div>
+            <div className="mt-0.5 text-[8px] text-shafx-textMuted">History belongs only to the selected {accountType === 'real' ? 'real' : 'demo'} account.</div>
+          </div>
+          <span className={accountType === 'real' ? 'rounded-md border border-shafx-success/25 bg-shafx-success/[0.05] px-2 py-1 font-mono text-[8px] font-bold text-shafx-success' : 'rounded-md border border-shafx-accent/25 bg-shafx-accent/[0.05] px-2 py-1 font-mono text-[8px] font-bold text-shafx-accent'}>{accountType === 'real' ? 'REAL' : 'DEMO'}</span>
+        </div>
+        {stats.closed.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-shafx-border bg-shafx-bg/70 p-4 text-center">
+            <History className="mx-auto h-6 w-6 text-shafx-textMuted" />
+            <p className="mt-2 text-xs font-semibold text-shafx-text">No completed trades in this account</p>
+            <p className="mt-1 text-[9px] leading-4 text-shafx-textMuted">{accountType === 'real' ? 'Provider trade history will appear here once the connected account history endpoint is available.' : 'Close a simulated trade to add it to this demo account history.'}</p>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <Metric label="Net P/L" value={formatCurrency(stats.net, currency)} positive={stats.net >= 0} />
+              <Metric label="Wins" value={String(stats.wins)} positive />
+              <Metric label="Losses" value={String(stats.losses)} positive={false} />
+              <Metric label="Gross profit" value={formatCurrency(stats.grossProfit, currency)} positive />
+              <Metric label="Gross loss" value={formatCurrency(-stats.grossLoss, currency)} positive={false} />
+              <Metric label="Win rate" value={formatPercent(stats.winRate)} />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-xl border border-shafx-success/20 bg-shafx-success/[0.045] p-3">
+                <div className="text-[8px] uppercase tracking-[0.14em] text-shafx-success">Profit</div>
+                <strong className="mt-1 block font-mono text-base text-shafx-success">{formatCurrency(stats.grossProfit, currency)}</strong>
+              </div>
+              <div className="rounded-xl border border-shafx-danger/20 bg-shafx-danger/[0.045] p-3">
+                <div className="text-[8px] uppercase tracking-[0.14em] text-shafx-danger">Loss</div>
+                <strong className="mt-1 block font-mono text-base text-shafx-danger">{formatCurrency(-stats.grossLoss, currency)}</strong>
+              </div>
+            </div>
+          </>
+        )}
+        <div className="flex items-center gap-2 text-[8px] text-shafx-textMuted"><History className="h-3 w-3" />{stats.closed.length} completed trade{stats.closed.length === 1 ? '' : 's'} in this account</div>
       </div>
     ) : (
+      <div className="mt-3 space-y-3">
       <div className="mt-3 space-y-3">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <Metric label="Net P/L" value={formatCurrency(stats.net, currency)} positive={stats.net >= 0} />
@@ -142,7 +176,7 @@ export function PerformancePanel({ tradeHistory, currency, showTrades = false }:
         {showTrades && <div className="flex items-center gap-2 border-t border-shafx-border pt-2 text-[9px] text-shafx-textMuted"><Award className="h-3.5 w-3.5 text-shafx-accent" /><span>Best trade {formatCurrency(stats.best, currency)}</span><span>Worst {formatCurrency(stats.worst, currency)}</span><span className="ml-auto">{stats.averageRR.toFixed(2)}:1 avg R:R</span></div>}
       </div>
     )}
-    <p className="mt-3 text-[9px] leading-4 text-shafx-textMuted">SIMULATED — NOT FINANCIAL ADVICE. Closed-trade results are historical simulator data and do not predict future performance.</p>
+    <p className="mt-3 text-[9px] leading-4 text-shafx-textMuted">SIMULATED — NOT FINANCIAL ADVICE. Closed-trade results are historical account data and do not predict future performance.</p>
   </section>
 }
 
