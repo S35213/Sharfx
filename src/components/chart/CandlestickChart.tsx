@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { ColorType, createChart, type CandlestickData, type IChartApi, type IPriceLine, type ISeriesApi, type Time, type UTCTimestamp } from 'lightweight-charts'
+import { ColorType, createChart, type CandlestickData, type IChartApi, type IPriceLine, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts'
 import { Crosshair, Eraser, Maximize2, Minimize2, Ruler, RotateCcw } from 'lucide-react'
 import type { CandleTheme, ChartMode } from '../../app/chartSettings'
 import { TIMEFRAMES, type OHLCV, type Timeframe } from '../../types'
@@ -343,7 +343,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         // the larger interval's boundary (e.g. M30+2 => every 60 minutes).
         if (Math.floor(timestamp / interval) * interval !== timestamp) continue
 
-        const x = timeScale.logicalToCoordinate(index)
+        const x = timeScale.timeToCoordinate(candle.time as UTCTimestamp)
         if (x === null || x < -40 || x > width + 40) continue
 
         const date = new Date(timestamp * 1000)
