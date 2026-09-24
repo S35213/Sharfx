@@ -91,7 +91,19 @@ const TerminalContent: React.FC = () => {
   const [toast, setToast] = useState<ToastMessage | null>(null)
   const [chartTool, setChartTool] = useState<WorkspaceTool>('cursor')
   const [dock, setDock] = useState<WorkspaceDock>('insights')
-  const [isCompactViewport, setIsCompactViewport] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches)
+  const [isCompactViewport, setIsCompactViewport] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 999px)').matches)
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 999px)')
+    const syncViewport = (): void => setIsCompactViewport(media.matches)
+    syncViewport()
+    media.addEventListener('change', syncViewport)
+    window.addEventListener('orientationchange', syncViewport)
+    return () => {
+      media.removeEventListener('change', syncViewport)
+      window.removeEventListener('orientationchange', syncViewport)
+    }
+  }, [])
 
   const accountInitialized = useRef(false)
   const simulatorInitialized = useRef(false)

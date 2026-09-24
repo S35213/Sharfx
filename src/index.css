@@ -349,3 +349,28 @@ input::placeholder { color: #667285; }
     animation-delay: 0ms !important;
   }
 }
+
+
+/* Universal viewport polish: keep SHARFX spatial instead of cramped when the device rotates. */
+@media (min-width: 1000px) {
+  body { overflow: hidden; }
+  #root { height: 100svh; }
+  .shafx-chart-stage { min-height: 0; }
+}
+
+@media (min-width: 1000px) and (max-height: 620px) {
+  .shafx-chart-stage { height: min(calc(100svh - 250px), 520px); max-height: 520px; }
+}
+
+@media (min-width: 1536px) {
+  .shafx-chart-stage { height: clamp(500px, 68svh, 900px); }
+}
+
+@media (min-width: 1920px) {
+  .shafx-chart-stage { max-height: 1000px; }
+  .shafx-mobile-content { padding-inline: clamp(0px, 1vw, 18px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { scroll-behavior: auto !important; }
+}
