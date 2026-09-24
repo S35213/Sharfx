@@ -173,7 +173,6 @@ export function TradingAgentPanel({
   const [lastResult, setLastResult] = useState<'WIN' | 'LOSS' | 'WAIT' | null>(null)
   const [lastProfit, setLastProfit] = useState<number | null>(null)
   const [status, setStatus] = useState('Ready to scan')
-  const [bias, setBias] = useState('Neutral')
   const [botPositionId, setBotPositionId] = useState<string | null>(null)
   const [botDisplayedOrder, setBotDisplayedOrder] = useState<TradeOrder | null>(null)
   const [botRunLotSize, setBotRunLotSize] = useState<number | null>(null)
@@ -228,7 +227,6 @@ export function TradingAgentPanel({
   }), [currentPrice, symbol, timeframeFrames, scanSnapshot])
   const marketOpportunities = marketReadRows.filter((row) => row.directionalOpportunity)
   const executableOpportunities = marketReadRows.filter((row) => row.executableSetup)
-  const botTrades = useMemo(() => tradeHistory.filter((trade) => botOrderIds.includes(trade.id)).sort((a, b) => new Date(b.closeTime ?? b.openTime).getTime() - new Date(a.closeTime ?? a.openTime).getTime()), [botOrderIds, tradeHistory])
   const activeBotOrder = activePosition && botOrderIds.includes(activePosition.id) ? activePosition : null
 
   const learning = useMemo(() => learnFromTrades(tradeHistory.filter((trade) => trade.status === 'closed').map((trade) => ({ symbol: trade.symbol, direction: trade.type, profit: trade.profit, riskRewardRatio: trade.riskRewardRatio }))), [tradeHistory])
@@ -236,9 +234,7 @@ export function TradingAgentPanel({
   const setup = tradingContext.setup.preferredSetup
   const bestOpportunity = activeBotScan?.setup ?? setup
   const displayedUnitNumber = pendingUnitCompletion ? Math.max(1, cycleUnits) : Math.max(1, cycleUnits + 1)
-  const nextUnitNumber = Math.max(1, cycleUnits + 1)
   const bestOpportunityRef = useRef(bestOpportunity)
-  const confidenceDisplay = bestOpportunity ? Math.max(50, Math.min(95, bestOpportunity.confidence)) : 0
   const parsedLotSize = Number(lotSize)
   const lotSizeValid = symbolSpec ? Number.isFinite(parsedLotSize) && parsedLotSize >= symbolSpec.minLotSize && parsedLotSize <= symbolSpec.maxLotSize && Math.abs((parsedLotSize / symbolSpec.lotStep) - Math.round(parsedLotSize / symbolSpec.lotStep)) < 1e-8 : false
 
@@ -265,10 +261,6 @@ export function TradingAgentPanel({
     window.dispatchEvent(new CustomEvent<string>('shafx-lot-size', { detail: lotSize }))
   }, [lotSize])
 
-
-  useEffect(() => {
-    setBias(multiTimeframe.dominantBias ?? (setup?.direction === 'BUY' ? 'Bullish' : setup?.direction === 'SELL' ? 'Bearish' : 'Neutral'))
-  }, [multiTimeframe.dominantBias, setup?.direction])
 
   useEffect(() => {
     onBotRunningChange?.(autoTradingEnabled && (phase === 'RUNNING' || phase === 'ANALYZING'))
@@ -676,7 +668,6 @@ export function TradingAgentPanel({
     setBotRunLotSize(parsedLotSize)
     setTotalWon(0)
     setTotalLost(0)
-    setBotSessionStarted(true)
     setLastResult(null)
     setBotScanProgress(0)
     setAutoTradingEnabled(true)
@@ -699,7 +690,6 @@ export function TradingAgentPanel({
     }
     setUnitRound(0)
     setPendingUnitCompletion(false)
-    setBotSessionStarted(true)
     setLastResult(null)
     startAutomaticTrading()
   }
