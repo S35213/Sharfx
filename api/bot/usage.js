@@ -1,3 +1,4 @@
+import { apiRequestGuard } from '../../server/authSecurity.js'
 const json = (res, status, body) => res.status(status).json(body)
 const cookie = (req, name) => (req.headers.cookie || '').split(';').map((part) => part.trim()).find((part) => part.startsWith(`${name}=`))?.slice(name.length + 1) || null
 const supabase = (path, options = {}) => fetch(`${process.env.SUPABASE_URL}/auth/v1${path}`, { ...options, headers: { apikey: process.env.SUPABASE_ANON_KEY, 'Content-Type': 'application/json', ...(options.headers || {}) } })
@@ -36,6 +37,8 @@ const normalizeEntitlement = (row) => {
 }
 const policy = { FREE: { max: null }, REGULAR: { max: 15 }, PRO: { max: null } }
 export default async function handler(req, res) {
+  const guard = await apiRequestGuard(req, 'api:bot-usage', 300)
+  if (!guard.allowed) return res.status(guard.status).json({ ok: false, error: guard.error, retryAfterSeconds: guard.retryAfterSeconds })
   res.setHeader('Cache-Control', 'no-store')
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY || !process.env.SUPABASE_SERVICE_ROLE_KEY) return json(res, 503, { ok: false, error: 'Bot usage service is not configured.' })
   if (req.method !== 'GET' && req.method !== 'POST') return json(res, 405, { ok: false, error: 'Method not allowed' })
