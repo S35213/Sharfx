@@ -27,8 +27,6 @@ async function updateSecurityProfile(userId, patch) { try { await rest(`/shafx_p
 export default async function handler(req, res) {
   const guard = await apiRequestGuard(req, 'api:auth', 120)
   if (!guard.allowed) return res.status(guard.status).json({ ok: false, error: guard.error, retryAfterSeconds: guard.retryAfterSeconds })
-  const guard = await apiRequestGuard(req, 'api:auth', 120)
-  if (!guard.allowed) return res.status(guard.status).json({ ok: false, error: guard.error, retryAfterSeconds: guard.retryAfterSeconds })
   res.setHeader('Cache-Control', 'no-store')
   if (!configured()) return json(res, 503, { ok: false, error: 'SHAFX identity is not configured on this deployment.' })
   const action = new URL(req.url || '/', 'http://shafx.local').searchParams.get('action') || ''
