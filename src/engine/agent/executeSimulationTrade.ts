@@ -73,6 +73,11 @@ export const executeSimulationTrade = (input: ExecuteSimulationTradeInput): Exec
   if (!Number.isFinite(lotSize) || lotSize < input.symbolSpec.minLotSize || lotSize > input.symbolSpec.maxLotSize || !lotStepValid) {
     return { decision, plan: { ...plan, isValid: false, summary: `Lot size must be between ${input.symbolSpec.minLotSize} and ${input.symbolSpec.maxLotSize} using step ${input.symbolSpec.lotStep}.` }, order: null }
   }
+  // Account-aware execution gate: a bot round may not use a manually selected
+  // volume above the lot size supported by the selected risk budget.
+  if (lotSize > plan.lotSize + 1e-8) {
+    return { decision, plan: { ...plan, isValid: false, summary: `Lot size ${lotSize.toFixed(2)} exceeds the account-risk limit of ${plan.lotSize.toFixed(2)} lots for this setup.` }, order: null }
+  }
 
   const lotMultiplier = plan.lotSize > 0 ? lotSize / plan.lotSize : 1
   const estimatedLoss = Number((plan.estimatedLoss * lotMultiplier).toFixed(2))
