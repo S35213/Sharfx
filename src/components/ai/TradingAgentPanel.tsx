@@ -46,6 +46,39 @@ const BOT_CYCLE_SECONDS = 10 as const
 const BOT_RESULT_DELAY_MS = BOT_CYCLE_SECONDS * 1000
 const BOT_START_DELAY_MS = 1000 as const
 const BOT_RESULT_DISPLAY_MS = 1000 as const
+const SIMULATOR_LEVERAGE = 100
+
+const buildFallbackSetup = (frameCandles: OHLCV[], symbol: string, currentPrice: number, precision: number): import('../../engine/setup/types').SetupCandidate | null => {
+  if (frameCandles.length < 5) return null
+  const latest = frameCandles[frameCandles.length - 1]
+  const previous = frameCandles[frameCandles.length - 2]
+  if (!latest || !previous) return null
+  const momentum = Math.sign(latest.close - previous.close)
+  const recentStart = frameCandles[Math.max(0, frameCandles.length - 5)]?.close ?? latest.close
+  const trend = Math.sign(latest.close - recentStart)
+  const direction = trend !== 0 ? trend : momentum
+  if (direction === 0) return null
+  const buy = direction > 0
+  const pipSize = symbol.includes('JPY') ? 0.01 : 0.0001
+  const stopDistance = pipSize * 30
+  const rewardDistance = pipSize * 50
+  const entryPrice = Number((latest.close || currentPrice).toFixed(precision))
+  return {
+    direction: buy ? 'BUY' : 'SELL',
+    status: 'candidate',
+    quality: 'weak',
+    entryPrice,
+    stopLoss: Number((entryPrice + (buy ? -stopDistance : stopDistance)).toFixed(precision)),
+    takeProfit: Number((entryPrice + (buy ? rewardDistance : -rewardDistance)).toFixed(precision)),
+    riskRewardRatio: 50 / 30,
+    riskDistance: stopDistance,
+    rewardDistance,
+    confidence: 52 + (momentum === trend ? 8 : 0),
+    rationale: ['Directional momentum was detected on this timeframe.', 'No strict setup was required for this scanner opportunity; review the strategy before placing a simulated order.'],
+    invalidation: 'The simulated stop loss invalidates this setup.',
+    liquidityTarget: null,
+  }
+}
 
 const buildScanCandidates = (
   frames: Partial<Record<Timeframe, OHLCV[]>>,
@@ -63,9 +96,12 @@ const buildScanCandidates = (
     const liquidity = analyzeLiquidity(frameCandles, swings, tolerance)
     const framePrice = frameCandles[frameCandles.length - 1]?.close ?? currentPrice
     const setupResult = analyzeSetup({ currentPrice: framePrice, structure, supportResistance, liquidity })
-    const preferredSetup = setupResult.preferredSetup
+    const preferredSetup = setupResult.preferredSetup ?? buildFallbackSetup(frameCandles, symbol, framePrice, 5)
     if (!preferredSetup || preferredSetup.status !== 'candidate') return []
-    const context = buildTradingContext(symbol, scanTimeframe, frameCandles, structure, supportResistance, liquidity, setupResult)
+    const context = buildTradingContext(symbol, scanTimeframe, frameCandles, structure, supportResistance, liquidity, {
+      ...setupResult,
+      preferredSetup,
+    })
     return [{
       timeframe: scanTimeframe,
       setup: preferredSetup,
@@ -218,12 +254,13 @@ export function TradingAgentPanel({
     const liquidity = analyzeLiquidity(frameCandles, swings, tolerance)
     const framePrice = frameCandles[frameCandles.length - 1]?.close ?? currentPrice
     const setupResult = analyzeSetup({ currentPrice: framePrice, structure, supportResistance, liquidity })
+    const executableSetup = setupResult.preferredSetup ?? buildFallbackSetup(frameCandles, symbol, framePrice, symbolSpec?.pricePrecision ?? 5)
     return {
       timeframe: scanTimeframe,
       bias: structure.bias,
       structure: structure.status,
-      directionalOpportunity: structure.bias === 'Bullish' || structure.bias === 'Bearish',
-      executableSetup: setupResult.preferredSetup,
+      directionalOpportunity: Boolean(executableSetup),
+      executableSetup,
     }
   }), [currentPrice, symbol, timeframeFrames, scanSnapshot])
   const marketOpportunities = marketReadRows.filter((row) => row.directionalOpportunity)
@@ -241,8 +278,17 @@ export function TradingAgentPanel({
     if (!symbolSpec || !botRiskSetup) return null
     return calculateRisk({ accountBalance, accountCurrency, riskPercent: riskModes[riskMode].percent, side: botRiskSetup.direction, entryPrice: botRiskSetup.entryPrice, stopLoss: botRiskSetup.stopLoss, takeProfit: botRiskSetup.takeProfit, symbolSpec, conversionRate })
   }, [accountBalance, accountCurrency, botRiskSetup, conversionRate, riskMode, symbolSpec])
-  const accountFitLot = botRiskCalc?.isValid ? botRiskCalc.suggestedLotSize : 0
-  const lotFitsAccount = Boolean(botRiskCalc?.isValid && parsedLotSize > 0 && parsedLotSize <= accountFitLot + 1e-8)
+  const accountMarginLotCeiling = useMemo(() => {
+    if (!symbolSpec || !botRiskSetup || !Number.isFinite(accountBalance) || accountBalance <= 0) return 0
+    let exposurePerLotInAccount = symbolSpec.contractSize
+    if (symbolSpec.quoteCurrency === accountCurrency) exposurePerLotInAccount = symbolSpec.contractSize * botRiskSetup.entryPrice
+    else if (symbolSpec.baseCurrency !== accountCurrency) {
+      if (typeof conversionRate !== 'number' || !Number.isFinite(conversionRate) || conversionRate <= 0) return 0
+      exposurePerLotInAccount = symbolSpec.contractSize * botRiskSetup.entryPrice * conversionRate
+    }
+    return Number((accountBalance * SIMULATOR_LEVERAGE / exposurePerLotInAccount).toFixed(8))
+  }, [accountBalance, accountCurrency, botRiskSetup, conversionRate, symbolSpec])
+  const lotFitsAccount = Boolean(accountMarginLotCeiling > 0 && parsedLotSize > 0 && parsedLotSize <= accountMarginLotCeiling + 1e-8)
   const lotSizeValid = symbolSpec ? Number.isFinite(parsedLotSize) && parsedLotSize >= symbolSpec.minLotSize && parsedLotSize <= symbolSpec.maxLotSize && Math.abs((parsedLotSize / symbolSpec.lotStep) - Math.round(parsedLotSize / symbolSpec.lotStep)) < 1e-8 : false
 
   useEffect(() => {
@@ -384,7 +430,7 @@ export function TradingAgentPanel({
           return
         }
         if (!lotFitsAccount) {
-          setStatus('BOT BLOCKED • ' + parsedLotSize.toFixed(2) + ' lot exceeds the ' + riskModes[riskMode].label.toLowerCase() + ' account-risk limit of ' + accountFitLot.toFixed(2) + ' lot')
+          setStatus('BOT BLOCKED • ' + parsedLotSize.toFixed(2) + ' lot is above the account-affordable ceiling of ' + accountMarginLotCeiling.toFixed(2) + ' lot at ' + SIMULATOR_LEVERAGE + ':1 leverage')
           setAutoTradingEnabled(false)
           setPhase('READY')
           return
@@ -784,33 +830,10 @@ export function TradingAgentPanel({
             <span className="block text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted">Round</span>
             <strong className="mt-1 block font-mono text-xs text-shafx-text">{Math.min(unitRound, BOT_CYCLES_PER_UNIT)} / {BOT_CYCLES_PER_UNIT}</strong>
           </div>
-          <div className="rounded-xl border border-shafx-border bg-shafx-bg px-2.5 py-2.5">
+          <button type="button" onClick={() => setRiskMode((mode) => mode === 'SAFE' ? 'NORMAL' : mode === 'NORMAL' ? 'EXTREME' : 'SAFE')} className="rounded-xl border border-shafx-border bg-shafx-bg px-2.5 py-2.5 text-left active:scale-[.99]" title="Tap to change risk mode">
             <span className="block text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted">Risk mode</span>
             <strong className={riskMode === 'SAFE' ? 'mt-1 block font-mono text-xs text-shafx-success' : riskMode === 'NORMAL' ? 'mt-1 block font-mono text-xs text-shafx-accent' : 'mt-1 block font-mono text-xs text-shafx-warning'}>{riskModes[riskMode].label}</strong>
-          </div>
-        </div>
-
-        <div className="mt-3 rounded-xl border border-shafx-border bg-shafx-bg p-3.5">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted">Account protection</div>
-              <div className="mt-1 text-sm font-semibold">Risk mode</div>
-            </div>
-            <span className="font-mono text-[8px] text-shafx-textMuted">{riskModes[riskMode].percent}% balance risk cap</span>
-          </div>
-          <div className="mt-3 grid grid-cols-3 gap-1.5">
-            {(Object.keys(riskModes) as RiskMode[]).map((mode) => (
-              <button key={mode} type="button" onClick={() => setRiskMode(mode)} className={mode === riskMode
-                ? 'min-h-10 rounded-lg border border-shafx-accent/40 bg-shafx-accent/10 px-2 text-[9px] font-semibold text-shafx-accent'
-                : 'min-h-10 rounded-lg border border-shafx-border bg-shafx-surface px-2 text-[9px] font-semibold text-shafx-textMuted'}>
-                {riskModes[mode].label}
-              </button>
-            ))}
-          </div>
-          <div className="mt-2 flex items-center justify-between gap-2 text-[8px] text-shafx-textMuted">
-            <span>Account balance {accountBalance.toFixed(2)} {accountCurrency}</span>
-            <span className="font-mono">Max risk {botRiskCalc?.isValid ? botRiskCalc.riskAmount.toFixed(2) : '—'} {accountCurrency}</span>
-          </div>
+          </button>
         </div>
 
         <div className="mt-3 rounded-xl border border-shafx-border bg-shafx-bg p-3.5">
@@ -841,8 +864,8 @@ export function TradingAgentPanel({
               <span className="font-mono">{botRunLotSize?.toFixed(2) ?? lotSize} lot/run</span>
             </div>
             <div className="flex items-center justify-between gap-2">
-              <span>{botRiskCalc?.isValid ? 'Account-fit ceiling' : 'Account-fit calculation waiting for setup'}</span>
-              <span className={lotFitsAccount ? 'font-mono text-shafx-success' : 'font-mono text-shafx-danger'}>{botRiskCalc?.isValid ? accountFitLot.toFixed(2) + ' lot max' : '—'}</span>
+              <span>{botRiskCalc?.isValid ? 'Account affordability ceiling' : 'Account-fit calculation waiting for setup'}</span>
+              <span className={lotFitsAccount ? 'font-mono text-shafx-success' : 'font-mono text-shafx-danger'}>{accountMarginLotCeiling > 0 ? accountMarginLotCeiling.toFixed(2) + ' lot max' : '—'}</span>
             </div>
           </div>
         </div>
@@ -850,10 +873,10 @@ export function TradingAgentPanel({
         {!lotFitsAccount && lotSizeValid && botRiskCalc?.isValid && (
           <div className="mt-3 rounded-xl border border-shafx-danger/25 bg-shafx-danger/[0.055] px-3 py-2.5">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[9px] font-semibold text-shafx-danger">BOT BLOCKED BY ACCOUNT RISK</span>
-              <span className="font-mono text-[9px] text-shafx-danger">{parsedLotSize.toFixed(2)} &gt; {accountFitLot.toFixed(2)} lot</span>
+              <span className="text-[9px] font-semibold text-shafx-danger">BOT BLOCKED BY ACCOUNT MARGIN</span>
+              <span className="font-mono text-[9px] text-shafx-danger">{parsedLotSize.toFixed(2)} &gt; {accountMarginLotCeiling.toFixed(2)} lot</span>
             </div>
-            <p className="mt-1 text-[8px] text-shafx-textMuted">The bot will not execute until the lot size fits the selected risk mode and account balance.</p>
+            <p className="mt-1 text-[8px] text-shafx-textMuted">The bot will not execute until the lot fits the account's available simulated margin.</p>
           </div>
         )}
 
