@@ -52,15 +52,22 @@ async function refreshSession(req, res) { const refresh = cookie(req, refreshCoo
 async function currentUser(req, res) { const token = cookie(req, sessionCookie); if (token) { const decoded = decodeURIComponent(token); const response = await supabase('/user', { headers: { Authorization: `Bearer ${decoded}` } }); if (response.ok) return { token: decoded, user: await response.json() } } return (await refreshSession(req, res)) || { token: null, user: null } }
 async function profileFor(userId) { const response = await rest(`/shafx_profiles?id=eq.${encodeURIComponent(userId)}&select=id,display_name,status,simulator_account_id,created_at,risk_score,security_state,last_login_at,failed_login_count`); if (!response.ok) throw new Error('SHAFX profile database is not ready. Run supabase/schema.sql once in the Supabase SQL Editor.'); const rows = await response.json(); return rows[0] || null }
 async function botEntitlementFor(userId) { const response = await rest(`/shafx_bot_entitlements?user_id=eq.${encodeURIComponent(userId)}&select=plan,subscription_status,subscription_ends_at`); if (!response.ok) throw new Error('SHAFX bot entitlement service is not ready.'); const row = (await response.json())[0]; const requested = row?.plan === 'PRO' || row?.plan === 'REGULAR' ? row.plan : 'FREE'; if (requested === 'FREE') return 'FREE'; const status = String(row?.subscription_status || '').toLowerCase(); const endsAt = row?.subscription_ends_at ? new Date(row.subscription_ends_at).getTime() : null; return (status === 'active' || status === 'trialing') && (endsAt === null || Number.isFinite(endsAt) && endsAt > Date.now()) ? requested : 'FREE' }
-const publicUser = async (user) => { const profile = await profileFor(user.id); if (!profile) return null; return { id: user.id, email: user.email, displayName: profile.display_name, status: profile.status, simulatorAccountId: profile.simulator_account_id, createdAt: profile.created_at, botPlan: await botEntitlementFor(user.id) } }
+const publicUser = async (user) => {
+  const [profile, botPlan] = await Promise.all([profileFor(user.id), botEntitlementFor(user.id)])
+  if (!profile) return null
+  return { id: user.id, email: user.email, displayName: profile.display_name, status: profile.status, simulatorAccountId: profile.simulator_account_id, createdAt: profile.created_at, botPlan }
+}
 async function securityEvent(event) { try { await rest('/shafx_security_events', { method: 'POST', body: JSON.stringify(event) }) } catch {} }
 async function updateSecurityProfile(userId, patch) { try { await rest(`/shafx_profiles?id=eq.${encodeURIComponent(userId)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch) }) } catch {} }
 export default async function handler(req, res) {
-  const guard = await apiRequestGuard(req, 'api:auth', 120)
-  if (!guard.allowed) return res.status(guard.status).json({ ok: false, error: guard.error, retryAfterSeconds: guard.retryAfterSeconds })
+  const action = new URL(req.url || '/', 'http://shafx.local').searchParams.get('action') || ''
+  const guardedBySpecificFlow = new Set(['login', 'signup', 'request-login-code', 'verify-login-code', 'verify-email-code'])
+  if (!guardedBySpecificFlow.has(action)) {
+    const guard = await apiRequestGuard(req, 'api:auth', 120)
+    if (!guard.allowed) return res.status(guard.status).json({ ok: false, error: guard.error, retryAfterSeconds: guard.retryAfterSeconds })
+  }
   res.setHeader('Cache-Control', 'no-store')
   if (!configured()) return json(res, 503, { ok: false, error: 'SHAFX identity is not configured on this deployment.' })
-  const action = new URL(req.url || '/', 'http://shafx.local').searchParams.get('action') || ''
   try {
     if (action === 'logout') { const { user } = await currentUser(req, res); if (user) await securityEvent({ user_id: user.id, event_type: 'logout', decision: 'allow', risk_score: 0, fingerprint: securityFingerprint(req), metadata: {} }); res.setHeader('Set-Cookie', [sessionCookie + '=; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=0', refreshCookie + '=; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=0', loginChallengeCookie + '=; Path=/api/auth; HttpOnly; SameSite=Lax; Secure; Max-Age=0']); return json(res, 200, { ok: true }) }
     if (action === 'me') { const { user } = await currentUser(req, res); if (!user) return json(res, 401, { ok: false, error: 'Not signed in' }); const result = await publicUser(user); if (!result) return json(res, 403, { ok: false, error: 'SHAFX account profile is missing.' }); if (result.status !== 'active') { clearSessionCookie(res); return json(res, 403, { ok: false, error: result.status === 'banned' ? 'This SHAFX account has been banned.' : 'This SHAFX account is suspended.', status: result.status }) } return json(res, 200, { ok: true, user: result }) }
@@ -131,9 +138,28 @@ export default async function handler(req, res) {
       const result = await publicUser(data.user)
       if (!result) return json(res, 403, { ok: false, error: 'SHAFX account profile is not ready.' })
       if (result.status !== 'active') return json(res, 403, { ok: false, error: result.status === 'banned' ? 'This SHAFX account has been banned.' : 'This SHAFX account is suspended.', status: result.status })
-      await clearLoginFailures(req)
       setLoginChallenge(res, { userId: data.user.id, email, purpose: 'login' })
-      return json(res, 200, { ok: true, requiresVerification: true, userId: data.user.id, email, message: 'Password verified. Request a verification code to continue.' })
+      const otpResult = await (async () => {
+        const guard = await otpRequestGuard(req, email)
+        if (!guard.allowed) return { sent: false, retryAfterSeconds: guard.retryAfterSeconds || 60, message: guard.error }
+        const response = await supabase('/otp', { method: 'POST', body: JSON.stringify({ email, create_user: false }) })
+        const otpData = await response.json().catch(() => ({}))
+        if (!response.ok) return { sent: false, retryAfterSeconds: 0, message: authError(otpData, 'Password verified, but SHAFX could not send the verification code right now.') }
+        return { sent: true, retryAfterSeconds: 60, message: 'Password verified. We sent a 6-digit verification code to your email. Enter it below.' }
+      })()
+      await Promise.all([
+        clearLoginFailures(req),
+        securityEvent({ user_id: data.user.id, event_type: 'login_password_verified', decision: 'allow', risk_score: 0, fingerprint: securityFingerprint(req), metadata: { code_sent: otpResult.sent } }),
+      ])
+      return json(res, 200, {
+        ok: true,
+        requiresVerification: true,
+        userId: data.user.id,
+        email,
+        codeSent: otpResult.sent,
+        resendAfterSeconds: otpResult.retryAfterSeconds,
+        message: otpResult.message,
+      })
     }    return json(res, 400, { ok: false, error: 'Unknown action.' })
   } catch (error) { return json(res, 500, { ok: false, error: error instanceof Error ? error.message : 'SHAFX identity service failed.' }) }
 }
