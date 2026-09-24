@@ -20,6 +20,8 @@ function clientIp(req) {
   return String(req.headers?.['x-forwarded-for'] || req.headers?.['x-real-ip'] || 'unknown').split(',')[0].trim()
 }
 
+const requestCookie = (req, name) => (req.headers?.cookie || '').split(';').map((part) => part.trim()).find((part) => part.startsWith(`${name}=`))?.slice(name.length + 1) || null
+
 function bucketId(req, action, identity = null) {
   const secret = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SHAFX_ADMIN_KEY || 'shafx'
   const subject = identity === null ? `${action}:${clientIp(req)}:${req.headers?.['user-agent'] || 'unknown'}` : `${action}:${identity}`
@@ -130,7 +132,7 @@ export function securityFingerprint(req) {
 
 
 function sessionIdentity(req) {
-  const token = String(cookie(req, 'shafx_session') || '').trim()
+  const token = String(requestCookie(req, 'shafx_session') || '').trim()
   if (!token) return null
   const secret = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SHAFX_ADMIN_KEY || 'shafx'
   return hash(secret, `session:${token}`)
