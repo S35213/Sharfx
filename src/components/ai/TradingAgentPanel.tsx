@@ -261,11 +261,15 @@ export function TradingAgentPanel({
     const liquidity = analyzeLiquidity(frameCandles, swings, tolerance)
     const framePrice = frameCandles[frameCandles.length - 1]?.close ?? currentPrice
     const setupResult = analyzeSetup({ currentPrice: framePrice, structure, supportResistance, liquidity })
-    const executableSetup = setupResult.preferredSetup ?? buildFallbackSetup(frameCandles, structure.bias, symbol, framePrice, symbolSpec?.pricePrecision ?? (symbol.includes('JPY') ? 3 : 5))
+    const executableSetup = (structure.bias === 'Bullish' || structure.bias === 'Bearish')
+      ? (setupResult.preferredSetup ?? buildFallbackSetup(frameCandles, structure.bias, symbol, framePrice, symbolSpec?.pricePrecision ?? (symbol.includes('JPY') ? 3 : 5)))
+      : null
+    const flow = structure.bias === 'Bullish' ? 'UPFLOW' : structure.bias === 'Bearish' ? 'DOWNFLOW' : structure.bias === 'Sideways' ? 'RANGE' : 'UNCLEAR'
     return {
       timeframe: scanTimeframe,
       bias: structure.bias,
-      structure: structure.status,
+      structure: structure.structureType,
+      flow,
       directionalOpportunity: Boolean(executableSetup),
       executableSetup,
     }
@@ -1052,7 +1056,7 @@ export function TradingAgentPanel({
               if (onReviewOpportunity) onReviewOpportunity(selectedOpportunity.timeframe, selectedOpportunity.executableSetup)
               else onReviewSetup?.(selectedOpportunity.executableSetup)
             }} className="flex min-h-14 w-full items-center justify-center rounded-xl border border-shafx-success/25 bg-shafx-success/5 px-3 text-[10px] font-semibold text-shafx-success shadow-[0_8px_24px_rgba(34,211,165,.08)] disabled:cursor-not-allowed disabled:opacity-40">
-              Review ${selectedOpportunity?.timeframe ?? "selected"} ${selectedOpportunity?.executableSetup?.direction ?? ""} strategy
+              Review {selectedOpportunity?.timeframe ?? "selected"} {selectedOpportunity?.executableSetup?.direction ?? ""} strategy
             </button>
           )}
         </div>
