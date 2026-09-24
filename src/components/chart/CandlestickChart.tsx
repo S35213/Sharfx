@@ -26,8 +26,6 @@ interface CandlestickChartProps {
   marketTimestamp?: number
   onTimeframeChange?: (timeframe: Timeframe) => void
   replayMode?: boolean
-  landscapeFocus?: boolean
-  onLandscapeFocusChange?: (focused: boolean) => void
 }
 
 interface UserLevel { id: string; price: number; label: string; color: string; lineWidth?: 1 | 2 | 3 | 4; dashed?: boolean; armed?: boolean }
@@ -80,7 +78,7 @@ const TIMEFRAME_SECONDS: Record<Timeframe, number> = {
 }
 const timeframeSecondsFor = (nextTimeframe: Timeframe): number => TIMEFRAME_SECONDS[nextTimeframe]
 
-export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, symbol, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [], candleTheme = 'mt5', chartMode = 'candles', marketTimestamp, onTimeframeChange, replayMode = false, landscapeFocus = false, onLandscapeFocusChange }) => {
+export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, symbol, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [], candleTheme = 'mt5', chartMode = 'candles', marketTimestamp, onTimeframeChange, replayMode = false }) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ShafxSeries | null>(null)
@@ -691,11 +689,6 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   }
 
   const toggleFullscreen = async (): Promise<void> => {
-    if (landscapeFocus) {
-      onLandscapeFocusChange?.(false)
-      setTimeframeMenuOpen(false)
-      return
-    }
     const element = containerRef.current
     if (!element || !document.fullscreenEnabled) return
     try {
