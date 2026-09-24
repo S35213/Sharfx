@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Activity, Bot, Play, RefreshCw, ShieldCheck, Sparkles, Square, Wallet } from 'lucide-react'
+import { Activity, Bot, Play, RefreshCw, ShieldCheck, Sparkles, Square } from 'lucide-react'
 import { analyzeLiquidity } from '../../engine/liquidity'
 import { calculatePositionProfit } from '../../engine/simulator/positionManager'
 import { analyzeMarketStructure, findSwingPoints } from '../../engine/marketStructure'
@@ -163,7 +163,6 @@ export function TradingAgentPanel({
   const dailyLimitReached = plan.maxDailyCycleUnits !== null && cycleUnits >= plan.maxDailyCycleUnits
   const [unitRound, setUnitRound] = useState(0)
   const [pendingUnitCompletion, setPendingUnitCompletion] = useState(false)
-  const [botSessionStarted, setBotSessionStarted] = useState(false)
   const [tradeCloseAt, setTradeCloseAt] = useState<number | null>(null)
   const [tradeSecondsLeft, setTradeSecondsLeft] = useState(0)
   const [scanFrame, setScanFrame] = useState<Timeframe>('M1')
@@ -236,7 +235,6 @@ export function TradingAgentPanel({
   const research = useMemo(() => buildAgentResearch({ context: tradingContext, learning, multiTimeframe }), [learning, multiTimeframe, tradingContext])
   const setup = tradingContext.setup.preferredSetup
   const bestOpportunity = activeBotScan?.setup ?? setup
-  const riskAmount = accountBalance * (riskModes[BOT_RISK_MODE].percent / 100)
   const displayedUnitNumber = pendingUnitCompletion ? Math.max(1, cycleUnits) : Math.max(1, cycleUnits + 1)
   const nextUnitNumber = Math.max(1, cycleUnits + 1)
   const bestOpportunityRef = useRef(bestOpportunity)
@@ -286,7 +284,6 @@ export function TradingAgentPanel({
     setBotRunLotSize(null)
     setUnitRound(0)
     setPendingUnitCompletion(false)
-    setBotSessionStarted(false)
     setTradeCloseAt(null)
     setTradeSecondsLeft(0)
     setLastResult(null)
@@ -585,8 +582,7 @@ export function TradingAgentPanel({
         setCycleUnits(serverUsedUnits)
         setUnitRound(serverRound)
         setPendingUnitCompletion(false)
-        setBotSessionStarted(true)
-        botRunLotSizeRef.current = parsedLotSize
+            botRunLotSizeRef.current = parsedLotSize
         setBotRunLotSize(parsedLotSize)
         setLastResult(null)
         setAutoTradingEnabled(true)
