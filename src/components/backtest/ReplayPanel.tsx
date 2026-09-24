@@ -20,6 +20,8 @@ export function ReplayPanel({ candles, replayCount, onReplayCountChange }: Props
   const [playing, setPlaying] = useState(false)
   const playTimer = useRef<number | null>(null)
 
+  const setCount = (count: number): void => onReplayCountChange(Math.min(max, Math.max(minimum, count)))
+
   useEffect(() => {
     if (!playing || isComplete) return
     playTimer.current = window.setTimeout(() => setCount(active + step), 550)
@@ -32,7 +34,6 @@ export function ReplayPanel({ candles, replayCount, onReplayCountChange }: Props
     if (isComplete) setPlaying(false)
   }, [isComplete])
 
-  const setCount = (count: number): void => onReplayCountChange(Math.min(max, Math.max(minimum, count)))
   const restart = (): void => {
     setPlaying(false)
     setCount(minimum)
