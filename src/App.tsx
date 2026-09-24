@@ -136,6 +136,26 @@ const TerminalContent: React.FC = () => {
     return () => { cancelled = true; unsubscribe() }
   }, [])
 
+  const brokerMode = isBrokerMode()
+  const accountScopeKey = useMemo(() => {
+    if (brokerMode) {
+      return activeProviderSelection
+        ? providerAccountStreamKey({
+            providerId: activeProviderSelection.providerId,
+            connectionId: activeProviderSelection.connectionId,
+            accountId: activeProviderSelection.accountId ?? '',
+            accountType: activeProviderSelection.environment === 'demo' ? 'demo' : 'real',
+          })
+        : 'broker:unselected'
+    }
+    const simulatorAccountId = typeof window !== 'undefined' ? window.sessionStorage.getItem('shafx-simulator-account-id') || 'default' : 'default'
+    return 'simulator:' + simulatorAccountId
+  }, [activeProviderSelection, brokerMode])
+
+  const accountHistoryLabel = brokerMode
+    ? `${activeProviderSelection?.providerId ?? 'Provider'} • ${activeProviderSelection?.environment === 'real' ? 'Real' : 'Demo'} • ${activeProviderSelection?.accountId ?? 'current account'}`
+    : 'SHAFX Demo Account'
+
   useEffect(() => {
     let cancelled = false
     const load = async (): Promise<void> => {
@@ -183,8 +203,12 @@ const TerminalContent: React.FC = () => {
         setReplayCount(cands.length)
         setMarketAnalysis(ma)
         setAiAnalysis(ai)
-        if (!accountInitialized.current) { accountInitialized.current = true; setAccountData(acc) }
-        if (!simulatorInitialized.current) { simulatorInitialized.current = true; setOpenPositions(positions); setPendingOrders(pending); setTradeHistory(history) }
+        accountInitialized.current = true
+        simulatorInitialized.current = true
+        setAccountData(acc)
+        setOpenPositions(positions)
+        setPendingOrders(pending)
+        setTradeHistory(history)
         const pair = wl.find((p) => p.symbol === selectedSymbol)
         const initialChartPrice = cands[cands.length - 1]?.close ?? pair?.price
         if (Number.isFinite(initialChartPrice)) setCurrentPrice(Number(initialChartPrice))
@@ -194,7 +218,7 @@ const TerminalContent: React.FC = () => {
     }
     void load()
     return () => { cancelled = true }
-  }, [pushToast, selectedSymbol, timeframe])
+  }, [accountScopeKey, pushToast, selectedSymbol, timeframe])
 
   const activeSelectionKey = activeProviderSelection
     ? providerAccountStreamKey({
@@ -206,7 +230,6 @@ const TerminalContent: React.FC = () => {
     : ''
 
   useEffect(() => {
-    const brokerMode = isBrokerMode()
     const manager = accountStreamManager.current
     if (!brokerMode) { void manager.stopAll(); return }
 
@@ -683,7 +706,7 @@ const TerminalContent: React.FC = () => {
       </section>
 
       <aside className={`${showAgent && isCompactViewport ? '' : 'hidden'} w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden`}><div className="space-y-3"><TradingAgentPanel {...botProps} /><SimulationFlowChart key={selectedSymbol} selectedSymbol={selectedSymbol} openPositions={openPositions} tradeHistory={tradeHistory} />{brokerMode && activeProviderId === 'deriv' && <div><DerivCashierLinks /></div>}</div></aside>
-      <aside className={`${showHistory ? '' : 'hidden'} w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden`}><div className="space-y-3"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} onBulkClose={handleBulkClose} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} showTrades /><SimulationFlowChart key={selectedSymbol} selectedSymbol={selectedSymbol} openPositions={openPositions} tradeHistory={tradeHistory} /><TradingJournalPanel tradeHistory={tradeHistory} currency={accountData.currency} /></div></aside>
+      <aside className={`${showHistory ? '' : 'hidden'} w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden`}><div className="space-y-3"><TradesPanel positionsOnly openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={displayPrice} selectedSymbol={selectedSymbol} onClosePosition={handleClosePosition} onBulkClose={handleBulkClose} /><PerformancePanel compactHistory tradeHistory={tradeHistory} currency={accountData.currency} accountLabel={accountHistoryLabel} accountType={activeProviderSelection?.environment === 'real' ? 'real' : 'demo'} /></div></aside>
       <aside className={`${showAccount ? '' : 'hidden'} w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden`}><div className="space-y-3"><AccountPanel account={accountData} />{brokerMode && activeProviderId === 'deriv' && <DerivCashierLinks />}</div></aside>
 
       <aside className="hidden w-[clamp(300px,28vw,420px)] min-w-0 flex-shrink-0 flex-col overflow-hidden border-l border-shafx-border bg-shafx-surface/50 lg:flex">
