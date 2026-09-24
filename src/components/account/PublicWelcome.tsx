@@ -30,7 +30,7 @@ export const PublicWelcome: React.FC = () => {
   })
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setBrandIntroVisible(false), 2850)
+    const timer = window.setTimeout(() => setBrandIntroVisible(false), 850)
     return () => window.clearTimeout(timer)
   }, [])
   const [showAuth, setShowAuth] = useState(false)
@@ -43,6 +43,7 @@ export const PublicWelcome: React.FC = () => {
   const [verificationStep, setVerificationStep] = useState<'none' | 'signup' | 'login'>('none')
   const [verificationCode, setVerificationCode] = useState('')
   const [codeRequested, setCodeRequested] = useState(false)
+  const [resendCountdown, setResendCountdown] = useState(0)
   const [resetPassword, setResetPassword] = useState('')
   const [resetConfirm, setResetConfirm] = useState('')
   const [displayName, setDisplayName] = useState('')
@@ -50,6 +51,11 @@ export const PublicWelcome: React.FC = () => {
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const { signIn, signUp, requestLoginCode, verifyEmailCode, error } = useAuth()
+  useEffect(() => {
+    if (resendCountdown <= 0) return
+    const timer = window.setTimeout(() => setResendCountdown((value) => Math.max(0, value - 1)), 1000)
+    return () => window.clearTimeout(timer)
+  }, [resendCountdown])
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -69,6 +75,7 @@ export const PublicWelcome: React.FC = () => {
     setVerificationStep('none')
     setVerificationCode('')
     setCodeRequested(false)
+    setResendCountdown(0)
     setShowAuth(true)
   }
 
@@ -116,8 +123,9 @@ export const PublicWelcome: React.FC = () => {
         if (result.requiresVerification) {
           setVerificationStep('login')
           setVerificationCode('')
-          setCodeRequested(false)
-          setMessage(result.message || 'Password verified. Request a verification code to continue.')
+          setCodeRequested(true)
+          setResendCountdown(Math.max(0, Number(result.resendAfterSeconds || 60)))
+          setMessage(result.message || 'We sent a 6-digit verification code to your email. Enter it below.')
         } else {
           setMessage('Login successful.')
         }
@@ -144,15 +152,12 @@ export const PublicWelcome: React.FC = () => {
             {resetToken ? <><input value={resetPassword} onChange={(event) => setResetPassword(event.target.value)} type="password" autoComplete="new-password" required minLength={10} placeholder="New password" className="min-h-12 w-full rounded-xl border border-shafx-border bg-shafx-surface px-4 text-sm outline-none focus:border-shafx-accent" /><input value={resetConfirm} onChange={(event) => setResetConfirm(event.target.value)} type="password" autoComplete="new-password" required minLength={10} placeholder="Confirm new password" className="min-h-12 w-full rounded-xl border border-shafx-border bg-shafx-surface px-4 text-sm outline-none focus:border-shafx-accent" /><button disabled={submitting} type="submit" className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-shafx-accent px-4 text-sm font-semibold text-white disabled:opacity-60"><KeyRound className="h-4 w-4" />{submitting ? 'Updating…' : 'Update password'}</button></> : forgotMode ? <><input value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" required placeholder="Email address" className="min-h-12 w-full rounded-xl border border-shafx-border bg-shafx-surface px-4 text-sm outline-none focus:border-shafx-accent" /><button disabled={submitting} type="submit" className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-shafx-accent px-4 text-sm font-semibold text-white disabled:opacity-60"><KeyRound className="h-4 w-4" />{submitting ? 'Sending…' : 'Send reset link'}</button></> : <>
               {verificationStep !== 'none' ? <>
               <input value={email} readOnly type="email" autoComplete="email" required placeholder="Email address" className="min-h-12 w-full rounded-xl border border-shafx-border bg-shafx-surface px-4 text-sm outline-none opacity-80" />
-              {verificationStep === 'login' && !codeRequested ? <>
-                <div className="rounded-xl border border-shafx-border bg-shafx-surface p-4 text-sm leading-6 text-shafx-textMuted"><div className="font-semibold text-shafx-text">Password verified</div><p className="mt-1">Click below to request a one-time code. We will send it to your email.</p></div>
-                <button disabled={submitting} type="button" onClick={async () => { try { setSubmitting(true); setMessage(null); const result = await requestLoginCode(email); setCodeRequested(true); setMessage(result.message || 'Verification code sent. Check Gmail and enter it below.'); } catch (err) { setMessage(err instanceof Error ? err.message : 'Unable to send the verification code.'); } finally { setSubmitting(false) } }} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-shafx-accent px-4 text-sm font-semibold text-white disabled:opacity-60"><KeyRound className="h-4 w-4" />{submitting ? 'Sending…' : 'Request verification code'}</button>
-              </> : <>
-                <input value={verificationCode} onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" pattern="\d{6}" required placeholder="6-digit verification code" className="min-h-12 w-full rounded-xl border border-shafx-border bg-shafx-surface px-4 text-center text-lg font-mono tracking-[0.35em] outline-none focus:border-shafx-accent" />
+              <>
+                <input value={verificationCode} onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" pattern="\d{6}" required placeholder="000000" className="min-h-12 w-full rounded-xl border border-shafx-border bg-shafx-surface px-4 text-center text-lg font-mono tracking-[0.35em] outline-none focus:border-shafx-accent" />
                 <button disabled={submitting} type="submit" className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-shafx-accent px-4 text-sm font-semibold text-white disabled:opacity-60"><KeyRound className="h-4 w-4" />{submitting ? 'Verifying…' : 'Verify code'}</button>
-                <button type="button" disabled={submitting} onClick={async () => { try { setSubmitting(true); setMessage(null); const result = await requestLoginCode(email); setMessage(result.message || 'A new verification code has been sent.'); } catch (err) { setMessage(err instanceof Error ? err.message : 'Unable to resend the code.'); } finally { setSubmitting(false) } }} className="w-full py-1 text-[11px] text-shafx-textMuted hover:text-shafx-accent disabled:opacity-50">{verificationStep === 'signup' ? 'Resend verification code' : 'Resend login code'}</button>
+                <button type="button" disabled={submitting || (verificationStep === 'login' && resendCountdown > 0)} onClick={async () => { try { setSubmitting(true); setMessage(null); const result = await requestLoginCode(email); setResendCountdown(Math.max(0, Number(result.retryAfterSeconds || 60))); setMessage(result.message || 'A new verification code has been sent.'); } catch (err) { setMessage(err instanceof Error ? err.message : 'Unable to resend the code.'); } finally { setSubmitting(false) } }} className="w-full py-2 text-[11px] text-shafx-textMuted hover:text-shafx-accent disabled:opacity-50">{verificationStep === 'login' && resendCountdown > 0 ? `Didn't receive it? Request another code in ${resendCountdown}s` : verificationStep === 'signup' ? 'Resend verification code' : 'Request another code'}</button>
               </>}
-              <button type="button" onClick={() => { setVerificationStep('none'); setVerificationCode(''); setCodeRequested(false); setMessage(null) }} className="w-full py-1 text-[11px] text-shafx-textMuted hover:text-shafx-accent">Back to email and password</button>
+              <button type="button" onClick={() => { setVerificationStep('none'); setVerificationCode(''); setCodeRequested(false); setResendCountdown(0); setMessage(null) }} className="w-full py-1 text-[11px] text-shafx-textMuted hover:text-shafx-accent">Back to email and password</button>
             </> : <>
               {formMode === 'signup' && <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Full name" className="min-h-12 w-full rounded-xl border border-shafx-border bg-shafx-surface px-4 text-sm outline-none focus:border-shafx-accent" />}
               <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" required placeholder="Email address" className="min-h-12 w-full rounded-xl border border-shafx-border bg-shafx-surface px-4 text-sm outline-none focus:border-shafx-accent" />{formMode === 'signin' && <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="current-password" required minLength={10} placeholder="Password" className="min-h-12 w-full rounded-xl border border-shafx-border bg-shafx-surface px-4 text-sm outline-none focus:border-shafx-accent" />}
