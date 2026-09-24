@@ -103,7 +103,19 @@ export class SimulatorRealtimeMarketEngine {
 
     const last = this.m1Candles[this.m1Candles.length - 1]
     if (!last) throw new Error('Simulator M1 history is invalid.')
-    this.simulatedTime = Number.isFinite(initialTimestamp) ? Number(initialTimestamp) : last.time
+
+    // The simulator price path is synthetic, but its clock is not. Rebase the
+    // historical seed data onto the actual current minute so every displayed
+    // timeframe follows the real-world wall clock instead of an old mock date.
+    const nowSeconds = Math.floor(Date.now() / 1000)
+    const currentMinute = Math.floor(nowSeconds / 60) * 60
+    const sourceLastMinute = Math.floor(last.time / 60) * 60
+    const timeShift = currentMinute - sourceLastMinute
+    if (timeShift !== 0) {
+      for (const candle of this.m1Candles) candle.time += timeShift
+    }
+
+    this.simulatedTime = nowSeconds
     this.bid = initialBid !== undefined && finitePositive(initialBid) ? Number(initialBid) : last.close
     const seed = seedFor(spec.baseCurrency + spec.quoteCurrency)
     this.phase = (seed % 10000) / 10000 * Math.PI * 2
