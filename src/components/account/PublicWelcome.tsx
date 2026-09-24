@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { ArrowRight, Bot, KeyRound, LockKeyhole, LogIn, ShieldCheck, Sparkles, UserPlus } from 'lucide-react'
 import { useAuth } from '../../app/AuthContext'
-import { ShafxBrandIntroMark, ShafxBrandMark, ShafxWordmark } from '../brand/ShafxBrand'
+import { ShafxIntroMark, ShafxBrandMark, ShafxWordmark } from '../brand/ShafxBrand'
 
 type FormMode = 'signin' | 'signup'
 
