@@ -61,7 +61,7 @@ export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, t
     setQuery('')
   }
 
-  return <header ref={navRef} className="sticky top-0 z-50 border-b border-shafx-border bg-[#080C12]/95 shadow-[0_8px_30px_rgba(0,0,0,.24)] backdrop-blur-xl">
+  return <header ref={navRef} className="shafx-top-nav sticky top-0 z-50 border-b border-shafx-border bg-[#080C12]/95 shadow-[0_8px_30px_rgba(0,0,0,.24)] backdrop-blur-xl">
     <div className="flex min-h-[68px] items-center gap-2 px-3 sm:gap-3 sm:px-4 lg:px-5">
       <div className="flex flex-shrink-0 items-center gap-2.5">
         <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-shafx-accent/30 bg-shafx-accent/[0.08] shadow-[0_0_22px_rgba(22,119,255,.12)]"><ShafxBrandMark size={30} /></div>

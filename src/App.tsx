@@ -92,16 +92,28 @@ const TerminalContent: React.FC = () => {
   const [chartTool, setChartTool] = useState<WorkspaceTool>('cursor')
   const [dock, setDock] = useState<WorkspaceDock>('insights')
   const [isCompactViewport, setIsCompactViewport] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 999px)').matches)
+  const [isLandscapeCompactViewport, setIsLandscapeCompactViewport] = useState(() => typeof window !== 'undefined' && window.matchMedia('(orientation: landscape) and (max-width: 999px)').matches)
+  const [landscapeChartFocus, setLandscapeChartFocus] = useState(() => typeof window !== 'undefined' && window.matchMedia('(orientation: landscape) and (max-width: 999px)').matches)
 
   useEffect(() => {
-    const media = window.matchMedia('(max-width: 999px)')
-    const syncViewport = (): void => setIsCompactViewport(media.matches)
+    const compactMedia = window.matchMedia('(max-width: 999px)')
+    const landscapeMedia = window.matchMedia('(orientation: landscape) and (max-width: 999px)')
+    const syncViewport = (): void => {
+      setIsCompactViewport(compactMedia.matches)
+      setIsLandscapeCompactViewport(landscapeMedia.matches)
+    }
+    const onOrientation = (): void => {
+      syncViewport()
+      setLandscapeChartFocus(landscapeMedia.matches)
+    }
     syncViewport()
-    media.addEventListener('change', syncViewport)
-    window.addEventListener('orientationchange', syncViewport)
+    compactMedia.addEventListener('change', syncViewport)
+    landscapeMedia.addEventListener('change', onOrientation)
+    window.addEventListener('orientationchange', onOrientation)
     return () => {
-      media.removeEventListener('change', syncViewport)
-      window.removeEventListener('orientationchange', syncViewport)
+      compactMedia.removeEventListener('change', syncViewport)
+      landscapeMedia.removeEventListener('change', onOrientation)
+      window.removeEventListener('orientationchange', onOrientation)
     }
   }, [])
 
@@ -688,7 +700,7 @@ const TerminalContent: React.FC = () => {
     research: <div className="space-y-3"><ReplayPanel candles={candles} replayCount={replayCount || candles.length} onReplayCountChange={handleReplayCountChange} /><BacktestPanel symbol={selectedSymbol} candles={candles} symbolSpec={symbolSpec} initialBalance={accountData.balance} accountCurrency={accountData.currency} conversionRate={conversionRate} /><PerformancePanel tradeHistory={tradeHistory} currency={accountData.currency} /><TradingJournalPanel tradeHistory={tradeHistory} currency={accountData.currency} /></div>,
   }[dock]
 
-  return <div className="min-h-[100svh] w-full min-w-0 overflow-x-hidden bg-shafx-bg text-shafx-text lg:flex lg:h-[calc(100vh-28px)] lg:flex-col lg:overflow-hidden">
+  return <div className={`shafx-terminal-root min-h-[100svh] w-full min-w-0 overflow-x-hidden bg-shafx-bg text-shafx-text lg:flex lg:h-[calc(100vh-28px)] lg:flex-col lg:overflow-hidden ${isLandscapeCompactViewport ? "shafx-landscape-mode" : ""}`}>
     <TopNav symbol={selectedSymbol} price={displayPrice} pricePrecision={symbolSpec.pricePrecision} timeframe={timeframe} onTimeframeChange={setTimeframe} pairs={watchlist} onSelectPair={setSelectedSymbol} view={mobileTab} />
     <main className="shafx-mobile-content flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-visible lg:flex-row lg:overflow-hidden">
       <WorkspaceRail tool={chartTool} onToolChange={(next) => setChartTool(next)} dock={dock} onDockChange={setDock} />
@@ -699,9 +711,9 @@ const TerminalContent: React.FC = () => {
         {brokerMode && activeProviderId === 'deriv' && <DerivCashierLinks />}
       </aside>
 
-      <section className={`${showMarket ? '' : 'hidden'} min-w-0 flex-1 flex-col overflow-visible lg:flex lg:overflow-hidden`}>
-        <WorkspaceStatus provider={activeProviderName} mode={brokerMode ? 'broker' : 'demo'} symbol={selectedSymbol} price={displayPrice} precision={symbolSpec.pricePrecision} live={liveMarketActive} />
-        <div className="border-b border-shafx-border bg-shafx-surface/70 px-2 py-2 sm:px-3">
+      <section className={`shafx-market-section ${showMarket ? 'flex' : 'hidden'} min-w-0 flex-1 flex-col overflow-visible lg:overflow-hidden`}>
+        <div className="shafx-landscape-secondary"><WorkspaceStatus provider={activeProviderName} mode={brokerMode ? 'broker' : 'demo'} symbol={selectedSymbol} price={displayPrice} precision={symbolSpec.pricePrecision} live={liveMarketActive} /></div>
+        <div className="shafx-landscape-secondary border-b border-shafx-border bg-shafx-surface/70 px-2 py-2 sm:px-3">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <div className="rounded-xl border border-shafx-border bg-shafx-bg/80 px-3 py-2">
               <div className="flex items-center justify-between gap-2"><span className="text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted">Account</span><span className={accountModeTone + " font-mono text-[8px] font-bold"}>{accountModeLabel}</span></div>
@@ -731,10 +743,10 @@ const TerminalContent: React.FC = () => {
           </div>
           <MobileChartTools tool={chartTool} onToolChange={setChartTool} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} />
           <div className="shafx-chart-stage relative min-h-0 p-1 sm:p-2 lg:flex-1">
-            <CandlestickChart data={chartCandles} symbol={selectedSymbol} timeframe={timeframe} annotations={chartAnnotations} tradeLines={tradeLines} bidPrice={chartLastPrice} askPrice={chartAskPrice} toolMode={chartToolMode} pipSize={symbolSpec.pipSize} onToolNotice={pushToast} showGrid={chartSettings.showGrid} showPriceLabels={chartSettings.showPriceLabels} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} marketTimestamp={marketTimestamp} onTimeframeChange={setTimeframe} replayMode={replayActive} />
+            <CandlestickChart data={chartCandles} symbol={selectedSymbol} timeframe={timeframe} annotations={chartAnnotations} tradeLines={tradeLines} bidPrice={chartLastPrice} askPrice={chartAskPrice} toolMode={chartToolMode} pipSize={symbolSpec.pipSize} onToolNotice={pushToast} showGrid={chartSettings.showGrid} showPriceLabels={chartSettings.showPriceLabels} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} marketTimestamp={marketTimestamp} onTimeframeChange={setTimeframe} replayMode={replayActive} landscapeFocus={isLandscapeCompactViewport && landscapeChartFocus} onLandscapeFocusChange={setLandscapeChartFocus} />
             <div className="pointer-events-none absolute bottom-5 right-5 z-10 hidden items-center gap-1.5 rounded-xl border border-shafx-border bg-shafx-surface/90 px-2.5 py-1.5 text-[9px] text-shafx-textMuted backdrop-blur sm:flex"><Maximize2 className="h-3 w-3 text-shafx-accent" />Scroll / pinch to navigate</div>
           </div>
-          <div className="grid grid-cols-2 gap-2 border-t border-shafx-border bg-shafx-surface/55 p-2 sm:grid-cols-4">
+          <div className="shafx-landscape-secondary grid grid-cols-2 gap-2 border-t border-shafx-border bg-shafx-surface/55 p-2 sm:grid-cols-4">
             <button type="button" onClick={() => openMobileDock('insights')} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Structure</span><div className="mt-1 text-xs font-semibold">{marketAnalysis.bias} • {marketAnalysis.structure.type}</div></button>
             <button type="button" onClick={() => openMobileDock('liquidity')} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Liquidity</span><div className="mt-1 text-xs font-semibold">Prev H {marketAnalysis.liquidity.previousHigh?.toFixed(symbolSpec.pricePrecision) ?? '—'}</div></button>
             <button type="button" onClick={() => openMobileDock('orders')} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Risk</span><div className="mt-1 text-xs font-semibold">Open trade workspace</div></button>

@@ -26,15 +26,86 @@ input::placeholder { color: #667285; }
 ::-webkit-scrollbar-thumb { background: #273244; border-radius: 999px; }
 ::-webkit-scrollbar-thumb:hover { background: #37445A; }
 
-@media (max-width: 1023px) {
-  body { overflow: auto; }
-  .shafx-chart-shell { min-height: 52svh !important; }
-  .shafx-chart-stage { height: clamp(420px, 70svh, 720px); }
+@media (max-width: 999px) {
+  body { overflow-x: hidden; overflow-y: auto; }
+  .shafx-chart-shell { min-height: 48svh !important; }
+  .shafx-chart-stage { height: clamp(360px, 68svh, 720px); }
 }
 
-@media (orientation: landscape) and (max-width: 1023px) {
-  .shafx-chart-stage { height: min(calc(100svh - 140px), 700px); max-height: 700px; }
+@media (orientation: landscape) and (max-width: 999px) {
+  body { overflow: hidden; }
+  #root { height: 100svh; }
+  .shafx-terminal-root {
+    height: 100svh;
+    min-height: 100svh;
+    overflow: hidden;
+  }
+  .shafx-terminal-root .shafx-top-nav {
+    flex-shrink: 0;
+  }
+  .shafx-terminal-root main.shafx-mobile-content {
+    min-height: 0;
+    overflow: hidden;
+    padding-bottom: 0;
+  }
+  .shafx-terminal-root .shafx-market-section {
+    min-height: 0;
+    overflow: hidden;
+  }
+  .shafx-terminal-root .shafx-landscape-secondary {
+    display: none !important;
+  }
+  .shafx-terminal-root .shafx-chart-stage {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    padding: 2px;
+  }
+  .shafx-terminal-root .shafx-mobile-nav {
+    display: none !important;
+  }
+  .shafx-terminal-root .shafx-chart-shell {
+    min-height: 0 !important;
+  }
+  .shafx-terminal-root .shafx-chart-stage > .shafx-chart-shell {
+    height: 100% !important;
+  }
+  .shafx-terminal-root .shafx-chart-stage + .shafx-landscape-secondary {
+    display: none !important;
+  }
+  .shafx-terminal-root .shafx-top-nav > div:first-child {
+    min-height: 54px;
+  }
+  .shafx-terminal-root .shafx-top-nav > div:last-child {
+    padding-block: 2px;
+  }
+  .shafx-terminal-root .shafx-top-nav > div:last-child button {
+    min-height: 32px;
+    padding-inline: 8px;
+  }
+  .shafx-terminal-root .shafx-top-nav > div:last-child {
+    scrollbar-width: none;
+  }
+  .shafx-terminal-root .shafx-top-nav > div:last-child::-webkit-scrollbar {
+    display: none;
+  }
 }
+
+@media (orientation: landscape) and (max-width: 639px) {
+  .shafx-terminal-root .shafx-top-nav > div:first-child {
+    min-height: 50px;
+  }
+  .shafx-terminal-root .shafx-top-nav button[aria-label="Open SHAFX menu"],
+  .shafx-terminal-root .shafx-top-nav button[aria-label="Change trading environment"] {
+    min-height: 40px;
+    height: 40px;
+  }
+  .shafx-terminal-root .shafx-top-nav .shafx-top-nav-market {
+    max-width: 230px;
+  }
+}
+
 
 @media (max-width: 639px) {
   button, a, input, select, textarea { touch-action: manipulation; }
@@ -373,4 +444,20 @@ input::placeholder { color: #667285; }
 
 @media (prefers-reduced-motion: reduce) {
   * { scroll-behavior: auto !important; }
+}
+
+
+/* SHARFX landscape chart behaves like a dedicated mobile chart workspace. */
+@media (orientation: landscape) and (max-width: 999px) {
+  .shafx-chart-shell {
+    border-radius: 0;
+    border-left-width: 0;
+    border-right-width: 0;
+  }
+  .shafx-chart-shell.fixed {
+    background: #070A0F;
+  }
+  .shafx-chart-shell.fixed .shafx-chart-shell__landscape-hint {
+    display: flex;
+  }
 }
