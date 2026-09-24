@@ -1,3 +1,4 @@
+import { apiRequestGuard } from '../../server/authSecurity.js'
 import { clearCookie, encryptSession, exchangeCode, getOrigin, parseCookies, parseStateCookie, setCookie, STATE_COOKIE, SESSION_COOKIE } from '../../lib/deriv/oauth.js'
 import {
   createProviderConnection,
@@ -40,6 +41,8 @@ const environmentOf = (accounts) => {
 const html = (title, message) => '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + title + '</title></head><body style="font-family:system-ui,sans-serif;background:#0B0E11;color:#fff;display:grid;place-items:center;min-height:100vh;padding:24px"><main style="max-width:520px;text-align:center"><h1>' + title + '</h1><p style="color:#a7b0bd">' + message + '</p><a href="/" style="color:#7da2ff">Return to SHAFX</a></main></body></html>'
 
 export default async function handler(req, res) {
+  const guard = await apiRequestGuard(req, 'api:deriv-callback', 60)
+  if (!guard.allowed) return res.status(guard.status).json({ ok: false, error: guard.error, retryAfterSeconds: guard.retryAfterSeconds })
   if (req.method !== 'GET') return res.status(405).send('Method not allowed')
   const origin = getOrigin(req)
   const params = new URL(req.url, origin).searchParams
