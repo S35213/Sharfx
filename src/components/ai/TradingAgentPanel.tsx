@@ -4,6 +4,7 @@ import { analyzeLiquidity } from '../../engine/liquidity'
 import { calculatePositionProfit } from '../../engine/simulator/positionManager'
 import { analyzeMarketStructure, findSwingPoints } from '../../engine/marketStructure'
 import { analyzeSetup } from '../../engine/setup'
+import { calculateRisk } from '../../engine/risk/riskCalculator'
 import { analyzeSupportResistance } from '../../engine/supportResistance'
 import { buildTradingContext } from '../../engine/ai/context'
 import { analyzeMultiTimeframeBias, buildAgentResearch, executeSimulationTrade, learnFromTrades, useMultiTimeframeCandles } from '../../engine/agent'
@@ -31,11 +32,11 @@ interface Props {
   botAutostartKey?: string
 }
 
-type RiskMode = 'SAFE' | 'NORMAL' | 'RISK'
+type RiskMode = 'SAFE' | 'NORMAL' | 'EXTREME'
 const riskModes: Record<RiskMode, { label: string; percent: number; description: string }> = {
-  SAFE: { label: 'Safe', percent: 0.25, description: 'Smallest simulated risk' },
+  SAFE: { label: 'Safe', percent: 0.25, description: 'Conservative simulated risk' },
   NORMAL: { label: 'Normal', percent: 0.5, description: 'Balanced simulated risk' },
-  RISK: { label: 'Risk', percent: 1, description: 'Higher simulated risk' },
+  EXTREME: { label: 'Extreme', percent: 1, description: 'Highest simulated risk profile' },
 }
 type Phase = 'READY' | 'ANALYZING' | 'RUNNING'
 const SCAN_TIMEFRAMES: Timeframe[] = ['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1', 'W1']
@@ -73,7 +74,6 @@ const buildScanCandidates = (
     }]
   }).sort((a, b) => b.score - a.score)
 }
-const BOT_RISK_MODE: RiskMode = 'SAFE'
 const buildFastBotCandidate = (
   frames: Partial<Record<Timeframe, OHLCV[]>>,
   symbol: string,
@@ -155,6 +155,7 @@ export function TradingAgentPanel({
   const [scanPhase, setScanPhase] = useState<Phase>('READY')
   const [botScanProgress, setBotScanProgress] = useState(0)
   const [autoTradingEnabled, setAutoTradingEnabled] = useState(false)
+  const [riskMode, setRiskMode] = useState<RiskMode>('SAFE')
   const [totalWon, setTotalWon] = useState(0)
   const [totalLost, setTotalLost] = useState(0)
   const [wins, setWins] = useState(0)
@@ -236,6 +237,13 @@ export function TradingAgentPanel({
   const displayedUnitNumber = pendingUnitCompletion ? Math.max(1, cycleUnits) : Math.max(1, cycleUnits + 1)
   const bestOpportunityRef = useRef(bestOpportunity)
   const parsedLotSize = Number(lotSize)
+  const botRiskSetup = activeBotScan?.setup ?? setup
+  const botRiskCalc = useMemo(() => {
+    if (!symbolSpec || !botRiskSetup) return null
+    return calculateRisk({ accountBalance, accountCurrency, riskPercent: riskModes[riskMode].percent, side: botRiskSetup.direction, entryPrice: botRiskSetup.entryPrice, stopLoss: botRiskSetup.stopLoss, takeProfit: botRiskSetup.takeProfit, symbolSpec, conversionRate })
+  }, [accountBalance, accountCurrency, botRiskSetup, conversionRate, riskMode, symbolSpec])
+  const accountFitLot = botRiskCalc?.isValid ? botRiskCalc.suggestedLotSize : 0
+  const lotFitsAccount = Boolean(botRiskCalc?.isValid && parsedLotSize > 0 && parsedLotSize <= accountFitLot + 1e-8)
   const lotSizeValid = symbolSpec ? Number.isFinite(parsedLotSize) && parsedLotSize >= symbolSpec.minLotSize && parsedLotSize <= symbolSpec.maxLotSize && Math.abs((parsedLotSize / symbolSpec.lotStep) - Math.round(parsedLotSize / symbolSpec.lotStep)) < 1e-8 : false
 
   useEffect(() => {
@@ -375,7 +383,13 @@ export function TradingAgentPanel({
           return
         }
         if (!lotSizeValid) {
-          setStatus('BOT ERROR • choose a valid lot size')
+          setStatus('BOT BLOCKED • choose a valid lot size for ' + symbol)
+          setAutoTradingEnabled(false)
+          setPhase('READY')
+          return
+        }
+        if (!lotFitsAccount) {
+          setStatus('BOT BLOCKED • ' + parsedLotSize.toFixed(2) + ' lot exceeds the ' + riskModes[riskMode].label.toLowerCase() + ' account-risk limit of ' + accountFitLot.toFixed(2) + ' lot')
           setAutoTradingEnabled(false)
           setPhase('READY')
           return
@@ -404,7 +418,7 @@ export function TradingAgentPanel({
             : { tradingContext, preferredSetup: setup, hasOpenPosition: false, permission: 'AUTONOMOUS_SIMULATION', multiTimeframe, learning, research },
           accountBalance,
           accountCurrency,
-          riskPercent: riskModes[BOT_RISK_MODE].percent,
+          riskPercent: riskModes[riskMode].percent,
           symbolSpec,
           conversionRate,
           lotSize: botLotSize,
@@ -672,7 +686,7 @@ export function TradingAgentPanel({
     setBotScanProgress(0)
     setAutoTradingEnabled(true)
     setPhase('ANALYZING')
-    setStatus('BOT SCAN • refreshing all timeframes independently…')
+    setStatus('BOT SCAN • checking balance, risk limit and all timeframes independently…')
     analysisTimer.current = window.setTimeout(() => {
       setPhase('RUNNING')
       setStatus('BOT RUNNING • 10-second simulated round. Circle fills → WIN/LOSS → next cycle.')
@@ -723,7 +737,7 @@ export function TradingAgentPanel({
         scanInterval.current = null
       }
     }, 1000)
-    setStatus(activePosition ? 'Refreshing structure, liquidity and setup independently…' : 'Scanning M1 → M5 → M15 → M30 → H1 → H4 → D1 → W1…')
+    setStatus(activePosition ? 'Refreshing structure, liquidity, account fit and setup independently…' : 'Scanning M1 → M5 → M15 → M30 → H1 → H4 → D1 → W1 + account fit…')
     marketScanTimer.current = window.setTimeout(() => {
       if (scanInterval.current) window.clearInterval(scanInterval.current)
       scanInterval.current = null
@@ -731,9 +745,9 @@ export function TradingAgentPanel({
       setScanComplete(true)
       setScanPhase('READY')
       const opportunity = bestOpportunityRef.current
-      setStatus(opportunity && activeBotScan
-        ? 'Opportunity found on ' + activeBotScan.timeframe + ' • ' + opportunity.direction + ' • ' + opportunity.confidence + '%'
-        : 'No clean opportunity found across all eight timeframes.')
+      setStatus(executableOpportunities.length > 0
+        ? executableOpportunities.length + ' opportunity' + (executableOpportunities.length === 1 ? '' : ' opportunities') + ' found across ' + executableOpportunities.map((row) => row.timeframe).join(', ') + '.'
+        : 'No opportunity found for trade.')
     }, 10000)
   }
 
@@ -777,8 +791,31 @@ export function TradingAgentPanel({
             <strong className="mt-1 block font-mono text-xs text-shafx-text">{Math.min(unitRound, BOT_CYCLES_PER_UNIT)} / {BOT_CYCLES_PER_UNIT}</strong>
           </div>
           <div className="rounded-xl border border-shafx-border bg-shafx-bg px-2.5 py-2.5">
-            <span className="block text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted">Risk</span>
-            <strong className="mt-1 block font-mono text-xs text-shafx-success">SAFE</strong>
+            <span className="block text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted">Risk mode</span>
+            <strong className={riskMode === 'SAFE' ? 'mt-1 block font-mono text-xs text-shafx-success' : riskMode === 'NORMAL' ? 'mt-1 block font-mono text-xs text-shafx-accent' : 'mt-1 block font-mono text-xs text-shafx-warning'}>{riskModes[riskMode].label}</strong>
+          </div>
+        </div>
+
+        <div className="mt-3 rounded-xl border border-shafx-border bg-shafx-bg p-3.5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted">Account protection</div>
+              <div className="mt-1 text-sm font-semibold">Risk mode</div>
+            </div>
+            <span className="font-mono text-[8px] text-shafx-textMuted">{riskModes[riskMode].percent}% balance risk cap</span>
+          </div>
+          <div className="mt-3 grid grid-cols-3 gap-1.5">
+            {(Object.keys(riskModes) as RiskMode[]).map((mode) => (
+              <button key={mode} type="button" onClick={() => setRiskMode(mode)} className={mode === riskMode
+                ? 'min-h-10 rounded-lg border border-shafx-accent/40 bg-shafx-accent/10 px-2 text-[9px] font-semibold text-shafx-accent'
+                : 'min-h-10 rounded-lg border border-shafx-border bg-shafx-surface px-2 text-[9px] font-semibold text-shafx-textMuted'}>
+                {riskModes[mode].label}
+              </button>
+            ))}
+          </div>
+          <div className="mt-2 flex items-center justify-between gap-2 text-[8px] text-shafx-textMuted">
+            <span>Account balance {accountBalance.toFixed(2)} {accountCurrency}</span>
+            <span className="font-mono">Max risk {botRiskCalc?.isValid ? botRiskCalc.riskAmount.toFixed(2) : '—'} {accountCurrency}</span>
           </div>
         </div>
 
@@ -804,11 +841,27 @@ export function TradingAgentPanel({
               setLotSize(String(next))
             }} className="min-h-11 min-w-11 rounded-xl border border-shafx-border bg-shafx-surface text-base font-semibold active:scale-[.98]">+</button>
           </div>
-          <div className="mt-2 flex items-center justify-between text-[8px] text-shafx-textMuted">
-            <span>{lotSizeValid ? 'Lot size accepted by symbol rules.' : 'Enter a valid lot size for this symbol.'}</span>
-            <span className="font-mono">{botRunLotSize?.toFixed(2) ?? lotSize} lot/run</span>
+          <div className="mt-2 space-y-1 text-[8px] text-shafx-textMuted">
+            <div className="flex items-center justify-between gap-2">
+              <span>{lotSizeValid ? 'Lot size matches symbol rules.' : 'Enter a valid lot size for this symbol.'}</span>
+              <span className="font-mono">{botRunLotSize?.toFixed(2) ?? lotSize} lot/run</span>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span>{botRiskCalc?.isValid ? 'Account-fit ceiling' : 'Account-fit calculation waiting for setup'}</span>
+              <span className={lotFitsAccount ? 'font-mono text-shafx-success' : 'font-mono text-shafx-danger'}>{botRiskCalc?.isValid ? accountFitLot.toFixed(2) + ' lot max' : '—'}</span>
+            </div>
           </div>
         </div>
+
+        {!lotFitsAccount && lotSizeValid && botRiskCalc?.isValid && (
+          <div className="mt-3 rounded-xl border border-shafx-danger/25 bg-shafx-danger/[0.055] px-3 py-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[9px] font-semibold text-shafx-danger">BOT BLOCKED BY ACCOUNT RISK</span>
+              <span className="font-mono text-[9px] text-shafx-danger">{parsedLotSize.toFixed(2)} &gt; {accountFitLot.toFixed(2)} lot</span>
+            </div>
+            <p className="mt-1 text-[8px] text-shafx-textMuted">The bot will not execute until the lot size fits the selected risk mode and account balance.</p>
+          </div>
+        )}
 
         {phase === 'ANALYZING' && (
           <div className="mt-3 rounded-xl border border-shafx-accent/20 bg-shafx-accent/[0.045] p-3.5">
@@ -919,13 +972,13 @@ export function TradingAgentPanel({
                   <span className="font-mono text-[9px] text-shafx-success">{marketOpportunities.length}/{SCAN_TIMEFRAMES.length} directional</span>
                 </div>
                 <div className="mt-3 space-y-1.5">
-                  {executableOpportunities.slice(0, 4).map((row) => {
+                  {executableOpportunities.map((row) => {
                     const setup = row.executableSetup
                     if (!setup) return null
                     return (
                       <div key={row.timeframe} className="flex items-center gap-2 rounded-lg border border-shafx-border bg-shafx-bg px-2.5 py-2.5">
                         <span className={setup.direction === 'BUY' ? 'rounded-md bg-shafx-success/10 px-1.5 py-1 font-mono text-[8px] font-bold text-shafx-success' : 'rounded-md bg-shafx-danger/10 px-1.5 py-1 font-mono text-[8px] font-bold text-shafx-danger'}>{setup.direction}</span>
-                        <div className="min-w-0 flex-1"><div className="font-mono text-[10px] font-bold text-shafx-text">{row.timeframe} detected</div><div className="mt-0.5 text-[8px] text-shafx-textMuted">Entry {setup.entryPrice}</div></div>
+                        <div className="min-w-0 flex-1"><div className="font-mono text-[10px] font-bold text-shafx-text">{row.timeframe} detected</div><div className="mt-0.5 text-[8px] text-shafx-textMuted">Entry {setup.entryPrice} • {riskModes[riskMode].label} fit {(() => { const r = calculateRisk({ accountBalance, accountCurrency, riskPercent: riskModes[riskMode].percent, side: setup.direction, entryPrice: setup.entryPrice, stopLoss: setup.stopLoss, takeProfit: setup.takeProfit, symbolSpec: symbolSpec!, conversionRate }); return r.isValid ? r.suggestedLotSize.toFixed(2) + ' lot' : 'blocked' })()}</div></div>
                         <span className="font-mono text-base font-black text-shafx-accent">{setup.confidence}%</span>
                       </div>
                     )
@@ -934,7 +987,10 @@ export function TradingAgentPanel({
               </div>
             )}
             {scanComplete && executableOpportunities.length === 0 && (
-              <div className="rounded-xl border border-dashed border-shafx-border p-3 text-[9px] text-shafx-textMuted">No execution-ready setup was found. The scanner still checked M1, M5, M15, M30, H1, H4, D1 and W1.</div>
+              <div className="rounded-xl border border-shafx-warning/25 bg-shafx-warning/[0.045] p-3">
+                <div className="font-mono text-[9px] font-black uppercase tracking-[0.16em] text-shafx-warning">NO OPPORTUNITY FOUND FOR TRADE</div>
+                <p className="mt-1 text-[8px] leading-4 text-shafx-textMuted">The scanner checked M1, M5, M15, M30, H1, H4, D1 and W1 and did not find a setup that passed the current market and account-risk filters.</p>
+              </div>
             )}
             <div className="rounded-xl border border-shafx-border bg-shafx-bg/60 p-2.5">
               <div className="mb-2 flex items-center justify-between gap-2"><span className="font-mono text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted">TIMEFRAME MAP</span><span className="text-[8px] text-shafx-textMuted">{scanComplete ? 'Fresh results' : 'Ready to scan'}</span></div>
@@ -954,12 +1010,16 @@ export function TradingAgentPanel({
           </div>
         )}
 
-        <div className="mt-3 flex gap-2">
-          <button type="button" disabled={!symbolSpec || scanPhase === 'ANALYZING'} onClick={rescanBot} className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-shafx-accent/35 bg-shafx-accent/10 px-3 text-[10px] font-semibold text-shafx-accent active:scale-[.99] disabled:opacity-40">
+        <div className="mt-3 space-y-2">
+          <button type="button" disabled={!symbolSpec || scanPhase === 'ANALYZING'} onClick={rescanBot} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-shafx-accent/35 bg-shafx-accent/10 px-3 text-[10px] font-semibold text-shafx-accent active:scale-[.99] disabled:opacity-40">
             <RefreshCw className={scanPhase === 'ANALYZING' ? 'h-3.5 w-3.5 animate-spin' : 'h-3.5 w-3.5'} />
-            {scanPhase === 'ANALYZING' ? 'Scanning…' : scanComplete ? 'Rescan market' : 'Scan market'}
+            {scanPhase === 'ANALYZING' ? 'Scanning market…' : scanComplete ? 'Rescan market' : 'Scan market'}
           </button>
-          {onReviewSetup && <button type="button" disabled={!bestOpportunity} onClick={() => onReviewSetup(bestOpportunity)} className="min-h-11 rounded-xl border border-shafx-border bg-shafx-bg px-3 text-[9px] font-semibold text-shafx-text disabled:opacity-40">Review</button>}
+          {onReviewSetup && (
+            <button type="button" disabled={!scanComplete || executableOpportunities.length === 0 || !bestOpportunity} onClick={() => onReviewSetup(bestOpportunity)} className="flex min-h-14 w-full items-center justify-center rounded-xl border border-shafx-success/25 bg-shafx-success/5 px-3 text-[10px] font-semibold text-shafx-success shadow-[0_8px_24px_rgba(34,211,165,.08)] disabled:cursor-not-allowed disabled:opacity-40">
+              Review strategy • open {bestOpportunity?.direction ?? 'trade'} setup
+            </button>
+          )}
         </div>
       </section>
     </section>
