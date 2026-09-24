@@ -49,13 +49,39 @@ export const OrderPanel: React.FC<Props> = ({ symbol, currentPrice, bidPrice = c
     window.dispatchEvent(new CustomEvent<string>('shafx-lot-size', { detail: lotSize }))
   }, [lotSize])
 
+  const calculateAutoProtection = useCallback((side: 'BUY' | 'SELL', entry: number): { stopLoss: number; takeProfit: number } | null => {
+    const lot = Number(lotSize)
+    const risk = Number(riskPercent)
+    if (!aiSetup || !Number.isFinite(lot) || lot <= 0 || !Number.isFinite(risk) || risk <= 0 || !Number.isFinite(accountBalance) || accountBalance <= 0) return null
+    let rate = 1
+    if (symbolSpec.quoteCurrency !== accountCurrency) {
+      if (typeof conversionRate !== 'number' || !Number.isFinite(conversionRate) || conversionRate <= 0) return null
+      rate = conversionRate
+    }
+    const pipValuePerLot = symbolSpec.pipSize * symbolSpec.contractSize * rate
+    const riskAmount = accountBalance * (risk / 100)
+    if (!Number.isFinite(pipValuePerLot) || pipValuePerLot <= 0 || !Number.isFinite(riskAmount) || riskAmount <= 0) return null
+    const stopDistancePips = riskAmount / (lot * pipValuePerLot)
+    if (!Number.isFinite(stopDistancePips) || stopDistancePips <= 0) return null
+    const rewardDistancePips = stopDistancePips * 1.67
+    const stopDistance = stopDistancePips * symbolSpec.pipSize
+    const rewardDistance = rewardDistancePips * symbolSpec.pipSize
+    return {
+      stopLoss: Number((entry + (side === 'BUY' ? -stopDistance : stopDistance)).toFixed(symbolSpec.pricePrecision)),
+      takeProfit: Number((entry + (side === 'BUY' ? rewardDistance : -rewardDistance)).toFixed(symbolSpec.pricePrecision)),
+    }
+  }, [accountBalance, accountCurrency, aiSetup, conversionRate, lotSize, riskPercent, symbolSpec])
+
   const applyAISetup = useCallback((): void => {
     if (!aiSetup) return
-    setOrderType(aiSetup.direction)
-    setEntryPrice(aiSetup.entryPrice.toFixed(symbolSpec.pricePrecision))
-    setStopLoss(aiSetup.stopLoss.toFixed(symbolSpec.pricePrecision))
-    setTakeProfit(aiSetup.takeProfit.toFixed(symbolSpec.pricePrecision))
-  }, [aiSetup, symbolSpec.pricePrecision])
+    const side = aiSetup.direction
+    const entry = side === 'BUY' ? askPrice : bidPrice
+    setOrderType(side)
+    setEntryPrice(entry.toFixed(symbolSpec.pricePrecision))
+    const protection = calculateAutoProtection(side, entry)
+    setStopLoss(protection?.stopLoss.toFixed(symbolSpec.pricePrecision) ?? aiSetup.stopLoss.toFixed(symbolSpec.pricePrecision))
+    setTakeProfit(protection?.takeProfit.toFixed(symbolSpec.pricePrecision) ?? aiSetup.takeProfit.toFixed(symbolSpec.pricePrecision))
+  }, [aiSetup, askPrice, bidPrice, calculateAutoProtection, symbolSpec.pricePrecision])
 
   const quoteForSide = (side: 'BUY' | 'SELL'): number => side === 'BUY' ? askPrice : bidPrice
   const chooseOrderSide = (side: 'BUY' | 'SELL'): void => {
@@ -65,7 +91,7 @@ export const OrderPanel: React.FC<Props> = ({ symbol, currentPrice, bidPrice = c
 
   useEffect(() => {
     if (autoApplyAISetup && aiSetup?.status === 'candidate') applyAISetup()
-  }, [applyAISetup, autoApplyAISetup, aiSetup?.status])
+  }, [applyAISetup, autoApplyAISetup, aiSetup?.status, lotSize, riskPercent])
 
   const numEntry = Number(entryPrice)
   const defaultStopDistance = symbolSpec.pipSize * 30
@@ -92,7 +118,7 @@ export const OrderPanel: React.FC<Props> = ({ symbol, currentPrice, bidPrice = c
   const handleSubmit = (e: React.FormEvent): void => { e.preventDefault(); if (!canSubmit) return; onSubmitOrder({ symbol, type: orderType, lotSize: parsedLotSize, entryPrice: numEntry, stopLoss: numSL, takeProfit: numTP, riskPercent: numRisk, riskAmount: riskCalc.riskAmount, rewardAmount: riskCalc.riskAmount * riskCalc.riskRewardRatio, riskRewardRatio: riskCalc.riskRewardRatio }); setStopLoss(''); setTakeProfit('') }
   const applySuggestedLot = (): void => { if (riskCalc.isValid && riskCalc.suggestedLotSize > 0) setLotSize(riskCalc.suggestedLotSize.toFixed(2)) }
 
-  return <div className="space-y-4 rounded-lg border border-shafx-border bg-shafx-surface p-4"><div className="flex items-center justify-between"><h3 className="text-sm font-semibold">Order Ticket</h3><span className="flex items-center gap-1 rounded border border-yellow-500/20 bg-yellow-500/10 px-2 py-0.5 text-xs text-yellow-500"><AlertCircle className="h-3 w-3" />Simulator</span></div>{aiSetup && <div className="rounded border border-shafx-primary/30 bg-shafx-primary/10 p-3"><div className="flex items-center justify-between gap-2"><div><p className="flex items-center gap-1 text-xs font-semibold text-shafx-primary"><Sparkles className="h-3 w-3" />AI trade idea ready</p><p className="mt-1 text-[11px] text-shafx-textMuted">The agent prepared this setup. Nothing is placed until you review and press the order button.</p></div><button type="button" onClick={applyAISetup} className="min-h-11 shrink-0 rounded bg-shafx-primary px-3 py-2 text-xs font-semibold text-white">Review AI setup</button></div></div>}<form onSubmit={handleSubmit} className="space-y-3"><div className="grid grid-cols-2 gap-2">
+  return <div className="space-y-4 rounded-lg border border-shafx-border bg-shafx-surface p-4"><div className="flex items-center justify-between"><h3 className="text-sm font-semibold">Order Ticket</h3><span className="flex items-center gap-1 rounded border border-yellow-500/20 bg-yellow-500/10 px-2 py-0.5 text-xs text-yellow-500"><AlertCircle className="h-3 w-3" />Simulator</span></div>{aiSetup && <div className="rounded border border-shafx-primary/30 bg-shafx-primary/10 p-3"><div className="flex items-center justify-between gap-2"><div><p className="flex items-center gap-1 text-xs font-semibold text-shafx-primary"><Sparkles className="h-3 w-3" />AI trade idea ready</p><p className="mt-1 text-[11px] text-shafx-textMuted">Selected setup loaded. Stop loss and take profit are automatically recalculated from your account balance and lot size.</p></div><button type="button" onClick={applyAISetup} className="min-h-11 shrink-0 rounded bg-shafx-primary px-3 py-2 text-xs font-semibold text-white">Review AI setup</button></div></div>}<form onSubmit={handleSubmit} className="space-y-3"><div className="grid grid-cols-2 gap-2">
     <button type="button" onClick={() => chooseOrderSide('BUY')} aria-pressed={orderType === 'BUY'} className={`flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-xl text-sm font-semibold transition-colors ${orderType === 'BUY' ? 'bg-shafx-success text-white' : 'border border-shafx-success/30 bg-shafx-surfaceHover text-shafx-success'}`}>
       <span className="flex items-center justify-between gap-2 w-full px-1"><span className="flex items-center gap-1.5"><ArrowUpCircle className="h-4 w-4" />BUY</span><span className="text-[8px] font-medium opacity-75">ASK</span></span>
       <span className="font-mono text-sm tabular tracking-tight">{askPrice.toFixed(symbolSpec.pricePrecision)}</span>
