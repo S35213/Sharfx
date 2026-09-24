@@ -37,13 +37,13 @@ export default async function handler(req, res) {
       if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'Method not allowed' })
       const body = typeof req.body === 'object' && req.body ? req.body : {}
       const email = String(body.email || '').trim().toLowerCase()
-      if (!/^\\S+@\\S+\\.\\S+$/.test(email)) return json(res, 400, { ok: false, error: 'Enter a valid email address.' })
+      if (!/^\S+@\S+\.\S+$/.test(email)) return json(res, 400, { ok: false, error: 'Enter a valid email address.' })
       const guard = await otpRequestGuard(req, email)
       if (!guard.allowed) return json(res, guard.status || 429, { ok: false, error: guard.error, retryAfterSeconds: guard.retryAfterSeconds })
       const response = await supabase('/otp', { method: 'POST', body: JSON.stringify({ email, create_user: false }) })
       const data = await response.json().catch(() => ({}))
       if (!response.ok) return json(res, response.status, { ok: false, error: authError(data, 'Unable to send the login code.') })
-      await securityEvent({ event_type: 'login_code_requested', decision: 'allow', risk_score: 0, fingerprint: securityFingerprint(req), metadata: { email_hash: securityFingerprint({ headers: { ...req.headers, 'x-forwarded-for': email } }) } })
+      await securityEvent({ event_type: 'login_code_requested', decision: 'allow', risk_score: 0, fingerprint: securityFingerprint(req), metadata: {} })
       return json(res, 200, { ok: true, message: 'A one-time login code has been sent to your email.' })
     }
 
@@ -53,7 +53,7 @@ export default async function handler(req, res) {
       const email = String(body.email || '').trim().toLowerCase()
       const token = String(body.code || '').trim()
       if (!/^\\S+@\\S+\\.\\S+$/.test(email)) return json(res, 400, { ok: false, error: 'Enter a valid email address.' })
-      if (!/^\\d{6}$/.test(token)) return json(res, 400, { ok: false, error: 'Enter the 6-digit verification code from your email.' })
+      if (!/^\d{6}$/.test(token)) return json(res, 400, { ok: false, error: 'Enter the 6-digit verification code from your email.' })
       const guard = await otpVerifyGuard(req, email)
       if (!guard.allowed) return json(res, guard.status || 429, { ok: false, error: guard.error, retryAfterSeconds: guard.retryAfterSeconds })
       const response = await supabase('/verify', { method: 'POST', body: JSON.stringify({ email, token, type: 'email' }) })
