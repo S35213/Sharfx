@@ -138,16 +138,17 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
           const date = typeof time === 'number'
             ? new Date(time * 1000)
             : typeof time === 'string'
-              ? new Date(time + 'T00:00:00Z')
-              : new Date(Date.UTC(time.year, time.month - 1, time.day))
+              ? new Date(time + 'T00:00:00')
+              : new Date(time.year, time.month - 1, time.day)
           if (!Number.isFinite(date.getTime())) return ''
-          const day = String(date.getUTCDate()).padStart(2, '0')
-          const month = date.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' })
-          // Intraday charts stay on a clock timeline. Calendar dates are only
-          // shown on daily/weekly charts, preventing H1/H4 from displaying
-          // misleading September/October date labels.
+          const day = String(date.getDate()).padStart(2, '0')
+          const month = date.toLocaleString('en-GB', { month: 'short' })
+          // Simulator/provider timestamps are real instants. Intraday charts
+          // always display the wall-clock time; daily/weekly charts display
+          // the calendar date. Keep labels short so Lightweight Charts can
+          // place them without overlap.
           if (timeframe === 'D1' || timeframe === 'W1') return day + ' ' + month
-          return date.toISOString().slice(11, 16)
+          return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })
         },
       },
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
@@ -686,11 +687,12 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
           const end = start + interval
           const format = (value: number): string => {
             const date = new Date(value * 1000)
-            if (timeframe === 'D1' || timeframe === 'W1') return String(date.getUTCDate()).padStart(2, '0') + ' ' + date.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' })
-            return date.toISOString().slice(11, 16)
+            if (timeframe === 'D1' || timeframe === 'W1') return String(date.getDate()).padStart(2, '0') + ' ' + date.toLocaleString('en-GB', { month: 'short' })
+            return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })
           }
           return format(start) + ' → ' + format(end)
         })()}</span>}
+        {!replayMode && marketTimestamp > 0 && <span className="rounded-md border border-shafx-success/20 bg-shafx-success/5 px-1.5 py-0.5 font-mono text-[8px] font-semibold tabular text-shafx-success">NOW {new Date(Number(marketTimestamp) * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</span>}
         {!replayMode && countdown !== null && <span className="font-mono text-[8px] font-semibold tabular text-shafx-accent">Close {formatCountdown(countdown)}</span>}
         {replayMode && <span className="font-mono text-[9px] font-semibold tabular text-shafx-accent">Historical</span>}
       </div>
