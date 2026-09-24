@@ -137,9 +137,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         tickMarkFormatter: (time) => {
           const date = typeof time === 'number'
             ? new Date(time * 1000)
-            : typeof time === 'string'
-              ? new Date(time + 'T00:00:00Z')
-              : new Date(Date.UTC(time.year, time.month - 1, time.day))
+            : new Date(Date.UTC(time.year, time.month - 1, time.day))
           if (!Number.isFinite(date.getTime())) return ''
           if (date.getUTCHours() === 0 && date.getUTCMinutes() === 0) {
             return String(date.getUTCDate()).padStart(2, '0') + ' ' + date.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' })
