@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { Building2, Check, Copy, ExternalLink, Link2, LogIn, LogOut, RefreshCw, ShieldCheck, TrendingDown, TrendingUp, UserCircle, UserPlus, Wallet, KeyRound } from 'lucide-react'
+import { Building2, Check, Copy, ExternalLink, Link2, LogIn, LogOut, Plus, RefreshCw, ShieldCheck, UserCircle, UserPlus, Wallet, KeyRound } from 'lucide-react'
 import type { AccountData } from '../../types'
 import { formatCurrency, formatPercent } from '../../lib/format'
 import { getProviderConnections, setStoredProviderSelection, subscribeToProviderSelection, type ActiveProviderSelection, type ProviderConnectionRecord } from '../../data/provider/providerConnections'
