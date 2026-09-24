@@ -51,14 +51,14 @@ const timeframeMeta = (timeframe?: Timeframe, data: CandlestickData[] = []): { l
 }
 
 const VISIBLE_BARS_BY_TIMEFRAME: Record<Timeframe, number> = {
-  M1: 260,
-  M5: 230,
-  M15: 210,
-  M30: 190,
-  H1: 170,
-  H4: 145,
-  D1: 120,
-  W1: 90,
+  M1: 120,
+  M5: 100,
+  M15: 80,
+  M30: 60,
+  H1: 52,
+  H4: 45,
+  D1: 36,
+  W1: 28,
 }
 
 const visibleBarsForTimeframe = (nextTimeframe: Timeframe | undefined, width: number): number => {
@@ -93,6 +93,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const renderedFirstTimeRef = useRef<number | null>(null)
   const renderedLastTimeRef = useRef<number | null>(null)
   const [crosshairInfo, setCrosshairInfo] = useState<{ price: number; time: string } | null>(null)
+  const [timelineMarks, setTimelineMarks] = useState<Array<{ x: number; label: string }>>([])
 
   useEffect(() => {
     const onFullscreenChange = (): void => setIsFullscreen(document.fullscreenElement === containerRef.current)
@@ -125,31 +126,15 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       crosshair: { mode: 1, vertLine: { color: '#667285', width: 1, style: 2, labelBackgroundColor: '#202A38' }, horzLine: { color: '#667285', width: 1, style: 2, labelBackgroundColor: '#202A38' } },
       rightPriceScale: { borderColor: '#202A38', minimumWidth: el.clientWidth < 640 ? 78 : 94, alignLabels: true, ticksVisible: true, scaleMargins: { top: 0.08, bottom: 0.08 } },
       timeScale: {
-        borderColor: '#202A38',
-        timeVisible: true,
+        visible: false,
+        borderVisible: false,
+        timeVisible: false,
         secondsVisible: false,
-        ticksVisible: true,
-        minimumHeight: 30,
-        uniformDistribution: true,
-        rightOffset: 5,
+        ticksVisible: false,
+        minimumHeight: 0,
+        rightOffset: 3,
         barSpacing: 5,
-        minBarSpacing: 1,
-        tickMarkFormatter: (time: Time) => {
-          const date = typeof time === 'number'
-            ? new Date(time * 1000)
-            : typeof time === 'string'
-              ? new Date(time + 'T00:00:00')
-              : new Date(time.year, time.month - 1, time.day)
-          if (!Number.isFinite(date.getTime())) return ''
-          const day = String(date.getDate()).padStart(2, '0')
-          const month = date.toLocaleString('en-GB', { month: 'short' })
-          // Simulator/provider timestamps are real instants. Intraday charts
-          // always display the wall-clock time; daily/weekly charts display
-          // the calendar date. Keep labels short so Lightweight Charts can
-          // place them without overlap.
-          if (timeframe === 'D1' || timeframe === 'W1') return day + ' ' + month
-          return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })
-        },
+        minBarSpacing: 0.5,
       },
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
       handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true },
@@ -224,7 +209,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     if (!chart) return
     chart.applyOptions({
       grid: showGrid
-        ? { vertLines: { color: '#131A23' }, horzLines: { color: '#131A23' } }
+        ? { vertLines: { color: 'transparent' }, horzLines: { color: '#131A23' } }
         : { vertLines: { color: 'transparent' }, horzLines: { color: 'transparent' } },
     })
   }, [showGrid])
@@ -276,13 +261,15 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       // Never carry the previous timeframe's pinch/bar-spacing zoom into the
       // new timeframe. The user can zoom in manually after switching.
       chart.timeScale().resetTimeScale()
+      const containerWidth = containerRef.current?.clientWidth ?? 640
+      const plotWidth = Math.max(280, containerWidth - (containerWidth < 640 ? 82 : 96))
+      const targetBars = visibleBarsForTimeframe(timeframe, containerWidth)
+      const initialBarSpacing = Math.max(5, Math.min(20, plotWidth / Math.max(1, targetBars)))
       chart.timeScale().applyOptions({
-        // Deliberately start every timeframe zoomed out. Lightweight Charts
-        // uses barSpacing as the horizontal zoom level: smaller spacing shows
-        // more candles. The user can pinch/scroll to zoom in manually.
-        barSpacing: 3.5,
+        barSpacing: initialBarSpacing,
         minBarSpacing: 0.5,
-        rightOffset: 7,
+        rightOffset: 3,
+        visible: false,
       })
       chart.timeScale().scrollToRealTime()
       verticalScaleMarginsRef.current = { top: 0.08, bottom: 0.08 }
@@ -303,6 +290,71 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     renderedFirstTimeRef.current = firstTime
     renderedLastTimeRef.current = lastTime
   }, [visualData, symbol, timeframe])
+
+  useEffect(() => {
+    const chart = chartRef.current
+    if (!chart || !chartData.length || !timeframe) {
+      setTimelineMarks([])
+      return
+    }
+
+    const timeScale = chart.timeScale()
+    const updateTimeline = (): void => {
+      const range = timeScale.getVisibleLogicalRange()
+      const width = timeScale.width()
+      if (!range || width <= 0) {
+        setTimelineMarks([])
+        return
+      }
+
+      const from = Math.max(0, Math.floor(range.from))
+      const to = Math.min(chartData.length - 1, Math.ceil(range.to))
+      const visibleCount = Math.max(1, to - from + 1)
+      const pxPerBar = width / visibleCount
+      const minimumLabelSpacing = width < 640 ? 62 : 74
+
+      // Adaptive density: when zoomed in enough, show every timeframe boundary;
+      // when zoomed out, progressively group bars while keeping all marks on
+      // exact timeframe boundaries. This mirrors the way MT5 avoids collisions.
+      const candidates = [1, 2, 4, 6, 12, 24, 48, 96, 192]
+      const step = candidates.find((candidate) => candidate * pxPerBar >= minimumLabelSpacing) ?? 192
+      const interval = timeframeSecondsFor(timeframe) * step
+      const marks: Array<{ x: number; label: string }> = []
+
+      for (let index = from; index <= to; index += 1) {
+        const candle = chartData[index]
+        if (!candle) continue
+        const timestamp = Number(candle.time)
+        if (!Number.isFinite(timestamp)) continue
+
+        // Keep marks on exact timeframe boundaries. For grouped labels, use
+        // the larger interval's boundary (e.g. M30+2 => every 60 minutes).
+        if (Math.floor(timestamp / interval) * interval !== timestamp) continue
+
+        const x = timeScale.logicalToCoordinate(index)
+        if (x === null || x < -40 || x > width + 40) continue
+
+        const date = new Date(timestamp * 1000)
+        const label = timeframe === 'D1' || timeframe === 'W1'
+          ? String(date.getDate()).padStart(2, '0') + ' ' + date.toLocaleString('en-GB', { month: 'short' })
+          : date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })
+
+        marks.push({ x: Number(x), label })
+      }
+
+      // Always keep the axis readable on very dense views.
+      setTimelineMarks(marks.slice(-14))
+    }
+
+    updateTimeline()
+    timeScale.subscribeVisibleLogicalRangeChange(updateTimeline)
+    const onResize = (): void => updateTimeline()
+    window.addEventListener('resize', onResize)
+    return () => {
+      timeScale.unsubscribeVisibleLogicalRangeChange(updateTimeline)
+      window.removeEventListener('resize', onResize)
+    }
+  }, [chartData, timeframe, isFullscreen, marketTimestamp])
 
   useEffect(() => {
     const series = seriesRef.current
@@ -676,26 +728,10 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   return <div ref={containerRef} onPointerDownCapture={handleChartPointerDown} onPointerMoveCapture={handleChartPointerMove} onPointerUpCapture={handleChartPointerUp} onPointerCancel={handleChartPointerCancel} onPointerDown={placeTool} className={`shafx-chart-shell relative w-full overflow-hidden border border-shafx-border bg-shafx-bg touch-pan-y ${['level', 'alert', 'measure'].includes(toolMode) ? 'cursor-crosshair' : ''} ${isFullscreen ? 'fixed inset-0 z-[200] h-[100dvh] w-screen' : ''}`} style={{ height: isFullscreen ? '100dvh' : height, minHeight: 280 }}>
     <div className="pointer-events-none absolute left-3 top-3 z-10 hidden items-center gap-2 rounded-xl border border-shafx-border bg-shafx-bg/90 px-2.5 py-1.5 text-[9px] font-semibold backdrop-blur sm:flex"><span className="text-shafx-accent">SHAFX</span><span className="text-shafx-textMuted">•</span><span className="text-shafx-textMuted">{timeframe ?? 'PRICE'} workspace</span></div>
     <div className="pointer-events-none absolute right-3 top-3 z-10 hidden rounded-xl border border-shafx-border bg-shafx-bg/90 px-2.5 py-1.5 text-[9px] font-semibold text-shafx-text backdrop-blur sm:block">{meta.label} <span className="font-normal text-shafx-textMuted">• {meta.interval}</span></div>
-    <div className="pointer-events-none absolute left-3 top-3 z-10 rounded-xl border border-shafx-border/70 bg-shafx-surface/88 px-2.5 py-1.5 shadow-md backdrop-blur">
-      <div className="flex items-center gap-2">
-        <span className="text-[8px] font-semibold uppercase tracking-[0.12em] text-shafx-textMuted">{replayMode ? 'Replay' : (chartMode === 'candles' ? 'Candles' : chartMode === 'bars' ? 'Bars' : chartMode === 'wave' ? 'Wave' : 'Area')}</span>
-        {timeframe && !replayMode && <span className="font-mono text-[9px] font-bold tabular text-shafx-text">{(() => {
-          const seconds = Number(marketTimestamp)
-          const interval = timeframeSeconds[timeframe]
-          if (!Number.isFinite(seconds) || !interval) return '—'
-          const start = timeframe === 'W1' ? weekStart(seconds) : Math.floor(seconds / interval) * interval
-          const end = start + interval
-          const format = (value: number): string => {
-            const date = new Date(value * 1000)
-            if (timeframe === 'D1' || timeframe === 'W1') return String(date.getDate()).padStart(2, '0') + ' ' + date.toLocaleString('en-GB', { month: 'short' })
-            return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })
-          }
-          return format(start) + ' → ' + format(end)
-        })()}</span>}
-        {!replayMode && Number(marketTimestamp) > 0 && <span className="rounded-md border border-shafx-success/20 bg-shafx-success/5 px-1.5 py-0.5 font-mono text-[8px] font-semibold tabular text-shafx-success">NOW {new Date(Number(marketTimestamp) * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</span>}
-        {!replayMode && countdown !== null && <span className="font-mono text-[8px] font-semibold tabular text-shafx-accent">Close {formatCountdown(countdown)}</span>}
-        {replayMode && <span className="font-mono text-[9px] font-semibold tabular text-shafx-accent">Historical</span>}
-      </div>
+    <div className="pointer-events-none absolute left-3 top-3 z-10 flex items-center gap-2 rounded-xl border border-shafx-border/70 bg-shafx-surface/88 px-2.5 py-1.5 shadow-md backdrop-blur">
+      <span className="font-mono text-[8px] font-bold uppercase tracking-[0.12em] text-shafx-textMuted">{replayMode ? 'REPLAY' : timeframe ?? 'PRICE'}</span>
+      {!replayMode && countdown !== null && <span className="font-mono text-[8px] font-semibold tabular text-shafx-accent">CLOSE {formatCountdown(countdown)}</span>}
+      {replayMode && <span className="font-mono text-[8px] font-semibold tabular text-shafx-accent">HISTORICAL</span>}
     </div>
     <div className="absolute right-3 top-3 z-20 flex items-center gap-1">
       <div className="pointer-events-none hidden items-center gap-1 rounded-xl border border-shafx-border/70 bg-shafx-surface/85 px-1 py-0.5 shadow-md backdrop-blur sm:flex">
@@ -729,6 +765,17 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       </div>
     </div>}
 
+    <div className="pointer-events-none absolute bottom-0 left-0 right-[82px] z-30 h-8 border-t border-shafx-border/70 bg-shafx-bg/95 sm:right-[96px]">
+      {timelineMarks.map((mark, index) => (
+        <span
+          key={`${mark.label}-${index}-${Math.round(mark.x)}`}
+          className="absolute top-1 -translate-x-1/2 whitespace-nowrap font-mono text-[8px] tabular text-shafx-textMuted sm:text-[9px]"
+          style={{ left: mark.x }}
+        >
+          {mark.label}
+        </span>
+      ))}
+    </div>
     <div
       aria-label="Price scale"
       className="absolute right-0 top-10 bottom-8 z-20 w-[82px] touch-none cursor-ns-resize sm:w-[96px]"
