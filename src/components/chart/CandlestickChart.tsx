@@ -138,15 +138,18 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       crosshair: { mode: 1, vertLine: { color: '#667285', width: 1, style: 2, labelBackgroundColor: '#202A38' }, horzLine: { color: '#667285', width: 1, style: 2, labelBackgroundColor: '#202A38' } },
       rightPriceScale: { borderColor: '#202A38', minimumWidth: el.clientWidth < 640 ? 78 : 94, alignLabels: true, ticksVisible: true, scaleMargins: { top: 0.08, bottom: 0.08 } },
       timeScale: {
-        visible: false,
-        borderVisible: false,
-        timeVisible: false,
+        visible: true,
+        borderVisible: true,
+        borderColor: '#202A38',
+        timeVisible: true,
         secondsVisible: false,
         ticksVisible: false,
-        minimumHeight: 0,
+        minimumHeight: 30,
+        uniformDistribution: true,
         rightOffset: 3,
         barSpacing: 5,
         minBarSpacing: 0.5,
+        tickMarkFormatter: () => '',
       },
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
       handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true },
@@ -281,7 +284,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         barSpacing: initialBarSpacing,
         minBarSpacing: 0.5,
         rightOffset: 3,
-        visible: false,
+        visible: true,
       })
       chart.timeScale().scrollToRealTime()
       verticalScaleMarginsRef.current = { top: 0.08, bottom: 0.08 }
