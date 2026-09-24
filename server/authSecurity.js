@@ -136,13 +136,47 @@ function sessionIdentity(req) {
   return hash(secret, `session:${token}`)
 }
 
-export async function apiRequestGuard(req, action, limit = API_DEFAULT_LIMIT) {
+async function consumeApiRateLimit(req, action, limit) {
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return { unavailable: true, blocked: false, count: 0, retryAfterSeconds: API_WINDOW_SECONDS }
+  }
   const identity = sessionIdentity(req)
-  const bucket = identity
+  const subject = identity
     ? `api-user:${identity}:${clientIp(req)}`
     : `api-ip:${clientIp(req)}:${req.headers?.['user-agent'] || 'unknown'}`
+  const bucket = hash(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SHAFX_ADMIN_KEY || 'shafx', `${action}:${subject}`)
+  try {
+    const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/consume_shafx_api_rate_limit`, {
+      method: 'POST',
+      headers: {
+        apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        p_bucket_id: bucket,
+        p_limit: limit,
+        p_window_seconds: API_WINDOW_SECONDS,
+        p_reset: false,
+      }),
+    })
+    if (!response.ok) return { unavailable: true, blocked: false, count: 0, retryAfterSeconds: API_WINDOW_SECONDS }
+    const rows = await response.json().catch(() => [])
+    const row = Array.isArray(rows) ? rows[0] : null
+    if (!row) return { unavailable: true, blocked: false, count: 0, retryAfterSeconds: API_WINDOW_SECONDS }
+    return {
+      unavailable: false,
+      blocked: Boolean(row.blocked),
+      count: Number(row.request_count) || 0,
+      retryAfterSeconds: Math.max(1, Number(row.retry_after_seconds) || API_WINDOW_SECONDS),
+    }
+  } catch {
+    return { unavailable: true, blocked: false, count: 0, retryAfterSeconds: API_WINDOW_SECONDS }
+  }
+}
 
-  const rate = await consumeRateLimit(req, action, limit, false, bucket, API_WINDOW_SECONDS)
+export async function apiRequestGuard(req, action, limit = API_DEFAULT_LIMIT) {
+  const rate = await consumeApiRateLimit(req, action, limit)
   if (rate.unavailable) {
     return {
       allowed: false,
@@ -151,7 +185,6 @@ export async function apiRequestGuard(req, action, limit = API_DEFAULT_LIMIT) {
       retryAfterSeconds: API_WINDOW_SECONDS,
     }
   }
-
   if (rate.blocked) {
     return {
       allowed: false,
@@ -160,7 +193,6 @@ export async function apiRequestGuard(req, action, limit = API_DEFAULT_LIMIT) {
       retryAfterSeconds: rate.retryAfterSeconds,
     }
   }
-
   return { allowed: true, remaining: Math.max(0, limit - rate.count), retryAfterSeconds: 0 }
 }
 
