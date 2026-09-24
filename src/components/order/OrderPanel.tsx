@@ -74,7 +74,8 @@ export const OrderPanel: React.FC<Props> = ({ symbol, currentPrice, bidPrice = c
   const riskCalc = useMemo(() => { if (![numEntry, numSL, numTP, numRisk].every(Number.isFinite)) return { ...emptyResult, errorMessage: 'Please fill in all fields with valid numbers.' }; return calculateRisk({ accountBalance, accountCurrency, riskPercent: numRisk, side: orderType, entryPrice: numEntry, stopLoss: numSL, takeProfit: numTP, symbolSpec, conversionRate }) }, [accountBalance, accountCurrency, conversionRate, numEntry, numRisk, numSL, numTP, orderType, symbolSpec])
   const parsedLotSize = Number(lotSize)
   const lotSizeIsValid = Number.isFinite(parsedLotSize) && parsedLotSize >= symbolSpec.minLotSize && parsedLotSize <= symbolSpec.maxLotSize && Math.abs((parsedLotSize / symbolSpec.lotStep) - Math.round(parsedLotSize / symbolSpec.lotStep)) < 1e-8
-  const canSubmit = riskCalc.isValid && lotSizeIsValid
+  const lotFitsRiskBudget = riskCalc.isValid && parsedLotSize <= riskCalc.suggestedLotSize + 1e-8
+  const canSubmit = riskCalc.isValid && lotSizeIsValid && lotFitsRiskBudget
 
   const handleSubmit = (e: React.FormEvent): void => { e.preventDefault(); if (!canSubmit) return; onSubmitOrder({ symbol, type: orderType, lotSize: parsedLotSize, entryPrice: numEntry, stopLoss: numSL, takeProfit: numTP, riskPercent: numRisk, riskAmount: riskCalc.riskAmount, rewardAmount: riskCalc.riskAmount * riskCalc.riskRewardRatio, riskRewardRatio: riskCalc.riskRewardRatio }); setStopLoss(''); setTakeProfit('') }
   const applySuggestedLot = (): void => { if (riskCalc.isValid && riskCalc.suggestedLotSize > 0) setLotSize(riskCalc.suggestedLotSize.toFixed(2)) }
