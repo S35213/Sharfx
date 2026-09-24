@@ -235,7 +235,6 @@ export function TradingAgentPanel({
   const setup = tradingContext.setup.preferredSetup
   const bestOpportunity = activeBotScan?.setup ?? setup
   const displayedUnitNumber = pendingUnitCompletion ? Math.max(1, cycleUnits) : Math.max(1, cycleUnits + 1)
-  const bestOpportunityRef = useRef(bestOpportunity)
   const parsedLotSize = Number(lotSize)
   const botRiskSetup = activeBotScan?.setup ?? setup
   const botRiskCalc = useMemo(() => {
@@ -245,10 +244,6 @@ export function TradingAgentPanel({
   const accountFitLot = botRiskCalc?.isValid ? botRiskCalc.suggestedLotSize : 0
   const lotFitsAccount = Boolean(botRiskCalc?.isValid && parsedLotSize > 0 && parsedLotSize <= accountFitLot + 1e-8)
   const lotSizeValid = symbolSpec ? Number.isFinite(parsedLotSize) && parsedLotSize >= symbolSpec.minLotSize && parsedLotSize <= symbolSpec.maxLotSize && Math.abs((parsedLotSize / symbolSpec.lotStep) - Math.round(parsedLotSize / symbolSpec.lotStep)) < 1e-8 : false
-
-  useEffect(() => {
-    bestOpportunityRef.current = bestOpportunity
-  }, [bestOpportunity])
 
   useEffect(() => {
     currentPriceRef.current = currentPrice
@@ -744,7 +739,6 @@ export function TradingAgentPanel({
       setScanSeconds(10)
       setScanComplete(true)
       setScanPhase('READY')
-      const opportunity = bestOpportunityRef.current
       setStatus(executableOpportunities.length > 0
         ? executableOpportunities.length + ' opportunity' + (executableOpportunities.length === 1 ? '' : ' opportunities') + ' found across ' + executableOpportunities.map((row) => row.timeframe).join(', ') + '.'
         : 'No opportunity found for trade.')
