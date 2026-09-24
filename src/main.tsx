@@ -106,7 +106,18 @@ const EntryGate = () => {
 
   const previewMode = new URLSearchParams(window.location.search).get('preview') === '1'
 
-  if (brandTransition) {\n    return <><ShafxBrandTransition kind={brandTransition} onDone={() => setBrandTransition(null)} /><div className={brandTransition ? 'pointer-events-none' : ''}><AccountAccessGate onEnterTerminal={setMode} /></div></>\n  }\n\n  if (previewMode) return (
+  if (brandTransition) {
+    return (
+      <>
+        <ShafxBrandTransition kind={brandTransition} onDone={() => setBrandTransition(null)} />
+        <div className="pointer-events-none">
+          <AccountAccessGate onEnterTerminal={setMode} />
+        </div>
+      </>
+    )
+  }
+
+  if (previewMode) return (
     <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-[#070A0F] text-sm text-[#8A93A3]">Loading SHAFX workspace…</div>}>
       <App />
     </Suspense>
