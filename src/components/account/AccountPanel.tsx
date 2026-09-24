@@ -277,51 +277,56 @@ export const AccountPanel: React.FC<Props> = ({ account, activeProviderSelection
     )}
 
     {!user && (
-      resetToken ? (
-        <section className="rounded-2xl border border-shafx-border bg-shafx-surface p-4">
-          <div className="flex items-center gap-2 text-sm font-semibold"><KeyRound className="h-4 w-4 text-shafx-accent" />Set a new password</div>
-          <p className="mt-1 text-[10px] text-shafx-textMuted">Choose a new password of at least 10 characters.</p>
-          <form onSubmit={(event) => void submitAuth(event)} className="mt-3 space-y-2">
-            <input value={resetPassword} onChange={(event) => setResetPassword(event.target.value)} type="password" autoComplete="new-password" required minLength={10} placeholder="New password" className="min-h-11 w-full rounded-lg border border-shafx-border bg-shafx-bg px-3 text-sm outline-none" />
-            <input value={resetConfirm} onChange={(event) => setResetConfirm(event.target.value)} type="password" autoComplete="new-password" required minLength={10} placeholder="Confirm new password" className="min-h-11 w-full rounded-lg border border-shafx-border bg-shafx-bg px-3 text-sm outline-none" />
-            <button disabled={submitting} type="submit" className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-shafx-primary px-3 text-sm font-semibold text-white disabled:opacity-60"><KeyRound className="h-4 w-4" />{submitting ? 'Please wait…' : 'Change password'}</button>
-          </form>
-        </section>
-      ) : (
-        <section className="rounded-2xl border border-shafx-border bg-shafx-surface p-4">
-          {!forgotMode && (
-            <div className="grid grid-cols-2 gap-1 rounded-xl border border-shafx-border bg-shafx-bg p-1">
-              <button type="button" onClick={() => { setFormMode('signin'); setMessage(null) }} className={`min-h-10 rounded-lg text-xs font-semibold ${formMode === 'signin' ? 'bg-shafx-accent text-white' : 'text-shafx-textMuted'}`}>Sign in</button>
-              <button type="button" onClick={() => { setFormMode('signup'); setMessage(null) }} className={`min-h-10 rounded-lg text-xs font-semibold ${formMode === 'signup' ? 'bg-shafx-accent text-white' : 'text-shafx-textMuted'}`}>Create account</button>
-            </div>
-          )}
-          <form onSubmit={(event) => void submitAuth(event)} className="relative mt-3 space-y-2">
-            {forgotMode ? (
-              <>
-                <div className="rounded-xl border border-shafx-border bg-shafx-bg p-3"><div className="flex items-center gap-2 text-sm font-semibold"><KeyRound className="h-4 w-4 text-shafx-accent" />Reset your password</div><p className="mt-1 text-[10px] text-shafx-textMuted">Enter your email and SHAFX will send a secure reset link.</p></div>
-                <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" required placeholder="Email address" className="min-h-11 w-full rounded-lg border border-shafx-border bg-shafx-bg px-3 text-sm outline-none" />
-                <button disabled={submitting} type="submit" className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-shafx-accent px-3 text-sm font-semibold text-white disabled:opacity-60"><KeyRound className="h-4 w-4" />{submitting ? 'Sending…' : 'Send reset link'}</button>
-              </>
-            ) : (
-              <>
-                {formMode === 'signup' && <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Your name" className="min-h-11 w-full rounded-lg border border-shafx-border bg-shafx-bg px-3 text-sm outline-none" />}
-                <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" required placeholder="Email address" className="min-h-11 w-full rounded-lg border border-shafx-border bg-shafx-bg px-3 text-sm outline-none" />
-                <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete={formMode === 'signin' ? 'current-password' : 'new-password'} required minLength={formMode === 'signup' ? 10 : 1} placeholder={formMode === 'signup' ? 'Password (minimum 10 characters)' : 'Password'} className="min-h-11 w-full rounded-lg border border-shafx-border bg-shafx-bg px-3 text-sm outline-none" />
-                {formMode === 'signup' && (
-                  <>
-                    <input value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} type="password" autoComplete="new-password" required minLength={10} placeholder="Confirm password" className="min-h-11 w-full rounded-lg border border-shafx-border bg-shafx-bg px-3 text-sm outline-none" />
-                    <input aria-hidden="true" tabIndex={-1} autoComplete="off" value={website} onChange={(event) => setWebsite(event.target.value)} className="absolute -left-[10000px] top-auto h-px w-px opacity-0" />
-                  </>
-                )}
-                <button disabled={submitting} type="submit" className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-shafx-accent px-3 text-sm font-semibold text-white disabled:opacity-60">{formMode === 'signin' ? <LogIn className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}{submitting ? 'Please wait…' : formMode === 'signin' ? 'Sign in to SHAFX' : 'Create SHAFX account'}</button>
-                {formMode === 'signin' && <button type="button" onClick={() => { setForgotMode(true); setMessage(null) }} className="w-full py-1 text-[10px] text-shafx-accent">Forgot password?</button>}
-              </>
+      <section className="rounded-2xl border border-shafx-border bg-shafx-surface p-4">
+        {resetToken ? (
+          <div>
+            <div className="flex items-center gap-2 text-sm font-semibold"><KeyRound className="h-4 w-4 text-shafx-accent" />Set a new password</div>
+            <p className="mt-1 text-[10px] text-shafx-textMuted">Choose a new password of at least 10 characters.</p>
+            <form onSubmit={(event) => void submitAuth(event)} className="mt-3 space-y-2">
+              <input value={resetPassword} onChange={(event) => setResetPassword(event.target.value)} type="password" autoComplete="new-password" required minLength={10} placeholder="New password" className="min-h-11 w-full rounded-lg border border-shafx-border bg-shafx-bg px-3 text-sm outline-none" />
+              <input value={resetConfirm} onChange={(event) => setResetConfirm(event.target.value)} type="password" autoComplete="new-password" required minLength={10} placeholder="Confirm new password" className="min-h-11 w-full rounded-lg border border-shafx-border bg-shafx-bg px-3 text-sm outline-none" />
+              <button disabled={submitting} type="submit" className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-shafx-accent px-3 text-sm font-semibold text-white disabled:opacity-60"><KeyRound className="h-4 w-4" />{submitting ? 'Please wait…' : 'Change password'}</button>
+            </form>
+          </div>
+        ) : (
+          <div>
+            {!forgotMode && (
+              <div className="mb-3 grid grid-cols-2 gap-1 rounded-xl border border-shafx-border bg-shafx-bg p-1">
+                <button type="button" onClick={() => { setFormMode('signin'); setMessage(null) }} className={formMode === 'signin' ? 'min-h-10 rounded-lg bg-shafx-accent text-xs font-semibold text-white' : 'min-h-10 rounded-lg text-xs font-semibold text-shafx-textMuted'}>Sign in</button>
+                <button type="button" onClick={() => { setFormMode('signup'); setMessage(null) }} className={formMode === 'signup' ? 'min-h-10 rounded-lg bg-shafx-accent text-xs font-semibold text-white' : 'min-h-10 rounded-lg text-xs font-semibold text-shafx-textMuted'}>Create account</button>
+              </div>
             )}
-          </form>
-          {(message || error) && <p className="mt-2 text-[10px] leading-relaxed text-shafx-textMuted">{message || error}</p>}
-          {forgotMode && <button type="button" onClick={() => { setForgotMode(false); setMessage(null) }} className="mt-2 w-full text-[10px] text-shafx-textMuted">Back to sign in</button>}
-        </section>
-      )
+            <form onSubmit={(event) => void submitAuth(event)} className="space-y-2">
+              {forgotMode ? (
+                <>
+                  <div className="rounded-xl border border-shafx-border bg-shafx-bg p-3"><div className="flex items-center gap-2 text-sm font-semibold"><KeyRound className="h-4 w-4 text-shafx-accent" />Reset your password</div><p className="mt-1 text-[10px] text-shafx-textMuted">Enter your email and SHAFX will send a secure reset link.</p></div>
+                  <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" required placeholder="Email address" className="min-h-11 w-full rounded-lg border border-shafx-border bg-shafx-bg px-3 text-sm outline-none" />
+                  <button disabled={submitting} type="submit" className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-shafx-accent px-3 text-sm font-semibold text-white disabled:opacity-60"><KeyRound className="h-4 w-4" />{submitting ? 'Sending…' : 'Send reset link'}</button>
+                  <button type="button" onClick={() => { setForgotMode(false); setMessage(null) }} className="w-full py-1 text-[10px] text-shafx-textMuted">Back to sign in</button>
+                </>
+              ) : (
+                <>
+                  {formMode === 'signup' && <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Your name" className="min-h-11 w-full rounded-lg border border-shafx-border bg-shafx-bg px-3 text-sm outline-none" />}
+                  <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" required placeholder="Email address" className="min-h-11 w-full rounded-lg border border-shafx-border bg-shafx-bg px-3 text-sm outline-none" />
+                  <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete={formMode === 'signin' ? 'current-password' : 'new-password'} required minLength={formMode === 'signup' ? 10 : 1} placeholder={formMode === 'signup' ? 'Password (minimum 10 characters)' : 'Password'} className="min-h-11 w-full rounded-lg border border-shafx-border bg-shafx-bg px-3 text-sm outline-none" />
+                  {formMode === 'signup' && (
+                    <>
+                      <input value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} type="password" autoComplete="new-password" required minLength={10} placeholder="Confirm password" className="min-h-11 w-full rounded-lg border border-shafx-border bg-shafx-bg px-3 text-sm outline-none" />
+                      <input aria-hidden="true" tabIndex={-1} autoComplete="off" value={website} onChange={(event) => setWebsite(event.target.value)} className="absolute -left-[10000px] top-auto h-px w-px opacity-0" />
+                    </>
+                  )}
+                  <button disabled={submitting} type="submit" className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-shafx-accent px-3 text-sm font-semibold text-white disabled:opacity-60">
+                    {formMode === 'signin' ? <LogIn className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
+                    {submitting ? 'Please wait…' : formMode === 'signin' ? 'Sign in to SHAFX' : 'Create SHAFX account'}
+                  </button>
+                  {formMode === 'signin' && <button type="button" onClick={() => { setForgotMode(true); setMessage(null) }} className="w-full py-1 text-[10px] text-shafx-accent">Forgot password?</button>}
+                </>
+              )}
+            </form>
+            {(message || error) && <p className="mt-2 text-[10px] leading-relaxed text-shafx-textMuted">{message || error}</p>}
+          </div>
+        )}
+      </section>
     )}
 
     <p className="px-1 text-[9px] leading-4 text-shafx-textMuted">SHAFX keeps its identity layer separate from provider credentials, account balances and trading state. Provider switching changes the active account context; it does not merge account history.</p>
