@@ -1,6 +1,9 @@
+import { apiRequestGuard } from '../../server/authSecurity.js'
 import { createSession, isAdminConfigured, keyMatches, setSessionCookie } from '../../server/adminAuth.js'
 
-export default function handler(req, res) {
+export default async function handler(req, res) {
+  const guard = await apiRequestGuard(req, 'api:admin-auth', 20)
+  if (!guard.allowed) return res.status(guard.status).json({ ok: false, error: guard.error, retryAfterSeconds: guard.retryAfterSeconds })
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' })
   if (!isAdminConfigured()) return res.status(503).json({ ok: false, error: 'Owner console is not configured yet' })
 
