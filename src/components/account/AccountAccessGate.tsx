@@ -9,7 +9,7 @@ import { setStoredTradingMode, type TradingMode } from '../../app/tradingMode'
 interface Props { onEnterTerminal: (mode: TradingMode) => void }
 
 export const AccountAccessGate: React.FC<Props> = ({ onEnterTerminal }) => {
-  const { user, loading } = useAuth()
+  const { user } = useAuth()
   const [mode, setMode] = useState<TradingMode | null>(() => {
     if (typeof window === 'undefined') return null
     const requested = new URLSearchParams(window.location.search).get('account')
@@ -17,7 +17,6 @@ export const AccountAccessGate: React.FC<Props> = ({ onEnterTerminal }) => {
   })
   const enter = (nextMode: TradingMode) => { setStoredTradingMode(nextMode, user?.simulatorAccountId); onEnterTerminal(nextMode) }
 
-  if (loading) return <div className="flex min-h-[calc(100vh-28px)] items-center justify-center bg-shafx-bg px-4 text-shafx-text"><div className="rounded-2xl border border-shafx-border bg-shafx-surface px-7 py-6 text-center shafx-glow"><div className="text-sm font-semibold">Preparing your workspace</div><div className="mt-1 text-[11px] text-shafx-textMuted">Checking the SHAFX session…</div></div></div>
   if (!user) return <PublicWelcome />
 
   if (!mode) return <main className="min-h-[calc(100vh-28px)] overflow-y-auto bg-shafx-bg px-4 py-7 text-shafx-text sm:px-8 sm:py-10"><div className="mx-auto max-w-6xl">
