@@ -62,6 +62,7 @@ const TerminalContent: React.FC = () => {
   const [currentPrice, setCurrentPrice] = useState(1.08542)
   const [simulatedPrice, setSimulatedPrice] = useState(1.08542)
   const [marketTimestamp, setMarketTimestamp] = useState<number>(0)
+  const marketWallClockRef = useRef<number>(Date.now())
   const [candles, setCandles] = useState<OHLCV[]>([])
   const [liveCandles, setLiveCandles] = useState<OHLCV[]>([])
   const [simulatedCandles, setSimulatedCandles] = useState<OHLCV[]>([])
@@ -191,6 +192,7 @@ const TerminalContent: React.FC = () => {
           setSimulatedPrice(snapshot.bid)
           simulatedPriceRef.current = snapshot.bid
           setMarketTimestamp(snapshot.timestamp)
+          marketWallClockRef.current = Date.now()
         } else {
           simulatedEngineRef.current = null
           simulatedEngineSymbolRef.current = null
@@ -298,12 +300,13 @@ const TerminalContent: React.FC = () => {
 
     const scheduleTick = (): void => {
       if (cancelled) return
-      const delay = 420 + Math.round(Math.random() * 360)
       timeout = window.setTimeout(() => {
         const engine = simulatedEngineRef.current
         if (!engine || cancelled) return
-
-        const snapshot = engine.tickOnce(1)
+        const now = Date.now()
+        const elapsedSeconds = Math.max(1, Math.min(15, Math.round((now - marketWallClockRef.current) / 1000)))
+        marketWallClockRef.current = now
+        const snapshot = engine.tickOnce(elapsedSeconds)
         setSimulatedCandles(snapshot.candles)
         setSimulatedM1Candles(snapshot.m1Candles.slice(-3000))
         setSimulatedPrice(snapshot.bid)
