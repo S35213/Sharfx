@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Activity, ArrowDownRight, ArrowUpRight, Award, BarChart3, Filter, History, Minus, TrendingDown, TrendingUp } from 'lucide-react'
+import { ArrowDownRight, ArrowUpRight, Award, BarChart3, Filter, History, Minus, TrendingDown, TrendingUp } from 'lucide-react'
 import type { TradeOrder } from '../../types'
 import { formatCurrency, formatPercent, formatPrice, formatTimestamp } from '../../lib/format'
 
