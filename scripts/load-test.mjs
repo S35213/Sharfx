@@ -1,4 +1,5 @@
-const BASE_URL = process.env.SHAFX_LOADTEST_URL || 'https://shafx.vercel.app'
+const BASE_URL = String(process.env.SHAFX_LOADTEST_URL || '').trim()
+if (!BASE_URL) throw new Error('SHAFX_LOADTEST_URL must be set explicitly; refusing to load-test a production host by default.')
 const TARGETS = [50, 100, 200, 1000]
 const ROUTES = [
   { name: 'home', path: '/', expected: [200] },
