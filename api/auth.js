@@ -61,7 +61,7 @@ async function securityEvent(event) { try { await rest('/shafx_security_events',
 async function updateSecurityProfile(userId, patch) { try { await rest(`/shafx_profiles?id=eq.${encodeURIComponent(userId)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(patch) }) } catch {} }
 export default async function handler(req, res) {
   const action = new URL(req.url || '/', 'http://shafx.local').searchParams.get('action') || ''
-  const guardedBySpecificFlow = new Set(['me', 'logout', 'login', 'signup', 'request-login-code', 'verify-login-code', 'verify-email-code'])
+  const guardedBySpecificFlow = new Set(['me', 'logout', 'login', 'signup', 'request-verification-code', 'verify-email-code'])
   if (!guardedBySpecificFlow.has(action)) {
     const guard = await apiRequestGuard(req, 'api:auth', 120)
     if (!guard.allowed) return res.status(guard.status).json({ ok: false, error: guard.error, retryAfterSeconds: guard.retryAfterSeconds })
@@ -71,11 +71,11 @@ export default async function handler(req, res) {
   try {
     if (action === 'logout') { const { user } = await currentUser(req, res); if (user) await securityEvent({ user_id: user.id, event_type: 'logout', decision: 'allow', risk_score: 0, fingerprint: securityFingerprint(req), metadata: {} }); res.setHeader('Set-Cookie', [sessionCookie + '=; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=0', refreshCookie + '=; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=0', loginChallengeCookie + '=; Path=/api/auth; HttpOnly; SameSite=Lax; Secure; Max-Age=0']); return json(res, 200, { ok: true }) }
     if (action === 'me') { const { user } = await currentUser(req, res); if (!user) return json(res, 401, { ok: false, error: 'Not signed in' }); const result = await publicUser(user); if (!result) return json(res, 403, { ok: false, error: 'SHAFX account profile is missing.' }); if (result.status !== 'active') { clearSessionCookie(res); return json(res, 403, { ok: false, error: result.status === 'banned' ? 'This SHAFX account has been banned.' : 'This SHAFX account is suspended.', status: result.status }) } return json(res, 200, { ok: true, user: result }) }
-    if (action === 'request-login-code') {
+    if (action === 'request-verification-code') {
       if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'Method not allowed' })
       const body = typeof req.body === 'object' && req.body ? req.body : {}
       const challenge = decodeChallenge(cookie(req, loginChallengeCookie))
-      if (!challenge) return json(res, 409, { ok: false, error: 'Your login verification step has expired. Enter your email and password again.' })
+      if (!challenge || challenge.purpose !== 'signup') return json(res, 409, { ok: false, error: 'Your email verification step has expired. Create the account again to request a new code.' })
       const email = String(body.email || '').trim().toLowerCase()
       if (!email || email !== challenge.email) return json(res, 400, { ok: false, error: 'The verification email does not match the login request.' })
       const guard = await otpRequestGuard(req, email)
@@ -83,9 +83,9 @@ export default async function handler(req, res) {
       const response = await supabase('/otp', { method: 'POST', body: JSON.stringify({ email, create_user: false }) })
       const data = await response.json().catch(() => ({}))
       if (!response.ok) return json(res, response.status, { ok: false, error: authError(data, 'Unable to send the verification code.') })
-      return json(res, 200, { ok: true, message: challenge.purpose === 'signup' ? 'A verification code has been sent to your email. Check Gmail and enter it below.' : 'A verification code has been sent to your email. Check Gmail and enter it below.', retryAfterSeconds: 0 })
+      return json(res, 200, { ok: true, message: 'A verification code has been sent to your email. Check Gmail and enter it below.', retryAfterSeconds: 0 })
     }
-    if (action === 'verify-email-code' || action === 'verify-login-code') {
+    if (action === 'verify-email-code') {
       if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'Method not allowed' })
       const body = typeof req.body === 'object' && req.body ? req.body : {}
       const email = String(body.email || '').trim().toLowerCase()
@@ -93,7 +93,7 @@ export default async function handler(req, res) {
       if (!/^\S+@\S+\.\S+$/.test(email)) return json(res, 400, { ok: false, error: 'Enter a valid email address.' })
       if (!/^\d{6}$/.test(token)) return json(res, 400, { ok: false, error: 'Enter the 6-digit verification code from your email.' })
       const challenge = decodeChallenge(cookie(req, loginChallengeCookie))
-      if (!challenge || challenge.email !== email || challenge.purpose !== (action === 'verify-login-code' ? 'login' : 'signup')) return json(res, 409, { ok: false, error: 'This verification step has expired. Start again from the login or account-creation screen.' })
+      if (!challenge || challenge.email !== email || challenge.purpose !== 'signup') return json(res, 409, { ok: false, error: 'This account verification step has expired. Create the account again to request a new code.' })
       const guard = await otpVerifyGuard(req, email)
       if (!guard.allowed) return json(res, guard.status || 429, { ok: false, error: guard.error, retryAfterSeconds: guard.retryAfterSeconds })
       const response = await supabase('/verify', { method: 'POST', body: JSON.stringify({ email, token, type: 'email' }) })
@@ -108,7 +108,7 @@ export default async function handler(req, res) {
       setSessionCookies(res, data)
       await updateSecurityProfile(data.user.id, { last_login_at: new Date().toISOString(), failed_login_count: 0 })
       await clearLoginFailures(req)
-      await securityEvent({ user_id: data.user.id, event_type: action === 'verify-login-code' ? 'login_code_verified' : 'signup_email_verified', decision: 'allow', risk_score: 0, fingerprint: securityFingerprint(req), metadata: {} })
+      await securityEvent({ user_id: data.user.id, event_type: 'signup_email_verified', decision: 'allow', risk_score: 0, fingerprint: securityFingerprint(req), metadata: {} })
       res.setHeader('Set-Cookie', [
         sessionCookie + '=' + encodeURIComponent(data.access_token) + '; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=3600',
         refreshCookie + '=' + encodeURIComponent(data.refresh_token) + '; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=2592000',
@@ -138,43 +138,15 @@ export default async function handler(req, res) {
       const result = await publicUser(data.user)
       if (!result) return json(res, 403, { ok: false, error: 'SHAFX account profile is not ready.' })
       if (result.status !== 'active') return json(res, 403, { ok: false, error: result.status === 'banned' ? 'This SHAFX account has been banned.' : 'This SHAFX account is suspended.', status: result.status })
-      setLoginChallenge(res, { userId: data.user.id, email, purpose: 'login' })
-      const otpResult = await (async () => {
-        const guard = await otpRequestGuard(req, email)
-        if (!guard.allowed) return { sent: false, retryAfterSeconds: guard.retryAfterSeconds || 0, message: guard.error, providerRateLimited: false }
-        const response = await supabase('/otp', { method: 'POST', body: JSON.stringify({ email, create_user: false }) })
-        const otpData = await response.json().catch(() => ({}))
-        const providerRateLimited = String(otpData?.code || '').toLowerCase() === 'over_email_send_rate_limit'
-        if (!response.ok) return { sent: false, retryAfterSeconds: 0, message: authError(otpData, 'Password verified, but SHAFX could not send the verification code right now.'), providerRateLimited }
-        return { sent: true, retryAfterSeconds: 0, message: 'Password verified. We sent a 6-digit verification code to your email. Enter it below.', providerRateLimited: false }
-      })()
-      await Promise.all([
-        clearLoginFailures(req),
-        securityEvent({ user_id: data.user.id, event_type: 'login_password_verified', decision: 'allow', risk_score: 0, fingerprint: securityFingerprint(req), metadata: { code_sent: otpResult.sent, email_delivery_rate_limited: otpResult.providerRateLimited === true } }),
+      await updateSecurityProfile(data.user.id, { last_login_at: new Date().toISOString(), failed_login_count: 0 })
+      await clearLoginFailures(req)
+      await securityEvent({ user_id: data.user.id, event_type: 'login_success', decision: 'allow', risk_score: 0, fingerprint: securityFingerprint(req), metadata: { email_verification_required: false } })
+      res.setHeader('Set-Cookie', [
+        sessionCookie + '=' + encodeURIComponent(data.access_token) + '; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=3600',
+        refreshCookie + '=' + encodeURIComponent(data.refresh_token) + '; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=2592000',
+        loginChallengeCookie + '=; Path=/api/auth; HttpOnly; SameSite=Lax; Secure; Max-Age=0',
       ])
-      if (!otpResult.sent && otpResult.providerRateLimited) {
-        await updateSecurityProfile(data.user.id, { last_login_at: new Date().toISOString(), failed_login_count: 0 })
-        setSessionCookies(res, data)
-        res.appendHeader?.('Set-Cookie', loginChallengeCookie + '=; Path=/api/auth; HttpOnly; SameSite=Lax; Secure; Max-Age=0')
-        return json(res, 200, {
-          ok: true,
-          requiresVerification: false,
-          email,
-          codeSent: false,
-          emailVerificationFallback: true,
-          message: 'Password verified. Supabase email delivery is temporarily rate-limited, so SHARFX completed this login with your password for testing.',
-        })
-      }
-      if (!otpResult.sent) return json(res, 429, { ok: false, error: otpResult.message, retryAfterSeconds: otpResult.retryAfterSeconds || 0, codeSent: false, passwordVerified: true })
-      return json(res, 200, {
-        ok: true,
-        requiresVerification: true,
-        userId: data.user.id,
-        email,
-        codeSent: otpResult.sent,
-        resendAfterSeconds: otpResult.retryAfterSeconds,
-        message: otpResult.message,
-      })
+      return json(res, 200, { ok: true, user: result })
     }    return json(res, 400, { ok: false, error: 'Unknown action.' })
   } catch (error) { return json(res, 500, { ok: false, error: error instanceof Error ? error.message : 'SHAFX identity service failed.' }) }
 }
