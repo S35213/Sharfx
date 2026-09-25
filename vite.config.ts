@@ -5,11 +5,15 @@ import { cloudflare } from '@cloudflare/vite-plugin'
 export default defineConfig({
   plugins: [react(), cloudflare()],
   base: process.env.GITHUB_ACTIONS ? '/Sharfx/' : '/',
-  build: {
-    rollupOptions: {
-      input: {
-        main: 'index.html',
-        owner: 'owner.html',
+  environments: {
+    client: {
+      build: {
+        rollupOptions: {
+          input: {
+            main: 'index.html',
+            owner: 'owner.html',
+          },
+        },
       },
     },
   },
