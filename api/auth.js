@@ -83,7 +83,7 @@ export default async function handler(req, res) {
       const response = await supabase('/otp', { method: 'POST', body: JSON.stringify({ email, create_user: false }) })
       const data = await response.json().catch(() => ({}))
       if (!response.ok) return json(res, response.status, { ok: false, error: authError(data, 'Unable to send the verification code.') })
-      return json(res, 200, { ok: true, message: challenge.purpose === 'signup' ? 'A verification code has been sent to your email. Check Gmail and enter it below.' : 'A verification code has been sent to your email. Check Gmail and enter it below.' })
+      return json(res, 200, { ok: true, message: challenge.purpose === 'signup' ? 'A verification code has been sent to your email. Check Gmail and enter it below.' : 'A verification code has been sent to your email. Check Gmail and enter it below.', retryAfterSeconds: 0 })
     }
     if (action === 'verify-email-code' || action === 'verify-login-code') {
       if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'Method not allowed' })
@@ -145,7 +145,7 @@ export default async function handler(req, res) {
         const response = await supabase('/otp', { method: 'POST', body: JSON.stringify({ email, create_user: false }) })
         const otpData = await response.json().catch(() => ({}))
         if (!response.ok) return { sent: false, retryAfterSeconds: 0, message: authError(otpData, 'Password verified, but SHAFX could not send the verification code right now.') }
-        return { sent: true, retryAfterSeconds: 60, message: 'Password verified. We sent a 6-digit verification code to your email. Enter it below.' }
+        return { sent: true, retryAfterSeconds: 0, message: 'Password verified. We sent a 6-digit verification code to your email. Enter it below.' }
       })()
       await Promise.all([
         clearLoginFailures(req),
