@@ -4,7 +4,6 @@ import type { MarketPair, Timeframe } from '../../types'
 import { TIMEFRAMES } from '../../types'
 import { formatPrice } from '../../lib/format'
 import { ProviderConnectionControl } from '../market/ProviderConnectionControl'
-import { setStoredTradingMode } from '../../app/tradingMode'
 import { ChartSettingsSheet } from './ChartSettingsSheet'
 import { ShafxBrandMark, ShafxWordmark } from '../brand/ShafxBrand'
 
@@ -42,7 +41,7 @@ export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, t
   }, [])
   const instruments = useMemo(() => Array.from(new Set(pairs.map((pair) => pair.symbol))), [pairs])
   const filtered = instruments.filter((item) => item.toLowerCase().includes(query.trim().toLowerCase()))
-  const simulatedQuote = (item: string) => {
+  const liveQuote = (item: string) => {
     const pair = pairs.find((entry) => entry.symbol === item)
     const precision = item === symbol ? pricePrecision : item.includes('JPY') ? 3 : item.includes('XAU') ? 2 : item.includes('BTC') ? 2 : 5
     const base = item === symbol ? price : pair?.price ?? 0
@@ -50,8 +49,7 @@ export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, t
     const mid = Number(base.toFixed(precision))
     return { pair, precision, bid: Number((mid - spread / 2).toFixed(precision)), ask: Number((mid + spread / 2).toFixed(precision)), mid }
   }
-  const currentMode = typeof window !== 'undefined' && sessionStorage.getItem('shafx-trading-mode') === 'broker' ? 'broker' : 'simulator'
-  const switchMode = (mode: 'simulator' | 'broker') => { setStoredTradingMode(mode, sessionStorage.getItem('shafx-simulator-account-id') || undefined); window.location.assign(`/?account=${mode === 'broker' ? 'broker' : 'demo'}`) }
+  const currentMode = 'broker' as const
 
   const selectFirstMatch = (): void => {
     const first = filtered[0]
@@ -78,10 +76,10 @@ export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, t
         </button>
         {marketOpen && <div className="fixed left-3 right-3 top-[76px] z-[200] max-h-[calc(100dvh-152px)] overflow-hidden rounded-2xl border border-shafx-border bg-shafx-surface p-2 shadow-2xl sm:absolute sm:left-0 sm:right-auto sm:top-[calc(100%+8px)] sm:max-h-none sm:w-[min(92vw,420px)]">
           <div className="mb-2 flex items-center gap-2 rounded-xl border border-shafx-border bg-shafx-bg px-3"><Search className="h-4 w-4 text-shafx-textMuted" /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') { setMarketOpen(false); setQuery('') } else if (event.key === 'Enter') selectFirstMatch() }} placeholder="Search symbol…" className="h-10 w-full bg-transparent text-sm outline-none" aria-label="Search trading symbols" /><kbd className="hidden rounded border border-shafx-border px-1.5 py-0.5 text-[8px] text-shafx-textMuted sm:block">⌘K</kbd></div>
-          <div className="mb-1 flex items-center justify-between px-2"><div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Market Watch</div><span className="rounded-full border border-shafx-warning/20 bg-shafx-warning/5 px-1.5 py-0.5 text-[8px] text-shafx-warning">SIMULATED</span></div>
+          <div className="mb-1 flex items-center justify-between px-2"><div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Market Watch</div><span className="rounded-full border border-shafx-success/20 bg-shafx-success/5 px-1.5 py-0.5 text-[8px] text-shafx-success">DERIV LIVE</span></div>
           <div className="mb-2 grid grid-cols-[1fr_82px_70px] gap-2 px-2 text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted"><span>Instrument</span><span className="text-right">Bid / Ask</span><span className="text-right">Move</span></div>
           <div className="max-h-[calc(100dvh-225px)] space-y-1 overflow-y-auto sm:max-h-80">{filtered.map((item) => {
-            const quote = simulatedQuote(item)
+            const quote = liveQuote(item)
             const change = quote.pair?.changePercent ?? 0
             const selectedClass = item === symbol ? 'bg-shafx-accent/10 text-shafx-accent' : ''
             return <button key={item} type="button" onClick={() => { onSelectPair(item); setMarketOpen(false); setQuery('') }} className={selectedClass + ' grid min-h-14 w-full grid-cols-[1fr_82px_70px] items-center gap-2 rounded-xl px-3 text-left transition hover:bg-shafx-surfaceHover'}>
@@ -93,15 +91,15 @@ export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, t
         </div>}
       </div> : <div className="min-w-0 flex-1"><div className="text-sm font-semibold">{view === 'agent' ? 'SHARFX Bot' : view === 'history' ? 'Trade history' : 'Account'}</div><div className="text-[9px] uppercase tracking-[0.16em] text-shafx-textMuted">{currentMode === 'broker' ? 'Provider workspace' : 'Simulator workspace'}</div></div>}
 
-      {view === 'market' && <div className="hidden items-center gap-2 border-l border-shafx-border pl-4 xl:flex"><span className="font-mono text-sm font-semibold tabular">{formatPrice(price, pricePrecision)}</span><span className="flex items-center gap-1 rounded-full border border-shafx-success/15 bg-shafx-success/5 px-2 py-1 text-[9px] text-shafx-success"><Wifi className="h-3 w-3" />{currentMode === 'broker' ? 'provider' : 'simulation'}</span></div>}
+      {view === 'market' && <div className="hidden items-center gap-2 border-l border-shafx-border pl-4 xl:flex"><span className="font-mono text-sm font-semibold tabular">{formatPrice(price, pricePrecision)}</span><span className="flex items-center gap-1 rounded-full border border-shafx-success/15 bg-shafx-success/5 px-2 py-1 text-[9px] text-shafx-success"><Wifi className="h-3 w-3" />Deriv live</span></div>}
 
       <div className="ml-auto flex min-w-0 items-center gap-1.5 sm:gap-2">
         <div className="hidden items-center gap-1 rounded-xl border border-shafx-border bg-shafx-surface px-2.5 py-2 text-[9px] text-shafx-textMuted 2xl:flex"><Command className="h-3 w-3" />Search</div>
         <div className="hidden sm:block"><ProviderConnectionControl /></div>
         <div className="relative">
-          <button type="button" onClick={() => setAccountOpen((open) => !open)} className="flex min-h-12 items-center gap-2 rounded-xl border border-shafx-border bg-shafx-surface px-3 text-left" aria-expanded={accountOpen} aria-label="Change trading environment">
-            <span className={`h-2 w-2 rounded-full ${currentMode === 'broker' ? 'bg-shafx-accent' : 'bg-shafx-success'}`} />
-            <span className="hidden text-[10px] font-semibold sm:block">{currentMode === 'broker' ? 'Provider' : 'Demo'}</span>
+          <button type="button" onClick={() => setAccountOpen((open) => !open)} className="flex min-h-12 items-center gap-2 rounded-xl border border-shafx-border bg-shafx-surface px-3 text-left" aria-expanded={accountOpen} aria-label="View connected broker">
+            <span className="h-2 w-2 rounded-full bg-shafx-accent" />
+            <span className="hidden text-[10px] font-semibold sm:block">Deriv</span>
             <ChevronDown className="h-3.5 w-3.5 text-shafx-textMuted" />
           </button>
           {accountOpen && <div className="absolute right-0 top-[calc(100%+8px)] z-[90] w-64 rounded-2xl border border-shafx-border bg-shafx-surface p-2 shadow-2xl">
@@ -122,7 +120,7 @@ export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, t
               <span><span className="block text-xs font-semibold">Settings</span><span className="mt-0.5 block text-[9px] text-shafx-textMuted">Chart, navigation and display</span></span>
             </button>
             <div className="my-1 border-t border-shafx-border" />
-            <div className="px-3 py-2 text-[9px] leading-4 text-shafx-textMuted">Provider-neutral workspace. Changes here affect this device only.</div>
+            <div className="px-3 py-2 text-[9px] leading-4 text-shafx-textMuted">Connected Deriv workspace. Account data comes from the selected Deriv account.</div>
           </div>}
         </div>
       </div>
