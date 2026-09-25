@@ -3,6 +3,7 @@ import { Check, ChevronDown, RefreshCw } from 'lucide-react'
 import { providerCatalog } from '../../integrations/catalog'
 import { ProviderCredentialForm } from './ProviderCredentialForm'
 import { assessProviderConnectionRecord } from '../../data/provider/providerConnectionHealth'
+import { setStoredTradingMode } from '../../app/tradingMode'
 import { chooseDefaultProviderSelection, getProviderConnections, setStoredProviderSelection, type ProviderConnectionRecord } from '../../data/provider/providerConnections'
 
 type LoadState = 'checking' | 'ready' | 'error'
@@ -54,6 +55,7 @@ export const ProviderConnectionControl: React.FC = () => {
 
   const selectAccount = (connection: ProviderConnectionRecord, accountId: string, environment: 'demo' | 'live'): void => {
     setStoredProviderSelection({ providerId: connection.providerId, connectionId: connection.id, accountId, environment })
+    setStoredTradingMode('broker')
     setSelectedConnectionId(connection.id)
     setSelectedAccountId(accountId)
     setOpen(false)
