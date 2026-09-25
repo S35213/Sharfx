@@ -30,7 +30,7 @@ export const PublicWelcome: React.FC = () => {
   })
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setBrandIntroVisible(false), 720)
+    const timer = window.setTimeout(() => setBrandIntroVisible(false), 1400)
     return () => window.clearTimeout(timer)
   }, [])
   const [showAuth, setShowAuth] = useState(false)
