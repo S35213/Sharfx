@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PanelRight, SlidersHorizontal } from 'lucide-react'
 import { TerminalProvider, useTerminal } from './app/TerminalContext'
 import { ErrorBoundary } from './app/ErrorBoundary'
-import { useAuth } from './app/AuthContext'
 import { TopNav } from './components/layout/TopNav'
 import { MobileNav, type MobileNavTab } from './components/layout/MobileNav'
 import { WorkspaceRail, type WorkspaceDock, type WorkspaceTool } from './components/layout/WorkspaceRail'
@@ -22,7 +21,7 @@ import { AccountPanel } from './components/account/AccountPanel'
 import { TradesPanel } from './components/trades/TradesPanel'
 import { Toast, type ToastMessage } from './components/common/Toast'
 import { CHART_SETTINGS_EVENT, readChartWorkspaceSettings, type ChartWorkspaceSettings } from './app/chartSettings'
-import { getConversionRate, SYMBOL_SPECS } from './data/mock/symbols'
+import { SYMBOL_SPECS } from './data/mock/symbols'
 import { getProviderConnections, chooseDefaultProviderSelection, subscribeToProviderSelection, type ActiveProviderSelection } from './data/provider/providerConnections'
 import { ProviderAccountStreamManager, providerAccountStreamKey } from './data/provider/ProviderAccountStreamManager'
 import { analyzeLiquidity } from './engine/liquidity'
@@ -34,7 +33,6 @@ import { mockWatchlist } from './data/mock/watchlist'
 
 const TerminalContent: React.FC = () => {
   const { selectedSymbol, setSelectedSymbol, timeframe, setTimeframe } = useTerminal()
-  const { user } = useAuth()
   const [activeProviderSelection, setActiveProviderSelection] = useState<ActiveProviderSelection | null>(() => chooseDefaultProviderSelection([]))
   const [currentPrice, setCurrentPrice] = useState(0)
   const [marketTimestamp, setMarketTimestamp] = useState(0)
@@ -52,7 +50,6 @@ const TerminalContent: React.FC = () => {
   const [dock, setDock] = useState<WorkspaceDock>('insights')
   const [mobileTab, setMobileTab] = useState<MobileNavTab>('market')
   const [mobileDockOpen, setMobileDockOpen] = useState(false)
-  const [isCompactViewport, setIsCompactViewport] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 999px)').matches)
   const [isLandscapeCompactViewport, setIsLandscapeCompactViewport] = useState(() => typeof window !== 'undefined' && window.matchMedia('(orientation: landscape) and (max-width: 999px)').matches)
   const accountStreamManager = useRef(new ProviderAccountStreamManager())
   const selectedSymbolRef = useRef(selectedSymbol)
@@ -240,15 +237,14 @@ const TerminalContent: React.FC = () => {
     .map((annotation) => ({ ...annotation, id: 'live-' + timeframe + '-' + annotation.id })), [liveCandles, selectedSymbol, timeframe])
 
   const tradeLines = useMemo<ChartAnnotation[]>(() => [], [])
-  const conversionRate = accountData ? getConversionRate(symbolSpec.quoteCurrency, accountData.currency) : undefined
-  const activeMarketConnection = activeProviderSelection ? {
+  const activeMarketConnection = useMemo(() => activeProviderSelection ? ({
     providerId: activeProviderSelection.providerId,
     connectionId: activeProviderSelection.connectionId,
     accountId: activeProviderSelection.accountId,
     environment: activeProviderSelection.environment,
     state: 'connected' as const,
     connectedAt: new Date().toISOString(),
-  } : undefined
+  }) : undefined, [activeProviderSelection?.providerId, activeProviderSelection?.connectionId, activeProviderSelection?.accountId, activeProviderSelection?.environment])
   const activeProviderName = 'Deriv'
   const accountModeLabel = activeProviderSelection?.environment === 'live' ? 'REAL ACCOUNT' : 'DEMO ACCOUNT'
   const accountModeTone = activeProviderSelection?.environment === 'live' ? 'text-shafx-accent' : 'text-shafx-success'
