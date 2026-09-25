@@ -60,7 +60,7 @@ export default async function handler(req, res) {
 
     const stateCookie = cookies[STATE_COOKIE]
     if (!stateCookie) throw new Error('OAuth session expired. Start the connection again.')
-    const { state, verifier } = parseStateCookie(stateCookie)
+    const { state, verifier } = await parseStateCookie(stateCookie)
     if (state !== returnedState) throw new Error('OAuth state mismatch')
 
     const clientId = process.env.DERIV_CLIENT_ID
