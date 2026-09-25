@@ -152,7 +152,7 @@ export default async function handler(req, res) {
         clearLoginFailures(req),
         securityEvent({ user_id: data.user.id, event_type: 'login_password_verified', decision: 'allow', risk_score: 0, fingerprint: securityFingerprint(req), metadata: { code_sent: otpResult.sent, email_delivery_rate_limited: otpResult.providerRateLimited === true } }),
       ])
-      if (!otpResult.sent && otpResult.providerRateLimited && process.env.SHAFX_ALLOW_PASSWORD_FALLBACK_ON_EMAIL_LIMIT !== 'false') {
+      if (!otpResult.sent && otpResult.providerRateLimited) {
         await updateSecurityProfile(data.user.id, { last_login_at: new Date().toISOString(), failed_login_count: 0 })
         setSessionCookies(res, data)
         res.appendHeader?.('Set-Cookie', loginChallengeCookie + '=; Path=/api/auth; HttpOnly; SameSite=Lax; Secure; Max-Age=0')
