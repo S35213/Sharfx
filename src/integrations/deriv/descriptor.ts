@@ -7,7 +7,7 @@ export const DERIV_PROVIDER_DESCRIPTOR: ProviderDescriptor = {
   status: 'available',
   executionMode: 'external',
   authMethods: ['oauth2'],
-  description: 'SHAFX market-data and authenticated account-data adapter for Deriv. Real-money execution remains intentionally disabled.',
+  description: 'Live Deriv market and authenticated account connection for SHAFX. Account selection is demo or real and balances come from Deriv.',
   capabilities: {
     accountRead: true,
     marketData: true,
@@ -25,8 +25,8 @@ export const DERIV_PROVIDER_DESCRIPTOR: ProviderDescriptor = {
     demoAccounts: true,
     symbolMetadata: false,
     funding: {
-      deposit: 'unsupported',
-      withdrawal: 'unsupported',
+      deposit: 'redirect',
+      withdrawal: 'redirect',
     },
   },
 }

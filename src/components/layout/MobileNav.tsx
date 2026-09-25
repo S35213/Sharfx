@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { BarChart3, Bot, History, UserCircle } from 'lucide-react'
+import { BarChart3, Brain, History, UserCircle } from 'lucide-react'
 import { readChartWorkspaceSettings, CHART_SETTINGS_EVENT, type ChartWorkspaceSettings } from '../../app/chartSettings'
 
 export type MobileNavTab = 'market' | 'agent' | 'history' | 'account'
@@ -8,7 +8,7 @@ interface MobileNavProps { activeTab: MobileNavTab; onChange: (tab: MobileNavTab
 
 const items: Array<{ id: MobileNavTab; label: string; icon: React.ElementType }> = [
   { id: 'market', label: 'Market', icon: BarChart3 },
-  { id: 'agent', label: 'Bot', icon: Bot },
+  { id: 'agent', label: 'AI', icon: Brain },
   { id: 'history', label: 'Orders', icon: History },
   { id: 'account', label: 'Account', icon: UserCircle },
 ]

@@ -1,43 +1,145 @@
-import React, { useState } from 'react'
-import { ArrowLeft, ArrowRight, BarChart3, CheckCircle2, ChevronRight, Link2, ShieldCheck, WalletCards } from 'lucide-react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import { ArrowRight, CheckCircle2, ChevronRight, Link2, RefreshCw, ShieldCheck, WalletCards } from 'lucide-react'
 import { PublicWelcome } from './PublicWelcome'
-import { ProviderConnectionControl } from '../market/ProviderConnectionControl'
-import { providerCatalog } from '../../integrations/catalog'
+import { getProviderConnections, setStoredProviderSelection, type ProviderConnectionRecord } from '../../data/provider/providerConnections'
 import { useAuth } from '../../app/AuthContext'
-import { setStoredTradingMode, type TradingMode } from '../../app/tradingMode'
 
-interface Props { onEnterTerminal: (mode: TradingMode) => void }
+interface Props { onConnected: () => void }
 
-export const AccountAccessGate: React.FC<Props> = ({ onEnterTerminal }) => {
+type BrokerTile = { id: string; name: string; kind: 'available' | 'soon'; note: string }
+
+const BROKERS: BrokerTile[] = [
+  { id: 'deriv', name: 'Deriv', kind: 'available', note: 'Connected with SHAFX OAuth' },
+  { id: 'hfm', name: 'HFM', kind: 'soon', note: 'Coming soon' },
+  { id: 'exness', name: 'Exness', kind: 'soon', note: 'Coming soon' },
+  { id: 'oanda', name: 'OANDA', kind: 'soon', note: 'Coming soon' },
+]
+
+function BrokerLogo({ id, name }: { id: string; name: string }) {
+  if (id === 'deriv') return <div title={name} className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-slate-900 shadow-sm"><span className="text-[15px] font-black tracking-[-0.08em]">d</span></div>
+  if (id === 'hfm') return <div title={name} className="flex h-11 w-11 items-center justify-center rounded-xl border border-red-500/25 bg-red-500/10 text-red-400"><span className="text-[12px] font-black">HFM</span></div>
+  if (id === 'exness') return <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-shafx-border bg-shafx-bg text-shafx-textMuted"><span className="text-[10px] font-black tracking-tight">EX</span></div>
+  return <div title={name} className="flex h-11 w-11 items-center justify-center rounded-xl border border-shafx-border bg-shafx-bg text-shafx-textMuted"><span className="text-[11px] font-black">OA</span></div>
+}
+
+function balanceText(balance: number | null, currency: string | null): string {
+  if (!Number.isFinite(Number(balance))) return 'Balance unavailable'
+  return (currency || '—') + ' ' + Number(balance).toFixed(2)
+}
+
+export const AccountAccessGate: React.FC<Props> = ({ onConnected }) => {
   const { user } = useAuth()
-  const [mode, setMode] = useState<TradingMode | null>(() => {
-    if (typeof window === 'undefined') return null
-    const requested = new URLSearchParams(window.location.search).get('account')
-    return requested === 'broker' ? 'broker' : requested === 'demo' ? 'simulator' : null
-  })
-  const enter = (nextMode: TradingMode) => { setStoredTradingMode(nextMode, user?.simulatorAccountId); onEnterTerminal(nextMode) }
+  const [connections, setConnections] = useState<ProviderConnectionRecord[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [connecting, setConnecting] = useState(false)
+
+  const derivConnection = useMemo(() => connections.find((item) => item.providerId === 'deriv' && item.state === 'connected'), [connections])
+  const accounts = useMemo(() => derivConnection?.accounts.filter((item) => item.active) ?? [], [derivConnection])
+
+  const refresh = useCallback(async (): Promise<void> => {
+    if (!user) return
+    setLoading(true)
+    setError(null)
+    try {
+      const next = await getProviderConnections()
+      setConnections(next)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to load broker connections.')
+    } finally {
+      setLoading(false)
+    }
+  }, [user])
+
+  useEffect(() => { void refresh() }, [refresh])
+
+  const connectDeriv = (): void => {
+    setConnecting(true)
+    setError(null)
+    window.location.assign('/api/deriv/login')
+  }
+
+  const selectAccount = (providerAccountId: string, environment: 'demo' | 'live'): void => {
+    if (!derivConnection) return
+    setStoredProviderSelection({
+      providerId: 'deriv',
+      connectionId: derivConnection.id,
+      accountId: providerAccountId,
+      environment,
+    })
+    onConnected()
+  }
 
   if (!user) return <PublicWelcome />
 
-  if (!mode) return <main className="min-h-[calc(100vh-28px)] overflow-y-auto bg-shafx-bg px-4 py-7 text-shafx-text sm:px-8 sm:py-10"><div className="mx-auto max-w-6xl">
-    <header className="flex items-center justify-between"><div><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-xl border border-shafx-accent/30 bg-shafx-accent/10 text-shafx-accent"><BarChart3 className="h-5 w-5" /></div><div><div className="text-lg font-semibold">SHAFX</div><div className="text-[9px] uppercase tracking-[0.22em] text-shafx-textMuted">Workspace selector</div></div></div></div><div className="hidden items-center gap-2 text-[10px] text-shafx-textMuted sm:flex"><span className="rounded-full border border-shafx-border px-2.5 py-1">Signed in</span><span>{user.displayName || user.email.split('@')[0]}</span></div></header>
-    <div className="mx-auto mt-16 max-w-4xl"><div className="text-center"><div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-shafx-textMuted">Choose your environment</div><h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-5xl">Start where you are.</h1><p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-shafx-textMuted">The SHAFX workspace remains the same. Only the market and account source changes.</p></div>
-      <div className="mt-9 grid gap-4 md:grid-cols-2">
-        <button type="button" onClick={() => setMode('simulator')} className="group rounded-3xl border border-shafx-border bg-shafx-surface p-6 text-left transition hover:-translate-y-0.5 hover:border-shafx-accent/40 shafx-glow"><div className="flex items-center justify-between"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-shafx-accent/10 text-shafx-accent"><BarChart3 className="h-6 w-6" /></div><ArrowRight className="h-5 w-5 text-shafx-textMuted transition group-hover:text-shafx-text" /></div><div className="mt-7 text-lg font-semibold">SHAFX Simulator</div><p className="mt-2 max-w-md text-xs leading-6 text-shafx-textMuted">Practice market structure, risk, replay and strategy ideas with simulated funds. No broker connection required.</p><div className="mt-6 flex flex-wrap gap-2 text-[9px] text-shafx-textMuted"><span className="rounded-full border border-shafx-border px-2.5 py-1">Replay</span><span className="rounded-full border border-shafx-border px-2.5 py-1">Backtest</span><span className="rounded-full border border-shafx-border px-2.5 py-1">SHAFX Bot</span></div></button>
-        <button type="button" onClick={() => setMode('broker')} className="group rounded-3xl border border-shafx-accent/30 bg-[linear-gradient(145deg,rgba(124,92,252,.10),rgba(13,18,26,.96)_50%)] p-6 text-left transition hover:-translate-y-0.5 hover:border-shafx-accent/50 shafx-glow"><div className="flex items-center justify-between"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-shafx-success/10 text-shafx-success"><WalletCards className="h-6 w-6" /></div><ArrowRight className="h-5 w-5 text-shafx-textMuted transition group-hover:text-shafx-text" /></div><div className="mt-7 text-lg font-semibold">Connect a provider</div><p className="mt-2 max-w-md text-xs leading-6 text-shafx-textMuted">Connect a supported broker or exchange and let SHAFX adapt its account, symbols and available execution capabilities.</p><div className="mt-6 flex flex-wrap gap-2 text-[9px] text-shafx-textMuted"><span className="rounded-full border border-shafx-border px-2.5 py-1">Adaptive UI</span><span className="rounded-full border border-shafx-border px-2.5 py-1">Normalized data</span><span className="rounded-full border border-shafx-border px-2.5 py-1">Safety gates</span></div></button>
-      </div>
-      <div className="mt-5 flex items-center justify-center gap-2 text-[10px] text-shafx-textMuted"><CheckCircle2 className="h-3.5 w-3.5 text-shafx-success" />Your SHAFX identity stays separate from connected provider credentials.</div>
+  return <main className="min-h-screen overflow-y-auto bg-shafx-bg px-4 py-7 text-shafx-text sm:px-8 sm:py-10">
+    <div className="mx-auto max-w-5xl">
+      <header className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-shafx-accent/30 bg-shafx-accent/10 text-shafx-accent"><WalletCards className="h-5 w-5" /></div>
+          <div><div className="text-lg font-semibold">SHAFX</div><div className="text-[9px] uppercase tracking-[0.22em] text-shafx-textMuted">Broker connection</div></div>
+        </div>
+        <div className="hidden items-center gap-2 rounded-full border border-shafx-border bg-shafx-surface px-3 py-2 text-[10px] text-shafx-textMuted sm:flex"><ShieldCheck className="h-3.5 w-3.5 text-shafx-success" />Signed in • {user.displayName || user.email.split('@')[0]}</div>
+      </header>
+
+      {!derivConnection ? (
+        <section className="mx-auto mt-14 max-w-4xl">
+          <div className="text-center">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-shafx-textMuted">Required before the workspace opens</div>
+            <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-5xl">Please connect to your broker to continue.</h1>
+            <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-shafx-textMuted">SHAFX does not create or simulate a trading account. Connect a supported broker, then choose the broker account you want SHAFX to use.</p>
+          </div>
+
+          <div className="mt-9 overflow-hidden rounded-3xl border border-shafx-accent/30 bg-[linear-gradient(145deg,rgba(124,92,252,.12),rgba(13,18,26,.98)_55%)] p-5 shadow-[0_24px_70px_rgba(0,0,0,.25)]">
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-4"><BrokerLogo id="deriv" name="Deriv" /><div><div className="flex items-center gap-2"><h2 className="text-lg font-semibold">Deriv</h2><span className="rounded-full border border-shafx-success/25 bg-shafx-success/10 px-2 py-1 text-[8px] font-bold uppercase tracking-wide text-shafx-success">Available</span></div><p className="mt-1 text-[11px] text-shafx-textMuted">OAuth account connection • live market data • demo/real account selection</p></div></div>
+              <button type="button" onClick={connectDeriv} disabled={connecting} className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-shafx-accent px-5 text-sm font-semibold text-white shadow-lg shadow-shafx-accent/20 disabled:opacity-60">{connecting ? 'Connecting…' : 'Connect Deriv'}<ArrowRight className="h-4 w-4" /></button>
+            </div>
+          </div>
+
+          <div className="mt-5 flex flex-wrap items-stretch gap-3">
+            {BROKERS.filter((broker) => broker.id !== 'deriv').map((broker) => (
+              <div key={broker.id} className="min-w-[150px] flex-1 rounded-2xl border border-shafx-border bg-shafx-surface/80 p-4">
+                <div className="flex items-center gap-3"><BrokerLogo id={broker.id} name={broker.name} /><div className="min-w-0"><div className="truncate text-sm font-semibold">{broker.name}</div><div className="mt-1 text-[9px] text-shafx-textMuted">{broker.note}</div></div></div>
+                <div className="mt-3 flex items-center gap-1.5 text-[9px] text-shafx-textMuted"><ChevronRight className="h-3 w-3" />Broker integration is being prepared.</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-5 flex items-start gap-2 rounded-2xl border border-shafx-border bg-shafx-surface/60 p-4 text-[10px] leading-5 text-shafx-textMuted"><Link2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-shafx-accent" /><span>Your SHAFX password and Deriv credentials remain separate. SHAFX stores the broker authorization on the server side and uses it only to access the connected account.</span></div>
+          {(error || loading) && <div className="mt-4 flex items-center justify-center gap-2 text-[10px] text-shafx-textMuted">{loading ? 'Checking broker connection…' : error}</div>}
+        </section>
+      ) : (
+        <section className="mx-auto mt-12 max-w-4xl">
+          <div className="text-center">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-shafx-textMuted">Deriv connected</div>
+            <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-5xl">Choose demo or real account.</h1>
+            <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-shafx-textMuted">The balance shown below is the balance SHAFX receives from the selected Deriv account. Nothing is created inside SHAFX.</p>
+          </div>
+
+          <div className="mt-8 rounded-3xl border border-shafx-border bg-shafx-surface p-4 shadow-[0_18px_60px_rgba(0,0,0,.2)]">
+            <div className="flex items-center justify-between gap-3 border-b border-shafx-border pb-3"><div><div className="flex items-center gap-2 text-sm font-semibold"><BrokerLogo id="deriv" name="Deriv" /><span>Deriv accounts</span></div><div className="mt-1 text-[9px] text-shafx-textMuted">{accounts.length} connected account{accounts.length === 1 ? '' : 's'}</div></div><button type="button" onClick={() => void refresh()} className="flex min-h-10 items-center gap-2 rounded-lg border border-shafx-border px-3 text-[9px] font-semibold text-shafx-textMuted"><RefreshCw className="h-3.5 w-3.5" />Refresh</button></div>
+            {accounts.length === 0 ? (
+              <div className="py-12 text-center"><div className="text-sm font-semibold">No Deriv account is available yet.</div><p className="mt-2 text-[10px] leading-5 text-shafx-textMuted">Return to Deriv, finish the account connection, then refresh this page.</p></div>
+            ) : (
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                {accounts.map((account) => (
+                  <div key={account.id} className="rounded-2xl border border-shafx-border bg-shafx-bg p-4">
+                    <div className="flex items-start justify-between gap-3"><div><div className="text-sm font-semibold">{account.environment === 'live' ? 'Real account' : 'Demo account'}</div><div className="mt-1 font-mono text-[9px] text-shafx-textMuted">{account.providerAccountId}</div></div><span className={account.environment === 'live' ? 'rounded-full border border-shafx-accent/25 bg-shafx-accent/10 px-2 py-1 text-[8px] font-semibold text-shafx-accent' : 'rounded-full border border-shafx-success/25 bg-shafx-success/10 px-2 py-1 text-[8px] font-semibold text-shafx-success'}>{account.environment === 'live' ? 'REAL' : 'DEMO'}</span></div>
+                    <div className="mt-6"><div className="text-[9px] uppercase tracking-[0.16em] text-shafx-textMuted">Current broker balance</div><div className="mt-1 font-mono text-2xl font-bold tabular-nums">{balanceText(account.balance, account.currency)}</div></div>
+                    <button type="button" onClick={() => selectAccount(account.providerAccountId, account.environment)} className="mt-5 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-shafx-accent px-3 text-xs font-semibold text-white">Use this account <ArrowRight className="h-4 w-4" /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl border border-shafx-border bg-shafx-surface/70 p-4"><div className="flex items-center gap-2 text-xs font-semibold"><CheckCircle2 className="h-4 w-4 text-shafx-success" />Real account money stays with Deriv.</div><p className="mt-1 text-[9px] leading-5 text-shafx-textMuted">SHAFX reads the connected account and, where broker execution is enabled, sends authorized trading instructions through the Deriv connection. SHAFX does not need a separate wallet for your trading funds.</p></div>
+            <div className="rounded-2xl border border-shafx-border bg-shafx-surface/70 p-4"><div className="flex items-center gap-2 text-xs font-semibold"><ShieldCheck className="h-4 w-4 text-shafx-accent" />Deposit / withdraw remains on Deriv.</div><p className="mt-1 text-[9px] leading-5 text-shafx-textMuted">Use Deriv's official Cashier for funding. SHAFX can open that official area without taking custody of the money.</p></div>
+          </div>
+        </section>
+      )}
     </div>
-  </div></main>
-
-  if (mode === 'broker') return <main className="min-h-[calc(100vh-28px)] overflow-y-auto bg-shafx-bg px-4 py-7 text-shafx-text sm:px-8 sm:py-10"><div className="mx-auto max-w-6xl">
-    <button type="button" onClick={() => setMode(null)} className="flex items-center gap-2 text-[11px] text-shafx-textMuted hover:text-shafx-text"><ArrowLeft className="h-3.5 w-3.5" />Workspace selector</button>
-    <header className="mt-7 flex flex-col justify-between gap-4 border-b border-shafx-border pb-6 sm:flex-row sm:items-end"><div><div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-shafx-textMuted">Provider connections</div><h1 className="mt-2 text-3xl font-semibold tracking-tight">Connect your market source.</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-shafx-textMuted">One SHAFX interface, multiple adapters. The selected provider changes the data source and the actions available in the workspace — not the whole product.</p></div><div className="flex items-center gap-2 rounded-full border border-shafx-border bg-shafx-surface px-3 py-2 text-[10px] text-shafx-textMuted"><ShieldCheck className="h-3.5 w-3.5 text-shafx-success" />Server-side credential boundary</div></header>
-    <section className="mt-6 rounded-3xl border border-shafx-accent/25 bg-shafx-surface p-5 shafx-glow"><div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center"><div><div className="flex items-center gap-2 text-sm font-semibold"><Link2 className="h-4 w-4 text-shafx-accent" />Connection manager</div><p className="mt-1 text-[11px] text-shafx-textMuted">Use the provider adapter that matches your account. Additional adapters can be added without rebuilding the terminal shell.</p></div><ProviderConnectionControl /></div></section>
-    <section className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{providerCatalog.filter((item) => item.id !== 'simulator').map((provider) => <div key={provider.id} className="rounded-2xl border border-shafx-border bg-shafx-surface/80 p-4"><div className="flex items-start justify-between gap-3"><div><div className="text-sm font-semibold">{provider.name}</div><p className="mt-1 text-[10px] leading-5 text-shafx-textMuted">{provider.description}</p></div><span className={`rounded-full border px-2 py-1 text-[8px] font-semibold tracking-wide ${provider.status === 'available' ? 'border-shafx-success/25 bg-shafx-success/5 text-shafx-success' : 'border-shafx-border text-shafx-textMuted'}`}>{provider.status === 'available' ? 'AVAILABLE' : 'PLANNED'}</span></div><div className="mt-4 flex items-center gap-2 text-[9px] text-shafx-textMuted"><span>Execution: {provider.capabilities.orderPlacement ? 'adapter present' : 'read / market'}</span><ChevronRight className="h-3 w-3" /></div></div>)}</section>
-    <div className="mt-5 rounded-2xl border border-shafx-border bg-shafx-surface/60 p-4 text-[10px] leading-5 text-shafx-textMuted"><strong className="text-shafx-warning">Release note:</strong> connecting a provider does not by itself authorize a real-money order. External execution remains explicitly gated in the server release boundary.</div>
-    <button type="button" onClick={() => enter('broker')} className="mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-shafx-accent/30 bg-shafx-accent/10 text-sm font-semibold text-shafx-accent hover:bg-shafx-accent/15">Open adaptive workspace <ArrowRight className="h-4 w-4" /></button>
-  </div></main>
-
-  return <main className="min-h-[calc(100vh-28px)] overflow-y-auto bg-shafx-bg px-4 py-10 text-shafx-text sm:px-8"><div className="mx-auto max-w-3xl text-center"><div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-shafx-accent/30 bg-shafx-accent/10 text-shafx-accent"><BarChart3 className="h-6 w-6" /></div><div className="mt-5 text-[10px] font-semibold uppercase tracking-[0.22em] text-shafx-textMuted">Simulator selected</div><h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Your private market lab is ready.</h1><p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-shafx-textMuted">Practice with simulated funds, review market structure, backtest ideas and use the SHAFX Bot without connecting a broker.</p><div className="mx-auto mt-7 max-w-xl rounded-3xl border border-shafx-border bg-shafx-surface p-5 text-left shafx-glow"><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-xl bg-shafx-accent/10 text-shafx-accent"><WalletCards className="h-5 w-5" /></div><div><div className="text-sm font-semibold">Simulator account</div><div className="mt-1 font-mono text-[10px] text-shafx-textMuted">{user.simulatorAccountId}</div></div></div><div className="mt-4 flex items-center gap-2 text-[10px] text-shafx-textMuted"><ShieldCheck className="h-3.5 w-3.5 text-shafx-success" />No broker credentials are required.</div></div><button type="button" onClick={() => enter('simulator')} className="mx-auto mt-4 flex min-h-12 w-full max-w-xl items-center justify-center gap-2 rounded-2xl bg-shafx-accent text-sm font-semibold text-white shadow-lg shadow-shafx-accent/15 hover:bg-shafx-primaryHover">Enter SHAFX workspace <ArrowRight className="h-4 w-4" /></button><button type="button" onClick={() => setMode(null)} className="mt-2 py-2 text-[10px] text-shafx-textMuted hover:text-shafx-text">Choose another environment</button></div></main>
+  </main>
 }
