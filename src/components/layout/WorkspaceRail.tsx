@@ -1,5 +1,5 @@
 import React from 'react'
-import { Activity, BarChart3, BellRing, Bot, Crosshair, LayoutPanelTop, LineChart, Minus, Ruler, Settings2, WalletCards } from 'lucide-react'
+import { Activity, BarChart3, BellRingCrosshair, LayoutPanelTop, LineChart, Minus, Ruler, WalletCards } from 'lucide-react'
 
 export type WorkspaceTool = 'cursor' | 'crosshair' | 'level' | 'measure' | 'alert'
 export type WorkspaceDock = 'insights' | 'liquidity' | 'orders' | 'agent' | 'research'
@@ -23,9 +23,7 @@ const dockItems: Array<{ id: WorkspaceDock; label: string; icon: React.ElementTy
   { id: 'insights', label: 'Market insight', icon: BarChart3 },
   { id: 'liquidity', label: 'Liquidity ladder', icon: LineChart },
   { id: 'orders', label: 'Orders & positions', icon: WalletCards },
-  { id: 'agent', label: 'SHAFX Bot', icon: Bot },
-  { id: 'research', label: 'Research tools', icon: LayoutPanelTop },
-]
+    ]
 
 export const WorkspaceRail: React.FC<Props> = ({ tool, onToolChange, dock, onDockChange }) => (
   <aside className="hidden w-14 flex-shrink-0 flex-col items-center justify-between border-r border-shafx-border bg-shafx-surface/80 py-2 lg:flex">
