@@ -20,9 +20,9 @@ export const ShafxBrandMark: React.FC<BrandMarkProps> = ({ size = 36, className 
         <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
       </filter>
     </defs>
-    <path d="M20 61c1-22 18-40 41-45 17-4 35 0 47 11L91 40c-8-7-19-9-29-6-13 3-22 13-24 25-2 11 3 21 12 27 8 5 18 5 26 1 8-4 13-11 14-19 1-5 0-10-3-14l19-13c8 11 11 24 8 37-4 17-15 31-31 38-18 8-39 7-56-3C24 94 19 78 20 61Z" fill="url(#shafx-blue)" filter="url(#shafx-glow)" />
-    <path d="M22 91c25-12 49-30 72-53l16-17-5 25 10 11-22-2C70 76 49 91 27 101l-14 6 9-16Z" fill="url(#shafx-orange)" filter="url(#shafx-glow)" />
-    <path d="M77 42 99 21l-5 22 14 14-23-2-8-13Z" fill="#18A9FF" opacity=".9" />
+    <path d="M78 24C66 15 48 14 35 22 20 31 18 48 29 58c7 6 17 8 29 10 13 2 19 5 17 12-3 9-16 13-29 11-10-1-19-6-25-13l-10 14c9 11 24 18 40 18 23 0 42-11 47-28 5-17-8-28-29-32-13-2-20-5-18-12 2-7 10-10 19-9 8 1 15 4 21 9l10-14Z" fill="url(#shafx-blue)" filter="url(#shafx-glow)" />
+    <path d="M61 29 96 99M96 29 61 99" fill="none" stroke="url(#shafx-orange)" stroke-width="9" stroke-linecap="round" />
+    <path d="M57 25 100 103" fill="none" stroke="#FFD24A" stroke-width="2.5" stroke-linecap="round" opacity=".55" />
   </svg>
 )
 
@@ -58,9 +58,9 @@ export const ShafxIntroMark: React.FC<{ className?: string }> = ({ className = '
           <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
         </filter>
       </defs>
-      <path className="shafx-intro-blue" d="M49 108C49 65 85 32 128 32c22 0 42 7 57 21l-22 21c-9-8-21-12-34-12-21 0-37 16-37 36 0 18 13 30 31 33 20 3 38-8 46-27l22-15c-3 31-19 58-48 71-30 13-68 8-91-12-20-18-31-41-29-60Z" fill="url(#intro-blue)" filter="url(#intro-glow)" />
-      <path className="shafx-intro-orange" d="M35 168C76 149 121 119 168 75l25-25-9 31 18 17-34-3c-42 38-84 65-126 80l-21 8 14-15Z" fill="url(#intro-orange)" filter="url(#intro-glow)" />
-      <path className="shafx-intro-x" d="M155 67 193 49l-11 31 22 21-35-4-15-26Z" fill="#1DBDFF" opacity=".95" />
+      <path className="shafx-intro-blue" d="M145 38C126 24 98 23 77 35 52 49 49 76 66 92c12 12 28 15 47 18 21 4 30 9 27 20-4 15-25 22-46 19-17-2-31-9-42-21l-16 22c15 18 38 29 65 29 38 0 68-18 76-45 8-28-12-46-48-53-21-4-32-9-29-19 3-11 17-16 31-14 13 2 24 7 34 15l16-22Z" fill="url(#intro-blue)" filter="url(#intro-glow)" />
+      <path className="shafx-intro-orange" d="M123 56 183 169M183 56 123 169" fill="none" stroke="url(#intro-orange)" stroke-width="14" stroke-linecap="round" />
+      <path className="shafx-intro-x" d="M118 49 189 176" fill="none" stroke="#FFE06A" stroke-width="4" stroke-linecap="round" opacity=".6" />
     </svg>
   </div>
 )
