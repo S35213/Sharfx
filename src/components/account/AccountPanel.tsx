@@ -27,7 +27,6 @@ export const AccountPanel: React.FC<Props> = ({ account, activeProviderSelection
   const [confirmPassword, setConfirmPassword] = useState('')
   const [verificationStep, setVerificationStep] = useState<'none' | 'signup'>('none')
   const [verificationCode, setVerificationCode] = useState('')
-  const [codeRequested, setCodeRequested] = useState(false)
   const [resendCountdown, setResendCountdown] = useState(0)
   const [resetPassword, setResetPassword] = useState('')
   const [resetConfirm, setResetConfirm] = useState('')
@@ -139,7 +138,6 @@ export const AccountPanel: React.FC<Props> = ({ account, activeProviderSelection
         await verifyEmailCode({ email, code: verificationCode })
         setVerificationStep('none')
         setVerificationCode('')
-        setCodeRequested(false)
         setMessage('Your SHAFX email code was verified.')
       } else if (formMode === 'signup') {
         if (password.length < 10) { setMessage('Password must be at least 10 characters.'); return }
