@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { Building2, Check, Copy, ExternalLink, LogOut, RefreshCw, ShieldCheck, UserCircle, Wallet } from 'lucide-react'
+import { Building2, Check, Copy, LogOut, ShieldCheck, UserCircle, Wallet } from 'lucide-react'
 import type { AccountData } from '../../types'
 import { formatCurrency, formatPercent } from '../../lib/format'
 import { getProviderConnections, setStoredProviderSelection, subscribeToProviderSelection, type ActiveProviderSelection, type ProviderConnectionRecord } from '../../data/provider/providerConnections'
-import { assessProviderConnectionRecord } from '../../data/provider/providerConnectionHealth'
 import { useAuth } from '../../app/AuthContext'
+import { DerivCashierLinks } from '../market/DerivCashierLinks'
 
 interface Props { account: AccountData; activeProviderSelection?: ActiveProviderSelection | null }
 
@@ -68,6 +68,8 @@ export const AccountPanel: React.FC<Props> = ({ account, activeProviderSelection
         })) }
       </div>
     </section>
+
+    <DerivCashierLinks />
 
     <section className="rounded-2xl border border-shafx-border bg-shafx-surface p-3.5 sm:p-4">
       <div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-shafx-accent" /><h3 className="text-sm font-semibold">Account safety</h3></div>
