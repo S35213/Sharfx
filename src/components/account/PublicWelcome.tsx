@@ -102,7 +102,7 @@ export const PublicWelcome: React.FC = () => {
         await verifyEmailCode({ email, code: verificationCode })
         setVerificationStep('none')
         setVerificationCode('')
-        setCodeRequested(false)
+        
       } else if (formMode === 'signup') {
         if (password.length < 10) { setMessage('Password must be at least 10 characters.'); return }
         if (password !== confirmPassword) { setMessage('Passwords do not match.'); return }
@@ -110,7 +110,7 @@ export const PublicWelcome: React.FC = () => {
         if (result.needsEmailConfirmation) {
           setVerificationStep('signup')
           setVerificationCode('')
-          setCodeRequested(true)
+          
           setPassword('')
           setMessage('Your account is created. We sent a verification code to your email. Copy it from Gmail and enter it below.')
         } else {
@@ -147,7 +147,7 @@ export const PublicWelcome: React.FC = () => {
                 <button disabled={submitting} type="submit" className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-shafx-accent px-4 text-sm font-semibold text-white disabled:opacity-60"><KeyRound className="h-4 w-4" />{submitting ? 'Verifying…' : 'Verify code'}</button>
                 <button type="button" disabled={submitting || resendCountdown > 0} onClick={async () => { try { setSubmitting(true); setMessage(null); const result = await requestVerificationCode(email); setResendCountdown(Math.max(0, Number(result.retryAfterSeconds || 0))); setMessage(result.message || 'A new verification code has been sent.'); } catch (err) { setMessage(err instanceof Error ? err.message : 'Unable to resend the code.'); } finally { setSubmitting(false) } }} className="w-full py-2 text-[11px] text-shafx-textMuted hover:text-shafx-accent disabled:opacity-50">{resendCountdown > 0 ? `Didn't receive it? Request another code in ${resendCountdown}s` : 'Resend verification code'}</button>
               </>
-              <button type="button" onClick={() => { setVerificationStep('none'); setVerificationCode(''); setCodeRequested(false); setResendCountdown(0); setMessage(null) }} className="w-full py-1 text-[11px] text-shafx-textMuted hover:text-shafx-accent">Back to email and password</button>
+              <button type="button" onClick={() => { setVerificationStep('none'); setVerificationCode(''); ; setResendCountdown(0); setMessage(null) }} className="w-full py-1 text-[11px] text-shafx-textMuted hover:text-shafx-accent">Back to email and password</button>
             </> : <>
               {formMode === 'signup' && <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Full name" className="min-h-12 w-full rounded-xl border border-shafx-border bg-shafx-surface px-4 text-sm outline-none focus:border-shafx-accent" />}
               <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" required placeholder="Email address" className="min-h-12 w-full rounded-xl border border-shafx-border bg-shafx-surface px-4 text-sm outline-none focus:border-shafx-accent" />{formMode === 'signin' && <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="current-password" required minLength={10} placeholder="Password" className="min-h-12 w-full rounded-xl border border-shafx-border bg-shafx-surface px-4 text-sm outline-none focus:border-shafx-accent" />}
