@@ -32,7 +32,7 @@ export const ProviderLiveControl: React.FC<ProviderLiveControlProps> = ({ provid
 
   useEffect(() => {
     setEnabled(Boolean(providedConnection))
-    onActiveChange?.(Boolean(providedConnection))
+    onActiveChange?.(false)
     const closeExistingStream = async (): Promise<void> => {
       const existing = streamRef.current
       streamRef.current = null
@@ -42,6 +42,7 @@ export const ProviderLiveControl: React.FC<ProviderLiveControlProps> = ({ provid
     if (!providedConnection || !enabled) {
       void closeExistingStream()
       setStatus('demo')
+      onActiveChange?.(false)
       return
     }
 
@@ -49,6 +50,7 @@ export const ProviderLiveControl: React.FC<ProviderLiveControlProps> = ({ provid
     const start = async (): Promise<void> => {
       try {
         setStatus('connecting')
+        onActiveChange?.(false)
         const adapter = providerRegistry.get(providerId)
         const readiness = assessProviderReadiness(adapter)
         if (!readiness.ready) throw new Error(`Provider ${adapter.descriptor.name} is not ready: ${readiness.missingMethods.join(', ') || readiness.issues.join(', ')}`)
@@ -62,6 +64,7 @@ export const ProviderLiveControl: React.FC<ProviderLiveControlProps> = ({ provid
           if (disposed) return
           if (event.type === 'error') {
             setStatus('error')
+            onActiveChange?.(false)
             return
           }
           if (event.type !== 'market_snapshot') return
@@ -74,6 +77,7 @@ export const ProviderLiveControl: React.FC<ProviderLiveControlProps> = ({ provid
           if (candles.length === 0 || price === undefined || !Number.isFinite(price) || !Number.isFinite(epoch)) return
           onUpdate(candles, price, epoch)
           setStatus('live')
+          onActiveChange?.(true)
         }, timeframe)
 
         if (disposed) {
@@ -81,9 +85,11 @@ export const ProviderLiveControl: React.FC<ProviderLiveControlProps> = ({ provid
           return
         }
         streamRef.current = stream
-        setStatus('live')
       } catch (error) {
-        if (!disposed) setStatus('error')
+        if (!disposed) {
+          setStatus('error')
+          onActiveChange?.(false)
+        }
         if (streamRef.current) {
           await streamRef.current.close().catch(() => undefined)
           streamRef.current = null
