@@ -19,6 +19,7 @@ export function AIAssistantPanel({ symbol, timeframe, candles, setup = null, onR
   const previousContext = useRef<AITradingContext | null>(null)
 
   const context = useMemo(() => {
+    if (!candles.length || !Number.isFinite(candles[candles.length - 1]?.close) || candles[candles.length - 1].close <= 0) return null
     const structure = analyzeMarketStructure(candles, 2)
     const swings = findSwingPoints(candles, 2)
     const tolerance = symbol.includes('JPY') ? 0.1 : 0.001
@@ -29,6 +30,11 @@ export function AIAssistantPanel({ symbol, timeframe, candles, setup = null, onR
   }, [candles, symbol, timeframe])
 
   useEffect(() => {
+    if (!context) {
+      setEvents([])
+      previousContext.current = null
+      return
+    }
     setEvents(detectMarketEvents(context, previousContext.current))
     previousContext.current = context
   }, [context])
@@ -39,8 +45,17 @@ export function AIAssistantPanel({ symbol, timeframe, candles, setup = null, onR
     return () => window.clearInterval(timer)
   }, [])
 
+  const response = useMemo(() => context ? buildTradingResponse(context, events, 'WHAT_IS_HAPPENING') : null, [context, events])
 
-  const response = useMemo(() => buildTradingResponse(context, events, 'WHAT_IS_HAPPENING'), [context, events])
+  if (!context || !response) {
+    return (
+      <div className="space-y-3 rounded-lg border border-shafx-border bg-shafx-surface p-4 text-sm">
+        <div className="flex items-center gap-2 font-semibold text-shafx-text"><Brain className="h-4 w-4 text-shafx-primary" /> AI Trading Agent</div>
+        <div className="rounded-xl border border-shafx-border bg-shafx-bg p-3 text-xs text-shafx-textMuted">Waiting for a live Deriv price feed. SHAFX will start the analysis automatically when the first valid market price arrives.</div>
+      </div>
+    )
+  }
+
   const activeSetup = setup ?? context.setup.preferredSetup
   const bias = context.marketStructure.bias
   const biasText = bias === 'Bullish' ? 'Buyers are currently stronger.' : bias === 'Bearish' ? 'Sellers are currently stronger.' : 'The market is not showing a clear directional edge.'
