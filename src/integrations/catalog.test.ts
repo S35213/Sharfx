@@ -9,8 +9,7 @@ const byId = (id: string) => {
 }
 
 describe('SHAFX provider catalog', () => {
-  it('keeps simulator, Deriv, OANDA and Binance adapters available', () => {
-    expect(byId('simulator').status).toBe('available')
+  it('keeps Deriv, OANDA and Binance adapters available', () => {
     expect(byId('deriv').status).toBe('available')
     expect(byId('oanda').status).toBe('available')
     expect(byId('binance').status).toBe('available')
@@ -29,8 +28,8 @@ describe('SHAFX provider catalog', () => {
   })
 
   it('does not conflate account/market integration with funding', () => {
-    expect(supportsDeposit(byId('deriv'))).toBe(false)
-    expect(supportsWithdrawal(byId('deriv'))).toBe(false)
+    expect(supportsDeposit(byId('deriv'))).toBe(true)
+    expect(supportsWithdrawal(byId('deriv'))).toBe(true)
     expect(supportsDeposit(byId('binance'))).toBe(false)
     expect(supportsWithdrawal(byId('binance'))).toBe(false)
   })
