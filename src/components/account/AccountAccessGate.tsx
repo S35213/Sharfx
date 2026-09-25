@@ -15,7 +15,7 @@ const BROKERS: BrokerTile[] = [
   { id: 'oanda', name: 'OANDA', kind: 'soon', note: 'Coming soon' },
 ]
 
-function BrokerLogo({ id, name }: { id: string; name: string }) {
+function BrokerLogo({ id }: { id: string }) {
   if (id === 'deriv') return <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-slate-900 shadow-sm"><span className="text-[15px] font-black tracking-[-0.08em]">d</span></div>
   if (id === 'hfm') return <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-red-500/25 bg-red-500/10 text-red-400"><span className="text-[12px] font-black">HFM</span></div>
   if (id === 'exness') return <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-shafx-border bg-shafx-bg text-shafx-textMuted"><span className="text-[10px] font-black tracking-tight">EX</span></div>
