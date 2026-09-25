@@ -107,7 +107,7 @@ export const ProviderLiveControl: React.FC<ProviderLiveControlProps> = ({ provid
   }
   const label = status === 'live' ? 'Live' : status === 'connecting' ? 'Connecting' : status === 'error' ? 'Retry Live' : 'Demo'
   return <div className="relative">
-    <button type="button" onClick={toggle aria-pressed={enabled} className="flex min-h-10 items-center gap-2 rounded-lg border border-shafx-border bg-shafx-surface px-3 text-xs font-medium text-shafx-text transition hover:border-shafx-primary">
+    <button type="button" onClick={toggle} aria-pressed={enabled} className="flex min-h-10 items-center gap-2 rounded-lg border border-shafx-border bg-shafx-surface px-3 text-xs font-medium text-shafx-text transition hover:border-shafx-primary">
       <span className={`h-2 w-2 rounded-full ${status === 'live' ? 'bg-emerald-400' : status === 'error' ? 'bg-red-400' : 'bg-shafx-textMuted'}`} />
       {label} Market
     </button>
