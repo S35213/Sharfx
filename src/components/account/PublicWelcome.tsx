@@ -42,7 +42,6 @@ export const PublicWelcome: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [verificationStep, setVerificationStep] = useState<'none' | 'signup'>('none')
   const [verificationCode, setVerificationCode] = useState('')
-  const [codeRequested, setCodeRequested] = useState(false)
   const [resendCountdown, setResendCountdown] = useState(0)
   const [resetPassword, setResetPassword] = useState('')
   const [resetConfirm, setResetConfirm] = useState('')
@@ -74,7 +73,6 @@ export const PublicWelcome: React.FC = () => {
     setMessage(null)
     setVerificationStep('none')
     setVerificationCode('')
-    setCodeRequested(false)
     setResendCountdown(0)
     setShowAuth(true)
   }
