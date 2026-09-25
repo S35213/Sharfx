@@ -45,8 +45,9 @@ export function AIAssistantPanel({ symbol, timeframe, candles, setup = null, onR
     return () => window.clearInterval(timer)
   }, [])
 
+  const response = useMemo(() => context ? buildTradingResponse(context, events, 'WHAT_IS_HAPPENING') : null, [context, events])
 
-  if (!context) {
+  if (!context || !response) {
     return (
       <div className="space-y-3 rounded-lg border border-shafx-border bg-shafx-surface p-4 text-sm">
         <div className="flex items-center gap-2 font-semibold text-shafx-text"><Brain className="h-4 w-4 text-shafx-primary" /> AI Trading Agent</div>
@@ -55,7 +56,6 @@ export function AIAssistantPanel({ symbol, timeframe, candles, setup = null, onR
     )
   }
 
-  const response = useMemo(() => buildTradingResponse(context, events, 'WHAT_IS_HAPPENING'), [context, events])
   const activeSetup = setup ?? context.setup.preferredSetup
   const bias = context.marketStructure.bias
   const biasText = bias === 'Bullish' ? 'Buyers are currently stronger.' : bias === 'Bearish' ? 'Sellers are currently stronger.' : 'The market is not showing a clear directional edge.'
