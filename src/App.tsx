@@ -27,8 +27,7 @@ import { ProviderAccountStreamManager, providerAccountStreamKey } from './data/p
 import { analyzeLiquidity } from './engine/liquidity'
 import { analyzeMarketStructure, findSwingPoints } from './engine/marketStructure'
 import { analyzeSupportResistance } from './engine/supportResistance'
-import { analyzeSetup } from './engine/setup'
-import type { AccountData, MarketAnalysis, MarketPair, OHLCV, SymbolSpec, Timeframe, TradeOrder } from './types'
+import type { AccountData, MarketAnalysis, MarketPair, OHLCV, SymbolSpec, TradeOrder } from './types'
 import { mockWatchlist } from './data/mock/watchlist'
 
 const TerminalContent: React.FC = () => {
@@ -66,7 +65,7 @@ const TerminalContent: React.FC = () => {
   useEffect(() => {
     const compactMedia = window.matchMedia('(max-width: 999px)')
     const landscapeMedia = window.matchMedia('(orientation: landscape) and (max-width: 999px)')
-    const sync = () => { setIsCompactViewport(compactMedia.matches); setIsLandscapeCompactViewport(landscapeMedia.matches) }
+    const sync = () => { setIsLandscapeCompactViewport(landscapeMedia.matches) }
     sync()
     compactMedia.addEventListener('change', sync)
     landscapeMedia.addEventListener('change', sync)
@@ -334,7 +333,7 @@ const TerminalContent: React.FC = () => {
             <button type="button" onClick={() => openMobileDock('orders')} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Account</span><div className="mt-1 text-xs font-semibold">{accountModeLabel}</div></button>
             <button type="button" onClick={() => { setMobileTab('account'); setMobileDockOpen(false) }} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Funding</span><div className="mt-1 text-xs font-semibold">Deposit • Withdraw</div></button>
           </div>
-          <div className="hidden h-56 flex-shrink-0 border-t border-shafx-border bg-shafx-surface/25 p-2 lg:block"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={currentPrice} selectedSymbol={selectedSymbol} /></div>
+          <div className="hidden h-56 flex-shrink-0 border-t border-shafx-border bg-shafx-surface/25 p-2 lg:block"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={currentPrice} selectedSymbol={selectedSymbol} onClosePosition={() => undefined} /></div>
           {mobileDockOpen && <div id="mobile-market-workspace" className="border-t border-shafx-border bg-shafx-surface p-3 lg:hidden">
             <div className="mb-3 flex items-center justify-between gap-3"><div><div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Market workspace</div><div className="text-sm font-semibold">{dock === 'insights' ? 'Structure & AI' : dock === 'liquidity' ? 'Liquidity' : 'Deriv account'}</div></div><button type="button" onClick={() => setMobileDockOpen(false)} className="min-h-10 rounded-xl border border-shafx-border px-3 text-[10px] font-semibold text-shafx-textMuted">Close</button></div>
             {dockContent[dock === 'agent' || dock === 'research' ? 'insights' : dock]}
@@ -343,7 +342,7 @@ const TerminalContent: React.FC = () => {
       </section>
 
       <aside className={showAgent ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={liveCandles} /><DerivCashierLinks /></div></aside>
-      <aside className={showHistory ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><TradesPanel positionsOnly openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={currentPrice} selectedSymbol={selectedSymbol} /><DerivCashierLinks /></div></aside>
+      <aside className={showHistory ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><TradesPanel positionsOnly openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={currentPrice} selectedSymbol={selectedSymbol} onClosePosition={() => undefined} /><DerivCashierLinks /></div></aside>
       <aside className={showAccount ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><AccountPanel account={accountData} activeProviderSelection={activeProviderSelection} /><DerivCashierLinks /></div></aside>
 
       <aside className="hidden w-[clamp(300px,28vw,420px)] min-w-0 flex-shrink-0 flex-col overflow-hidden border-l border-shafx-border bg-shafx-surface/50 lg:flex">
