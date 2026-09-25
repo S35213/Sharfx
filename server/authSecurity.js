@@ -204,11 +204,9 @@ export async function otpRequestGuard(req, email) {
   if (ipRate.unavailable) return limiterUnavailable()
   if (ipRate.blocked) return { allowed: false, status: 429, error: 'Too many verification-code requests. Please try again later.', retryAfterSeconds: ipRate.retryAfterSeconds }
 
-  const emailRate = await consumeRateLimit(req, 'otp-request-email', OTP_REQUEST_EMAIL_LIMIT, false, normalized, 60)
-  if (emailRate.unavailable) return limiterUnavailable()
-  if (emailRate.blocked) return { allowed: false, status: 429, error: 'A verification code was recently sent to this email. Please wait before requesting another.', retryAfterSeconds: emailRate.retryAfterSeconds }
-
-  return { allowed: true }
+  // Temporary auth-email test mode: SHAFX does not enforce the 60-second per-email resend bucket here.
+  // Supabase's own email provider limits still apply underneath this application guard.
+  return { allowed: true, retryAfterSeconds: 0 }
 }
 
 export async function otpVerifyGuard(req, email) {
