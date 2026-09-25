@@ -29,7 +29,9 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Run authenticated quota concurrency test
         env:
-          SHAFX_LOADTEST_URL: ${{ vars.SHAFX_LOADTEST_URL || 'https://shafx.vercel.app' }}
+          SHAFX_LOADTEST_URL: ${{ vars.SHAFX_LOADTEST_URL }}
           SHAFX_TEST_EMAIL: ${{ secrets.SHAFX_TEST_EMAIL }}
           SHAFX_TEST_PASSWORD: ${{ secrets.SHAFX_TEST_PASSWORD }}
-        run: node scripts/auth-load-test.mjs
+        run: |
+          test -n "$SHAFX_LOADTEST_URL"
+          node scripts/auth-load-test.mjs
