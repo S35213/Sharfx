@@ -42,3 +42,4 @@ export const ProviderConnectionControl: React.FC = () => {
       <div className="mt-2 rounded-xl border border-shafx-border bg-shafx-bg p-2.5 text-[9px] leading-4 text-shafx-textMuted">OAuth authorization stays on the SHAFX server side. SHAFX does not ask for your Deriv password.</div>
     </div>}
   </div>
+}
