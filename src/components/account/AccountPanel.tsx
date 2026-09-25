@@ -162,6 +162,8 @@ export const AccountPanel: React.FC<Props> = ({ account, activeProviderSelection
           setCodeRequested(true)
           setResendCountdown(Math.max(0, Number(result.resendAfterSeconds || 0)))
           setMessage(result.message || 'We sent a 6-digit verification code to your email. Enter it below.')
+        } else if (result.message) {
+          setMessage(result.message)
         }
       }
     } catch (err) { setMessage(err instanceof Error ? err.message : 'Unable to complete SHAFX account request.') }
