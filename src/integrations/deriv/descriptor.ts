@@ -25,8 +25,8 @@ export const DERIV_PROVIDER_DESCRIPTOR: ProviderDescriptor = {
     demoAccounts: true,
     symbolMetadata: false,
     funding: {
-      deposit: 'external',
-      withdrawal: 'external',
+      deposit: 'redirect',
+      withdrawal: 'redirect',
     },
   },
 }
