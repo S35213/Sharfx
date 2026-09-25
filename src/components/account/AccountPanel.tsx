@@ -74,3 +74,4 @@ export const AccountPanel: React.FC<Props> = ({ account, activeProviderSelection
       <p className="mt-2 text-[9px] leading-5 text-shafx-textMuted">SHAFX reads the connected Deriv account. Your trading money remains at Deriv; SHAFX does not create a separate trading wallet.</p>
     </section>
   </div>
+}
