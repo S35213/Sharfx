@@ -11,7 +11,23 @@ import adminAuth from '../api/admin/auth.js'
 import adminLogout from '../api/admin/logout.js'
 import adminOverview from '../api/admin/overview.js'
 
-type LegacyHandler = (req: any, res: any) => Promise<unknown> | unknown
+type LegacyRequest = {
+  method: string
+  url: string
+  headers: Record<string, string>
+  query: Record<string, string>
+  body: unknown
+}
+
+type LegacyResponse = {
+  status: (status: number) => LegacyResponse
+  setHeader: (name: string, value: string | string[]) => LegacyResponse
+  json: (body: unknown) => LegacyResponse
+  send: (body: unknown) => LegacyResponse
+  redirect: (status: number, location: string) => LegacyResponse
+}
+
+type LegacyHandler = (req: LegacyRequest, res: LegacyResponse) => Promise<unknown> | unknown
 
 const handlers: Record<string, LegacyHandler> = {
   '/api/auth': auth,
@@ -95,12 +111,16 @@ const invokeLegacyHandler = async (handler: LegacyHandler, request: Request): Pr
 }
 
 export default {
-  async fetch(request: Request, env: { ASSETS: Fetcher }): Promise<Response> {
+  async fetch(request: Request, env: {
+    ASSETS: {
+      fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+    }
+  }): Promise<Response> {
     const url = new URL(request.url)
 
     if (url.pathname === '/owner') {
       const ownerUrl = new URL('/owner.html', request.url)
-      return env.ASSETS.fetch(new Request(ownerUrl, request))
+      return env.ASSETS.fetch(ownerUrl.toString(), { headers: request.headers })
     }
 
     const handler = handlers[url.pathname]
