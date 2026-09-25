@@ -40,7 +40,7 @@ export const PublicWelcome: React.FC = () => {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [verificationStep, setVerificationStep] = useState<'none' | 'signup' | 'login'>('none')
+  const [verificationStep, setVerificationStep] = useState<'none' | 'signup'>('none')
   const [verificationCode, setVerificationCode] = useState('')
   const [codeRequested, setCodeRequested] = useState(false)
   const [resendCountdown, setResendCountdown] = useState(0)
@@ -50,7 +50,7 @@ export const PublicWelcome: React.FC = () => {
   const [website, setWebsite] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
-  const { signIn, signUp, requestLoginCode, verifyEmailCode, error } = useAuth()
+  const { signIn, signUp, requestVerificationCode, verifyEmailCode, error } = useAuth()
   useEffect(() => {
     if (resendCountdown <= 0) return
     const timer = window.setTimeout(() => setResendCountdown((value) => Math.max(0, value - 1)), 1000)
@@ -99,9 +99,9 @@ export const PublicWelcome: React.FC = () => {
         setPassword('')
         setResetPassword('')
         setResetConfirm('')
-      } else if (verificationStep !== 'none') {
+      } else if (verificationStep === 'signup') {
         if (!/^\d{6}$/.test(verificationCode)) { setMessage('Enter the 6-digit code from your email.'); return }
-        await verifyEmailCode({ email, code: verificationCode, purpose: verificationStep })
+        await verifyEmailCode({ email, code: verificationCode })
         setVerificationStep('none')
         setVerificationCode('')
         setCodeRequested(false)
@@ -120,15 +120,7 @@ export const PublicWelcome: React.FC = () => {
         }
       } else {
         const result = await signIn({ email, password })
-        if (result.requiresVerification) {
-          setVerificationStep('login')
-          setVerificationCode('')
-          setCodeRequested(true)
-          setResendCountdown(Math.max(0, Number(result.resendAfterSeconds || 0)))
-          setMessage(result.message || 'We sent a 6-digit verification code to your email. Enter it below.')
-        } else {
-          setMessage(result.message || 'Login successful.')
-        }
+        setMessage(result.message || 'Login successful.')
       }
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Unable to complete SHARFX account request.')
@@ -138,8 +130,8 @@ export const PublicWelcome: React.FC = () => {
   }
 
   if (showAuth) {
-    const title = resetToken ? 'Create a new password' : forgotMode ? 'Recover your account' : verificationStep === 'signup' ? 'Verify your email' : verificationStep === 'login' ? (codeRequested ? 'Enter your login code' : 'Verify your login') : formMode === 'signin' ? 'Welcome back' : 'Create your SHARFX account'
-    const subtitle = resetToken ? 'Set a new password and return to your workspace.' : forgotMode ? 'We will send a secure reset link to your account email.' : verificationStep === 'signup' ? `Enter the 6-digit code sent to ${email}. It is single-use and expires automatically.` : verificationStep === 'login' ? (codeRequested ? `Enter the 6-digit code sent to ${email}. It is single-use and expires automatically.` : 'Your password is correct. Request a verification code to finish signing in.') : formMode === 'signin' ? 'Sign in with your email and password. A verification-code step follows.' : 'Create your SHARFX identity with an email and password, then verify your email.'
+    const title = resetToken ? 'Create a new password' : forgotMode ? 'Recover your account' : verificationStep === 'signup' ? 'Verify your email' : formMode === 'signin' ? 'Welcome back' : 'Create your SHARFX account'
+    const subtitle = resetToken ? 'Set a new password and return to your workspace.' : forgotMode ? 'We will send a secure reset link to your account email.' : verificationStep === 'signup' ? `Enter the 6-digit code sent to ${email}. It is single-use and expires automatically.` : formMode === 'signin' ? 'Sign in with your email and password.' : 'Create your SHARFX identity with an email and password, then verify your email.'
 
     return <main className="min-h-[calc(100vh-28px)] overflow-y-auto bg-shafx-bg text-shafx-text">
       <div className="mx-auto flex min-h-[calc(100vh-28px)] w-full max-w-[1480px] items-center justify-center px-4 py-8 sm:px-8">
@@ -150,12 +142,12 @@ export const PublicWelcome: React.FC = () => {
           {!resetToken && !forgotMode && verificationStep === 'none' && <div className="grid grid-cols-2 rounded-xl border border-shafx-border bg-shafx-surface p-1"><button type="button" onClick={() => { setFormMode('signin'); setMessage(null); setVerificationStep('none') }} className={`min-h-11 rounded-lg text-xs font-semibold transition ${formMode === 'signin' ? 'bg-shafx-accent text-white shadow-lg shadow-shafx-accent/10' : 'text-shafx-textMuted hover:text-shafx-text'}`}>Login</button><button type="button" onClick={() => { setFormMode('signup'); setMessage(null); setVerificationStep('none') }} className={`min-h-11 rounded-lg text-xs font-semibold transition ${formMode === 'signup' ? 'bg-shafx-accent text-white shadow-lg shadow-shafx-accent/10' : 'text-shafx-textMuted hover:text-shafx-text'}`}>Create account</button></div>}
           <form onSubmit={(event) => void submit(event)} className="mt-5 space-y-3">
             {resetToken ? <><input value={resetPassword} onChange={(event) => setResetPassword(event.target.value)} type="password" autoComplete="new-password" required minLength={10} placeholder="New password" className="min-h-12 w-full rounded-xl border border-shafx-border bg-shafx-surface px-4 text-sm outline-none focus:border-shafx-accent" /><input value={resetConfirm} onChange={(event) => setResetConfirm(event.target.value)} type="password" autoComplete="new-password" required minLength={10} placeholder="Confirm new password" className="min-h-12 w-full rounded-xl border border-shafx-border bg-shafx-surface px-4 text-sm outline-none focus:border-shafx-accent" /><button disabled={submitting} type="submit" className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-shafx-accent px-4 text-sm font-semibold text-white disabled:opacity-60"><KeyRound className="h-4 w-4" />{submitting ? 'Updating…' : 'Update password'}</button></> : forgotMode ? <><input value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" required placeholder="Email address" className="min-h-12 w-full rounded-xl border border-shafx-border bg-shafx-surface px-4 text-sm outline-none focus:border-shafx-accent" /><button disabled={submitting} type="submit" className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-shafx-accent px-4 text-sm font-semibold text-white disabled:opacity-60"><KeyRound className="h-4 w-4" />{submitting ? 'Sending…' : 'Send reset link'}</button></> : <>
-              {verificationStep !== 'none' ? <>
+              {verificationStep === 'signup' ? <>
               <input value={email} readOnly type="email" autoComplete="email" required placeholder="Email address" className="min-h-12 w-full rounded-xl border border-shafx-border bg-shafx-surface px-4 text-sm outline-none opacity-80" />
               <>
                 <input value={verificationCode} onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" pattern="\d{6}" required placeholder="000000" className="min-h-12 w-full rounded-xl border border-shafx-border bg-shafx-surface px-4 text-center text-lg font-mono tracking-[0.35em] outline-none focus:border-shafx-accent" />
                 <button disabled={submitting} type="submit" className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-shafx-accent px-4 text-sm font-semibold text-white disabled:opacity-60"><KeyRound className="h-4 w-4" />{submitting ? 'Verifying…' : 'Verify code'}</button>
-                <button type="button" disabled={submitting || (verificationStep === 'login' && resendCountdown > 0)} onClick={async () => { try { setSubmitting(true); setMessage(null); const result = await requestLoginCode(email); setResendCountdown(Math.max(0, Number(result.retryAfterSeconds || 0))); setMessage(result.message || 'A new verification code has been sent.'); } catch (err) { setMessage(err instanceof Error ? err.message : 'Unable to resend the code.'); } finally { setSubmitting(false) } }} className="w-full py-2 text-[11px] text-shafx-textMuted hover:text-shafx-accent disabled:opacity-50">{verificationStep === 'login' && resendCountdown > 0 ? `Didn't receive it? Request another code in ${resendCountdown}s` : verificationStep === 'signup' ? 'Resend verification code' : 'Request another code'}</button>
+                <button type="button" disabled={submitting || resendCountdown > 0} onClick={async () => { try { setSubmitting(true); setMessage(null); const result = await requestVerificationCode(email); setResendCountdown(Math.max(0, Number(result.retryAfterSeconds || 0))); setMessage(result.message || 'A new verification code has been sent.'); } catch (err) { setMessage(err instanceof Error ? err.message : 'Unable to resend the code.'); } finally { setSubmitting(false) } }} className="w-full py-2 text-[11px] text-shafx-textMuted hover:text-shafx-accent disabled:opacity-50">{resendCountdown > 0 ? `Didn't receive it? Request another code in ${resendCountdown}s` : 'Resend verification code'}</button>
               </>
               <button type="button" onClick={() => { setVerificationStep('none'); setVerificationCode(''); setCodeRequested(false); setResendCountdown(0); setMessage(null) }} className="w-full py-1 text-[11px] text-shafx-textMuted hover:text-shafx-accent">Back to email and password</button>
             </> : <>
