@@ -141,16 +141,30 @@ export default async function handler(req, res) {
       setLoginChallenge(res, { userId: data.user.id, email, purpose: 'login' })
       const otpResult = await (async () => {
         const guard = await otpRequestGuard(req, email)
-        if (!guard.allowed) return { sent: false, retryAfterSeconds: guard.retryAfterSeconds || 60, message: guard.error }
+        if (!guard.allowed) return { sent: false, retryAfterSeconds: guard.retryAfterSeconds || 0, message: guard.error, providerRateLimited: false }
         const response = await supabase('/otp', { method: 'POST', body: JSON.stringify({ email, create_user: false }) })
         const otpData = await response.json().catch(() => ({}))
-        if (!response.ok) return { sent: false, retryAfterSeconds: 0, message: authError(otpData, 'Password verified, but SHAFX could not send the verification code right now.') }
-        return { sent: true, retryAfterSeconds: 0, message: 'Password verified. We sent a 6-digit verification code to your email. Enter it below.' }
+        const providerRateLimited = String(otpData?.code || '').toLowerCase() === 'over_email_send_rate_limit'
+        if (!response.ok) return { sent: false, retryAfterSeconds: 0, message: authError(otpData, 'Password verified, but SHAFX could not send the verification code right now.'), providerRateLimited }
+        return { sent: true, retryAfterSeconds: 0, message: 'Password verified. We sent a 6-digit verification code to your email. Enter it below.', providerRateLimited: false }
       })()
       await Promise.all([
         clearLoginFailures(req),
-        securityEvent({ user_id: data.user.id, event_type: 'login_password_verified', decision: 'allow', risk_score: 0, fingerprint: securityFingerprint(req), metadata: { code_sent: otpResult.sent } }),
+        securityEvent({ user_id: data.user.id, event_type: 'login_password_verified', decision: 'allow', risk_score: 0, fingerprint: securityFingerprint(req), metadata: { code_sent: otpResult.sent, email_delivery_rate_limited: otpResult.providerRateLimited === true } }),
       ])
+      if (!otpResult.sent && otpResult.providerRateLimited && process.env.SHAFX_ALLOW_PASSWORD_FALLBACK_ON_EMAIL_LIMIT !== 'false') {
+        await updateSecurityProfile(data.user.id, { last_login_at: new Date().toISOString(), failed_login_count: 0 })
+        setSessionCookies(res, data)
+        res.appendHeader?.('Set-Cookie', loginChallengeCookie + '=; Path=/api/auth; HttpOnly; SameSite=Lax; Secure; Max-Age=0')
+        return json(res, 200, {
+          ok: true,
+          requiresVerification: false,
+          email,
+          codeSent: false,
+          emailVerificationFallback: true,
+          message: 'Password verified. Supabase email delivery is temporarily rate-limited, so SHARFX completed this login with your password for testing.',
+        })
+      }
       if (!otpResult.sent) return json(res, 429, { ok: false, error: otpResult.message, retryAfterSeconds: otpResult.retryAfterSeconds || 0, codeSent: false, passwordVerified: true })
       return json(res, 200, {
         ok: true,
