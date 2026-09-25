@@ -18,7 +18,6 @@ const Capability: React.FC<{ label: string; value: boolean; detail?: string }> =
 )
 
 export const ProviderCapabilityPanel: React.FC<Props> = ({ descriptor, environment }) => {
-  const external = descriptor.executionMode === 'external'
   const executionReady = descriptor.capabilities.orderPlacement && typeof descriptor.capabilities.orderPlacement === 'boolean'
   return <section className="rounded-2xl border border-shafx-border bg-shafx-surface">
     <header className="flex items-start justify-between gap-3 border-b border-shafx-border px-4 py-4">
