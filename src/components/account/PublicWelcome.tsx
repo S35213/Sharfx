@@ -124,7 +124,7 @@ export const PublicWelcome: React.FC = () => {
           setVerificationStep('login')
           setVerificationCode('')
           setCodeRequested(true)
-          setResendCountdown(Math.max(0, Number(result.resendAfterSeconds || 60)))
+          setResendCountdown(Math.max(0, Number(result.resendAfterSeconds || 0)))
           setMessage(result.message || 'We sent a 6-digit verification code to your email. Enter it below.')
         } else {
           setMessage('Login successful.')
@@ -155,7 +155,7 @@ export const PublicWelcome: React.FC = () => {
               <>
                 <input value={verificationCode} onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" pattern="\d{6}" required placeholder="000000" className="min-h-12 w-full rounded-xl border border-shafx-border bg-shafx-surface px-4 text-center text-lg font-mono tracking-[0.35em] outline-none focus:border-shafx-accent" />
                 <button disabled={submitting} type="submit" className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-shafx-accent px-4 text-sm font-semibold text-white disabled:opacity-60"><KeyRound className="h-4 w-4" />{submitting ? 'Verifying…' : 'Verify code'}</button>
-                <button type="button" disabled={submitting || (verificationStep === 'login' && resendCountdown > 0)} onClick={async () => { try { setSubmitting(true); setMessage(null); const result = await requestLoginCode(email); setResendCountdown(Math.max(0, Number(result.retryAfterSeconds || 60))); setMessage(result.message || 'A new verification code has been sent.'); } catch (err) { setMessage(err instanceof Error ? err.message : 'Unable to resend the code.'); } finally { setSubmitting(false) } }} className="w-full py-2 text-[11px] text-shafx-textMuted hover:text-shafx-accent disabled:opacity-50">{verificationStep === 'login' && resendCountdown > 0 ? `Didn't receive it? Request another code in ${resendCountdown}s` : verificationStep === 'signup' ? 'Resend verification code' : 'Request another code'}</button>
+                <button type="button" disabled={submitting || (verificationStep === 'login' && resendCountdown > 0)} onClick={async () => { try { setSubmitting(true); setMessage(null); const result = await requestLoginCode(email); setResendCountdown(Math.max(0, Number(result.retryAfterSeconds || 0))); setMessage(result.message || 'A new verification code has been sent.'); } catch (err) { setMessage(err instanceof Error ? err.message : 'Unable to resend the code.'); } finally { setSubmitting(false) } }} className="w-full py-2 text-[11px] text-shafx-textMuted hover:text-shafx-accent disabled:opacity-50">{verificationStep === 'login' && resendCountdown > 0 ? `Didn't receive it? Request another code in ${resendCountdown}s` : verificationStep === 'signup' ? 'Resend verification code' : 'Request another code'}</button>
               </>
               <button type="button" onClick={() => { setVerificationStep('none'); setVerificationCode(''); setCodeRequested(false); setResendCountdown(0); setMessage(null) }} className="w-full py-1 text-[11px] text-shafx-textMuted hover:text-shafx-accent">Back to email and password</button>
             </> : <>
