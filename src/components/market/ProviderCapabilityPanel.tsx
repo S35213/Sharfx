@@ -38,9 +38,7 @@ export const ProviderCapabilityPanel: React.FC<Props> = ({ descriptor, environme
       <Capability label="Close position" value={descriptor.capabilities.positionClose} />
     </div>
 
-    <div className="mx-3 mb-3 rounded-xl border border-shafx-accent/20 bg-shafx-accent/5 p-3">
-      <div className="flex items-start gap-2"><ShieldCheck className="mt-0.5 h-4 w-4 text-shafx-accent" /><div><div className="text-[10px] font-semibold">{external ? 'External provider safety gate' : 'SHAFX simulator mode'}</div><p className="mt-1 text-[9px] leading-4 text-shafx-textMuted">{external ? (environment === 'demo' && executionReady ? 'Demo execution support exists at the provider boundary; terminal order routing remains explicitly gated until end-to-end reconciliation is certified.' : 'Provider actions stay constrained by the server-side release gate and the adapter capabilities above.') : 'Orders are simulated inside SHAFX and do not require a provider connection.'}</p></div></div>
-    </div>
+    <div className="mx-3 mb-3 rounded-xl border border-shafx-accent/20 bg-shafx-accent/5 p-3"><div className="flex items-start gap-2"><ShieldCheck className="mt-0.5 h-4 w-4 text-shafx-accent" /><div><div className="text-[10px] font-semibold">Deriv live account boundary</div><p className="mt-1 text-[9px] leading-4 text-shafx-textMuted">Market and account data are live. Real-money order placement remains disabled until the Deriv instrument mapping and server-side execution/reconciliation path are certified end to end.</p></div></div></div>
 
     <footer className="grid grid-cols-2 gap-2 border-t border-shafx-border p-3 text-[9px]">
       <div className="flex items-center gap-2 rounded-xl border border-shafx-border bg-shafx-bg p-2.5 text-shafx-textMuted"><DatabaseZap className="h-3.5 w-3.5 text-shafx-accent" />Normalized market contract</div>
