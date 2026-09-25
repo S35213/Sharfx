@@ -127,7 +127,7 @@ export const PublicWelcome: React.FC = () => {
           setResendCountdown(Math.max(0, Number(result.resendAfterSeconds || 0)))
           setMessage(result.message || 'We sent a 6-digit verification code to your email. Enter it below.')
         } else {
-          setMessage('Login successful.')
+          setMessage(result.message || 'Login successful.')
         }
       }
     } catch (err) {
