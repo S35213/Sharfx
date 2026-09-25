@@ -1,13 +1,22 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <defs>
-    <linearGradient id="g" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#A78BFA"/>
-      <stop offset="1" stop-color="#22D3A5"/>
+    <linearGradient id="s" x1="12" y1="10" x2="50" y2="54" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1677FF"/>
+      <stop offset=".55" stop-color="#00C9FF"/>
+      <stop offset="1" stop-color="#0757D6"/>
     </linearGradient>
+    <linearGradient id="x" x1="28" y1="16" x2="52" y2="54" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFD24A"/>
+      <stop offset=".5" stop-color="#FFAA00"/>
+      <stop offset="1" stop-color="#FF7A00"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="1.4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
   </defs>
   <rect width="64" height="64" rx="16" fill="#080C12"/>
   <rect x="1" y="1" width="62" height="62" rx="15" fill="none" stroke="#202A38"/>
-  <path d="M12 42 20 28l7 8 8-16 8 11 9-7" fill="none" stroke="url(#g)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M12 49h40" stroke="#7C5CFC" stroke-width="2.5" stroke-linecap="round" opacity=".7"/>
-  <circle cx="52" cy="24" r="3" fill="#22D3A5"/>
+  <path d="M39 15c-8-5-18-5-25 0-8 5-9 14-3 20 4 4 9 5 16 6 8 1 11 3 10 7-2 5-9 7-16 6-6-1-11-3-14-7l-6 8c5 6 12 9 21 9 12 0 22-6 25-15 3-10-4-16-15-18-8-1-11-3-10-6 1-4 5-5 10-5 4 1 8 2 11 5l6-8Z" fill="url(#s)" filter="url(#glow)"/>
+  <path d="M30 17 53 49M53 17 30 49" fill="none" stroke="url(#x)" stroke-width="6" stroke-linecap="round" filter="url(#glow)"/>
 </svg>
