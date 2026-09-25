@@ -81,6 +81,8 @@ export class DerivPublicMarketFeed {
         }
         if (response.msg_type === 'candles') {
           this.candles = toCandles(response.candles).sort((a, b) => a.time - b.time).slice(-300)
+          const lastCandle = this.candles[this.candles.length - 1]
+          if (lastCandle) this.onUpdate?.(this.candles, lastCandle.close, Math.trunc(lastCandle.time))
           return
         }
         if (response.msg_type === 'tick' && response.tick?.quote !== undefined && response.tick.epoch !== undefined) {
