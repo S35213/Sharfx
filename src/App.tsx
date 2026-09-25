@@ -293,7 +293,7 @@ const TerminalContent: React.FC = () => {
         accountRead: true, marketData: true, historicalCandles: true, realtimeMarketData: true, realtimeAccountData: true,
         positionsRead: false, ordersRead: false, orderPlacement: false, orderCancellation: false, orderModification: false,
         orderLookupByClientOrderId: false, positionClose: false, multipleAccounts: true, demoAccounts: true, symbolMetadata: false,
-        funding: { deposit: 'external', withdrawal: 'external' },
+        funding: { deposit: 'redirect', withdrawal: 'redirect' },
       },
     }} environment={activeProviderSelection?.environment ?? 'demo'} />,
   }
