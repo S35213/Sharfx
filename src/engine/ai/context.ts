@@ -16,6 +16,7 @@ export const buildTradingContext = (
   higherTimeframeBias: string | null = null,
   externalEvents: ExternalEvent[] = [],
   timestamp?: number,
+  dataStatus: AITradingContext['dataStatus'] = 'live',
 ): AITradingContext => {
   const lastCandle = candles[candles.length - 1]
   const currentPrice = lastCandle?.close ?? setup.currentPrice
@@ -40,6 +41,6 @@ export const buildTradingContext = (
     higherTimeframeBias,
     externalEvents,
     timestamp: resolvedTimestamp,
-    dataStatus: 'simulated',
+    dataStatus,
   }
 }
