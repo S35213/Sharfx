@@ -255,52 +255,49 @@ const TerminalContent: React.FC = () => {
 
   useEffect(() => {
     const manager = accountStreamManager.current
-    if (!brokerMode) { void manager.stopAll(); return }
+    if (!brokerMode || !activeProviderSelection?.providerId || !activeProviderSelection.connectionId || !activeProviderSelection.accountId) {
+      void manager.stopAll()
+      return
+    }
 
     let cancelled = false
-    const startAll = async (): Promise<void> => {
+    const startSelected = async (): Promise<void> => {
+      const spec = {
+        providerId: activeProviderSelection.providerId,
+        connectionId: activeProviderSelection.connectionId,
+        accountId: activeProviderSelection.accountId as string,
+        accountType: activeProviderSelection.environment === 'demo' ? 'demo' as const : 'real' as const,
+      }
+      const key = providerAccountStreamKey(spec)
       try {
-        const connections = await getProviderConnections()
-        if (cancelled) return
-        const specs = connections
-          .filter((connection) => connection.state === 'connected')
-          .flatMap((connection) => connection.accounts
-            .filter((account) => account.active)
-            .map((account) => ({
-              providerId: connection.providerId,
-              connectionId: connection.id,
-              accountId: account.providerAccountId,
-              accountType: account.environment === 'demo' ? 'demo' as const : 'real' as const,
-            })))
-        if (!specs.length) { pushToast('No connected provider accounts are available.'); return }
-
-        await Promise.all(specs.map(async (spec) => {
-          const key = providerAccountStreamKey(spec)
-          await manager.start(
-            spec,
-            (snapshot) => {
-              if (key !== activeSelectionKey) return
-              setAccountData((prev) => {
-                if (!prev) return prev
-                const floatingPL = Number((snapshot.floatingPL ?? prev.floatingPL).toFixed(2))
-                const equity = Number((snapshot.equity ?? (snapshot.balance + floatingPL)).toFixed(2))
-                const usedMargin = Number((snapshot.usedMargin ?? prev.usedMargin).toFixed(2))
-                const freeMargin = Number((snapshot.freeMargin ?? (equity - usedMargin)).toFixed(2))
-                if (prev.balance === snapshot.balance && prev.currency === snapshot.currency && prev.equity === equity && prev.floatingPL === floatingPL && prev.usedMargin === usedMargin && prev.freeMargin === freeMargin) return prev
-                return { ...prev, balance: snapshot.balance, currency: snapshot.currency, equity, floatingPL, usedMargin, freeMargin }
-              })
-            },
-            (status) => { if (key === activeSelectionKey && status === 'error') pushToast(spec.providerId + ' account stream interrupted — SHAFX is reconnecting.') },
-          )
-        }))
+        await manager.start(
+          spec,
+          (snapshot) => {
+            if (cancelled || key !== activeSelectionKey) return
+            setAccountData((prev) => {
+              if (!prev) return prev
+              const floatingPL = Number((snapshot.floatingPL ?? prev.floatingPL).toFixed(2))
+              const equity = Number((snapshot.equity ?? (snapshot.balance + floatingPL)).toFixed(2))
+              const usedMargin = Number((snapshot.usedMargin ?? prev.usedMargin).toFixed(2))
+              const freeMargin = Number((snapshot.freeMargin ?? (equity - usedMargin)).toFixed(2))
+              if (prev.balance === snapshot.balance && prev.currency === snapshot.currency && prev.equity === equity && prev.floatingPL === floatingPL && prev.usedMargin === usedMargin && prev.freeMargin === freeMargin) return prev
+              return { ...prev, balance: snapshot.balance, currency: snapshot.currency, equity, floatingPL, usedMargin, freeMargin }
+            })
+          },
+          (status) => {
+            if (!cancelled && key === activeSelectionKey && status === 'error') {
+              pushToast(spec.providerId + ' ' + spec.accountType + ' account stream interrupted — SHAFX is reconnecting.')
+            }
+          },
+        )
       } catch (error) {
-        if (!cancelled) pushToast(error instanceof Error ? error.message : 'Unable to start provider account streams.')
+        if (!cancelled) pushToast(error instanceof Error ? error.message : 'Unable to start the selected provider account stream.')
       }
     }
 
-    void manager.stopAll().then(startAll)
+    void manager.stopAll().then(startSelected)
     return () => { cancelled = true; void manager.stopAll() }
-  }, [activeSelectionKey, pushToast])
+  }, [activeProviderSelection?.providerId, activeProviderSelection?.connectionId, activeProviderSelection?.accountId, activeProviderSelection?.environment, activeSelectionKey, brokerMode, pushToast])
 
   useEffect(() => {
     if (!isSimulatorMode()) return
