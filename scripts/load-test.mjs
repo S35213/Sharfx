@@ -1,5 +1,6 @@
-const BASE_URL = process.env.SHAFX_LOADTEST_URL || 'https://shafx.vercel.app'
-const TARGETS = [50, 100, 200, 1000]
+const BASE_URL = String(process.env.SHAFX_LOADTEST_URL || '').trim()
+if (!BASE_URL) throw new Error('SHAFX_LOADTEST_URL must be set explicitly; refusing to load-test a production host by default.')
+const TARGETS = [10, 25, 50]
 const ROUTES = [
   { name: 'home', path: '/', expected: [200] },
   // Vercel maps api/auth.js to /api/auth; auth actions are query parameters.
@@ -49,7 +50,7 @@ async function runRoute(route, concurrency) {
   }
 }
 
-console.log(`SHAFX production concurrency test: ${BASE_URL}`)
+console.log(`SHAFX explicit-target concurrency test: ${BASE_URL}`)
 console.log('Unauthenticated routes are used so the test never consumes a real user quota or needs credentials.')
 
 for (const concurrency of TARGETS) {

@@ -10,7 +10,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "loadtest": "node scripts/load-test.mjs",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "cf:build": "npm run build",
+    "cf:dev": "vite dev",
+    "cf:deploy": "npm run build && wrangler deploy",
+    "cf:typegen": "wrangler types"
   },
   "dependencies": {
     "lightweight-charts": "4.2.1",
@@ -33,7 +37,9 @@
     "typescript": "5.7.2",
     "typescript-eslint": "8.70.0",
     "vite": "8.3.0",
-    "vitest": "5.0.1"
+    "vitest": "5.0.1",
+    "@cloudflare/vite-plugin": "1.59.0",
+    "wrangler": "4.139.0"
   },
   "engines": {
     "node": "24.x"
