@@ -1,12 +1,103 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 
-export type BotPlan = 'FREE' | 'REGULAR' | 'PRO'
-export interface ShafxUser { id: string; email: string; displayName: string | null; status: 'active' | 'suspended' | 'banned'; simulatorAccountId: string; createdAt: string; botPlan: BotPlan }
-interface AuthContextValue { user: ShafxUser | null; loading: boolean; error: string | null; signUp: (input: { displayName: string; email: string; password: string; website?: string }) => Promise<{ needsEmailConfirmation?: boolean; message?: string }>; signIn: (input: { email: string; password: string }) => Promise<{ message?: string }>; requestVerificationCode: (email: string) => Promise<{ message?: string; retryAfterSeconds?: number }>; verifyEmailCode: (input: { email: string; code: string }) => Promise<void>; signOut: () => Promise<void>; refresh: () => Promise<void> }
-const AuthContext = createContext<AuthContextValue | null>(null)
-const syncSimulatorIdentity = (user: ShafxUser | null): void => { if (typeof window === 'undefined') return; if (user?.simulatorAccountId) window.sessionStorage.setItem('shafx-simulator-account-id', user.simulatorAccountId); else window.sessionStorage.removeItem('shafx-simulator-account-id') }
-async function request(action: string, options: RequestInit = {}) { const response = await fetch(`/api/auth?action=${encodeURIComponent(action)}`, { credentials: 'same-origin', headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }, ...options }); const data = await response.json().catch(() => ({ ok: false, error: 'Unexpected SHAFX identity response.' })); if (!response.ok || !data.ok) throw new Error(data.error || 'SHAFX identity request failed.'); return data }
-export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) => { const [user, setUser] = useState<ShafxUser | null>(null); const [loading, setLoading] = useState(true); const [error, setError] = useState<string | null>(null); const authMutationVersion = useRef(0); const refresh = useCallback(async () => { const version = authMutationVersion.current; setLoading(true); try { const data = await request('me'); if (version !== authMutationVersion.current) return; setUser(data.user); syncSimulatorIdentity(data.user); setError(null) } catch (err) { if (version !== authMutationVersion.current) return; setUser(null); syncSimulatorIdentity(null); setError(err instanceof Error && err.message !== 'Not signed in' ? err.message : null) } finally { setLoading(false) } }, []); useEffect(() => { void refresh() }, [refresh]); const signUp = useCallback(async (input: { displayName: string; email: string; password: string; website?: string }) => { authMutationVersion.current += 1; const data = await request('signup', { method: 'POST', body: JSON.stringify(input) }); if (data.user) { setUser(data.user); syncSimulatorIdentity(data.user) } return { needsEmailConfirmation: data.needsEmailConfirmation, message: data.message } }, []); const signIn = useCallback(async (input: { email: string; password: string }) => { authMutationVersion.current += 1; const data = await request('login', { method: 'POST', body: JSON.stringify(input) }); if (data.user) { setUser(data.user); syncSimulatorIdentity(data.user) } setError(null); return { message: data.message } }, [])
-  const requestVerificationCode = useCallback(async (email: string) => request('request-verification-code', { method: 'POST', body: JSON.stringify({ email }) }), [])
-  const verifyEmailCode = useCallback(async (input: { email: string; code: string }) => { authMutationVersion.current += 1; const data = await request('verify-email-code', { method: 'POST', body: JSON.stringify({ email: input.email, code: input.code }) }); setUser(data.user); syncSimulatorIdentity(data.user); setError(null) }, []); const signOut = useCallback(async () => { authMutationVersion.current += 1; await request('logout'); setUser(null); syncSimulatorIdentity(null); setError(null) }, []); const value = useMemo(() => ({ user, loading, error, signUp, signIn, requestVerificationCode, verifyEmailCode, signOut, refresh }), [user, loading, error, signUp, signIn, requestVerificationCode, verifyEmailCode, signOut, refresh]); return <AuthContext.Provider value={value}>{children}</AuthContext.Provider> }
-export const useAuth = (): AuthContextValue => { const context = useContext(AuthContext); if (!context) throw new Error('useAuth must be used inside AuthProvider'); return context }
+interface ShafxUser {
+  id: string
+  email: string
+  displayName: string
+  status: string
+  createdAt: string
+  botPlan: 'FREE' | 'REGULAR' | 'PRO'
+}
+
+interface AuthResult {
+  message?: string
+  needsEmailConfirmation?: boolean
+  retryAfterSeconds?: number
+}
+
+interface AuthContextValue {
+  user: ShafxUser | null
+  loading: boolean
+  error: string | null
+  signUp: (input: { displayName: string; email: string; password: string; website?: string }) => Promise<AuthResult>
+  signIn: (input: { email: string; password: string }) => Promise<AuthResult>
+  requestVerificationCode: (email: string) => Promise<AuthResult>
+  verifyEmailCode: (input: { email: string; code: string }) => Promise<AuthResult>
+  signOut: () => Promise<void>
+  refresh: () => Promise<void>
+}
+
+const AuthContext = createContext<AuthContextValue | undefined>(undefined)
+
+async function authRequest(action: string, body?: Record<string, unknown>): Promise<{ user: ShafxUser | null; data?: AuthResult; error?: string }> {
+  const response = await fetch('/api/auth?action=' + encodeURIComponent(action), {
+    method: body ? 'POST' : 'GET',
+    credentials: 'same-origin',
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok || payload?.ok === false) throw new Error(typeof payload?.error === 'string' ? payload.error : 'SHAFX authentication request failed.')
+  return { user: payload?.user ?? null, data: payload }
+}
+
+export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const [user, setUser] = useState<ShafxUser | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const refresh = useCallback(async () => {
+    try {
+      setError(null)
+      const result = await authRequest('me')
+      setUser(result.user)
+    } catch (err) {
+      setUser(null)
+      setError(err instanceof Error ? err.message : 'Unable to restore SHAFX authentication.')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { void refresh() }, [refresh])
+
+  const signUp = useCallback(async (input: { displayName: string; email: string; password: string; website?: string }) => {
+    setError(null)
+    const result = await authRequest('signup', input)
+    setUser(result.user)
+    return result.data ?? {}
+  }, [])
+
+  const signIn = useCallback(async (input: { email: string; password: string }) => {
+    setError(null)
+    const result = await authRequest('signin', input)
+    setUser(result.user)
+    return result.data ?? {}
+  }, [])
+
+  const requestVerificationCode = useCallback(async (email: string) => {
+    setError(null)
+    const result = await authRequest('request-verification', { email })
+    return result.data ?? {}
+  }, [])
+
+  const verifyEmailCode = useCallback(async (input: { email: string; code: string }) => {
+    setError(null)
+    const result = await authRequest('verify-email', input)
+    setUser(result.user)
+    return result.data ?? {}
+  }, [])
+
+  const signOut = useCallback(async () => {
+    try { await authRequest('signout') } finally { setUser(null) }
+  }, [])
+
+  const value: AuthContextValue = { user, loading, error, signUp, signIn, requestVerificationCode, verifyEmailCode, signOut, refresh }
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+}
+
+export const useAuth = (): AuthContextValue => {
+  const context = useContext(AuthContext)
+  if (!context) throw new Error('useAuth must be used within AuthProvider')
+  return context
+}
