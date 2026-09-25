@@ -21,7 +21,7 @@ describe('AI Trading Assistant', () => {
     const result = buildTradingContext('EUR/USD', 'H1', [{ time: 10, open: 1.099, high: 1.101, low: 1.098, close: 1.1 }], structure, sr, liquidity, noSetup)
     expect(result.currentPrice).toBe(1.1)
     expect(result.timestamp).toBe(10)
-    expect(result.dataStatus).toBe('simulated')
+    expect(result.dataStatus).toBe('live')
   })
 
   it('rejects an invalid current price', () => {
@@ -65,6 +65,6 @@ describe('AI Trading Assistant', () => {
   })
 
   it('keeps simulator provenance in the response', () => {
-    expect(buildTradingResponse(context(), [], 'WHAT_IS_HAPPENING').dataStatus).toBe('simulated')
+    expect(buildTradingResponse(context({ dataStatus: 'simulated' }), [], 'WHAT_IS_HAPPENING').dataStatus).toBe('simulated')
   })
 })
