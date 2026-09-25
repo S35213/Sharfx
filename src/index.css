@@ -153,6 +153,16 @@ input::placeholder { color: #667285; }
 
 
 /* SHARFX brand system */
+.shafx-brand-image {
+  display: block;
+  object-fit: contain;
+  width: 100%;
+  height: 100%;
+  user-select: none;
+  -webkit-user-drag: none;
+  filter: drop-shadow(0 18px 34px rgba(0,0,0,.40)) drop-shadow(0 0 24px rgba(0, 150, 255, .18));
+}
+
 .shafx-brand-intro {
   position: fixed;
   inset: 0;
@@ -162,103 +172,81 @@ input::placeholder { color: #667285; }
   overflow: hidden;
   pointer-events: auto;
   background:
-    radial-gradient(circle at 50% 40%, rgba(0, 190, 255, .10), transparent 25%),
-    radial-gradient(circle at 52% 55%, rgba(255, 150, 0, .075), transparent 31%),
+    radial-gradient(circle at 50% 38%, rgba(0, 190, 255, .10), transparent 25%),
+    radial-gradient(circle at 53% 57%, rgba(255, 150, 0, .07), transparent 30%),
     #03070D;
   opacity: 1;
-  transition: opacity .72s ease, visibility .72s ease;
+  transition: opacity .42s ease, visibility .42s ease;
 }
 .shafx-brand-intro--done { opacity: 0; visibility: hidden; pointer-events: none; }
 .shafx-brand-intro__grid {
   position: absolute;
   inset: -20%;
-  opacity: .28;
+  opacity: .25;
   background-image:
-    linear-gradient(rgba(40, 150, 255, .05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(40, 150, 255, .05) 1px, transparent 1px);
+    linear-gradient(rgba(40, 150, 255, .045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(40, 150, 255, .045) 1px, transparent 1px);
   background-size: 38px 38px;
   transform: perspective(900px) rotateX(62deg) translateY(18%);
-  animation: shafx-grid-drift 3.2s ease-out both;
+  animation: shafx-grid-drift 1.35s ease-out both;
 }
 .shafx-brand-intro__scan {
   position: absolute;
   inset: -20% -8%;
-  background: linear-gradient(110deg, transparent 40%, rgba(0, 197, 255, .10) 49%, rgba(255, 152, 0, .12) 51%, transparent 60%);
-  transform: translateX(-70%);
-  animation: shafx-scan 2.25s .25s ease-out both;
+  background: linear-gradient(110deg, transparent 39%, rgba(0, 197, 255, .08) 49%, rgba(255, 152, 0, .10) 51%, transparent 61%);
+  transform: translateX(-75%);
+  animation: shafx-scan .9s .05s ease-out both;
   mix-blend-mode: screen;
 }
 .shafx-brand-intro__mark {
   position: relative;
-  width: min(46vw, 310px);
-  height: min(46vw, 310px);
-  filter: drop-shadow(0 0 32px rgba(0, 164, 255, .22));
-  animation: shafx-mark-lock 1.9s .05s cubic-bezier(.16,.9,.18,1) both;
+  width: min(56vw, 360px);
+  height: min(56vw, 360px);
+  filter: drop-shadow(0 0 28px rgba(0, 164, 255, .18));
+  animation: shafx-mark-lock .72s .02s cubic-bezier(.16,.9,.18,1) both;
 }
-.shafx-brand-intro__word {
-  position: absolute;
-  bottom: 22%;
-  left: 50%;
-  transform: translateX(-50%);
-  white-space: nowrap;
-  opacity: 0;
-  animation: shafx-word-reveal .78s 1.55s cubic-bezier(.22,.8,.24,1) both;
-}
-.shafx-brand-intro__line {
-  position: absolute;
-  width: min(68vw, 520px);
-  height: 1px;
-  left: 50%;
-  bottom: 19%;
-  transform: translateX(-50%) scaleX(0);
-  transform-origin: center;
-  background: linear-gradient(90deg, transparent, #16BFFF 35%, #FF9D00 65%, transparent);
-  animation: shafx-line-reveal .72s 1.85s ease-out both;
-  box-shadow: 0 0 18px rgba(22, 191, 255, .35);
-}
-.shafx-brand-intro__tag {
-  position: absolute;
-  bottom: 14%;
-  width: 100%;
-  text-align: center;
-  padding-inline: 16px;
-  color: rgba(236, 243, 251, .62);
-  font-size: clamp(8px, 1vw, 11px);
-  letter-spacing: .28em;
-  text-transform: uppercase;
-  opacity: 0;
-  animation: shafx-tag-reveal .65s 2.02s ease-out both;
-}
-.shafx-intro-blue, .shafx-intro-orange, .shafx-intro-x { transform-origin: 60px 60px; }
-.shafx-logo-ring { transform-origin: 60px 60px; animation: shafx-ring-in 1.9s .05s cubic-bezier(.18,.9,.18,1) both; }
-.shafx-logo-ring-outer { transform-origin: 60px 60px; animation: shafx-ring-in 1.55s .18s cubic-bezier(.18,.9,.18,1) both; }
-.shafx-logo-s { transform-origin: 60px 60px; animation: shafx-s-together 1.45s cubic-bezier(.12,.92,.2,1) both; }
-.shafx-logo-x { transform-origin: 60px 60px; animation: shafx-x-together 1.45s .22s cubic-bezier(.12,.92,.2,1) both; }
-.shafx-logo-lock { stroke-dasharray: 100; stroke-dashoffset: 100; animation: shafx-lock-line .65s 1.05s ease-out forwards; }
+.shafx-brand-intro__word,
+.shafx-brand-intro__line,
+.shafx-brand-intro__tag { display: none; }
 
-@keyframes shafx-s-together {
-  0% { opacity: 0; transform: translateX(-38px) rotate(-18deg) scale(.72); }
-  55% { opacity: 1; transform: translateX(7px) rotate(2deg) scale(1.035); }
-  100% { opacity: 1; transform: translateX(0) rotate(0) scale(1); }
+.shafx-logo-assembly {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
 }
-@keyframes shafx-x-together {
-  0% { opacity: 0; transform: translateX(38px) rotate(18deg) scale(.72); }
-  55% { opacity: 1; transform: translateX(-7px) rotate(-2deg) scale(1.035); }
-  100% { opacity: 1; transform: translateX(0) rotate(0) scale(1); }
+.shafx-logo-assembly__piece {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  will-change: transform, opacity;
+  filter: drop-shadow(0 14px 28px rgba(0,0,0,.44));
 }
-@keyframes shafx-ring-in {
-  0% { opacity: 0; transform: scale(.45) rotate(-25deg); }
-  60% { opacity: .9; transform: scale(1.06) rotate(4deg); }
-  100% { opacity: .55; transform: scale(1) rotate(0); }
+.shafx-logo-assembly__piece--left {
+  clip-path: inset(0 48% 0 0);
+  animation: shafx-logo-left .68s cubic-bezier(.12,.9,.16,1) both;
 }
-@keyframes shafx-lock-line {
-  to { stroke-dashoffset: 0; }
+.shafx-logo-assembly__piece--right {
+  clip-path: inset(0 0 0 48%);
+  animation: shafx-logo-right .68s .10s cubic-bezier(.12,.9,.16,1) both;
 }
-@keyframes shafx-mark-lock {
-  0% { opacity: 0; transform: scale(.76); }
-  65% { opacity: 1; transform: scale(1.025); }
-  100% { opacity: 1; transform: scale(1); }
+.shafx-logo-assembly__flash {
+  position: absolute;
+  left: 50%;
+  top: 12%;
+  width: 2px;
+  height: 76%;
+  transform: translateX(-50%) scaleY(0);
+  transform-origin: center;
+  background: linear-gradient(180deg, transparent, rgba(98,229,255,.85), rgba(255,191,55,.9), transparent);
+  box-shadow: 0 0 18px rgba(42,207,255,.55);
+  animation: shafx-logo-flash .32s .48s ease-out both;
+  opacity: .85;
+  pointer-events: none;
 }
+
 .shafx-wordmark-silver {
   background: linear-gradient(180deg,#FFFFFF 0%,#D7DEE7 48%,#8995A5 100%);
   -webkit-background-clip: text; background-clip: text; color: transparent;
@@ -271,26 +259,34 @@ input::placeholder { color: #667285; }
   background: linear-gradient(180deg,#FFE99A 0%,#FFB21B 48%,#F06B00 100%);
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
-@keyframes shafx-word-reveal {
-  0% { opacity: 0; transform: translate(-50%, 18px); letter-spacing: .35em; }
-  100% { opacity: 1; transform: translate(-50%, 0); letter-spacing: .12em; }
+
+@keyframes shafx-logo-left {
+  0% { opacity: 0; transform: translateX(-95px) rotate(-8deg) scale(.92); }
+  55% { opacity: 1; transform: translateX(9px) rotate(1.5deg) scale(1.015); }
+  100% { opacity: 1; transform: translateX(0) rotate(0) scale(1); }
 }
-@keyframes shafx-line-reveal { to { transform: translateX(-50%) scaleX(1); } }
-@keyframes shafx-tag-reveal {
-  0% { opacity: 0; transform: translateY(10px); }
-  100% { opacity: .78; transform: translateY(0); }
+@keyframes shafx-logo-right {
+  0% { opacity: 0; transform: translateX(95px) rotate(8deg) scale(.92); }
+  55% { opacity: 1; transform: translateX(-9px) rotate(-1.5deg) scale(1.015); }
+  100% { opacity: 1; transform: translateX(0) rotate(0) scale(1); }
 }
-@keyframes shafx-scan { 0% { transform: translateX(-70%); } 100% { transform: translateX(70%); } }
+@keyframes shafx-logo-flash {
+  0% { opacity: 0; transform: translateX(-50%) scaleY(0); }
+  45% { opacity: 1; transform: translateX(-50%) scaleY(1); }
+  100% { opacity: 0; transform: translateX(-50%) scaleY(1); }
+}
+@keyframes shafx-mark-lock {
+  0% { opacity: 0; transform: scale(.88); }
+  65% { opacity: 1; transform: scale(1.025); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes shafx-scan { 0% { transform: translateX(-75%); } 100% { transform: translateX(75%); } }
 @keyframes shafx-grid-drift {
-  0% { transform: perspective(900px) rotateX(62deg) translateY(24%) scale(1.05); opacity: 0; }
-  100% { transform: perspective(900px) rotateX(62deg) translateY(8%) scale(1); opacity: .28; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .shafx-brand-intro, .shafx-brand-intro * { animation: none !important; transition: none !important; }
-  .shafx-brand-intro { opacity: 0; visibility: hidden; pointer-events: none; }
+  0% { transform: perspective(900px) rotateX(62deg) translateY(18%) scale(1.04); opacity: 0; }
+  100% { transform: perspective(900px) rotateX(62deg) translateY(8%) scale(1); opacity: .25; }
 }
 
-/* SHARFX auth/session cinematic transitions */
+/* SHARFX auth/session transitions */
 .shafx-brand-transition {
   position: fixed;
   inset: 0;
@@ -304,7 +300,7 @@ input::placeholder { color: #667285; }
     #04070B;
   color: #F4F8FC;
   isolation: isolate;
-  animation: shafx-transition-fade-in .34s ease-out both;
+  animation: shafx-transition-fade-in .28s ease-out both;
 }
 .shafx-brand-transition::after {
   content: "";
@@ -317,21 +313,21 @@ input::placeholder { color: #667285; }
 .shafx-brand-transition__grid {
   position: absolute;
   inset: -30%;
-  opacity: .36;
+  opacity: .32;
   background-image:
-    linear-gradient(rgba(34, 150, 255, .055) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(34, 150, 255, .055) 1px, transparent 1px);
+    linear-gradient(rgba(34, 150, 255, .05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34, 150, 255, .05) 1px, transparent 1px);
   background-size: 34px 34px;
   transform: perspective(900px) rotateX(63deg) translateY(18%);
-  animation: shafx-transition-grid 3.15s ease-out both;
+  animation: shafx-transition-grid 1.8s ease-out both;
 }
 .shafx-brand-transition__scan {
   position: absolute;
   inset: -25% -15%;
-  background: linear-gradient(110deg, transparent 41%, rgba(0, 205, 255, .15) 49%, rgba(255, 158, 0, .16) 51%, transparent 59%);
+  background: linear-gradient(110deg, transparent 41%, rgba(0, 205, 255, .13) 49%, rgba(255, 158, 0, .14) 51%, transparent 59%);
   transform: translateX(-85%);
   mix-blend-mode: screen;
-  animation: shafx-transition-scan 2.15s .18s cubic-bezier(.2,.8,.2,1) both;
+  animation: shafx-transition-scan 1.2s .08s cubic-bezier(.2,.8,.2,1) both;
 }
 .shafx-brand-transition__halo {
   position: absolute;
@@ -342,121 +338,68 @@ input::placeholder { color: #667285; }
   box-shadow: 0 0 80px rgba(0,155,255,.06), inset 0 0 70px rgba(0,155,255,.04);
   opacity: 0;
 }
-.shafx-brand-transition__halo--one { animation: shafx-halo-one 2.6s .12s ease-out both; }
-.shafx-brand-transition__halo--two { width: min(34vw, 320px); height: min(34vw, 320px); animation: shafx-halo-two 2.25s .45s ease-out both; border-color: rgba(255,154,0,.11); }
+.shafx-brand-transition__halo--one { animation: shafx-halo-one 1.5s .08s ease-out both; }
+.shafx-brand-transition__halo--two { width: min(34vw, 320px); height: min(34vw, 320px); animation: shafx-halo-two 1.35s .2s ease-out both; border-color: rgba(255,154,0,.11); }
 .shafx-brand-transition__mark {
   position: absolute;
-  width: min(48vw, 330px);
-  height: min(48vw, 330px);
-  top: 23%;
+  width: min(54vw, 360px);
+  height: min(54vw, 360px);
+  top: 21%;
   left: 50%;
   transform: translateX(-50%);
   filter: drop-shadow(0 0 30px rgba(0,170,255,.24));
-  animation: shafx-transition-mark 1.95s .02s cubic-bezier(.12,.92,.2,1) both;
+  animation: shafx-transition-mark 1.0s .02s cubic-bezier(.12,.92,.2,1) both;
 }
 .shafx-brand-transition__word {
   position: absolute;
   left: 50%;
-  top: 55%;
+  top: 57%;
   transform: translateX(-50%);
   white-space: nowrap;
   opacity: 0;
-  animation: shafx-transition-word .82s 1.18s cubic-bezier(.18,.85,.2,1) both;
+  animation: shafx-transition-word .55s .58s cubic-bezier(.18,.85,.2,1) both;
 }
-.shafx-brand-transition__headline {
-  position: absolute;
-  left: 50%;
-  top: 69%;
-  width: 100%;
-  padding: 0 18px;
-  transform: translateX(-50%);
-  text-align: center;
-  font-size: clamp(17px, 3vw, 34px);
-  font-weight: 800;
-  letter-spacing: .20em;
-  text-indent: .20em;
-  text-transform: uppercase;
-  opacity: 0;
-  animation: shafx-transition-headline .72s 1.48s ease-out both;
-}
-.shafx-brand-transition__subline {
-  position: absolute;
-  left: 50%;
-  top: 76%;
-  width: 100%;
-  padding: 0 18px;
-  transform: translateX(-50%);
-  text-align: center;
-  color: rgba(215,224,234,.58);
-  font-size: clamp(7px, 1vw, 10px);
-  letter-spacing: .30em;
-  text-transform: uppercase;
-  opacity: 0;
-  animation: shafx-transition-subline .62s 1.72s ease-out both;
-}
-.shafx-brand-transition__progress {
-  position: absolute;
-  left: 50%;
-  bottom: 11%;
-  width: min(50vw, 300px);
-  height: 1px;
-  transform: translateX(-50%) scaleX(0);
-  transform-origin: center;
-  background: linear-gradient(90deg, transparent, #16C8FF 35%, #FF9B00 65%, transparent);
-  box-shadow: 0 0 18px rgba(0,195,255,.35);
-  animation: shafx-transition-progress 1.4s 1.4s ease-out both;
-}
-.shafx-brand-transition--goodbye .shafx-brand-transition__mark { animation-duration: 1.55s; }
-.shafx-brand-transition--goodbye .shafx-brand-transition__word { animation-delay: .92s; }
-.shafx-brand-transition--goodbye .shafx-brand-transition__headline { animation-delay: 1.28s; }
-.shafx-brand-transition--goodbye .shafx-brand-transition__subline { animation-delay: 1.52s; }
+.shafx-brand-transition__headline,
+.shafx-brand-transition__subline,
+.shafx-brand-transition__progress { display: none; }
+
+.shafx-brand-transition--goodbye .shafx-brand-transition__mark { animation-duration: .82s; }
 
 @keyframes shafx-transition-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes shafx-transition-grid {
-  from { transform: perspective(900px) rotateX(63deg) translateY(26%) scale(1.08); opacity: 0; }
-  to { transform: perspective(900px) rotateX(63deg) translateY(8%) scale(1); opacity: .36; }
+  from { transform: perspective(900px) rotateX(63deg) translateY(18%) scale(1.04); opacity: 0; }
+  to { transform: perspective(900px) rotateX(63deg) translateY(8%) scale(1); opacity: .32; }
 }
 @keyframes shafx-transition-scan {
   from { transform: translateX(-85%); opacity: 0; }
-  18% { opacity: 1; }
-  to { transform: translateX(85%); opacity: .75; }
+  to { transform: translateX(85%); opacity: .65; }
 }
 @keyframes shafx-halo-one {
-  0% { opacity: 0; transform: scale(.7); }
-  45% { opacity: .8; }
-  100% { opacity: 0; transform: scale(1.18); }
-}
-@keyframes shafx-halo-two {
-  0% { opacity: 0; transform: scale(.5); }
-  45% { opacity: .55; }
+  0% { opacity: 0; transform: scale(.75); }
+  45% { opacity: .65; }
   100% { opacity: 0; transform: scale(1.12); }
 }
+@keyframes shafx-halo-two {
+  0% { opacity: 0; transform: scale(.55); }
+  45% { opacity: .45; }
+  100% { opacity: 0; transform: scale(1.08); }
+}
 @keyframes shafx-transition-mark {
-  0% { opacity: 0; transform: translateX(-50%) scale(.72); }
-  65% { opacity: 1; transform: translateX(-50%) scale(1.025); }
+  0% { opacity: 0; transform: translateX(-50%) scale(.82); }
+  65% { opacity: 1; transform: translateX(-50%) scale(1.02); }
   100% { opacity: 1; transform: translateX(-50%) scale(1); }
 }
 @keyframes shafx-transition-word {
-  0% { opacity: 0; transform: translate(-50%, 24px) scale(.94); letter-spacing: .36em; }
+  0% { opacity: 0; transform: translate(-50%, 18px) scale(.96); letter-spacing: .30em; }
   100% { opacity: 1; transform: translate(-50%, 0) scale(1); letter-spacing: .12em; }
 }
-@keyframes shafx-transition-headline {
-  0% { opacity: 0; transform: translate(-50%, 16px); filter: blur(5px); }
-  100% { opacity: 1; transform: translate(-50%, 0); filter: blur(0); }
-}
-@keyframes shafx-transition-subline {
-  0% { opacity: 0; transform: translate(-50%, 10px); }
-  100% { opacity: 1; transform: translate(-50%, 0); }
-}
-@keyframes shafx-transition-progress {
-  0% { transform: translateX(-50%) scaleX(0); }
-  100% { transform: translateX(-50%) scaleX(1); }
-}
 @media (prefers-reduced-motion: reduce) {
+  .shafx-brand-intro, .shafx-brand-intro * ,
   .shafx-brand-transition, .shafx-brand-transition * {
-    animation-duration: .01ms !important;
-    animation-delay: 0ms !important;
+    animation: none !important;
+    transition: none !important;
   }
+  .shafx-brand-intro, .shafx-brand-transition { opacity: 0; visibility: hidden; pointer-events: none; }
 }
 
 /* Universal viewport polish: keep SHARFX spatial instead of cramped when the device rotates. */
