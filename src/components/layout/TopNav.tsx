@@ -67,7 +67,6 @@ export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, t
             {filtered.map((item) => {
               const selected = item === symbol && Number.isFinite(price) && price > 0
               const pair = pairs.find((entry) => entry.symbol === item)
-              const precision = item.includes('JPY') ? 3 : item.includes('XAU') ? 2 : item.includes('BTC') ? 2 : 5
               return <button key={item} type="button" onClick={() => choose(item)} className={'grid min-h-14 w-full grid-cols-[1fr_75px_60px] items-center gap-2 rounded-xl px-3 text-left ' + (item === symbol ? 'bg-shafx-accent/10 text-shafx-accent' : '')}>
                 <span className="min-w-0"><span className="block truncate text-xs font-semibold">{item}</span><span className="mt-0.5 block text-[8px] text-shafx-textMuted">{selected ? 'Live stream' : 'Select to stream'} • FX</span></span>
                 <span className="text-right font-mono text-[9px] tabular">{selected ? formatPrice(price, pricePrecision) : '—'}</span>
