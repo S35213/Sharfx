@@ -513,7 +513,7 @@ export function TradingAgentPanel({
             return
           }
 
-          const closedProfit = closed.profit ?? profit
+          const closedProfit = Number(closed.profit ?? 0)
           const result = closedProfit >= 0 ? 'WIN' : 'LOSS'
           processedHistory.current.add(order.id)
           setBotDisplayedOrder(null)
