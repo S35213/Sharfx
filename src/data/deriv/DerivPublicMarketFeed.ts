@@ -1,11 +1,10 @@
 import type { OHLCV, Timeframe } from '../../types'
 
-export const DERIV_PUBLIC_WS_URL = 'wss://api.derivws.com/trading/v1/options/ws/public'
+export const DERIV_PUBLIC_WS_URL = 'wss://ws.binaryws.com/websockets/v3'
 
 export const getDerivMarketWebSocketUrl = (): string => {
   if (typeof window === 'undefined') return DERIV_PUBLIC_WS_URL
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return protocol + '//' + window.location.host + '/api/deriv/public-market'
+  return DERIV_PUBLIC_WS_URL
 }
 
 const timeframeSeconds: Record<Timeframe, number> = {
