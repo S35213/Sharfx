@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  statuses: write
 
 concurrency:
   group: shafx-cloudflare-production
@@ -40,3 +41,21 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: deploy
+
+      - name: Publish Cloudflare deployment status
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          DEPLOY_STATE: ${{ job.status == 'success' && 'success' || 'failure' }}
+        with:
+          script: |
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state: process.env.DEPLOY_STATE,
+              context: 'Cloudflare',
+              description: process.env.DEPLOY_STATE === 'success'
+                ? 'Cloudflare Worker deploy finished.'
+                : 'Cloudflare Worker deploy failed.'
+            })
