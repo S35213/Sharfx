@@ -87,7 +87,6 @@ export const executeDerivTrade = async (input: ExecuteDerivTradeInput): Promise<
     riskAmount: estimatedLoss,
     rewardAmount: estimatedReward,
     riskRewardRatio: plan.risk.riskRewardRatio,
-    setup,
   })
 
   return { decision, plan, order }
