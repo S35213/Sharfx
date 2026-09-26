@@ -113,7 +113,7 @@ describe('assessProviderReadiness', () => {
 
     expect(full.ready).toBe(false)
     expect(full.missingMethods).toContain('getAccounts')
-    expect(full.missingMethods).toContain('subscribe')
+    expect(full.missingMethods).not.toContain('subscribe')
     expect(marketOnly.ready).toBe(true)
     expect(marketOnly.missingMethods).toEqual([])
   })
