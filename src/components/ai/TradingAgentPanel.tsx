@@ -195,7 +195,7 @@ export function TradingAgentPanel({
   botAutostartKey = 'shafx-bot-autostart',
 }: Props) {
   const plan = BOT_PLANS[botPlan]
-  const readStoredLotSize = (): string => typeof window !== 'undefined' ? window.sessionStorage.getItem('shafx-broker-lot-size') || '0.10' : '0.10'
+  const readStoredLotSize = (): string => typeof window !== 'undefined' ? window.sessionStorage.getItem('shafx-lot-size') || '0.10' : '0.10'
   const [lotSize, setLotSize] = useState(readStoredLotSize)
   const [phase, setPhase] = useState<Phase>('READY')
   const [scanPhase, setScanPhase] = useState<Phase>('READY')
@@ -248,7 +248,7 @@ export function TradingAgentPanel({
     return buildTradingContext(symbol, timeframe, candles, structure, supportResistance, liquidity, setup)
   }, [candles, currentPrice, symbol, timeframe])
 
-  const timeframeFrames = useMultiTimeframeCandles(symbol, timeframe, candles, scanM1Candles)
+  const timeframeFrames = useMultiTimeframeCandles(symbol, timeframe, candles, scanM1Candles, scanNonce)
   const multiTimeframe = useMemo(() => analyzeMultiTimeframeBias(timeframeFrames), [timeframeFrames])
   const fastScanCandidates = useMemo(
     () => buildScanCandidates(timeframeFrames, symbol, currentPrice),
@@ -480,7 +480,7 @@ export function TradingAgentPanel({
         const order = result.order
         if (!order) {
           setLastResult('WAIT')
-          setStatus('WAIT • the risk/setup gate did not produce a valid simulated order')
+          setStatus('WAIT • the Deriv risk/setup gate did not produce a valid trade')
           return
         }
 
@@ -935,7 +935,7 @@ export function TradingAgentPanel({
         </div>
 
         <div className="mt-2 flex items-center justify-between gap-2 rounded-lg border border-shafx-border bg-shafx-bg/60 px-2.5 py-2 text-[8px] text-shafx-textMuted">
-          <span className="flex min-w-0 items-center gap-1.5"><ShieldCheck className="h-3 w-3 text-shafx-success" />Broker only • no broker orders</span>
+          <span className="flex min-w-0 items-center gap-1.5"><ShieldCheck className="h-3 w-3 text-shafx-success" />Deriv execution • broker orders</span>
           <span className="font-mono">{status}</span>
         </div>
       </section>
