@@ -75,7 +75,8 @@ describe('Deriv provider funding and readiness capabilities', () => {
       onerror: (() => void) | null = null
       onclose: (() => void) | null = null
 
-      constructor(_url: string) {
+      constructor(url: string) {
+        void url
         queueMicrotask(() => this.onopen?.())
       }
 
