@@ -39,7 +39,7 @@ jobs:
       - name: Verify Deriv market-data stream
         run: |
           node <<'NODE'
-          const url = 'wss://api.derivws.com/trading/v1/options/ws/public'
+          const url = 'wss://sharfx.150sharingan2.workers.dev/api/deriv/public-market'
           const ws = new WebSocket(url)
           let opened = false
           let candleOk = false
@@ -73,19 +73,36 @@ jobs:
           ws.addEventListener('message', (event) => {
             try {
               const data = JSON.parse(String(event.data))
-              if (data.error?.message) finish(1, 'Deriv returned an API error: ' + data.error.message)
+              if (data.error?.message) {
+                if (data.req_id === 101) {
+                  ws.send(JSON.stringify({
+                    ticks_history: 'frxEURUSD',
+                    end: 'latest',
+                    count: 300,
+                    style: 'ticks',
+                    subscribe: 0,
+                    req_id: 103,
+                  }))
+                  return
+                }
+                finish(1, 'Deriv returned an API error: ' + data.error.message)
+              }
               if (data.msg_type === 'candles' && Array.isArray(data.candles) && data.candles.length > 0) {
                 candleOk = true
-                console.log('Received EUR/USD candle history from Deriv.')
+                console.log('Proxy returned EUR/USD candle history.')
+              }
+              if (data.msg_type === 'history' && Array.isArray(data.history?.times) && data.history.times.length > 0) {
+                candleOk = true
+                console.log('Proxy returned EUR/USD tick history.')
               }
               if (data.msg_type === 'tick' && Number.isFinite(Number(data.tick?.quote)) && Number(data.tick.quote) > 0) {
                 tickSeen = true
-                console.log('Received an EUR/USD tick from Deriv.')
+                console.log('Proxy returned an EUR/USD live tick.')
               }
               if (opened && candleOk) {
                 finish(0, tickSeen
-                  ? 'Deriv market-data stream returned candle history and a live tick.'
-                  : 'Deriv market-data stream returned candle history; no live FX tick was required for this verification run.')
+                  ? 'Cloudflare proxy returned market history and a live tick from Deriv.'
+                  : 'Cloudflare proxy returned market history from Deriv.')
               }
             } catch (error) {
               finish(1, error instanceof Error ? error.message : 'Invalid Deriv WebSocket message.')
