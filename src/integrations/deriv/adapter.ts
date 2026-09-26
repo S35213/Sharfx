@@ -178,6 +178,39 @@ export const DERIV_PROVIDER_ADAPTER: ProviderAdapter = {
     }
   },
 
+  async placeOrder(connection: ProviderConnection, accountId: string, order): Promise<import('../core/types').ProviderOrderResult> {
+    assertConnection(connection)
+    const response = await fetch('/api/deriv/order', {
+      method: 'POST',
+      credentials: 'include',
+      cache: 'no-store',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'place',
+        connectionId: connection.connectionId,
+        accountId,
+        order: { ...order, durationSeconds: order.durationSeconds ?? 30, stake: order.stake ?? order.quantity },
+      }),
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok || !payload?.ok || !payload?.order) throw new Error(typeof payload?.error === 'string' ? payload.error : 'Unable to place the Deriv order.')
+    return payload.order
+  },
+
+  async closePosition(connection: ProviderConnection, accountId: string, positionId: string): Promise<import('../core/types').ProviderOrderResult> {
+    assertConnection(connection)
+    const response = await fetch('/api/deriv/order', {
+      method: 'POST',
+      credentials: 'include',
+      cache: 'no-store',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'sell', connectionId: connection.connectionId, accountId, providerOrderId: positionId }),
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok || !payload?.ok || !payload?.order) throw new Error(typeof payload?.error === 'string' ? payload.error : 'Unable to close the Deriv contract.')
+    return payload.order
+  },
+
   async subscribeAccount(connection: ProviderConnection, _accountId: string | undefined, onEvent: (event: ProviderStreamEvent) => void): Promise<ProviderStreamHandle> {
     assertConnection(connection)
     const persistedConnection = !connection.connectionId.startsWith('account:')
