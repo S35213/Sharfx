@@ -500,34 +500,8 @@ export function TradingAgentPanel({
 
         if (tradeCloseTimer.current) window.clearTimeout(tradeCloseTimer.current)
         tradeCloseTimer.current = window.setTimeout(async () => {
-          const rawExitPrice = currentPriceRef.current
-          const m1Frame = timeframeFrames.M1 ?? []
-          const latestM1 = m1Frame[m1Frame.length - 1]?.close
-          const previousM1 = m1Frame[m1Frame.length - 2]?.close
-          const microDirection = typeof latestM1 === 'number' && typeof previousM1 === 'number'
-            ? Math.sign(latestM1 - previousM1)
-            : 0
-          const minimumMove = Math.max(symbolSpec.pipSize / 10, Math.pow(10, -symbolSpec.pricePrecision))
-          const roundedSamePrice = Number(rawExitPrice.toFixed(symbolSpec.pricePrecision)) === Number(order.entryPrice.toFixed(symbolSpec.pricePrecision))
-          const exitNudgeDirection = microDirection !== 0
-            ? microDirection
-            : order.type === 'BUY' ? 1 : -1
-          const exitPrice = roundedSamePrice
-            ? Number((rawExitPrice + exitNudgeDirection * minimumMove).toFixed(symbolSpec.pricePrecision))
-            : rawExitPrice
-          const profit = (() => {
-            try {
-              return calculatePositionProfit(order, exitPrice, symbolSpec, conversionRate)
-            } catch {
-              const directionDelta = (exitPrice - order.entryPrice) * (order.type === 'BUY' ? 1 : -1)
-              return Number(directionDelta.toFixed(2))
-            }
-          })()
+          const exitPrice = currentPriceRef.current
 
-          // The displayed WIN/LOSS must come from a trade that is actually
-          // closed in the parent order store. Previously the bot announced the
-          // result first and fired close asynchronously, allowing an open order
-          // to remain behind in the Market/Orders panels.
           const closed = await onBotClose?.(order.id, exitPrice)
           if (!closed) {
             setStatus('BOT ERROR • round result was calculated but the broker position did not close.')
