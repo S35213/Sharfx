@@ -101,7 +101,7 @@ const place = async (req) => {
   const symbol = String(order.symbol || '')
   const side = order.side === 'SELL' ? 'SELL' : 'BUY'
   const stake = Number(order.stake ?? order.quantity)
-  const durationSeconds = Math.max(5, Math.min(3600, Math.trunc(Number(order.durationSeconds) || 30)))
+  const multiplier = Math.max(1, Math.min(1000, Number(order.multiplier) || 10))
   const accountResponse = await fetch(DERIV_API + '/accounts/' + encodeURIComponent(accountId), { headers: { Authorization: 'Bearer ' + token } })
   const accountPayload = await accountResponse.json().catch(() => ({}))
   const currency = String(order.currency || accountPayload?.data?.currency || '')
@@ -113,10 +113,15 @@ const place = async (req) => {
       proposal: 1,
       amount: stake,
       basis: 'stake',
-      contract_type: side === 'BUY' ? 'CALL' : 'PUT',
+      contract_type: side === 'BUY' ? 'MULTUP' : 'MULTDOWN',
+      amount: stake,
+      basis: 'stake',
       currency,
-      duration: durationSeconds,
-      duration_unit: 's',
+      multiplier,
+      limit_order: {
+        take_profit: Math.max(0, Number(order.takeProfitAmount) || 0),
+        stop_loss: Math.max(0, Number(order.stopLossAmount) || 0),
+      },
       underlying_symbol: toDerivSymbol(symbol),
       req_id: 1,
     }, 1)
@@ -143,7 +148,7 @@ const place = async (req) => {
       symbol,
       side,
       stake,
-      durationSeconds,
+      multiplier,
       environment: connection.environment,
     },
   })
