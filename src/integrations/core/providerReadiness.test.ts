@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ProviderAdapter, ProviderDescriptor } from './types'
 import { assessProviderReadiness } from './providerReadiness'
+import { DERIV_PROVIDER_ADAPTER } from '../deriv/adapter'
 
 const descriptor: ProviderDescriptor = {
   id: 'test',
@@ -91,5 +92,15 @@ describe('assessProviderReadiness', () => {
 
     expect(result.ready).toBe(true)
     expect(result.issues).not.toContain('LIVE_EXECUTION_DISABLED')
+  })
+})
+
+
+describe('Deriv readiness', () => {
+  it('is capability-complete so market streaming is not blocked by funding handlers', () => {
+    const result = assessProviderReadiness(DERIV_PROVIDER_ADAPTER)
+
+    expect(result.ready).toBe(true)
+    expect(result.missingMethods).toEqual([])
   })
 })
