@@ -23,6 +23,7 @@ interface DerivTickResponse {
   tick?: { epoch?: number; quote?: number; symbol?: string }
   candles?: Array<{ epoch?: number; open?: number; high?: number; low?: number; close?: number }>
   error?: { message?: string }
+  errors?: Array<{ message?: string }>
 }
 
 const toCandles = (items: DerivTickResponse['candles']): OHLCV[] => (items ?? []).flatMap((item) => {
@@ -43,13 +44,24 @@ export class DerivPublicMarketFeed {
   private candles: OHLCV[] = []
   private onUpdate?: (candles: OHLCV[], price: number, epoch: number) => void
   private onStatus?: (status: 'connecting' | 'connected' | 'disconnected' | 'error', message?: string) => void
+  private webSocketUrlProvider?: () => Promise<string>
+  private pingTimer: ReturnType<typeof setInterval> | null = null
 
-  connect(symbol: string, timeframe: Timeframe, callbacks: { onUpdate: (candles: OHLCV[], price: number, epoch: number) => void; onStatus: (status: 'connecting' | 'connected' | 'disconnected' | 'error', message?: string) => void }): void {
+  connect(
+    symbol: string,
+    timeframe: Timeframe,
+    callbacks: {
+      onUpdate: (candles: OHLCV[], price: number, epoch: number) => void
+      onStatus: (status: 'connecting' | 'connected' | 'disconnected' | 'error', message?: string) => void
+      getWebSocketUrl?: () => Promise<string>
+    },
+  ): void {
     this.disconnect()
     this.symbol = toDerivSymbol(symbol)
     this.timeframe = timeframe
     this.onUpdate = callbacks.onUpdate
     this.onStatus = callbacks.onStatus
+    this.webSocketUrlProvider = callbacks.getWebSocketUrl
     this.candles = []
     this.reconnectAttempt = 0
     this.stopped = false
@@ -57,16 +69,44 @@ export class DerivPublicMarketFeed {
     this.openSocket(this.connectionGeneration)
   }
 
-  private openSocket(generation: number): void {
+  private async openSocket(generation: number): Promise<void> {
     if (this.stopped || generation !== this.connectionGeneration) return
     this.onStatus?.('connecting')
-    const socket = new WebSocket(DERIV_PUBLIC_WS_URL)
+
+    let wsUrl = DERIV_PUBLIC_WS_URL
+    if (this.webSocketUrlProvider) {
+      try {
+        wsUrl = await this.webSocketUrlProvider()
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unable to obtain the authenticated Deriv market stream.'
+        this.onStatus?.('error', message)
+        // Public market data remains a safe fallback when the authenticated URL cannot be obtained.
+        wsUrl = DERIV_PUBLIC_WS_URL
+      }
+    }
+
+    if (this.stopped || generation !== this.connectionGeneration) return
+
+    let socket: WebSocket
+    try {
+      socket = new WebSocket(wsUrl)
+    } catch (error) {
+      this.onStatus?.('error', error instanceof Error ? error.message : 'Unable to open the Deriv WebSocket.')
+      this.scheduleReconnect(generation)
+      return
+    }
     this.socket = socket
 
     socket.onopen = () => {
       if (this.stopped || generation !== this.connectionGeneration) return
       this.reconnectAttempt = 0
       this.onStatus?.('connected')
+      if (this.pingTimer !== null) globalThis.clearInterval(this.pingTimer)
+      this.pingTimer = globalThis.setInterval(() => {
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ ping: 1, req_id: Date.now() }))
+        }
+      }, 30000)
       socket.send(JSON.stringify({ ticks_history: this.symbol, end: 'latest', count: 200, style: 'candles', granularity: timeframeSeconds[this.timeframe], subscribe: 0, req_id: 1 }))
       socket.send(JSON.stringify({ ticks: this.symbol, subscribe: 1, req_id: 2 }))
     }
@@ -75,8 +115,9 @@ export class DerivPublicMarketFeed {
       if (this.stopped || generation !== this.connectionGeneration) return
       try {
         const response = JSON.parse(String(event.data)) as DerivTickResponse
-        if (response.error?.message) {
-          this.onStatus?.('error', response.error.message)
+        const responseError = response.error?.message ?? response.errors?.find((item) => typeof item?.message === 'string')?.message
+        if (responseError) {
+          this.onStatus?.('error', responseError)
           socket.close()
           return
         }
@@ -87,9 +128,14 @@ export class DerivPublicMarketFeed {
           return
         }
         if (response.msg_type === 'tick' && response.tick?.quote !== undefined && response.tick.epoch !== undefined) {
-          const price = response.tick.quote
-          const epochMs = response.tick.epoch * 1000
-          const bucket = Math.floor(response.tick.epoch / timeframeSeconds[this.timeframe]) * timeframeSeconds[this.timeframe] * 1000
+          const price = Number(response.tick.quote)
+          const epoch = Number(response.tick.epoch)
+          if (!Number.isFinite(price) || !Number.isFinite(epoch) || price <= 0) {
+            this.onStatus?.('error', 'Deriv returned an invalid live price.')
+            return
+          }
+          const epochMs = epoch * 1000
+          const bucket = Math.floor(epoch / timeframeSeconds[this.timeframe]) * timeframeSeconds[this.timeframe] * 1000
           const last = this.candles[this.candles.length - 1]
           if (!last || last.time !== bucket) this.candles = [...this.candles, { time: bucket, open: price, high: price, low: price, close: price }]
           else this.candles = [...this.candles.slice(0, -1), { ...last, high: Math.max(last.high, price), low: Math.min(last.low, price), close: price }]
@@ -104,11 +150,16 @@ export class DerivPublicMarketFeed {
 
     socket.onerror = () => {
       if (this.stopped || generation !== this.connectionGeneration) return
-      this.onStatus?.('error', 'Deriv public market-data connection failed.')
+      this.onStatus?.('error', 'Deriv market-data WebSocket connection failed.')
     }
 
     socket.onclose = () => {
+      if (this.pingTimer !== null) {
+        globalThis.clearInterval(this.pingTimer)
+        this.pingTimer = null
+      }
       if (this.stopped || generation !== this.connectionGeneration) return
+      this.socket = null
       this.onStatus?.('disconnected')
       this.scheduleReconnect(generation)
     }
@@ -130,10 +181,15 @@ export class DerivPublicMarketFeed {
     this.connectionGeneration += 1
     if (this.reconnectTimer !== null) globalThis.clearTimeout(this.reconnectTimer)
     this.reconnectTimer = null
+    if (this.pingTimer !== null) {
+      globalThis.clearInterval(this.pingTimer)
+      this.pingTimer = null
+    }
     const socket = this.socket
     this.socket = null
     socket?.close()
     this.onUpdate = undefined
     this.onStatus = undefined
+    this.webSocketUrlProvider = undefined
   }
 }
