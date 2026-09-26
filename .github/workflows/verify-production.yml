@@ -21,17 +21,22 @@ jobs:
             "https://sharfx.150sharingan2.workers.dev"
           )
           found=0
-          for host in "${hosts[@]}"; do
-            echo "Checking $host"
-            body="$(curl -fsSL --max-time 15 --retry 2 --retry-delay 2 "$host/shafx-deployment.txt?cachebust=$GITHUB_SHA" || true)"
-            if [ "$body" = "$MARKER" ]; then
-              echo "Production marker is live at $host"
-              found=1
-            else
-              echo "Marker not present at $host"
+          for attempt in $(seq 1 60); do
+            found=0
+            for host in "${hosts[@]}"; do
+              echo "Checking $host (attempt $attempt/60)"
+              body="$(curl -fsSL --max-time 15 --retry 2 --retry-delay 2 "$host/shafx-deployment.txt?cachebust=$GITHUB_SHA" || true)"
+              if [ "$body" = "$MARKER" ]; then
+                echo "Production marker is live at $host"
+                found=1
+              else
+                echo "Marker not present at $host"
+              fi
+            done
+            if [ "$found" -eq 1 ]; then
+              exit 0
             fi
+            sleep 10
           done
-          if [ "$found" -ne 1 ]; then
-            echo "Neither candidate production host is serving the expected deployed marker."
-            exit 1
-          fi
+          echo "Neither candidate production host served the expected deployed marker within 10 minutes."
+          exit 1
