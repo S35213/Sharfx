@@ -33,32 +33,50 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Build
+        id: build
         run: npm run build
 
       - name: Deploy Worker
-        uses: cloudflare/wrangler-action@v4
+        id: deploy
+        if: steps.build.outcome == 'success'
+        continue-on-error: true
         env:
-          SHAFX_CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN || secrets.CLOUDFLARE_WORKERS_API_TOKEN || secrets.CLOUDFLARE_TOKEN }}
-          SHAFX_CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || secrets.CF_ACCOUNT_ID || secrets.CLOUDFLARE_WORKERS_ACCOUNT_ID }}
-        with:
-          apiToken: ${{ env.SHAFX_CF_API_TOKEN }}
-          accountId: ${{ env.SHAFX_CF_ACCOUNT_ID }}
-          command: deploy
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -o pipefail
+          npx wrangler deploy --log-level info 2>&1 | tee /tmp/shafx-cloudflare-deploy.log
+          exit ${PIPESTATUS[0]}
 
       - name: Publish Cloudflare deployment status
         if: always()
         uses: actions/github-script@v7
         env:
-          DEPLOY_STATE: ${{ job.status == 'success' && 'success' || 'failure' }}
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
         with:
           script: |
+            const fs = require('fs')
+            let tail = ''
+            try {
+              tail = fs.readFileSync('/tmp/shafx-cloudflare-deploy.log', 'utf8').slice(-1200)
+            } catch {}
+            const ok = process.env.BUILD_OUTCOME === 'success' && process.env.DEPLOY_OUTCOME === 'success'
+            const cleanTail = tail.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim()
+            const description = [
+              `build=${process.env.BUILD_OUTCOME || 'unknown'}`,
+              `deploy=${process.env.DEPLOY_OUTCOME || 'not-run'}`,
+              cleanTail ? `log=${cleanTail.slice(-900)}` : ''
+            ].filter(Boolean).join('; ')
             await github.rest.repos.createCommitStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
               sha: context.sha,
-              state: process.env.DEPLOY_STATE,
+              state: ok ? 'success' : 'failure',
               context: 'Cloudflare',
-              description: process.env.DEPLOY_STATE === 'success'
-                ? 'Cloudflare Worker deploy finished.'
-                : 'Cloudflare Worker deploy failed.'
+              description: description.slice(0, 140)
             })
+
+      - name: Fail workflow when Cloudflare deployment did not succeed
+        if: steps.build.outcome != 'success' || steps.deploy.outcome != 'success'
+        run: exit 1
