@@ -715,7 +715,7 @@ export function TradingAgentPanel({
     setStatus('BOT SCAN • checking balance, risk limit and all timeframes independently…')
     analysisTimer.current = window.setTimeout(() => {
       setPhase('RUNNING')
-      setStatus('BOT RUNNING • 10-second simulated round. Circle fills → WIN/LOSS → next cycle.')
+      setStatus('BOT RUNNING • 10-second Deriv trade round. Circle fills → broker result → next cycle.')
       if (nextRoundTimer.current) window.clearTimeout(nextRoundTimer.current)
       nextRoundTimer.current = window.setTimeout(() => {
         void runBotCycleRef.current?.()
