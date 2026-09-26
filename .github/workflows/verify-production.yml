@@ -39,7 +39,7 @@ jobs:
       - name: Verify Deriv market-data stream
         run: |
           node <<'NODE'
-          const url = 'wss://ws.binaryws.com/websockets/v3'
+          const url = 'wss://api.derivws.com/trading/v1/options/ws/public'
           const ws = new WebSocket(url)
           let opened = false
           let candleOk = false
