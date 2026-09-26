@@ -39,7 +39,7 @@ const handleDerivPublicMarketWebSocket = async (request: Request): Promise<Respo
   const pair = new WebSocketPair()
   const client = pair[0]
   const server = pair[1]
-  server.accept()
+  server.accept({ allowHalfOpen: true })
 
   const upstreamResponse = await fetch('https://api.derivws.com/trading/v1/options/ws/public', {
     headers: { Upgrade: 'websocket' },
@@ -51,7 +51,7 @@ const handleDerivPublicMarketWebSocket = async (request: Request): Promise<Respo
     return new Response(null, { status: 101, webSocket: client })
   }
 
-  upstream.accept()
+  upstream.accept({ allowHalfOpen: true })
 
   const closeBoth = (code = 1000, reason = 'closed'): void => {
     try { if (server.readyState === WebSocket.OPEN || server.readyState === WebSocket.CLOSING) server.close(code, reason) } catch (error) { void error }
