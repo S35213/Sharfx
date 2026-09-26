@@ -61,7 +61,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || secrets.CF_ACCOUNT_ID || secrets.CLOUDFLARE_WORKERS_ACCOUNT_ID }}
         run: |
           set -o pipefail
-          npx wrangler deploy --log-level info 2>&1 | tee /tmp/shafx-cloudflare-deploy.log
+          npx wrangler deploy 2>&1 | tee /tmp/shafx-cloudflare-deploy.log
           exit ${PIPESTATUS[0]}
 
       - name: Publish Cloudflare deploy step status
