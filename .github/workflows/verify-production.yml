@@ -39,7 +39,7 @@ jobs:
       - name: Verify Deriv market-data stream
         run: |
           node <<'NODE'
-          const url = 'wss://sharfx.150sharingan2.workers.dev/api/deriv/public-market'
+          const url = 'wss://ws.binaryws.com/websockets/v3'
           const ws = new WebSocket(url)
           let opened = false
           let candleOk = false
