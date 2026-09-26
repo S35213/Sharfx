@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react'
 import type { OHLCV, Timeframe } from '../../types'
 import '../../integrations/catalog'
 import { providerRegistry } from '../../integrations/core/providerRegistry'
-import { assessProviderReadiness } from '../../integrations/core/providerReadiness'
 import { validateProviderConnection } from '../../integrations/core/providerConnectionGuard'
 import type { ProviderConnection, ProviderStreamHandle } from '../../integrations/core/types'
 
@@ -50,11 +49,11 @@ export const ProviderLiveControl: React.FC<ProviderLiveControlProps> = ({ provid
         setStatus('connecting')
         setErrorMessage(null)
         const adapter = providerRegistry.get(providerId)
-        const readiness = assessProviderReadiness(adapter)
-        if (!readiness.ready) throw new Error('Provider is not ready.')
+        if (!adapter.descriptor.capabilities.realtimeMarketData || typeof adapter.subscribe !== 'function') {
+          throw new Error('The selected broker does not provide a realtime market-data stream.')
+        }
         const check = validateProviderConnection(adapter, connection)
         if (!check.allowed) throw new Error(check.reason || 'The broker connection is not usable.')
-        if (typeof adapter.subscribe !== 'function') throw new Error('The selected broker does not provide a live market stream.')
         const stream = await adapter.subscribe(connection, connection.accountId, [symbol], (event) => {
           if (disposed) return
           if (event.type === 'error') {
