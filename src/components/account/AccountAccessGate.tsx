@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowRight, CheckCircle2, ChevronRight, Link2, RefreshCw, ShieldCheck, WalletCards } from 'lucide-react'
+import { ArrowRight, Check, CheckCircle2, ChevronRight, Link2, RefreshCw, ShieldCheck, WalletCards } from 'lucide-react'
 import { PublicWelcome } from './PublicWelcome'
 import { getProviderConnections, setStoredProviderSelection, type ProviderConnectionRecord } from '../../data/provider/providerConnections'
 import { useAuth } from '../../app/AuthContext'
@@ -90,20 +90,29 @@ export const AccountAccessGate: React.FC<Props> = ({ onConnected }) => {
             <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-shafx-textMuted">SHAFX does not create or simulate a trading account. Connect a supported broker, then choose the broker account you want SHAFX to use.</p>
           </div>
 
-          <div className="mt-9 overflow-hidden rounded-3xl border border-shafx-accent/30 bg-[linear-gradient(145deg,rgba(124,92,252,.12),rgba(13,18,26,.98)_55%)] p-5 shadow-[0_24px_70px_rgba(0,0,0,.25)]">
-            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-4"><BrokerLogo id="deriv" name="Deriv" /><div><div className="flex items-center gap-2"><h2 className="text-lg font-semibold">Deriv</h2><span className="rounded-full border border-shafx-success/25 bg-shafx-success/10 px-2 py-1 text-[8px] font-bold uppercase tracking-wide text-shafx-success">Available</span></div><p className="mt-1 text-[11px] text-shafx-textMuted">OAuth account connection • live market data • demo/real account selection</p></div></div>
-              <button type="button" onClick={connectDeriv} disabled={connecting} className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-shafx-accent px-5 text-sm font-semibold text-white shadow-lg shadow-shafx-accent/20 disabled:opacity-60">{connecting ? 'Connecting…' : 'Connect Deriv'}<ArrowRight className="h-4 w-4" /></button>
-            </div>
-          </div>
-
-          <div className="mt-5 flex flex-wrap items-stretch gap-3">
-            {BROKERS.filter((broker) => broker.id !== 'deriv').map((broker) => (
-              <div key={broker.id} className="min-w-[150px] flex-1 rounded-2xl border border-shafx-border bg-shafx-surface/80 p-4">
-                <div className="flex items-center gap-3"><BrokerLogo id={broker.id} name={broker.name} /><div className="min-w-0"><div className="truncate text-sm font-semibold">{broker.name}</div><div className="mt-1 text-[9px] text-shafx-textMuted">{broker.note}</div></div></div>
-                <div className="mt-3 flex items-center gap-1.5 text-[9px] text-shafx-textMuted"><ChevronRight className="h-3 w-3" />Broker integration is being prepared.</div>
-              </div>
-            ))}
+          <div className="mt-9 grid gap-3 sm:grid-cols-2">
+            {BROKERS.map((broker) => {
+              const available = broker.kind === 'available'
+              return <button
+                key={broker.id}
+                type="button"
+                disabled={!available || connecting}
+                onClick={available ? connectDeriv : undefined}
+                className={"group relative min-h-28 rounded-2xl border p-4 text-left transition " + (
+                  available
+                    ? "border-shafx-accent/30 bg-[linear-gradient(145deg,rgba(124,92,252,.12),rgba(13,18,26,.98)_55%)] hover:border-shafx-accent/60"
+                    : "border-shafx-border bg-shafx-surface/70 opacity-80"
+                )}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex min-w-0 items-center gap-3"><BrokerLogo id={broker.id} name={broker.name} /><div className="min-w-0"><div className="flex items-center gap-2"><h2 className="truncate text-base font-semibold">{broker.name}</h2><span className={"rounded-full border px-2 py-1 text-[8px] font-bold uppercase tracking-wide " + (available ? "border-shafx-success/25 bg-shafx-success/10 text-shafx-success" : "border-shafx-border bg-shafx-bg text-shafx-textMuted")}>{available ? "Available" : "Coming soon"}</span></div><p className="mt-1 text-[10px] leading-4 text-shafx-textMuted">{available ? "Connect your Deriv account with OAuth, then choose Demo or Real." : broker.note}</p></div></div>
+                  <span className={"flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 " + (connecting && available ? "border-red-500 bg-red-500 text-white" : "border-shafx-textMuted/40 bg-transparent text-transparent")}>
+                    <Check className="h-4 w-4" />
+                  </span>
+                </div>
+                <div className="mt-3 flex items-center gap-1.5 text-[9px] font-semibold " + (available ? "text-shafx-accent" : "text-shafx-textMuted")}>{available ? (connecting ? "Opening Deriv…" : "Tap to continue") : "Broker integration is being prepared."}<ChevronRight className="h-3 w-3" /></div>
+              </button>
+            })}
           </div>
 
           <div className="mt-5 flex items-start gap-2 rounded-2xl border border-shafx-border bg-shafx-surface/60 p-4 text-[10px] leading-5 text-shafx-textMuted"><Link2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-shafx-accent" /><span>Your SHAFX password and Deriv credentials remain separate. SHAFX stores the broker authorization on the server side and uses it only to access the connected account.</span></div>
