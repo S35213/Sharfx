@@ -7,7 +7,7 @@ import { analyzeSetup } from '../../engine/setup'
 import { calculateRisk } from '../../engine/risk/riskCalculator'
 import { analyzeSupportResistance } from '../../engine/supportResistance'
 import { buildTradingContext } from '../../engine/ai/context'
-import { analyzeMultiTimeframeBias, buildAgentResearch, executeSimulationTrade, learnFromTrades, useMultiTimeframeCandles } from '../../engine/agent'
+import { analyzeMultiTimeframeBias, buildAgentResearch, executeDerivTrade, learnFromTrades, useMultiTimeframeCandles } from '../../engine/agent'
 import { BOT_CYCLES_PER_UNIT, BOT_PLANS, type BotPlan } from '../../engine/agent/botPlans'
 import type { OHLCV, SymbolSpec, Timeframe, TradeOrder } from '../../types'
 
@@ -20,6 +20,9 @@ interface Props {
   tradeHistory: TradeOrder[]
   accountBalance?: number
   accountCurrency?: string
+  derivConnectionId?: string
+  derivAccountId?: string
+  derivEnvironment?: 'demo' | 'live'
   symbolSpec?: SymbolSpec | null
   conversionRate?: number
   botPlan?: BotPlan
@@ -178,6 +181,9 @@ export function TradingAgentPanel({
   tradeHistory,
   accountBalance = 10000,
   accountCurrency = 'USD',
+  derivConnectionId = '',
+  derivAccountId = '',
+  derivEnvironment = 'demo',
   symbolSpec = null,
   conversionRate,
   botPlan = 'FREE',
@@ -433,8 +439,8 @@ export function TradingAgentPanel({
           setStatus('MONITORING • waiting for the current simulated bot round to close')
           return
         }
-        if (!symbolSpec || !onBotOrder) {
-          setStatus('BOT ERROR • broker order engine is not ready')
+        if (!symbolSpec || !onBotOrder || !derivConnectionId || !derivAccountId) {
+          setStatus('BOT ERROR • connect a Deriv account before trading')
           return
         }
         if (!lotSizeValid) {
@@ -467,7 +473,7 @@ export function TradingAgentPanel({
           ? 'BOT ANALYSIS • ' + scan.setup.direction + ' on ' + scan.timeframe + ' • confidence ' + scan.setup.confidence + '%'
           : 'BOT ANALYSIS • using the current independent broker context…')
 
-        const result = executeSimulationTrade({
+        const result = await executeDerivTrade({
           context: scan
             ? { tradingContext: scan.context, preferredSetup: scan.setup, hasOpenPosition: false, permission: 'AUTONOMOUS_TRADING', multiTimeframe, learning, research }
             : { tradingContext, preferredSetup: setup, hasOpenPosition: false, permission: 'AUTONOMOUS_TRADING', multiTimeframe, learning, research },
@@ -477,7 +483,9 @@ export function TradingAgentPanel({
           symbolSpec,
           conversionRate,
           lotSize: botLotSize,
-          allowSimulationFallback: true,
+          connectionId: derivConnectionId,
+          accountId: derivAccountId,
+          environment: derivEnvironment,
         })
 
         const order = result.order
