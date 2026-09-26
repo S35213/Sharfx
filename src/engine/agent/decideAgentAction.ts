@@ -2,9 +2,9 @@ import type { AgentContext, AgentDecision, AgentPermission } from './types'
 
 const permissionText = (permission: AgentPermission): string => {
   if (permission === 'ANALYZE_ONLY') return 'The agent may analyze the market but cannot prepare or place an order.'
-  if (permission === 'PREPARE_ONLY') return 'The agent may prepare a simulated trade plan but cannot place it.'
-  if (permission === 'AUTONOMOUS_SIMULATION') return 'The agent may execute paper trades automatically inside the SHAFX simulator. Broker execution is not permitted.'
-  return 'The agent may prepare a simulated trade, but explicit user approval is required before execution.'
+  if (permission === 'PREPARE_ONLY') return 'The agent may prepare a trade plan but cannot place it.'
+  if (permission === 'AUTONOMOUS_TRADING') return 'The agent may execute broker trades automatically inside the SHAFX broker. Broker execution is not permitted.'
+  return 'The agent may prepare a trade, but explicit user approval is required before execution.'
 }
 
 export const decideAgentAction = (context: AgentContext): AgentDecision => {
@@ -24,10 +24,10 @@ export const decideAgentAction = (context: AgentContext): AgentDecision => {
   const learningKey = `${symbol}:${preferredSetup.direction}`
   if (learning?.cautionKeys.includes(learningKey)) return { state: 'NO_TRADE', action: 'WAIT', permission, symbol, timeframe, setup: preferredSetup, rationale: `The setup is technically valid, but the agent has recorded repeated underperformance for ${learningKey}. It will require stronger evidence before repeating that pattern.`, approvalRequired: false, safety: permissionText(permission) }
 
-  const learningNote = learning && learning.confidenceAdjustment !== 0 ? ` Historical simulator evidence adjusts caution by ${learning.confidenceAdjustment > 0 ? '+' : ''}${learning.confidenceAdjustment} points.` : ''
+  const learningNote = learning && learning.confidenceAdjustment !== 0 ? ` Historical broker evidence adjusts caution by ${learning.confidenceAdjustment > 0 ? '+' : ''}${learning.confidenceAdjustment} points.` : ''
   const researchNote = research ? ` Research agreement is ${research.agreement.toFixed(0)}%.` : ''
   if (permission === 'ANALYZE_ONLY') return { state: 'OPPORTUNITY', action: 'WAIT', permission, symbol, timeframe, setup: preferredSetup, rationale: `A ${preferredSetup.direction} opportunity is visible, but the current permission only allows analysis.${learningNote}${researchNote}`, approvalRequired: false, safety: permissionText(permission) }
-  if (permission === 'PREPARE_ONLY') return { state: 'OPPORTUNITY', action: 'PREPARE_TRADE', permission, symbol, timeframe, setup: preferredSetup, rationale: `The agent prepared a ${preferredSetup.direction} simulated trade from the current confluence.${learningNote}${researchNote} Execution remains disabled.`, approvalRequired: false, safety: permissionText(permission) }
-  if (permission === 'AUTONOMOUS_SIMULATION') return { state: 'EXECUTING_SIMULATION', action: 'EXECUTE_SIMULATION', permission, symbol, timeframe, setup: preferredSetup, rationale: `The ${preferredSetup.direction} setup passed the SHAFX analysis, research, learning and risk gates. The bot will execute a paper trade only.${learningNote}${researchNote}`, approvalRequired: false, safety: permissionText(permission) }
-  return { state: 'AWAITING_APPROVAL', action: 'REQUEST_APPROVAL', permission, symbol, timeframe, setup: preferredSetup, rationale: `A ${preferredSetup.direction} simulated trade meets the current rules. Review the entry, stop, target and risk before approving execution.${learningNote}${researchNote}`, approvalRequired: true, safety: permissionText(permission) }
+  if (permission === 'PREPARE_ONLY') return { state: 'OPPORTUNITY', action: 'PREPARE_TRADE', permission, symbol, timeframe, setup: preferredSetup, rationale: `The agent prepared a ${preferredSetup.direction} trade from the current confluence.${learningNote}${researchNote} Execution remains disabled.`, approvalRequired: false, safety: permissionText(permission) }
+  if (permission === 'AUTONOMOUS_TRADING') return { state: 'EXECUTING_TRADE', action: 'EXECUTE_TRADE', permission, symbol, timeframe, setup: preferredSetup, rationale: `The ${preferredSetup.direction} setup passed the SHAFX analysis, research, learning and risk gates. The bot will execute a broker trade only.${learningNote}${researchNote}`, approvalRequired: false, safety: permissionText(permission) }
+  return { state: 'AWAITING_APPROVAL', action: 'REQUEST_APPROVAL', permission, symbol, timeframe, setup: preferredSetup, rationale: `A ${preferredSetup.direction} trade meets the current rules. Review the entry, stop, target and risk before approving execution.${learningNote}${researchNote}`, approvalRequired: true, safety: permissionText(permission) }
 }
