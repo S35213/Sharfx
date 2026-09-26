@@ -30,4 +30,4 @@ describe('DerivPublicMarketFeed', () => {
   it('leaves non-forex symbols unchanged', () => {
     expect(toDerivSymbol('1HZ100V')).toBe('1HZ100V')
   })
-}
+})
