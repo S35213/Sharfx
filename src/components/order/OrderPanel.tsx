@@ -5,7 +5,6 @@ import type { SetupCandidate } from '../../engine/setup/types'
 import { calculateRisk } from '../../engine/risk/riskCalculator'
 import { formatCurrency, formatPrice } from '../../lib/format'
 
-const DERIV_MULTIPLIER = 10
 
 interface Props { symbol: string; currentPrice: number; bidPrice?: number; askPrice?: number; accountBalance: number; accountCurrency: string; symbolSpec: SymbolSpec; conversionRate?: number; onSubmitOrder: (draft: SimulatedOrderDraft) => void; aiSetup?: SetupCandidate | null; autoApplyAISetup?: boolean }
 const emptyResult: RiskCalculationResult = { isValid: false, riskAmount: 0, stopDistancePips: 0, rewardDistancePips: 0, riskRewardRatio: 0, suggestedLotSize: 0, pipValuePerLot: 0, estimatedLossAtStop: 0 }
