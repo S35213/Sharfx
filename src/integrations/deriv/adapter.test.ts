@@ -47,3 +47,33 @@ describe('Deriv provider adapter account discovery', () => {
     await expect(DERIV_PROVIDER_ADAPTER.getAccounts!(connection)).rejects.toThrow('session expired')
   })
 })
+
+
+describe('Deriv provider funding and readiness capabilities', () => {
+  it('exposes official cashier redirect instructions', async () => {
+    const deposit = await DERIV_PROVIDER_ADAPTER.getDepositInstructions!(connection, 'demo-123')
+    const withdrawal = await DERIV_PROVIDER_ADAPTER.getWithdrawalInstructions!(connection, 'demo-123')
+
+    expect(deposit).toMatchObject({
+      mode: 'redirect',
+      providerUrl: 'https://app.deriv.com/cashier/deposit',
+    })
+    expect(withdrawal).toMatchObject({
+      mode: 'redirect',
+      providerUrl: 'https://app.deriv.com/cashier/withdraw',
+    })
+  })
+
+  it('advertises W1 as a supported SHAFX timeframe', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      ok: true,
+      data: {
+        url: 'wss://api.derivws.com/trading/v1/options/ws/demo?otp=test',
+      },
+    }), { status: 200, headers: { 'content-type': 'application/json' } })))
+
+    // The adapter accepts W1 before the live transport is opened.
+    const promise = DERIV_PROVIDER_ADAPTER.getHistoricalCandles!(connection, 'demo-123', 'EURUSD', 'W1', 10)
+    await expect(promise).rejects.toThrow()
+  })
+})
