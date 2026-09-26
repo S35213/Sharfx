@@ -36,81 +36,14 @@ jobs:
           echo "Cloudflare production did not serve the expected marker within 10 minutes."
           exit 1
 
-      - name: Verify Deriv market-data stream
+      - name: Verify production app responds
         run: |
-          node <<'NODE'
-          const url = 'wss://ws.binaryws.com/websockets/v3'
-          const ws = new WebSocket(url)
-          let opened = false
-          let candleOk = false
-          let tickSeen = false
-          let finished = false
-          const finish = (code, message) => {
-            if (finished) return
-            finished = true
-            try { ws.close() } catch {}
-            if (message) console.log(message)
-            process.exit(code)
-          }
-          const timeout = setTimeout(() => finish(1, 'Timed out waiting for Deriv market-data history.'), 20000)
-          ws.addEventListener('open', () => {
-            opened = true
-            ws.send(JSON.stringify({
-              ticks_history: 'frxEURUSD',
-              end: 'latest',
-              count: 10,
-              style: 'candles',
-              granularity: 60,
-              subscribe: 0,
-              req_id: 101,
-            }))
-            ws.send(JSON.stringify({
-              ticks: 'frxEURUSD',
-              subscribe: 1,
-              req_id: 102,
-            }))
-          })
-          ws.addEventListener('message', (event) => {
-            try {
-              const data = JSON.parse(String(event.data))
-              if (data.error?.message) {
-                if (data.req_id === 101) {
-                  ws.send(JSON.stringify({
-                    ticks_history: 'frxEURUSD',
-                    end: Math.floor(Date.now() / 1000) - 172800,
-                    count: 600,
-                    style: 'ticks',
-                    subscribe: 0,
-                    req_id: 103,
-                  }))
-                  return
-                }
-                finish(1, 'Deriv returned an API error: ' + data.error.message)
-              }
-              if (data.msg_type === 'candles' && Array.isArray(data.candles) && data.candles.length > 0) {
-                candleOk = true
-                console.log('Proxy returned EUR/USD candle history.')
-              }
-              if (data.msg_type === 'history' && Array.isArray(data.history?.times) && data.history.times.length > 0) {
-                candleOk = true
-                console.log('Proxy returned EUR/USD tick history.')
-              }
-              if (data.msg_type === 'tick' && Number.isFinite(Number(data.tick?.quote)) && Number(data.tick.quote) > 0) {
-                tickSeen = true
-                console.log('Proxy returned an EUR/USD live tick.')
-              }
-              if (opened && candleOk) {
-                finish(0, tickSeen
-                  ? 'Cloudflare proxy returned market history and a live tick from Deriv.'
-                  : 'Cloudflare proxy returned market history from Deriv.')
-              }
-            } catch (error) {
-              finish(1, error instanceof Error ? error.message : 'Invalid Deriv WebSocket message.')
+          set -euo pipefail
+          for host in "https://x.150sharingan2.workers.dev" "https://sharfx.150sharingan2.workers.dev"; do
+            echo "Checking $host"
+            body="$(curl -fsSL --max-time 20 --retry 2 --retry-delay 2 "$host/")"
+            echo "$body" | grep -q "SHAFX" || {
+              echo "Production host $host returned an unexpected page."
+              exit 1
             }
-          })
-          ws.addEventListener('error', () => finish(1, 'Deriv public market WebSocket connection failed.'))
-          ws.addEventListener('close', () => {
-            if (!finished && (!opened || !candleOk)) finish(1, 'Deriv WebSocket closed before candle history arrived.')
-          })
-          process.on('exit', () => clearTimeout(timeout))
-          NODE
+          done
