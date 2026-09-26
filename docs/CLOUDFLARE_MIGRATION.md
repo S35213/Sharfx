@@ -17,6 +17,7 @@ These findings explain a real and preventable part of the CPU/request usage, but
 - `worker/index.ts` adapts the existing Vercel-style handlers to the Cloudflare Workers Request/Response runtime.
 - Supabase remains the authentication/database provider.
 - Cloudflare Workers serves the Vite static assets and API routes.
+- Deriv public market-data WebSocket traffic is kept separate from authenticated account/trading WebSocket traffic.
 - Secrets/configuration stay in Cloudflare Worker environment variables.
 
 ## Required Cloudflare environment variables
