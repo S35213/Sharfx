@@ -851,7 +851,7 @@ export function TradingAgentPanel({
             </div>
             <div className="flex items-center justify-between gap-2">
               <span>Account affordability ceiling</span>
-              <span className={lotFitsAccount ? 'font-mono text-shafx-success' : 'font-mono text-shafx-danger'}>{accountMarginLotCeiling > 0 ? accountMarginLotCeiling.toFixed(2) + ' lot max' : '—'}</span>
+              <span className={lotFitsAccount ? 'font-mono text-shafx-success' : 'font-mono text-shafx-danger'}>{accountStakeCeiling > 0 ? accountStakeCeiling.toFixed(2) + ' lot max' : '—'}</span>
             </div>
           </div>
         </div>
@@ -860,7 +860,7 @@ export function TradingAgentPanel({
           <div className="mt-3 rounded-xl border border-shafx-danger/25 bg-shafx-danger/[0.055] px-3 py-2.5">
             <div className="flex items-center justify-between gap-2">
               <span className="text-[9px] font-semibold text-shafx-danger">BOT BLOCKED BY ACCOUNT RISK</span>
-              <span className="font-mono text-[9px] text-shafx-danger">{parsedLotSize.toFixed(2)} &gt; {accountMarginLotCeiling.toFixed(2)} lot</span>
+              <span className="font-mono text-[9px] text-shafx-danger">{parsedLotSize.toFixed(2)} &gt; {accountStakeCeiling.toFixed(2)} lot</span>
             </div>
             <p className="mt-1 text-[8px] text-shafx-textMuted">The bot will not execute until the lot fits the account's available account margin.</p>
           </div>
