@@ -34,10 +34,13 @@ export const assessProviderReadiness = (adapter: ProviderAdapter): ProviderReadi
     }
   }
 
-  if (adapter.descriptor.capabilities.funding.deposit !== 'unsupported' && typeof adapter.getDepositInstructions !== 'function') {
+  // Redirect-based funding is intentionally handled by the application UI/provider URL.
+  // Readiness should require adapter funding methods only when SHAFX expects the adapter
+  // itself to produce funding instructions (for example API/manual modes).
+  if (adapter.descriptor.capabilities.funding.deposit === 'api' && typeof adapter.getDepositInstructions !== 'function') {
     missingMethods.push('getDepositInstructions')
   }
-  if (adapter.descriptor.capabilities.funding.withdrawal !== 'unsupported' && typeof adapter.getWithdrawalInstructions !== 'function') {
+  if (adapter.descriptor.capabilities.funding.withdrawal === 'api' && typeof adapter.getWithdrawalInstructions !== 'function') {
     missingMethods.push('getWithdrawalInstructions')
   }
 
