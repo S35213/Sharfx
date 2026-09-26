@@ -3,7 +3,7 @@ import type { AgentContext, AgentDecision, AgentPermission } from './types'
 const permissionText = (permission: AgentPermission): string => {
   if (permission === 'ANALYZE_ONLY') return 'The agent may analyze the market but cannot prepare or place an order.'
   if (permission === 'PREPARE_ONLY') return 'The agent may prepare a trade plan but cannot place it.'
-  if (permission === 'AUTONOMOUS_TRADING') return 'The agent may execute broker trades automatically inside the SHAFX broker. Broker execution is not permitted.'
+  if (permission === 'AUTONOMOUS_TRADING') return 'The agent may execute trades automatically through the connected Deriv account. User-selected account and risk controls apply.'
   return 'The agent may prepare a trade, but explicit user approval is required before execution.'
 }
 
@@ -11,7 +11,7 @@ export const decideAgentAction = (context: AgentContext): AgentDecision => {
   const { tradingContext, preferredSetup, hasOpenPosition, permission, multiTimeframe, learning, research } = context
   const symbol = tradingContext.symbol
   const timeframe = tradingContext.timeframe
-  if (hasOpenPosition) return { state: 'IN_POSITION', action: 'MONITOR_POSITION', permission, symbol, timeframe, setup: preferredSetup, rationale: 'A simulated position is already open. The agent will monitor its risk and invalidation conditions instead of creating another position.', approvalRequired: false, safety: permissionText(permission) }
+  if (hasOpenPosition) return { state: 'IN_POSITION', action: 'MONITOR_POSITION', permission, symbol, timeframe, setup: preferredSetup, rationale: 'A broker position is already open. The agent will monitor its risk and invalidation conditions instead of creating another position.', approvalRequired: false, safety: permissionText(permission) }
   if (!preferredSetup || preferredSetup.status !== 'candidate') return { state: 'NO_TRADE', action: 'WAIT', permission, symbol, timeframe, setup: null, rationale: 'No valid setup currently satisfies the agent rules. Waiting is the active decision.', approvalRequired: false, safety: permissionText(permission) }
 
   const setupBias = preferredSetup.direction === 'BUY' ? 'Bullish' : 'Bearish'
