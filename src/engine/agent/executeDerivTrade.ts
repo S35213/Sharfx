@@ -42,7 +42,7 @@ export const executeDerivTrade = async (input: ExecuteDerivTradeInput): Promise<
   const setup = decision.setup
   if (decision.action !== 'EXECUTE_TRADE' || !setup) return { decision, plan: null, order: null }
 
-  let plan = prepareTradePlan({
+  const plan = prepareTradePlan({
     setup,
     accountBalance: input.accountBalance,
     accountCurrency: input.accountCurrency,
