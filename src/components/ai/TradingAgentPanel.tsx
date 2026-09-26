@@ -239,12 +239,16 @@ export function TradingAgentPanel({
   const [resumePending, setResumePending] = useState(false)
 
   const tradingContext = useMemo(() => {
+    const lastClose = candles[candles.length - 1]?.close
+    const resolvedPrice = Number.isFinite(currentPrice) && currentPrice > 0 ? currentPrice : lastClose
+    if (!candles.length || !Number.isFinite(resolvedPrice) || resolvedPrice <= 0) return null
+
     const swings = findSwingPoints(candles, 2)
     const structure = analyzeMarketStructure(candles, 2)
     const tolerance = symbol.includes('JPY') ? 0.1 : 0.001
     const supportResistance = analyzeSupportResistance(candles, tolerance, swings)
     const liquidity = analyzeLiquidity(candles, swings, tolerance)
-    const setup = analyzeSetup({ currentPrice: candles[candles.length - 1]?.close ?? currentPrice, structure, supportResistance, liquidity })
+    const setup = analyzeSetup({ currentPrice: resolvedPrice, structure, supportResistance, liquidity })
     return buildTradingContext(symbol, timeframe, candles, structure, supportResistance, liquidity, setup)
   }, [candles, currentPrice, symbol, timeframe])
 
@@ -286,8 +290,12 @@ export function TradingAgentPanel({
   const activeBotOrder = activePosition && botOrderIds.includes(activePosition.id) ? activePosition : null
 
   const learning = useMemo(() => learnFromTrades(tradeHistory.filter((trade) => trade.status === 'closed').map((trade) => ({ symbol: trade.symbol, direction: trade.type, profit: trade.profit, riskRewardRatio: trade.riskRewardRatio }))), [tradeHistory])
-  const research = useMemo(() => buildAgentResearch({ context: tradingContext, learning, multiTimeframe }), [learning, multiTimeframe, tradingContext])
-  const setup = tradingContext.setup.preferredSetup
+  const research = useMemo(
+    () => tradingContext ? buildAgentResearch({ context: tradingContext, learning, multiTimeframe }) : null,
+    [learning, multiTimeframe, tradingContext],
+  )
+  const setup = tradingContext?.setup.preferredSetup ?? null
+  const liveContextReady = Boolean(tradingContext && Number.isFinite(currentPrice) && currentPrice > 0)
   const displayedUnitNumber = pendingUnitCompletion ? Math.max(1, cycleUnits) : Math.max(1, cycleUnits + 1)
   const selectedOpportunity = topOpportunities.find((row) => row.timeframe === selectedOpportunityTimeframe) ?? topOpportunities[0] ?? null
   const parsedLotSize = Number(lotSize)
@@ -432,6 +440,14 @@ export function TradingAgentPanel({
           setStatus('BOT ERROR • connect a Deriv account before trading')
           return
         }
+        if (!tradingContext && !activeBotScan) {
+          setStatus('WAIT • waiting for a valid live Deriv price before trading')
+          return
+        }
+        if (!research && !activeBotScan) {
+          setStatus('WAIT • waiting for live market analysis to initialize')
+          return
+        }
         if (!lotSizeValid) {
           setStatus('BOT BLOCKED • choose a valid lot size for ' + symbol)
           setAutoTradingEnabled(false)
@@ -464,8 +480,10 @@ export function TradingAgentPanel({
 
         const result = await executeDerivTrade({
           context: scan
-            ? { tradingContext: scan.context, preferredSetup: scan.setup, hasOpenPosition: false, permission: 'AUTONOMOUS_TRADING', multiTimeframe, learning, research }
-            : { tradingContext, preferredSetup: setup, hasOpenPosition: false, permission: 'AUTONOMOUS_TRADING', multiTimeframe, learning, research },
+            ? { tradingContext: scan.context, preferredSetup: scan.setup, hasOpenPosition: false, permission: 'AUTONOMOUS_TRADING', multiTimeframe, learning, research: research ?? buildAgentResearch({ context: scan.context, learning, multiTimeframe }) }
+            : tradingContext
+              ? { tradingContext, preferredSetup: setup, hasOpenPosition: false, permission: 'AUTONOMOUS_TRADING', multiTimeframe, learning, research: research ?? buildAgentResearch({ context: tradingContext, learning, multiTimeframe }) }
+              : (() => { throw new Error('Live trading context is not ready.') })(),
           accountBalance,
           accountCurrency,
           riskPercent: riskModes[riskMode].percent,
@@ -925,7 +943,7 @@ export function TradingAgentPanel({
         </div>
 
         <div className="mt-3 flex gap-2">
-          <button type="button" disabled={!symbolSpec || phase === 'ANALYZING' || (!autoTradingEnabled && dailyLimitReached)} onClick={autoTradingEnabled ? stopAutomaticTrading : pendingUnitCompletion && !dailyLimitReached ? continueNextUnit : startAutomaticTrading} className={autoTradingEnabled
+          <button type="button" disabled={!symbolSpec || !liveContextReady || phase === 'ANALYZING' || (!autoTradingEnabled && dailyLimitReached)} onClick={autoTradingEnabled ? stopAutomaticTrading : pendingUnitCompletion && !dailyLimitReached ? continueNextUnit : startAutomaticTrading} className={autoTradingEnabled
             ? 'flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-shafx-danger/30 bg-shafx-danger/10 px-3 text-[10px] font-semibold text-shafx-danger shadow-[0_0_22px_rgba(255,92,117,.06)] active:scale-[.99]'
             : 'flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-shafx-accent to-shafx-primaryHover px-3 text-[10px] font-semibold text-white shadow-[0_8px_28px_rgba(124,92,252,.24)] active:scale-[.99]'}>
             {autoTradingEnabled ? <Square className="h-3.5 w-3.5 fill-current" /> : <Play className="h-3.5 w-3.5 fill-current" />}
@@ -1017,7 +1035,7 @@ export function TradingAgentPanel({
         )}
 
         <div className="mt-3 space-y-2">
-          <button type="button" disabled={!symbolSpec || scanPhase === 'ANALYZING'} onClick={rescanBot} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-shafx-accent/35 bg-shafx-accent/10 px-3 text-[10px] font-semibold text-shafx-accent active:scale-[.99] disabled:opacity-40">
+          <button type="button" disabled={!symbolSpec || !liveContextReady || scanPhase === 'ANALYZING'} onClick={rescanBot} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-shafx-accent/35 bg-shafx-accent/10 px-3 text-[10px] font-semibold text-shafx-accent active:scale-[.99] disabled:opacity-40">
             <RefreshCw className={scanPhase === 'ANALYZING' ? 'h-3.5 w-3.5 animate-spin' : 'h-3.5 w-3.5'} />
             {scanPhase === 'ANALYZING' ? 'Scanning market…' : scanComplete ? 'Rescan market' : 'Scan market'}
           </button>
