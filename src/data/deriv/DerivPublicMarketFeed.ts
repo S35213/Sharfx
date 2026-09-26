@@ -26,8 +26,10 @@ export const toDerivSymbol = (symbol: string): string => {
 
 interface DerivTickResponse {
   msg_type?: string
+  req_id?: number
   tick?: { epoch?: number; quote?: number; symbol?: string }
   candles?: Array<{ epoch?: number; open?: number; high?: number; low?: number; close?: number }>
+  history?: { times?: number[]; prices?: number[] }
   error?: { message?: string }
   errors?: Array<{ message?: string }>
 }
@@ -38,6 +40,25 @@ const toCandles = (items: DerivTickResponse['candles']): OHLCV[] => (items ?? []
   if (high! < Math.max(open!, close!) || low! > Math.min(open!, close!) || low! > high!) return []
   return [{ time: Math.trunc(epoch! * 1000), open: open!, high: high!, low: low!, close: close! }]
 })
+
+const toTickCandles = (times: number[] | undefined, prices: number[] | undefined, seconds: number): OHLCV[] => {
+  if (!Array.isArray(times) || !Array.isArray(prices)) return []
+  const buckets = new Map<number, OHLCV>()
+  const length = Math.min(times.length, prices.length)
+  for (let index = 0; index < length; index += 1) {
+    const epoch = Number(times[index])
+    const price = Number(prices[index])
+    if (!Number.isFinite(epoch) || !Number.isFinite(price) || price <= 0) continue
+    const bucket = Math.floor(epoch / seconds) * seconds * 1000
+    const existing = buckets.get(bucket)
+    if (!existing) {
+      buckets.set(bucket, { time: bucket, open: price, high: price, low: price, close: price })
+    } else {
+      buckets.set(bucket, { ...existing, high: Math.max(existing.high, price), low: Math.min(existing.low, price), close: price })
+    }
+  }
+  return [...buckets.values()].sort((a, b) => a.time - b.time).slice(-300)
+}
 
 export class DerivPublicMarketFeed {
   private socket: WebSocket | null = null
@@ -122,6 +143,14 @@ export class DerivPublicMarketFeed {
         const response = JSON.parse(String(event.data)) as DerivTickResponse
         const responseError = response.error?.message ?? response.errors?.find((item) => typeof item?.message === 'string')?.message
         if (responseError) {
+          if (response.req_id === 1) {
+            // Some Deriv gateway variants reject candle-style history while still
+            // allowing ticks. Retry the same history request in tick format instead
+            // of killing the entire live stream.
+            socket.send(JSON.stringify({ ticks_history: this.symbol, end: 'latest', count: 600, style: 'ticks', subscribe: 0, req_id: 3 }))
+            return
+          }
+          if (response.req_id === 3) return
           this.onStatus?.('error', responseError)
           socket.close()
           return
@@ -130,6 +159,15 @@ export class DerivPublicMarketFeed {
           this.candles = toCandles(response.candles).sort((a, b) => a.time - b.time).slice(-300)
           const lastCandle = this.candles[this.candles.length - 1]
           if (lastCandle) this.onUpdate?.(this.candles, lastCandle.close, Math.trunc(lastCandle.time))
+          return
+        }
+        if (response.msg_type === 'history' && response.history) {
+          const candles = toTickCandles(response.history.times, response.history.prices, timeframeSeconds[this.timeframe])
+          if (candles.length) {
+            this.candles = candles
+            const lastCandle = this.candles[this.candles.length - 1]
+            this.onUpdate?.(this.candles, lastCandle.close, Math.trunc(lastCandle.time))
+          }
           return
         }
         if (response.msg_type === 'tick' && response.tick?.quote !== undefined && response.tick.epoch !== undefined) {
