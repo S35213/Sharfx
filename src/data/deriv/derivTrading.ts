@@ -1,6 +1,4 @@
 import type { TradeOrder } from '../../types'
-import type { SetupCandidate } from '../setup/types'
-
 export interface DerivOrderConnection {
   connectionId: string
   accountId: string
@@ -22,7 +20,6 @@ interface PlaceInput {
   riskAmount: number
   rewardAmount: number
   riskRewardRatio: number
-  setup?: SetupCandidate | null
 }
 
 export async function placeDerivContract(input: PlaceInput): Promise<TradeOrder> {
