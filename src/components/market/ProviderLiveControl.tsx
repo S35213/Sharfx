@@ -27,6 +27,7 @@ const toOHLCV = (time: string, open: number, high: number, low: number, close: n
 export const ProviderLiveControl: React.FC<ProviderLiveControlProps> = ({ providerId, connection, symbol, timeframe, onUpdate, onActiveChange }) => {
   const streamRef = useRef<ProviderStreamHandle | null>(null)
   const [status, setStatus] = useState<Status>('waiting')
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
 
   useEffect(() => {
@@ -37,6 +38,7 @@ export const ProviderLiveControl: React.FC<ProviderLiveControlProps> = ({ provid
       if (existing) await existing.close()
     }
     setStatus('waiting')
+    setErrorMessage(null)
     onActiveChange?.(false)
     if (!connection) {
       void closeExisting()
@@ -46,6 +48,7 @@ export const ProviderLiveControl: React.FC<ProviderLiveControlProps> = ({ provid
     const start = async (): Promise<void> => {
       try {
         setStatus('connecting')
+        setErrorMessage(null)
         const adapter = providerRegistry.get(providerId)
         const readiness = assessProviderReadiness(adapter)
         if (!readiness.ready) throw new Error('Provider is not ready.')
@@ -53,7 +56,14 @@ export const ProviderLiveControl: React.FC<ProviderLiveControlProps> = ({ provid
         if (!check.allowed) throw new Error(check.reason || 'The broker connection is not usable.')
         if (typeof adapter.subscribe !== 'function') throw new Error('The selected broker does not provide a live market stream.')
         const stream = await adapter.subscribe(connection, connection.accountId, [symbol], (event) => {
-          if (disposed || event.type !== 'market_snapshot') return
+          if (disposed) return
+          if (event.type === 'error') {
+            setStatus('error')
+            setErrorMessage(event.error instanceof Error ? event.error.message : 'The Deriv market stream reported an error.')
+            onActiveChange?.(false)
+            return
+          }
+          if (event.type !== 'market_snapshot') return
           const candles = event.snapshot.candles.flatMap((candle) => {
             const item = toOHLCV(candle.openTime, candle.open, candle.high, candle.low, candle.close)
             return item ? [item] : []
@@ -67,9 +77,10 @@ export const ProviderLiveControl: React.FC<ProviderLiveControlProps> = ({ provid
         }, timeframe)
         if (disposed) { await stream.close(); return }
         streamRef.current = stream
-      } catch {
+      } catch (error) {
         if (!disposed) {
           setStatus('error')
+          setErrorMessage(error instanceof Error ? error.message : 'The Deriv market stream failed.')
           onActiveChange?.(false)
         }
       }
