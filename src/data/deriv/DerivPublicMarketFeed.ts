@@ -143,14 +143,28 @@ export class DerivPublicMarketFeed {
         const response = JSON.parse(String(event.data)) as DerivTickResponse
         const responseError = response.error?.message ?? response.errors?.find((item) => typeof item?.message === 'string')?.message
         if (responseError) {
+          const marketClosed = /market(?:\s+is)?\s+presently\s+closed/i.test(responseError)
           if (response.req_id === 1) {
-            // Some Deriv gateway variants reject candle-style history while still
-            // allowing ticks. Retry the same history request in tick format instead
-            // of killing the entire live stream.
-            socket.send(JSON.stringify({ ticks_history: this.symbol, end: 'latest', count: 600, style: 'ticks', subscribe: 0, req_id: 3 }))
+            // Candle history may reject "latest" while a market is closed. Retry
+            // against a known historical point so the chart can still render the
+            // latest completed session instead of going blank for the weekend.
+            const fallbackEnd = Math.floor(Date.now() / 1000) - 172800
+            socket.send(JSON.stringify({
+              ticks_history: this.symbol,
+              end: fallbackEnd,
+              count: 600,
+              style: 'ticks',
+              subscribe: 0,
+              req_id: 3,
+            }))
             return
           }
-          if (response.req_id === 3) return
+          if (marketClosed && response.req_id === 2) {
+            // FX ticks are unavailable while the market is closed. Keep the
+            // historical candles and connection alive; live ticks will resume
+            // automatically the next time the socket is opened.
+            return
+          }
           this.onStatus?.('error', responseError)
           socket.close()
           return
