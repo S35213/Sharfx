@@ -13,7 +13,7 @@ jobs:
     steps:
       - name: Wait for the Cloudflare production marker
         env:
-          MARKER: SHAFX-PRODUCTION-LIVE-DATA-FIX-2026-09-26
+          MARKER: SHAFX-PRODUCTION-MARKER-2026-09-26-1149-CLOUDFLARE
         run: |
           set -euo pipefail
           hosts=(
