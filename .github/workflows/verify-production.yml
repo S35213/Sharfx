@@ -77,8 +77,8 @@ jobs:
                 if (data.req_id === 101) {
                   ws.send(JSON.stringify({
                     ticks_history: 'frxEURUSD',
-                    end: 'latest',
-                    count: 300,
+                    end: Math.floor(Date.now() / 1000) - 172800,
+                    count: 600,
                     style: 'ticks',
                     subscribe: 0,
                     req_id: 103,
