@@ -77,6 +77,7 @@ export class DerivPublicMarketFeed {
         const response = JSON.parse(String(event.data)) as DerivTickResponse
         if (response.error?.message) {
           this.onStatus?.('error', response.error.message)
+          socket.close()
           return
         }
         if (response.msg_type === 'candles') {
@@ -97,6 +98,7 @@ export class DerivPublicMarketFeed {
         }
       } catch {
         this.onStatus?.('error', 'Received invalid market-data message.')
+        socket.close()
       }
     }
 

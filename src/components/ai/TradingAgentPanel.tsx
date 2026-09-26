@@ -102,6 +102,7 @@ const buildScanCandidates = (
     const liquidity = analyzeLiquidity(frameCandles, swings, tolerance)
     const framePrice = frameCandles[frameCandles.length - 1]?.close ?? currentPrice
     const setupResult = analyzeSetup({ currentPrice: framePrice, structure, supportResistance, liquidity })
+    if (!Number.isFinite(framePrice) || framePrice <= 0) return []
     const preferredSetup = setupResult.preferredSetup ?? buildFallbackSetup(frameCandles, structure.bias, symbol, framePrice, symbol.includes('JPY') ? 3 : 5)
     if (!preferredSetup || preferredSetup.status !== 'candidate') return []
     const context = buildTradingContext(symbol, scanTimeframe, frameCandles, structure, supportResistance, liquidity, {
