@@ -21,7 +21,7 @@ describe('SHAFX provider catalog', () => {
   })
 
   it('keeps provider execution capabilities explicit', () => {
-    expect(supportsOrderPlacement(byId('deriv'))).toBe(false)
+    expect(supportsOrderPlacement(byId('deriv'))).toBe(true)
     expect(supportsOrderPlacement(byId('binance'))).toBe(false)
     expect(supportsOrderPlacement(byId('oanda'))).toBe(true)
     expect(byId('oanda').executionMode).toBe('external')
