@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { TIMEFRAMES, type OHLCV, type Timeframe } from '../../types'
 import { DerivPublicMarketFeed } from '../../data/deriv/DerivPublicMarketFeed'
 
-const loadDerivCandles = (symbol: string, timeframe: Timeframe, getWebSocketUrl?: () => Promise<string>): Promise<OHLCV[]> => new Promise((resolve, reject) => {
+const loadDerivCandles = (symbol: string, timeframe: Timeframe): Promise<OHLCV[]> => new Promise((resolve, reject) => {
   const feed = new DerivPublicMarketFeed()
   const finish = (result: OHLCV[] | Error): void => {
     feed.disconnect()
@@ -17,7 +17,6 @@ const loadDerivCandles = (symbol: string, timeframe: Timeframe, getWebSocketUrl?
   }
 
   feed.connect(symbol, timeframe, {
-    getWebSocketUrl,
     onUpdate: (candles) => {
       if (candles.length >= 5) finishWithTimer(candles)
     },
@@ -33,7 +32,6 @@ export const useMultiTimeframeCandles = (
   fallbackCandles: OHLCV[],
   baseM1Candles: OHLCV[] = [],
   refreshKey = 0,
-  getWebSocketUrl?: () => Promise<string>,
 ): Partial<Record<Timeframe, OHLCV[]>> => {
   const [frames, setFrames] = useState<Partial<Record<Timeframe, OHLCV[]>>>(
     fallbackCandles.length > 0 ? { [fallbackTimeframe]: fallbackCandles } : {},
@@ -55,7 +53,7 @@ export const useMultiTimeframeCandles = (
     const load = async (): Promise<void> => {
       const results = await Promise.all(TIMEFRAMES.map(async (timeframe) => {
         try {
-          return [timeframe, await loadDerivCandles(symbol, timeframe, getWebSocketUrl)] as const
+          return [timeframe, await loadDerivCandles(symbol, timeframe)] as const
         } catch {
           return [timeframe, []] as const
         }
@@ -70,7 +68,7 @@ export const useMultiTimeframeCandles = (
 
     void load()
     return () => { cancelled = true }
-  }, [baseM1Candles.length, fallbackCandles, fallbackTimeframe, getWebSocketUrl, refreshKey, symbol])
+  }, [baseM1Candles.length, fallbackCandles, fallbackTimeframe, refreshKey, symbol])
 
   return frames
 }
