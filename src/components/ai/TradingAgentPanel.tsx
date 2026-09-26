@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Activity, Bot, Play, RefreshCw, ShieldCheck, Sparkles, Square } from 'lucide-react'
 import { analyzeLiquidity } from '../../engine/liquidity'
-import { calculatePositionProfit } from '../../engine/broker/positionManager'
 import { analyzeMarketStructure, findSwingPoints } from '../../engine/marketStructure'
 import { analyzeSetup } from '../../engine/setup'
 import { calculateRisk } from '../../engine/risk/riskCalculator'
@@ -297,17 +296,8 @@ export function TradingAgentPanel({
     if (!symbolSpec || !botRiskSetup) return null
     return calculateRisk({ accountBalance, accountCurrency, riskPercent: riskModes[riskMode].percent, side: botRiskSetup.direction, entryPrice: botRiskSetup.entryPrice, stopLoss: botRiskSetup.stopLoss, takeProfit: botRiskSetup.takeProfit, symbolSpec, conversionRate })
   }, [accountBalance, accountCurrency, botRiskSetup, conversionRate, riskMode, symbolSpec])
-  const accountMarginLotCeiling = useMemo(() => {
-    if (!symbolSpec || !botRiskSetup || !Number.isFinite(accountBalance) || accountBalance <= 0) return 0
-    let exposurePerLotInAccount = symbolSpec.contractSize
-    if (symbolSpec.quoteCurrency === accountCurrency) exposurePerLotInAccount = symbolSpec.contractSize * botRiskSetup.entryPrice
-    else if (symbolSpec.baseCurrency !== accountCurrency) {
-      if (typeof conversionRate !== 'number' || !Number.isFinite(conversionRate) || conversionRate <= 0) return 0
-      exposurePerLotInAccount = symbolSpec.contractSize * botRiskSetup.entryPrice * conversionRate
-    }
-    return Number((accountBalance * SIMULATOR_LEVERAGE / exposurePerLotInAccount).toFixed(8))
-  }, [accountBalance, accountCurrency, botRiskSetup, conversionRate, symbolSpec])
-  const lotFitsAccount = Boolean(accountMarginLotCeiling > 0 && parsedLotSize > 0 && parsedLotSize <= accountMarginLotCeiling + 1e-8)
+  const accountStakeCeiling = Number.isFinite(accountBalance) && accountBalance > 0 ? Math.max(symbolSpec?.minLotSize ?? 0.01, accountBalance) : 0
+  const lotFitsAccount = Boolean(accountStakeCeiling > 0 && parsedLotSize > 0 && parsedLotSize <= accountStakeCeiling + 1e-8)
   const lotSizeValid = symbolSpec ? Number.isFinite(parsedLotSize) && parsedLotSize >= symbolSpec.minLotSize && parsedLotSize <= symbolSpec.maxLotSize && Math.abs((parsedLotSize / symbolSpec.lotStep) - Math.round(parsedLotSize / symbolSpec.lotStep)) < 1e-8 : false
 
   useEffect(() => {
@@ -325,7 +315,7 @@ export function TradingAgentPanel({
 
   useEffect(() => {
     if (typeof window === 'undefined' || !lotSize.trim()) return
-    window.sessionStorage.setItem('shafx-broker-lot-size', lotSize)
+    window.sessionStorage.setItem('shafx-lot-size', lotSize)
     window.dispatchEvent(new CustomEvent<string>('shafx-lot-size', { detail: lotSize }))
   }, [lotSize])
 
@@ -449,7 +439,7 @@ export function TradingAgentPanel({
           return
         }
         if (!lotFitsAccount) {
-          setStatus('BOT BLOCKED • ' + parsedLotSize.toFixed(2) + ' lot is above the account-affordable ceiling of ' + accountMarginLotCeiling.toFixed(2) + ' lot at ' + SIMULATOR_LEVERAGE + ':1 leverage')
+          setStatus('BOT BLOCKED • ' + parsedLotSize.toFixed(2) + ' lot is above the account-affordable ceiling of ' + accountStakeCeiling.toFixed(2) + ' lot')
           setAutoTradingEnabled(false)
           setPhase('READY')
           return
