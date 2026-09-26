@@ -2,7 +2,6 @@ import type { ProviderAdapter, ProviderCapabilities } from './types'
 
 export type ProviderReadinessIssue =
   | 'MISSING_ADAPTER_METHOD'
-  | 'LIVE_EXECUTION_DISABLED'
 
 export interface ProviderReadinessResult {
   ready: boolean
