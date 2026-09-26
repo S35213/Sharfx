@@ -188,7 +188,7 @@ export const PublicWelcome: React.FC = () => {
             <div className="inline-flex items-center gap-2 rounded-full border border-shafx-accent/20 bg-shafx-accent/5 px-3 py-1.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-shafx-accent"><Sparkles className="h-3 w-3" />Trade with more clarity</div>
             <h1 className="mt-6 text-4xl font-semibold leading-[1.05] tracking-[-0.04em] sm:text-6xl lg:text-7xl">Welcome to <span className="text-shafx-accent">SHARFX.</span></h1>
             <p className="mt-5 max-w-xl text-base leading-7 text-shafx-textMuted sm:text-lg">SHARFX is built to help you trade more easily with AI agents, market intelligence and a professional trading interface — all in one workspace.</p>
-            <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-[10px] text-shafx-textMuted"><span className="flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5 text-shafx-success" />Simulation-first access</span><span className="flex items-center gap-1.5"><LockKeyhole className="h-3.5 w-3.5 text-shafx-accent" />Provider credentials separated</span></div>
+            <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-[10px] text-shafx-textMuted"><span className="flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5 text-shafx-success" />Deriv-powered workspace</span><span className="flex items-center gap-1.5"><LockKeyhole className="h-3.5 w-3.5 text-shafx-accent" />Provider credentials separated</span></div>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">

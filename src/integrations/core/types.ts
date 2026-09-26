@@ -105,6 +105,9 @@ export interface ProviderOrderRequest {
   takeProfit?: number
   timeInForce?: TimeInForce
   clientOrderId?: string
+  currency?: string
+  stake?: number
+  durationSeconds?: number
 }
 
 export interface ProviderOrderResult {

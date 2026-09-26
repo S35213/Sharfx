@@ -17,6 +17,9 @@ import { buildStructuralChartAnnotations } from './components/chart/buildAIChart
 import { Watchlist } from './components/watchlist/Watchlist'
 import { MarketAnalysisPanel } from './components/analysis/MarketAnalysis'
 import { AIAssistantPanel } from './components/ai/AIAssistantPanel'
+import { TradingAgentPanel } from './components/ai/TradingAgentPanel'
+import { OrderPanel } from './components/order/OrderPanel'
+import { closeDerivContract, placeDerivContract } from './data/deriv/derivTrading'
 import { AccountPanel } from './components/account/AccountPanel'
 import { TradesPanel } from './components/trades/TradesPanel'
 import { Toast, type ToastMessage } from './components/common/Toast'
@@ -27,7 +30,8 @@ import { ProviderAccountStreamManager, providerAccountStreamKey } from './data/p
 import { analyzeLiquidity } from './engine/liquidity'
 import { analyzeMarketStructure, findSwingPoints } from './engine/marketStructure'
 import { analyzeSupportResistance } from './engine/supportResistance'
-import type { AccountData, MarketAnalysis, MarketPair, OHLCV, SymbolSpec, TradeOrder } from './types'
+import type { AccountData, MarketAnalysis, MarketPair, OHLCV, SimulatedOrderDraft, SymbolSpec, TradeOrder } from './types'
+import type { SetupCandidate } from './engine/setup/types'
 import { mockWatchlist } from './data/mock/watchlist'
 
 const TerminalContent: React.FC = () => {
@@ -39,9 +43,11 @@ const TerminalContent: React.FC = () => {
   const [accountData, setAccountData] = useState<AccountData | null>(null)
   const [watchlist, setWatchlist] = useState<MarketPair[]>(() => mockWatchlist)
   const [symbolSpec, setSymbolSpec] = useState<SymbolSpec>(() => SYMBOL_SPECS[selectedSymbol] ?? SYMBOL_SPECS['EUR/USD'])
-  const [openPositions] = useState<TradeOrder[]>([])
+  const [openPositions, setOpenPositions] = useState<TradeOrder[]>([])
   const [pendingOrders] = useState<TradeOrder[]>([])
-  const [tradeHistory] = useState<TradeOrder[]>([])
+  const [tradeHistory, setTradeHistory] = useState<TradeOrder[]>([])
+  const [botOrderIds, setBotOrderIds] = useState<string[]>([])
+  const [reviewSetup, setReviewSetup] = useState<SetupCandidate | null>(null)
   const [liveMarketActive, setLiveMarketActive] = useState(false)
   const [chartSettings, setChartSettings] = useState<ChartWorkspaceSettings>(() => readChartWorkspaceSettings())
   const [toast, setToast] = useState<ToastMessage | null>(null)
@@ -249,6 +255,73 @@ const TerminalContent: React.FC = () => {
   const accountModeTone = activeProviderSelection?.environment === 'live' ? 'text-shafx-accent' : 'text-shafx-success'
   const chartToolMode: ChartToolMode = chartTool
 
+  const derivOrderConnection = activeProviderSelection?.connectionId && activeProviderSelection.accountId
+    ? {
+        connectionId: activeProviderSelection.connectionId,
+        accountId: activeProviderSelection.accountId,
+        environment: activeProviderSelection.environment,
+      }
+    : null
+
+  const handleBotOrder = useCallback((order: TradeOrder): void => {
+    setOpenPositions((current) => current.some((item) => item.id === order.id) ? current : [...current, order])
+    setBotOrderIds((current) => current.includes(order.id) ? current : [...current, order.id])
+  }, [])
+
+  const handleClosePosition = useCallback(async (id: string): Promise<TradeOrder | null> => {
+    const existing = openPositions.find((order) => order.id === id) || tradeHistory.find((order) => order.id === id)
+    if (!derivOrderConnection) {
+      pushToast('Connect Deriv before closing a trade.')
+      return null
+    }
+    try {
+      const closed = await closeDerivContract(derivOrderConnection, id, existing)
+      if (!closed) return null
+      setOpenPositions((current) => current.filter((order) => order.id !== id))
+      setTradeHistory((current) => [closed, ...current.filter((order) => order.id !== id)])
+      return closed
+    } catch (error) {
+      pushToast(error instanceof Error ? error.message : 'Unable to close the Deriv trade.')
+      return null
+    }
+  }, [derivOrderConnection, openPositions, pushToast, tradeHistory])
+
+  const handleManualOrder = useCallback(async (draft: SimulatedOrderDraft): Promise<void> => {
+    if (!derivOrderConnection || !accountData) {
+      pushToast('Connect a Deriv account before placing a trade.')
+      return
+    }
+    try {
+      const order = await placeDerivContract({
+        connection: derivOrderConnection,
+        symbol: draft.symbol,
+        side: draft.type,
+        stake: draft.lotSize,
+        multiplier: 10,
+        takeProfitAmount: draft.rewardAmount,
+        stopLossAmount: draft.riskAmount,
+        entryPrice: draft.entryPrice,
+        stopLoss: draft.stopLoss,
+        takeProfit: draft.takeProfit,
+        riskPercent: draft.riskPercent,
+        riskAmount: draft.riskAmount,
+        rewardAmount: draft.rewardAmount,
+        riskRewardRatio: draft.riskRewardRatio,
+      })
+      setOpenPositions((current) => [...current, order])
+      pushToast('Deriv ' + draft.type + ' trade opened.')
+      setReviewSetup(null)
+    } catch (error) {
+      pushToast(error instanceof Error ? error.message : 'Unable to place the Deriv trade.')
+    }
+  }, [accountData, derivOrderConnection, pushToast])
+
+  const handleReviewSetup = useCallback((setup?: SetupCandidate | null): void => {
+    setReviewSetup(setup || null)
+    setMobileTab('chat')
+    setMobileDockOpen(false)
+  }, [])
+
   const openMobileDock = (next: WorkspaceDock): void => {
     const willOpen = dock !== next || !mobileDockOpen
     setMobileDockOpen((open) => dock === next ? !open : true)
@@ -256,9 +329,11 @@ const TerminalContent: React.FC = () => {
     if (!willOpen) setMobileDockOpen(false)
   }
 
-  const showMarket = mobileTab === 'market'
-  const showAgent = mobileTab === 'agent'
+  const showMarket = !['bot', 'history', 'funds', 'account'].includes(mobileTab)
+  const showChat = mobileTab === 'chat'
+  const showBot = mobileTab === 'bot'
   const showHistory = mobileTab === 'history'
+  const showFunds = mobileTab === 'funds'
   const showAccount = mobileTab === 'account'
 
   if (!accountData) {
@@ -278,8 +353,31 @@ const TerminalContent: React.FC = () => {
     insights: <div className="space-y-3">
       <FXMoveMatrix pairs={watchlist} />
       <MarketAnalysisPanel analysis={marketAnalysis} pricePrecision={symbolSpec.pricePrecision} pipSize={symbolSpec.pipSize} currentPrice={currentPrice} timeframe={timeframe} />
-      <AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={liveCandles} />
+<AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={liveCandles} setup={reviewSetup} onReviewSetup={() => handleReviewSetup(reviewSetup)} />
+      <OrderPanel symbol={selectedSymbol} currentPrice={currentPrice} bidPrice={currentPrice} askPrice={currentPrice} accountBalance={accountData?.balance ?? 0} accountCurrency={accountData?.currency ?? 'USD'} symbolSpec={symbolSpec} onSubmitOrder={(draft) => { void handleManualOrder(draft) }} aiSetup={reviewSetup} autoApplyAISetup={Boolean(reviewSetup)} />
     </div>,
+    chat: <div className="space-y-3">
+      <AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={liveCandles} setup={reviewSetup} onReviewSetup={() => handleReviewSetup(reviewSetup)} />
+      <OrderPanel symbol={selectedSymbol} currentPrice={currentPrice} bidPrice={currentPrice} askPrice={currentPrice} accountBalance={accountData.balance} accountCurrency={accountData.currency} symbolSpec={symbolSpec} onSubmitOrder={(draft) => { void handleManualOrder(draft) }} aiSetup={reviewSetup} autoApplyAISetup={Boolean(reviewSetup)} />
+    </div>,
+    bot: <TradingAgentPanel
+      symbol={selectedSymbol}
+      timeframe={timeframe}
+      candles={liveCandles}
+      currentPrice={currentPrice}
+      activePosition={openPositions.find((order) => botOrderIds.includes(order.id)) ?? null}
+      tradeHistory={tradeHistory}
+      accountBalance={accountData.balance}
+      accountCurrency={accountData.currency}
+      symbolSpec={symbolSpec}
+      botOrderIds={botOrderIds}
+      onBotOrder={handleBotOrder}
+      onBotClose={(id) => handleClosePosition(id)}
+      derivConnectionId={activeProviderSelection?.connectionId}
+      derivAccountId={activeProviderSelection?.accountId}
+      derivEnvironment={activeProviderSelection?.environment}
+      onReviewSetup={handleReviewSetup}
+    />,
     liquidity: <LiquidityPanel key={selectedSymbol} symbol={selectedSymbol} price={currentPrice} precision={symbolSpec.pricePrecision} pipSize={symbolSpec.pipSize} candles={liveCandles} />,
     orders: <ProviderCapabilityPanel descriptor={{
       id: 'deriv',
@@ -291,15 +389,15 @@ const TerminalContent: React.FC = () => {
       description: 'Connected Deriv account',
       capabilities: {
         accountRead: true, marketData: true, historicalCandles: true, realtimeMarketData: true, realtimeAccountData: true,
-        positionsRead: false, ordersRead: false, orderPlacement: false, orderCancellation: false, orderModification: false,
-        orderLookupByClientOrderId: false, positionClose: false, multipleAccounts: true, demoAccounts: true, symbolMetadata: false,
+        positionsRead: false, ordersRead: false, orderPlacement: true, orderCancellation: false, orderModification: false,
+        orderLookupByClientOrderId: false, positionClose: true, multipleAccounts: true, demoAccounts: true, symbolMetadata: false,
         funding: { deposit: 'redirect', withdrawal: 'redirect' },
       },
     }} environment={activeProviderSelection?.environment ?? 'demo'} />,
   }
 
   return <div className={'shafx-terminal-root min-h-[100svh] w-full min-w-0 overflow-x-hidden bg-shafx-bg text-shafx-text lg:flex lg:h-[calc(100vh-28px)] lg:flex-col lg:overflow-hidden' + (isLandscapeCompactViewport ? ' shafx-landscape-mode' : '')}>
-    <TopNav symbol={selectedSymbol} price={currentPrice} pricePrecision={symbolSpec.pricePrecision} timeframe={timeframe} onTimeframeChange={setTimeframe} pairs={watchlist} onSelectPair={setSelectedSymbol} view={mobileTab} />
+    <TopNav symbol={selectedSymbol} price={currentPrice} pricePrecision={symbolSpec.pricePrecision} timeframe={timeframe} onTimeframeChange={setTimeframe} pairs={watchlist} onSelectPair={setSelectedSymbol} view={mobileTab === 'history' ? 'history' : mobileTab === 'account' || mobileTab === 'funds' ? 'account' : 'market'} />
     <main className="shafx-mobile-content flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-visible lg:flex-row lg:overflow-hidden">
       <WorkspaceRail tool={chartTool} onToolChange={setChartTool} dock={dock} onDockChange={setDock} />
       <aside className="hidden w-[clamp(210px,20vw,280px)] min-w-0 flex-shrink-0 flex-col gap-3 border-r border-shafx-border bg-shafx-surface/40 p-3 lg:flex lg:overflow-y-auto">
@@ -333,7 +431,7 @@ const TerminalContent: React.FC = () => {
             <button type="button" onClick={() => openMobileDock('orders')} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Account</span><div className="mt-1 text-xs font-semibold">{accountModeLabel}</div></button>
             <button type="button" onClick={() => { setMobileTab('account'); setMobileDockOpen(false) }} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Funding</span><div className="mt-1 text-xs font-semibold">Deposit • Withdraw</div></button>
           </div>
-          <div className="hidden h-56 flex-shrink-0 border-t border-shafx-border bg-shafx-surface/25 p-2 lg:block"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={currentPrice} selectedSymbol={selectedSymbol} onClosePosition={() => undefined} /></div>
+          <div className="hidden h-56 flex-shrink-0 border-t border-shafx-border bg-shafx-surface/25 p-2 lg:block"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={currentPrice} selectedSymbol={selectedSymbol} onClosePosition={(id) => { void handleClosePosition(id) }} /></div>
           {mobileDockOpen && <div id="mobile-market-workspace" className="border-t border-shafx-border bg-shafx-surface p-3 lg:hidden">
             <div className="mb-3 flex items-center justify-between gap-3"><div><div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Market workspace</div><div className="text-sm font-semibold">{dock === 'insights' ? 'Structure & AI' : dock === 'liquidity' ? 'Liquidity' : 'Deriv account'}</div></div><button type="button" onClick={() => setMobileDockOpen(false)} className="min-h-10 rounded-xl border border-shafx-border px-3 text-[10px] font-semibold text-shafx-textMuted">Close</button></div>
             {dockContent[dock === 'agent' || dock === 'research' ? 'insights' : dock]}
@@ -341,12 +439,14 @@ const TerminalContent: React.FC = () => {
         </div>
       </section>
 
-      <aside className={showAgent ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={liveCandles} /><DerivCashierLinks /></div></aside>
-      <aside className={showHistory ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><TradesPanel positionsOnly openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={currentPrice} selectedSymbol={selectedSymbol} onClosePosition={() => undefined} /><DerivCashierLinks /></div></aside>
-      <aside className={showAccount ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><AccountPanel account={accountData} activeProviderSelection={activeProviderSelection} /><DerivCashierLinks /></div></aside>
+      <aside className={showChat ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={liveCandles} setup={reviewSetup} onReviewSetup={() => handleReviewSetup(reviewSetup)} /><OrderPanel symbol={selectedSymbol} currentPrice={currentPrice} bidPrice={currentPrice} askPrice={currentPrice} accountBalance={accountData.balance} accountCurrency={accountData.currency} symbolSpec={symbolSpec} onSubmitOrder={(draft) => { void handleManualOrder(draft) }} aiSetup={reviewSetup} autoApplyAISetup={Boolean(reviewSetup)} /></div></aside>
+      <aside className={showBot ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><TradingAgentPanel symbol={selectedSymbol} timeframe={timeframe} candles={liveCandles} currentPrice={currentPrice} activePosition={openPositions.find((order) => botOrderIds.includes(order.id)) ?? null} tradeHistory={tradeHistory} accountBalance={accountData.balance} accountCurrency={accountData.currency} symbolSpec={symbolSpec} botOrderIds={botOrderIds} onBotOrder={handleBotOrder} onBotClose={(id) => handleClosePosition(id)} derivConnectionId={activeProviderSelection?.connectionId} derivAccountId={activeProviderSelection?.accountId} derivEnvironment={activeProviderSelection?.environment} onReviewSetup={handleReviewSetup} /></aside>
+      <aside className={showHistory ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><TradesPanel positionsOnly openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={currentPrice} selectedSymbol={selectedSymbol} onClosePosition={(id) => { void handleClosePosition(id) }} /></div></aside>
+      <aside className={showFunds ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><DerivCashierLinks /></div></aside>
+      <aside className={showAccount ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><AccountPanel account={accountData} activeProviderSelection={activeProviderSelection} /></div></aside>
 
       <aside className="hidden w-[clamp(300px,28vw,420px)] min-w-0 flex-shrink-0 flex-col overflow-hidden border-l border-shafx-border bg-shafx-surface/50 lg:flex">
-        <div className="flex h-12 flex-shrink-0 items-center justify-between border-b border-shafx-border px-3"><div><div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Workspace panel</div><div className="text-sm font-semibold">{dock === 'insights' ? 'Market intelligence' : dock === 'liquidity' ? 'Liquidity & depth' : 'Deriv account'}</div></div><PanelRight className="h-4 w-4 text-shafx-textMuted" /></div>
+        <div className="flex h-12 flex-shrink-0 items-center justify-between border-b border-shafx-border px-3"><div><div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Workspace panel</div><div className="text-sm font-semibold">{dock === 'insights' ? 'Market intelligence' : dock === 'chat' ? 'Chat & Order Ticket' : dock === 'bot' ? 'SHAFX Bot' : dock === 'liquidity' ? 'Liquidity & depth' : 'Deriv account'}</div></div><PanelRight className="h-4 w-4 text-shafx-textMuted" /></div>
         <div className="min-h-0 flex-1 overflow-y-auto p-3">{dockContent[dock === 'agent' || dock === 'research' ? 'insights' : dock]}</div>
       </aside>
     </main>

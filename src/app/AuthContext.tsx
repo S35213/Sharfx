@@ -70,26 +70,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const signIn = useCallback(async (input: { email: string; password: string }) => {
     setError(null)
-    const result = await authRequest('signin', input)
+    const result = await authRequest('login', input)
     setUser(result.user)
     return result.data ?? {}
   }, [])
 
   const requestVerificationCode = useCallback(async (email: string) => {
     setError(null)
-    const result = await authRequest('request-verification', { email })
+    const result = await authRequest('request-verification-code', { email })
     return result.data ?? {}
   }, [])
 
   const verifyEmailCode = useCallback(async (input: { email: string; code: string }) => {
     setError(null)
-    const result = await authRequest('verify-email', input)
+    const result = await authRequest('verify-email-code', input)
     setUser(result.user)
     return result.data ?? {}
   }, [])
 
   const signOut = useCallback(async () => {
-    try { await authRequest('signout') } finally { setUser(null) }
+    try { await authRequest('logout') } finally { setUser(null) }
   }, [])
 
   const value: AuthContextValue = { user, loading, error, signUp, signIn, requestVerificationCode, verifyEmailCode, signOut, refresh }

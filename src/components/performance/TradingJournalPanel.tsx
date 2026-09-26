@@ -4,7 +4,7 @@ import type { TradeOrder } from '../../types'
 import { formatCurrency, formatTimestamp } from '../../lib/format'
 
 interface Props { tradeHistory: TradeOrder[]; currency: string }
-const storageKey = 'shafx.simulator.journal'
+const storageKey = 'shafx.trading.journal'
 type JournalEntry = { tradeId: string; note: string }
 
 const readNotes = (): JournalEntry[] => {
@@ -38,10 +38,10 @@ export function TradingJournalPanel({ tradeHistory, currency }: Props) {
 
   return <section className="rounded-lg border border-shafx-border bg-shafx-surface p-4 text-sm">
     <div className="flex items-start justify-between gap-3">
-      <div><h3 className="flex items-center gap-2 font-semibold text-shafx-text"><BookOpen className="h-4 w-4 text-shafx-primary" /> Trading journal</h3><p className="mt-1 text-[11px] text-shafx-textMuted">Review completed simulator trades and record what you learned.</p></div>
+      <div><h3 className="flex items-center gap-2 font-semibold text-shafx-text"><BookOpen className="h-4 w-4 text-shafx-primary" /> Trading journal</h3><p className="mt-1 text-[11px] text-shafx-textMuted">Review completed trades and record what you learned.</p></div>
       <span className="rounded border border-shafx-border px-2 py-1 text-[10px] text-shafx-textMuted">DEMO</span>
     </div>
-    {closed.length === 0 ? <div className="mt-3 rounded border border-shafx-border bg-shafx-bg p-4 text-center"><p className="text-xs text-shafx-text">Your journal starts with your first completed simulated trade.</p><p className="mt-1 text-[11px] text-shafx-textMuted">Close a demo trade to get an automatic review and a place for your notes.</p></div> : <div className="mt-3 space-y-3">
+    {closed.length === 0 ? <div className="mt-3 rounded border border-shafx-border bg-shafx-bg p-4 text-center"><p className="text-xs text-shafx-text">Your journal starts with your first completed trade.</p><p className="mt-1 text-[11px] text-shafx-textMuted">Close a Deriv trade to get an automatic review and a place for your notes.</p></div> : <div className="mt-3 space-y-3">
       <label className="block text-[10px] uppercase tracking-wider text-shafx-textMuted" htmlFor="journal-trade">Trade to review</label>
       <select id="journal-trade" value={selected?.id ?? ''} onChange={(event) => setSelectedId(event.target.value)} className="min-h-11 w-full rounded border border-shafx-border bg-shafx-bg px-3 text-xs text-shafx-text">{closed.map((trade) => <option key={trade.id} value={trade.id}>{trade.id} • {trade.symbol} • {formatCurrency(trade.profit ?? 0, currency)}</option>)}</select>
       {selected && <div className="rounded border border-shafx-border bg-shafx-bg p-3">
@@ -53,7 +53,7 @@ export function TradingJournalPanel({ tradeHistory, currency }: Props) {
       <div><label className="block text-[10px] uppercase tracking-wider text-shafx-textMuted" htmlFor="journal-note">Your note</label><textarea id="journal-note" key={selected?.id} defaultValue={selectedNote} onBlur={(event) => saveNote(event.currentTarget.value)} placeholder="What did you learn from this trade?" className="mt-1 min-h-20 w-full resize-y rounded border border-shafx-border bg-shafx-bg p-3 text-xs text-shafx-text placeholder:text-shafx-textMuted" /></div>
       <p className="flex items-center gap-1 text-[10px] text-shafx-textMuted"><Save className="h-3 w-3" />Notes are saved locally on this device.</p>
     </div>}
-    <p className="mt-3 text-[10px] text-shafx-textMuted">SIMULATED — NOT FINANCIAL ADVICE. Journal reviews are educational and do not predict future performance.</p>
+    <p className="mt-3 text-[10px] text-shafx-textMuted">LIVE DERIV TRADE REVIEW — NOT FINANCIAL ADVICE. Journal reviews are educational and do not predict future performance.</p>
   </section>
 }
 

@@ -1,15 +1,16 @@
 import React, { useEffect, useState } from 'react'
-import { BarChart3, Brain, History, UserCircle } from 'lucide-react'
+import { MessageCircle, Bot, History, WalletCards, UserCircle } from 'lucide-react'
 import { readChartWorkspaceSettings, CHART_SETTINGS_EVENT, type ChartWorkspaceSettings } from '../../app/chartSettings'
 
-export type MobileNavTab = 'market' | 'agent' | 'history' | 'account'
+export type MobileNavTab = 'market' | 'chat' | 'bot' | 'history' | 'funds' | 'account'
 
 interface MobileNavProps { activeTab: MobileNavTab; onChange: (tab: MobileNavTab) => void }
 
 const items: Array<{ id: MobileNavTab; label: string; icon: React.ElementType }> = [
-  { id: 'market', label: 'Market', icon: BarChart3 },
-  { id: 'agent', label: 'AI', icon: Brain },
-  { id: 'history', label: 'Orders', icon: History },
+  { id: 'chat', label: 'Chat', icon: MessageCircle },
+  { id: 'bot', label: 'Bot', icon: Bot },
+  { id: 'history', label: 'History', icon: History },
+  { id: 'funds', label: 'Funds', icon: WalletCards },
   { id: 'account', label: 'Account', icon: UserCircle },
 ]
 
@@ -53,7 +54,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({ activeTab, onChange }) => 
 
   return (
     <nav aria-label="Terminal navigation" className={"shafx-mobile-nav fixed inset-x-0 bottom-0 z-[70] border-t border-shafx-border bg-[#080C12]/98 px-2 pb-[env(safe-area-inset-bottom)] shadow-[0_-18px_44px_rgba(0,0,0,.42)] backdrop-blur-xl " + (hidden ? "translate-y-full transition-transform duration-300 ease-out" : "translate-y-0 transition-transform duration-200 ease-out") + " lg:hidden"}>
-      <div className="mx-auto grid max-w-xl grid-cols-4 gap-1.5 px-1 py-1.5">
+      <div className="mx-auto grid max-w-2xl grid-cols-5 gap-1.5 px-1 py-1.5">
         {items.map(({ id, label, icon: Icon }) => {
           const active = activeTab === id
           return <button key={id} type="button" aria-current={active ? 'page' : undefined} onClick={() => { setHidden(false); if (active && id !== 'market') onChange('market'); else onChange(id) }} className={active ? 'flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-xl bg-shafx-accent/10 text-shafx-accent ring-1 ring-inset ring-shafx-accent/20' : 'flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-xl text-shafx-textMuted active:bg-shafx-surfaceHover'}>

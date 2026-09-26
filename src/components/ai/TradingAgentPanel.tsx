@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Activity, Bot, Play, RefreshCw, ShieldCheck, Sparkles, Square } from 'lucide-react'
 import { analyzeLiquidity } from '../../engine/liquidity'
-import { calculatePositionProfit } from '../../engine/simulator/positionManager'
 import { analyzeMarketStructure, findSwingPoints } from '../../engine/marketStructure'
 import { analyzeSetup } from '../../engine/setup'
 import { calculateRisk } from '../../engine/risk/riskCalculator'
 import { analyzeSupportResistance } from '../../engine/supportResistance'
 import { buildTradingContext } from '../../engine/ai/context'
-import { analyzeMultiTimeframeBias, buildAgentResearch, executeSimulationTrade, learnFromTrades, useMultiTimeframeCandles } from '../../engine/agent'
+import { analyzeMultiTimeframeBias, buildAgentResearch, executeDerivTrade, learnFromTrades, useMultiTimeframeCandles } from '../../engine/agent'
 import { BOT_CYCLES_PER_UNIT, BOT_PLANS, type BotPlan } from '../../engine/agent/botPlans'
 import type { OHLCV, SymbolSpec, Timeframe, TradeOrder } from '../../types'
 
@@ -20,6 +19,9 @@ interface Props {
   tradeHistory: TradeOrder[]
   accountBalance?: number
   accountCurrency?: string
+  derivConnectionId?: string
+  derivAccountId?: string
+  derivEnvironment?: 'demo' | 'live'
   symbolSpec?: SymbolSpec | null
   conversionRate?: number
   botPlan?: BotPlan
@@ -35,9 +37,9 @@ interface Props {
 
 type RiskMode = 'SAFE' | 'NORMAL' | 'EXTREME'
 const riskModes: Record<RiskMode, { label: string; percent: number; description: string }> = {
-  SAFE: { label: 'Safe', percent: 0.25, description: 'Conservative simulated risk' },
-  NORMAL: { label: 'Normal', percent: 0.5, description: 'Balanced simulated risk' },
-  EXTREME: { label: 'Extreme', percent: 1, description: 'Highest simulated risk profile' },
+  SAFE: { label: 'Safe', percent: 0.25, description: 'Conservative broker risk' },
+  NORMAL: { label: 'Normal', percent: 0.5, description: 'Balanced broker risk' },
+  EXTREME: { label: 'Extreme', percent: 1, description: 'Highest broker risk profile' },
 }
 type Phase = 'READY' | 'ANALYZING' | 'RUNNING'
 const SCAN_TIMEFRAMES: Timeframe[] = ['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1', 'W1']
@@ -47,7 +49,6 @@ const BOT_CYCLE_SECONDS = 10 as const
 const BOT_RESULT_DELAY_MS = BOT_CYCLE_SECONDS * 1000
 const BOT_START_DELAY_MS = 1000 as const
 const BOT_RESULT_DISPLAY_MS = 1000 as const
-const SIMULATOR_LEVERAGE = 100
 
 const buildFallbackSetup = (frameCandles: OHLCV[], structureBias: 'Bullish' | 'Bearish' | 'Sideways' | 'Unclear', symbol: string, currentPrice: number, precision: number): import('../../engine/setup/types').SetupCandidate | null => {
   if ((structureBias !== 'Bullish' && structureBias !== 'Bearish') || frameCandles.length < 8) return null
@@ -80,7 +81,7 @@ const buildFallbackSetup = (frameCandles: OHLCV[], structureBias: 'Bullish' | 'B
     rewardDistance,
     confidence,
     rationale: ['Market structure is directional on this timeframe.', `Recent candle direction aligned ${Math.round(consistency * 100)}% with the structural flow.`],
-    invalidation: 'The simulated stop loss invalidates this setup.',
+    invalidation: 'The stop loss invalidates this setup.',
     liquidityTarget: null,
   }
 }
@@ -178,6 +179,9 @@ export function TradingAgentPanel({
   tradeHistory,
   accountBalance = 10000,
   accountCurrency = 'USD',
+  derivConnectionId = '',
+  derivAccountId = '',
+  derivEnvironment = 'demo',
   symbolSpec = null,
   conversionRate,
   botPlan = 'FREE',
@@ -191,7 +195,7 @@ export function TradingAgentPanel({
   botAutostartKey = 'shafx-bot-autostart',
 }: Props) {
   const plan = BOT_PLANS[botPlan]
-  const readStoredLotSize = (): string => typeof window !== 'undefined' ? window.sessionStorage.getItem('shafx-simulator-lot-size') || '0.10' : '0.10'
+  const readStoredLotSize = (): string => typeof window !== 'undefined' ? window.sessionStorage.getItem('shafx-broker-lot-size') || '0.10' : '0.10'
   const [lotSize, setLotSize] = useState(readStoredLotSize)
   const [phase, setPhase] = useState<Phase>('READY')
   const [scanPhase, setScanPhase] = useState<Phase>('READY')
@@ -292,17 +296,8 @@ export function TradingAgentPanel({
     if (!symbolSpec || !botRiskSetup) return null
     return calculateRisk({ accountBalance, accountCurrency, riskPercent: riskModes[riskMode].percent, side: botRiskSetup.direction, entryPrice: botRiskSetup.entryPrice, stopLoss: botRiskSetup.stopLoss, takeProfit: botRiskSetup.takeProfit, symbolSpec, conversionRate })
   }, [accountBalance, accountCurrency, botRiskSetup, conversionRate, riskMode, symbolSpec])
-  const accountMarginLotCeiling = useMemo(() => {
-    if (!symbolSpec || !botRiskSetup || !Number.isFinite(accountBalance) || accountBalance <= 0) return 0
-    let exposurePerLotInAccount = symbolSpec.contractSize
-    if (symbolSpec.quoteCurrency === accountCurrency) exposurePerLotInAccount = symbolSpec.contractSize * botRiskSetup.entryPrice
-    else if (symbolSpec.baseCurrency !== accountCurrency) {
-      if (typeof conversionRate !== 'number' || !Number.isFinite(conversionRate) || conversionRate <= 0) return 0
-      exposurePerLotInAccount = symbolSpec.contractSize * botRiskSetup.entryPrice * conversionRate
-    }
-    return Number((accountBalance * SIMULATOR_LEVERAGE / exposurePerLotInAccount).toFixed(8))
-  }, [accountBalance, accountCurrency, botRiskSetup, conversionRate, symbolSpec])
-  const lotFitsAccount = Boolean(accountMarginLotCeiling > 0 && parsedLotSize > 0 && parsedLotSize <= accountMarginLotCeiling + 1e-8)
+  const accountStakeCeiling = Number.isFinite(accountBalance) && accountBalance > 0 ? Math.max(symbolSpec?.minLotSize ?? 0.01, accountBalance) : 0
+  const lotFitsAccount = Boolean(accountStakeCeiling > 0 && parsedLotSize > 0 && parsedLotSize <= accountStakeCeiling + 1e-8)
   const lotSizeValid = symbolSpec ? Number.isFinite(parsedLotSize) && parsedLotSize >= symbolSpec.minLotSize && parsedLotSize <= symbolSpec.maxLotSize && Math.abs((parsedLotSize / symbolSpec.lotStep) - Math.round(parsedLotSize / symbolSpec.lotStep)) < 1e-8 : false
 
   useEffect(() => {
@@ -320,7 +315,7 @@ export function TradingAgentPanel({
 
   useEffect(() => {
     if (typeof window === 'undefined' || !lotSize.trim()) return
-    window.sessionStorage.setItem('shafx-simulator-lot-size', lotSize)
+    window.sessionStorage.setItem('shafx-lot-size', lotSize)
     window.dispatchEvent(new CustomEvent<string>('shafx-lot-size', { detail: lotSize }))
   }, [lotSize])
 
@@ -430,11 +425,11 @@ export function TradingAgentPanel({
         if (!autoTradingEnabled || phase !== 'RUNNING') return
         if (resumePending && !activeBotOrder && !botPositionId && !botDisplayedOrder) setResumePending(false)
         if (activeBotOrder || botPositionId || botDisplayedOrder) {
-          setStatus('MONITORING • waiting for the current simulated bot round to close')
+          setStatus('MONITORING • waiting for the current broker trade round to close')
           return
         }
-        if (!symbolSpec || !onBotOrder) {
-          setStatus('BOT ERROR • simulator order engine is not ready')
+        if (!symbolSpec || !onBotOrder || !derivConnectionId || !derivAccountId) {
+          setStatus('BOT ERROR • connect a Deriv account before trading')
           return
         }
         if (!lotSizeValid) {
@@ -444,7 +439,7 @@ export function TradingAgentPanel({
           return
         }
         if (!lotFitsAccount) {
-          setStatus('BOT BLOCKED • ' + parsedLotSize.toFixed(2) + ' lot is above the account-affordable ceiling of ' + accountMarginLotCeiling.toFixed(2) + ' lot at ' + SIMULATOR_LEVERAGE + ':1 leverage')
+          setStatus('BOT BLOCKED • ' + parsedLotSize.toFixed(2) + ' lot is above the account-affordable ceiling of ' + accountStakeCeiling.toFixed(2) + ' lot')
           setAutoTradingEnabled(false)
           setPhase('READY')
           return
@@ -465,19 +460,21 @@ export function TradingAgentPanel({
         setLastResult(null)
         setStatus(scan
           ? 'BOT ANALYSIS • ' + scan.setup.direction + ' on ' + scan.timeframe + ' • confidence ' + scan.setup.confidence + '%'
-          : 'BOT ANALYSIS • using the current independent simulator context…')
+          : 'BOT ANALYSIS • using the current independent broker context…')
 
-        const result = executeSimulationTrade({
+        const result = await executeDerivTrade({
           context: scan
-            ? { tradingContext: scan.context, preferredSetup: scan.setup, hasOpenPosition: false, permission: 'AUTONOMOUS_SIMULATION', multiTimeframe, learning, research }
-            : { tradingContext, preferredSetup: setup, hasOpenPosition: false, permission: 'AUTONOMOUS_SIMULATION', multiTimeframe, learning, research },
+            ? { tradingContext: scan.context, preferredSetup: scan.setup, hasOpenPosition: false, permission: 'AUTONOMOUS_TRADING', multiTimeframe, learning, research }
+            : { tradingContext, preferredSetup: setup, hasOpenPosition: false, permission: 'AUTONOMOUS_TRADING', multiTimeframe, learning, research },
           accountBalance,
           accountCurrency,
           riskPercent: riskModes[riskMode].percent,
           symbolSpec,
           conversionRate,
           lotSize: botLotSize,
-          allowSimulationFallback: true,
+          connectionId: derivConnectionId,
+          accountId: derivAccountId,
+          environment: derivEnvironment,
         })
 
         const order = result.order
@@ -503,37 +500,11 @@ export function TradingAgentPanel({
 
         if (tradeCloseTimer.current) window.clearTimeout(tradeCloseTimer.current)
         tradeCloseTimer.current = window.setTimeout(async () => {
-          const rawExitPrice = currentPriceRef.current
-          const m1Frame = timeframeFrames.M1 ?? []
-          const latestM1 = m1Frame[m1Frame.length - 1]?.close
-          const previousM1 = m1Frame[m1Frame.length - 2]?.close
-          const microDirection = typeof latestM1 === 'number' && typeof previousM1 === 'number'
-            ? Math.sign(latestM1 - previousM1)
-            : 0
-          const minimumMove = Math.max(symbolSpec.pipSize / 10, Math.pow(10, -symbolSpec.pricePrecision))
-          const roundedSamePrice = Number(rawExitPrice.toFixed(symbolSpec.pricePrecision)) === Number(order.entryPrice.toFixed(symbolSpec.pricePrecision))
-          const exitNudgeDirection = microDirection !== 0
-            ? microDirection
-            : order.type === 'BUY' ? 1 : -1
-          const exitPrice = roundedSamePrice
-            ? Number((rawExitPrice + exitNudgeDirection * minimumMove).toFixed(symbolSpec.pricePrecision))
-            : rawExitPrice
-          const profit = (() => {
-            try {
-              return calculatePositionProfit(order, exitPrice, symbolSpec, conversionRate)
-            } catch {
-              const directionDelta = (exitPrice - order.entryPrice) * (order.type === 'BUY' ? 1 : -1)
-              return Number(directionDelta.toFixed(2))
-            }
-          })()
+          const exitPrice = currentPriceRef.current
 
-          // The displayed WIN/LOSS must come from a trade that is actually
-          // closed in the parent order store. Previously the bot announced the
-          // result first and fired close asynchronously, allowing an open order
-          // to remain behind in the Market/Orders panels.
           const closed = await onBotClose?.(order.id, exitPrice)
           if (!closed) {
-            setStatus('BOT ERROR • round result was calculated but the simulated position did not close.')
+            setStatus('BOT ERROR • round result was calculated but the broker position did not close.')
             setLastResult('WAIT')
             setBotDisplayedOrder(order)
             setBotPositionId(order.id)
@@ -542,7 +513,7 @@ export function TradingAgentPanel({
             return
           }
 
-          const closedProfit = closed.profit ?? profit
+          const closedProfit = Number(closed.profit ?? 0)
           const result = closedProfit >= 0 ? 'WIN' : 'LOSS'
           processedHistory.current.add(order.id)
           setBotDisplayedOrder(null)
@@ -595,7 +566,7 @@ export function TradingAgentPanel({
       } catch (error) {
         setAutoTradingEnabled(false)
         setPhase('READY')
-        setStatus('BOT ERROR • ' + (error instanceof Error ? error.message : 'Unable to open simulator trade'))
+        setStatus('BOT ERROR • ' + (error instanceof Error ? error.message : 'Unable to open broker trade'))
       } finally {
         runInFlightRef.current = false
       }
@@ -671,7 +642,7 @@ export function TradingAgentPanel({
     setBotDisplayedOrder(activeBotOrder)
     setTradeCloseAt(Date.now() + BOT_RESULT_DELAY_MS)
     setTradeSecondsLeft(BOT_CYCLE_SECONDS)
-    setStatus('BOT RESUMING • settling restored simulated trade, then continuing…')
+    setStatus('BOT RESUMING • settling restored trade, then continuing…')
     if (tradeCloseTimer.current) window.clearTimeout(tradeCloseTimer.current)
     tradeCloseTimer.current = window.setTimeout(async () => {
       const closed = await onBotClose?.(activeBotOrder.id)
@@ -880,7 +851,7 @@ export function TradingAgentPanel({
             </div>
             <div className="flex items-center justify-between gap-2">
               <span>Account affordability ceiling</span>
-              <span className={lotFitsAccount ? 'font-mono text-shafx-success' : 'font-mono text-shafx-danger'}>{accountMarginLotCeiling > 0 ? accountMarginLotCeiling.toFixed(2) + ' lot max' : '—'}</span>
+              <span className={lotFitsAccount ? 'font-mono text-shafx-success' : 'font-mono text-shafx-danger'}>{accountStakeCeiling > 0 ? accountStakeCeiling.toFixed(2) + ' lot max' : '—'}</span>
             </div>
           </div>
         </div>
@@ -888,10 +859,10 @@ export function TradingAgentPanel({
         {!lotFitsAccount && lotSizeValid && botRiskCalc?.isValid && (
           <div className="mt-3 rounded-xl border border-shafx-danger/25 bg-shafx-danger/[0.055] px-3 py-2.5">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[9px] font-semibold text-shafx-danger">BOT BLOCKED BY ACCOUNT MARGIN</span>
-              <span className="font-mono text-[9px] text-shafx-danger">{parsedLotSize.toFixed(2)} &gt; {accountMarginLotCeiling.toFixed(2)} lot</span>
+              <span className="text-[9px] font-semibold text-shafx-danger">BOT BLOCKED BY ACCOUNT RISK</span>
+              <span className="font-mono text-[9px] text-shafx-danger">{parsedLotSize.toFixed(2)} &gt; {accountStakeCeiling.toFixed(2)} lot</span>
             </div>
-            <p className="mt-1 text-[8px] text-shafx-textMuted">The bot will not execute until the lot fits the account's available simulated margin.</p>
+            <p className="mt-1 text-[8px] text-shafx-textMuted">The bot will not execute until the lot fits the account's available account margin.</p>
           </div>
         )}
 
@@ -902,7 +873,7 @@ export function TradingAgentPanel({
               <div className="min-w-0 flex-1">
                 <div className="font-mono text-[8px] font-semibold uppercase tracking-[0.17em] text-shafx-accent">PREPARING NEXT ROUND</div>
                 <div className="mt-1 text-sm font-semibold">Checking lower timeframes first</div>
-                <p className="mt-1 text-[9px] leading-4 text-shafx-textMuted">The execution bot scans independently before it opens a simulated position.</p>
+                <p className="mt-1 text-[9px] leading-4 text-shafx-textMuted">The execution bot scans independently before it opens a broker position.</p>
               </div>
             </div>
           </div>
@@ -964,7 +935,7 @@ export function TradingAgentPanel({
         </div>
 
         <div className="mt-2 flex items-center justify-between gap-2 rounded-lg border border-shafx-border bg-shafx-bg/60 px-2.5 py-2 text-[8px] text-shafx-textMuted">
-          <span className="flex min-w-0 items-center gap-1.5"><ShieldCheck className="h-3 w-3 text-shafx-success" />Simulator only • no broker orders</span>
+          <span className="flex min-w-0 items-center gap-1.5"><ShieldCheck className="h-3 w-3 text-shafx-success" />Broker only • no broker orders</span>
           <span className="font-mono">{status}</span>
         </div>
       </section>
