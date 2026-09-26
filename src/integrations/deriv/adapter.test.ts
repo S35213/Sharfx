@@ -10,7 +10,10 @@ const connection: ProviderConnection = {
   state: 'connected',
 }
 
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+})
 
 describe('Deriv provider adapter account discovery', () => {
   it('normalizes the authenticated accounts response without exposing provider-specific fields', async () => {
@@ -48,7 +51,6 @@ describe('Deriv provider adapter account discovery', () => {
   })
 })
 
-
 describe('Deriv provider funding and readiness capabilities', () => {
   it('exposes official cashier redirect instructions', async () => {
     const deposit = await DERIV_PROVIDER_ADAPTER.getDepositInstructions!(connection, 'demo-123')
@@ -64,16 +66,54 @@ describe('Deriv provider funding and readiness capabilities', () => {
     })
   })
 
-  it('advertises W1 as a supported SHAFX timeframe', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      ok: true,
-      data: {
-        url: 'wss://api.derivws.com/trading/v1/options/ws/demo?otp=test',
-      },
-    }), { status: 200, headers: { 'content-type': 'application/json' } })))
+  it('supports W1 historical candles without opening a real network connection', async () => {
+    class FakeWebSocket {
+      static readonly OPEN = 1
+      readyState = FakeWebSocket.OPEN
+      onopen: (() => void) | null = null
+      onmessage: ((event: MessageEvent) => void) | null = null
+      onerror: (() => void) | null = null
+      onclose: (() => void) | null = null
 
-    // The adapter accepts W1 before the live transport is opened.
-    const promise = DERIV_PROVIDER_ADAPTER.getHistoricalCandles!(connection, 'demo-123', 'EURUSD', 'W1', 10)
-    await expect(promise).rejects.toThrow()
+      constructor(_url: string) {
+        queueMicrotask(() => this.onopen?.())
+      }
+
+      send(raw: string): void {
+        const request = JSON.parse(raw) as { req_id?: number; msg_type?: string }
+        if (request.req_id !== 1) return
+        queueMicrotask(() => this.onmessage?.({
+          data: JSON.stringify({
+            msg_type: 'candles',
+            candles: [{
+              epoch: 1700000000,
+              open: 1.08,
+              high: 1.09,
+              low: 1.07,
+              close: 1.085,
+            }],
+          }),
+        } as MessageEvent))
+      }
+
+      close(): void {
+        this.readyState = 3
+        this.onclose?.()
+      }
+    }
+
+    vi.stubGlobal('WebSocket', FakeWebSocket as unknown as typeof WebSocket)
+
+    const candles = await DERIV_PROVIDER_ADAPTER.getHistoricalCandles!(connection, 'demo-123', 'EURUSD', 'W1', 10)
+
+    expect(candles).toHaveLength(1)
+    expect(candles[0]).toMatchObject({
+      symbol: 'EURUSD',
+      timeframe: 'W1',
+      open: 1.08,
+      high: 1.09,
+      low: 1.07,
+      close: 1.085,
+    })
   })
 })
