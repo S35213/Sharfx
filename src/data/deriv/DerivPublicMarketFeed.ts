@@ -77,10 +77,9 @@ export class DerivPublicMarketFeed {
     if (this.webSocketUrlProvider) {
       try {
         wsUrl = await this.webSocketUrlProvider()
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unable to obtain the authenticated Deriv market stream.'
-        this.onStatus?.('error', message)
-        // Public market data remains a safe fallback when the authenticated URL cannot be obtained.
+      } catch {
+        // Read-only market data does not require account authentication.
+        // Keep the market stream healthy by silently falling back to Deriv's public feed.
         wsUrl = DERIV_PUBLIC_WS_URL
       }
     }
