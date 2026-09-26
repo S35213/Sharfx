@@ -110,7 +110,7 @@ export const AccountAccessGate: React.FC<Props> = ({ onConnected }) => {
                     <Check className="h-4 w-4" />
                   </span>
                 </div>
-                <div className="mt-3 flex items-center gap-1.5 text-[9px] font-semibold " + (available ? "text-shafx-accent" : "text-shafx-textMuted")}>{available ? (connecting ? "Opening Deriv…" : "Tap to continue") : "Broker integration is being prepared."}<ChevronRight className="h-3 w-3" /></div>
+                <div className={"mt-3 flex items-center gap-1.5 text-[9px] font-semibold " + (available ? "text-shafx-accent" : "text-shafx-textMuted")}>{available ? (connecting ? "Opening Deriv…" : "Tap to continue") : "Broker integration is being prepared."}<ChevronRight className="h-3 w-3" /></div>
               </button>
             })}
           </div>
