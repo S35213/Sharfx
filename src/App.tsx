@@ -17,6 +17,9 @@ import { buildStructuralChartAnnotations } from './components/chart/buildAIChart
 import { Watchlist } from './components/watchlist/Watchlist'
 import { MarketAnalysisPanel } from './components/analysis/MarketAnalysis'
 import { AIAssistantPanel } from './components/ai/AIAssistantPanel'
+import { TradingAgentPanel } from './components/ai/TradingAgentPanel'
+import { OrderPanel } from './components/order/OrderPanel'
+import { closeDerivContract, placeDerivContract } from './data/deriv/derivTrading'
 import { AccountPanel } from './components/account/AccountPanel'
 import { TradesPanel } from './components/trades/TradesPanel'
 import { Toast, type ToastMessage } from './components/common/Toast'
@@ -27,7 +30,7 @@ import { ProviderAccountStreamManager, providerAccountStreamKey } from './data/p
 import { analyzeLiquidity } from './engine/liquidity'
 import { analyzeMarketStructure, findSwingPoints } from './engine/marketStructure'
 import { analyzeSupportResistance } from './engine/supportResistance'
-import type { AccountData, MarketAnalysis, MarketPair, OHLCV, SymbolSpec, TradeOrder } from './types'
+import type { AccountData, MarketAnalysis, MarketPair, OHLCV, SimulatedOrderDraft, SymbolSpec, TradeOrder } from './types'
 import { mockWatchlist } from './data/mock/watchlist'
 
 const TerminalContent: React.FC = () => {
@@ -39,9 +42,11 @@ const TerminalContent: React.FC = () => {
   const [accountData, setAccountData] = useState<AccountData | null>(null)
   const [watchlist, setWatchlist] = useState<MarketPair[]>(() => mockWatchlist)
   const [symbolSpec, setSymbolSpec] = useState<SymbolSpec>(() => SYMBOL_SPECS[selectedSymbol] ?? SYMBOL_SPECS['EUR/USD'])
-  const [openPositions] = useState<TradeOrder[]>([])
+  const [openPositions, setOpenPositions] = useState<TradeOrder[]>([])
   const [pendingOrders] = useState<TradeOrder[]>([])
-  const [tradeHistory] = useState<TradeOrder[]>([])
+  const [tradeHistory, setTradeHistory] = useState<TradeOrder[]>([])
+  const [botOrderIds, setBotOrderIds] = useState<string[]>([])
+  const [reviewSetup, setReviewSetup] = useState<import('./engine/setup/types').SetupCandidate | null>(null)
   const [liveMarketActive, setLiveMarketActive] = useState(false)
   const [chartSettings, setChartSettings] = useState<ChartWorkspaceSettings>(() => readChartWorkspaceSettings())
   const [toast, setToast] = useState<ToastMessage | null>(null)
