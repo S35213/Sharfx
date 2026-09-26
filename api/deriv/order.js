@@ -100,9 +100,11 @@ const place = async (req) => {
   const order = req.body?.order && typeof req.body.order === 'object' ? req.body.order : {}
   const symbol = String(order.symbol || '')
   const side = order.side === 'SELL' ? 'SELL' : 'BUY'
-  const currency = String(order.currency || '')
   const stake = Number(order.stake ?? order.quantity)
   const durationSeconds = Math.max(5, Math.min(3600, Math.trunc(Number(order.durationSeconds) || 30)))
+  const accountResponse = await fetch(DERIV_API + '/accounts/' + encodeURIComponent(accountId), { headers: { Authorization: 'Bearer ' + token } })
+  const accountPayload = await accountResponse.json().catch(() => ({}))
+  const currency = String(order.currency || accountPayload?.data?.currency || '')
   if (!symbol || !currency || !Number.isFinite(stake) || stake <= 0) throw new Error('Deriv trade requires a valid symbol, currency and stake.')
   const wsUrl = await requestWebSocketUrl(token, accountId)
 
