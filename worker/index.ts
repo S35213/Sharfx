@@ -41,7 +41,7 @@ const handleDerivPublicMarketWebSocket = async (request: Request): Promise<Respo
   const server = pair[1]
   server.accept()
 
-  const upstreamResponse = await fetch('https://ws.binaryws.com/websockets/v3', {
+  const upstreamResponse = await fetch('https://api.derivws.com/trading/v1/options/ws/public', {
     headers: { Upgrade: 'websocket' },
   })
   const upstream = upstreamResponse.webSocket
