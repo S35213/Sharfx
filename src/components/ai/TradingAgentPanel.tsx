@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Activity, Bot, Play, RefreshCw, ShieldCheck, Sparkles, Square } from 'lucide-react'
 import { analyzeLiquidity } from '../../engine/liquidity'
-import { calculatePositionProfit } from '../../engine/simulator/positionManager'
+import { calculatePositionProfit } from '../../engine/broker/positionManager'
 import { analyzeMarketStructure, findSwingPoints } from '../../engine/marketStructure'
 import { analyzeSetup } from '../../engine/setup'
 import { calculateRisk } from '../../engine/risk/riskCalculator'
@@ -191,7 +191,7 @@ export function TradingAgentPanel({
   botAutostartKey = 'shafx-bot-autostart',
 }: Props) {
   const plan = BOT_PLANS[botPlan]
-  const readStoredLotSize = (): string => typeof window !== 'undefined' ? window.sessionStorage.getItem('shafx-simulator-lot-size') || '0.10' : '0.10'
+  const readStoredLotSize = (): string => typeof window !== 'undefined' ? window.sessionStorage.getItem('shafx-broker-lot-size') || '0.10' : '0.10'
   const [lotSize, setLotSize] = useState(readStoredLotSize)
   const [phase, setPhase] = useState<Phase>('READY')
   const [scanPhase, setScanPhase] = useState<Phase>('READY')
@@ -320,7 +320,7 @@ export function TradingAgentPanel({
 
   useEffect(() => {
     if (typeof window === 'undefined' || !lotSize.trim()) return
-    window.sessionStorage.setItem('shafx-simulator-lot-size', lotSize)
+    window.sessionStorage.setItem('shafx-broker-lot-size', lotSize)
     window.dispatchEvent(new CustomEvent<string>('shafx-lot-size', { detail: lotSize }))
   }, [lotSize])
 
@@ -434,7 +434,7 @@ export function TradingAgentPanel({
           return
         }
         if (!symbolSpec || !onBotOrder) {
-          setStatus('BOT ERROR • simulator order engine is not ready')
+          setStatus('BOT ERROR • broker order engine is not ready')
           return
         }
         if (!lotSizeValid) {
@@ -465,12 +465,12 @@ export function TradingAgentPanel({
         setLastResult(null)
         setStatus(scan
           ? 'BOT ANALYSIS • ' + scan.setup.direction + ' on ' + scan.timeframe + ' • confidence ' + scan.setup.confidence + '%'
-          : 'BOT ANALYSIS • using the current independent simulator context…')
+          : 'BOT ANALYSIS • using the current independent broker context…')
 
         const result = executeSimulationTrade({
           context: scan
-            ? { tradingContext: scan.context, preferredSetup: scan.setup, hasOpenPosition: false, permission: 'AUTONOMOUS_SIMULATION', multiTimeframe, learning, research }
-            : { tradingContext, preferredSetup: setup, hasOpenPosition: false, permission: 'AUTONOMOUS_SIMULATION', multiTimeframe, learning, research },
+            ? { tradingContext: scan.context, preferredSetup: scan.setup, hasOpenPosition: false, permission: 'AUTONOMOUS_TRADING', multiTimeframe, learning, research }
+            : { tradingContext, preferredSetup: setup, hasOpenPosition: false, permission: 'AUTONOMOUS_TRADING', multiTimeframe, learning, research },
           accountBalance,
           accountCurrency,
           riskPercent: riskModes[riskMode].percent,
@@ -595,7 +595,7 @@ export function TradingAgentPanel({
       } catch (error) {
         setAutoTradingEnabled(false)
         setPhase('READY')
-        setStatus('BOT ERROR • ' + (error instanceof Error ? error.message : 'Unable to open simulator trade'))
+        setStatus('BOT ERROR • ' + (error instanceof Error ? error.message : 'Unable to open broker trade'))
       } finally {
         runInFlightRef.current = false
       }
@@ -671,7 +671,7 @@ export function TradingAgentPanel({
     setBotDisplayedOrder(activeBotOrder)
     setTradeCloseAt(Date.now() + BOT_RESULT_DELAY_MS)
     setTradeSecondsLeft(BOT_CYCLE_SECONDS)
-    setStatus('BOT RESUMING • settling restored simulated trade, then continuing…')
+    setStatus('BOT RESUMING • settling restored trade, then continuing…')
     if (tradeCloseTimer.current) window.clearTimeout(tradeCloseTimer.current)
     tradeCloseTimer.current = window.setTimeout(async () => {
       const closed = await onBotClose?.(activeBotOrder.id)
@@ -891,7 +891,7 @@ export function TradingAgentPanel({
               <span className="text-[9px] font-semibold text-shafx-danger">BOT BLOCKED BY ACCOUNT MARGIN</span>
               <span className="font-mono text-[9px] text-shafx-danger">{parsedLotSize.toFixed(2)} &gt; {accountMarginLotCeiling.toFixed(2)} lot</span>
             </div>
-            <p className="mt-1 text-[8px] text-shafx-textMuted">The bot will not execute until the lot fits the account's available simulated margin.</p>
+            <p className="mt-1 text-[8px] text-shafx-textMuted">The bot will not execute until the lot fits the account's available account margin.</p>
           </div>
         )}
 
@@ -964,7 +964,7 @@ export function TradingAgentPanel({
         </div>
 
         <div className="mt-2 flex items-center justify-between gap-2 rounded-lg border border-shafx-border bg-shafx-bg/60 px-2.5 py-2 text-[8px] text-shafx-textMuted">
-          <span className="flex min-w-0 items-center gap-1.5"><ShieldCheck className="h-3 w-3 text-shafx-success" />Simulator only • no broker orders</span>
+          <span className="flex min-w-0 items-center gap-1.5"><ShieldCheck className="h-3 w-3 text-shafx-success" />Broker only • no broker orders</span>
           <span className="font-mono">{status}</span>
         </div>
       </section>
