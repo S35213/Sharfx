@@ -61,8 +61,6 @@ const sendAndWait = (socket, request, expectedReqId) => new Promise((resolve, re
   socket.send(JSON.stringify(request))
 })
 
-const providerIdFor = (symbol) => toDerivSymbol(symbol)
-
 const requireConnection = async (req) => {
   const user = await getShafxUser(req)
   if (!user) throw new Error('SHAFX sign-in is required.')
@@ -80,7 +78,7 @@ const requireConnection = async (req) => {
 
 const normalizeBuy = (payload, request) => {
   const buy = payload?.buy || {}
-  const contractId = String(buy.contract_id ?? buy.contract_id || '')
+  const contractId = String(buy.contract_id ?? '')
   if (!contractId) throw new Error('Deriv did not return a contract ID.')
   const buyPrice = Number(buy.buy_price ?? buy.price ?? 0)
   const spot = Number(buy.start_spot ?? buy.start_spot_display_value ?? 0)
