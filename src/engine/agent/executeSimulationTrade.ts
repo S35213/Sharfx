@@ -76,7 +76,7 @@ export const executeSimulationTrade = (input: ExecuteSimulationTradeInput): Exec
   const decision = decideAgentAction(input.context)
   let setup = decision.setup
 
-  if (!setup && input.allowSimulationFallback && decision.permission === 'AUTONOMOUS_SIMULATION' && !input.context.hasOpenPosition) {
+  if (!setup && input.allowSimulationFallback && decision.permission === 'AUTONOMOUS_TRADING' && !input.context.hasOpenPosition) {
     const marketBias = input.context.tradingContext.marketStructure.bias
     const recent = input.context.tradingContext.recentCandles
     const momentumUp = recent.length > 1 && recent[recent.length - 1].close >= recent[recent.length - 2].close
@@ -101,7 +101,7 @@ export const executeSimulationTrade = (input: ExecuteSimulationTradeInput): Exec
     } satisfies SetupCandidate
   }
 
-  if (decision.action !== 'EXECUTE_SIMULATION' && !setup) return { decision, plan: null, order: null }
+  if (decision.action !== 'EXECUTE_TRADE' && !setup) return { decision, plan: null, order: null }
   if (!setup) return { decision, plan: null, order: null }
 
   let plan = prepareTradePlan({
