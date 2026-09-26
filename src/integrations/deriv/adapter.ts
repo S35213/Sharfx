@@ -101,7 +101,7 @@ export const DERIV_PROVIDER_ADAPTER: ProviderAdapter = {
     return normalizeAccountRows(payload)
   },
 
-  async getQuote(connection: ProviderConnection, accountId: string | undefined, symbol: string): Promise<ProviderQuote> {
+  async getQuote(connection: ProviderConnection, _accountId: string | undefined, symbol: string): Promise<ProviderQuote> {
     assertConnection(connection)
     const feed = new DerivPublicMarketFeed()
     return withTimeout(new Promise<ProviderQuote>((resolve, reject) => {
@@ -120,7 +120,7 @@ export const DERIV_PROVIDER_ADAPTER: ProviderAdapter = {
     }))
   },
 
-  async getHistoricalCandles(connection: ProviderConnection, accountId: string | undefined, symbol: string, timeframe: string, limit = 200): Promise<ProviderCandle[]> {
+  async getHistoricalCandles(connection: ProviderConnection, _accountId: string | undefined, symbol: string, timeframe: string, limit = 200): Promise<ProviderCandle[]> {
     assertConnection(connection)
     if (!isTimeframe(timeframe)) throw new Error(`Unsupported SHAFX timeframe for Deriv: ${timeframe}`)
     const feed = new DerivPublicMarketFeed()
