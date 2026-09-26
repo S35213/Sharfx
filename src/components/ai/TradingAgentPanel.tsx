@@ -253,6 +253,8 @@ export function TradingAgentPanel({
     return buildTradingContext(symbol, timeframe, candles, structure, supportResistance, liquidity, setup)
   }, [candles, currentPrice, symbol, timeframe])
 
+  const timeframeFrames = useMultiTimeframeCandles(symbol, timeframe, candles, scanM1Candles, scanNonce)
+
   const fastScanCandidates = useMemo(
     () => buildScanCandidates(timeframeFrames, symbol, currentPrice),
     [currentPrice, scanNonce, symbol, timeframeFrames],
