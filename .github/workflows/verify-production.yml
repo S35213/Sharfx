@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
-      - name: Verify deployed marker on production host
+      - name: Wait for the Cloudflare production marker
         env:
           MARKER: SHAFX-PRODUCTION-LIVE-DATA-FIX-2026-09-26
         run: |
@@ -20,23 +20,18 @@ jobs:
             "https://x.150sharingan2.workers.dev"
             "https://sharfx.150sharingan2.workers.dev"
           )
-          found=0
+
           for attempt in $(seq 1 60); do
-            found=0
             for host in "${hosts[@]}"; do
-              echo "Checking $host (attempt $attempt/60)"
+              echo "Attempt $attempt/60: checking $host"
               body="$(curl -fsSL --max-time 15 --retry 2 --retry-delay 2 "$host/shafx-deployment.txt?cachebust=$GITHUB_SHA" || true)"
               if [ "$body" = "$MARKER" ]; then
                 echo "Production marker is live at $host"
-                found=1
-              else
-                echo "Marker not present at $host"
+                exit 0
               fi
             done
-            if [ "$found" -eq 1 ]; then
-              exit 0
-            fi
             sleep 10
           done
-          echo "Neither candidate production host served the expected deployed marker within 10 minutes."
+
+          echo "Cloudflare production did not serve the expected marker within 10 minutes."
           exit 1
