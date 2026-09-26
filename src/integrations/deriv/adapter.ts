@@ -5,7 +5,7 @@ import { validateProviderConnection } from '../core/providerConnectionGuard'
 import { DerivAccountStreamTransport } from './accountStream'
 import { DERIV_PROVIDER_DESCRIPTOR } from './descriptor'
 
-const supportedTimeframes: Timeframe[] = ['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1']
+const supportedTimeframes: Timeframe[] = ['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1', 'W1']
 const isTimeframe = (value: string): value is Timeframe => supportedTimeframes.includes(value as Timeframe)
 
 const assertConnection = (connection: ProviderConnection): void => {
@@ -196,6 +196,24 @@ export const DERIV_PROVIDER_ADAPTER: ProviderAdapter = {
         closed = true
         feed.disconnect()
       },
+    }
+  },
+
+  async getDepositInstructions(connection: ProviderConnection, _accountId: string): Promise<import('../core/types').ProviderFundingInstruction> {
+    assertConnection(connection)
+    return {
+      mode: 'redirect',
+      providerUrl: 'https://app.deriv.com/cashier/deposit',
+      message: 'Use the official Deriv Cashier to deposit funds, then return to SHAFX and refresh your broker balance.',
+    }
+  },
+
+  async getWithdrawalInstructions(connection: ProviderConnection, _accountId: string): Promise<import('../core/types').ProviderFundingInstruction> {
+    assertConnection(connection)
+    return {
+      mode: 'redirect',
+      providerUrl: 'https://app.deriv.com/cashier/withdraw',
+      message: 'Use the official Deriv Cashier to withdraw funds, then return to SHAFX and refresh your broker balance.',
     }
   },
 
