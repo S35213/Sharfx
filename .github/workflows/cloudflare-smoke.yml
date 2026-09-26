@@ -9,18 +9,18 @@ on:
 jobs:
   verify-cloudflare:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     steps:
       - name: Wait for Cloudflare Workers production deployment
         env:
           MARKER: SHAFX-PRODUCTION-LIVE-DATA-FIX-2026-09-26
-          URL: https://x.150sharingan2.workers.dev/shafx-deployment.txt
+          BASE_URL: https://x.150sharingan2.workers.dev
         run: |
           set -euo pipefail
           for attempt in $(seq 1 60); do
-            body="$(curl -fsSL --max-time 15 --retry 2 --retry-delay 2 "$URL?cachebust=$GITHUB_SHA" || true)"
+            body="$(curl -fsSL --max-time 15 --retry 2 --retry-delay 2 "$BASE_URL/shafx-deployment.txt?cachebust=$GITHUB_SHA" || true)"
             if [ "$body" = "$MARKER" ]; then
-              echo "Cloudflare production is serving the expected SHAFX build marker."
+              echo "Cloudflare production is serving the expected SHAFX build marker at $BASE_URL."
               exit 0
             fi
             echo "Cloudflare deployment not visible yet (attempt $attempt/60)."
@@ -28,3 +28,89 @@ jobs:
           done
           echo "Cloudflare production did not serve the expected build marker within 10 minutes."
           exit 1
+
+      - name: Verify production client contains the current Deriv public WebSocket
+        env:
+          BASE_URL: https://x.150sharingan2.workers.dev
+          EXPECTED: wss://api.derivws.com/trading/v1/options/ws/public
+        run: |
+          set -euo pipefail
+          html="$(curl -fsSL --max-time 20 "$BASE_URL/?cachebust=$GITHUB_SHA")"
+          found=0
+          for src in $(printf '%s' "$html" | grep -oE 'src="[^"]+\.js"' | cut -d'"' -f2); do
+            case "$src" in
+              https://*) asset="$src" ;;
+              /*) asset="$BASE_URL$src" ;;
+              *) asset="$BASE_URL/$src" ;;
+            esac
+            js="$(curl -fsSL --max-time 20 "$asset")"
+            if printf '%s' "$js" | grep -Fq "$EXPECTED"; then
+              echo "Production client is using the current Deriv public WebSocket."
+              found=1
+              break
+            fi
+          done
+          test "$found" -eq 1
+
+      - name: Verify Deriv public market stream
+        run: |
+          node <<'NODE'
+          const url = 'wss://api.derivws.com/trading/v1/options/ws/public'
+          const ws = new WebSocket(url)
+          let candleOk = false
+          let tickOk = false
+          let finished = false
+          const fail = (message) => {
+            if (finished) return
+            finished = true
+            try { ws.close() } catch {}
+            console.error(message)
+            process.exit(1)
+          }
+          const succeed = () => {
+            if (finished || !candleOk || !tickOk) return
+            finished = true
+            console.log('Deriv public market stream returned EUR/USD candles and a live tick.')
+            try { ws.close() } catch {}
+            process.exit(0)
+          }
+          const timeout = setTimeout(() => fail('Timed out waiting for Deriv public market data.'), 20000)
+          ws.addEventListener('open', () => {
+            ws.send(JSON.stringify({
+              ticks_history: 'frxEURUSD',
+              end: 'latest',
+              count: 10,
+              style: 'candles',
+              granularity: 60,
+              subscribe: 0,
+              req_id: 201,
+            }))
+            ws.send(JSON.stringify({
+              ticks: 'frxEURUSD',
+              subscribe: 1,
+              req_id: 202,
+            }))
+          })
+          ws.addEventListener('message', (event) => {
+            try {
+              const data = JSON.parse(String(event.data))
+              if (data.error?.message) fail('Deriv returned an API error: ' + data.error.message)
+              if (data.msg_type === 'candles' && Array.isArray(data.candles) && data.candles.length > 0) {
+                candleOk = true
+                console.log('Received EUR/USD candle history.')
+              }
+              if (data.msg_type === 'tick' && Number.isFinite(Number(data.tick?.quote)) && Number(data.tick.quote) > 0) {
+                tickOk = true
+                console.log('Received EUR/USD live quote: ' + data.tick.quote)
+              }
+              succeed()
+            } catch (error) {
+              fail(error instanceof Error ? error.message : 'Invalid Deriv WebSocket message.')
+            }
+          })
+          ws.addEventListener('error', () => fail('Deriv public market WebSocket connection failed.'))
+          ws.addEventListener('close', () => {
+            if (!finished && (!candleOk || !tickOk)) fail('Deriv WebSocket closed before candle history and a live tick arrived.')
+          })
+          process.on('exit', () => clearTimeout(timeout))
+          NODE
