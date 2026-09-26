@@ -19,6 +19,9 @@ interface Props {
   tradeHistory: TradeOrder[]
   accountBalance?: number
   accountCurrency?: string
+  derivConnectionId?: string
+  derivAccountId?: string
+  derivEnvironment?: 'demo' | 'live'
   symbolSpec?: SymbolSpec | null
   conversionRate?: number
   botPlan?: BotPlan
@@ -177,6 +180,9 @@ export function TradingAgentPanel({
   tradeHistory,
   accountBalance = 10000,
   accountCurrency = 'USD',
+  derivConnectionId = '',
+  derivAccountId = '',
+  derivEnvironment = 'demo',
   symbolSpec = null,
   conversionRate,
   botPlan = 'FREE',
