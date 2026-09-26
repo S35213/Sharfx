@@ -7,7 +7,7 @@ export const DERIV_PROVIDER_DESCRIPTOR: ProviderDescriptor = {
   status: 'available',
   executionMode: 'external',
   authMethods: ['oauth2'],
-  description: 'Live Deriv market and authenticated account connection for SHAFX. Account selection is demo or real and balances come from Deriv.',
+  description: 'Deriv-powered SHAFX market, account and contract execution. Account selection is demo or real and balances come from Deriv.',
   capabilities: {
     accountRead: true,
     marketData: true,
