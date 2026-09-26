@@ -1,0 +1,37 @@
+name: Verify SHAFX production deployment
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Verify deployed marker on production host
+        env:
+          MARKER: SHAFX-PRODUCTION-LIVE-DATA-FIX-2026-09-26
+        run: |
+          set -euo pipefail
+          hosts=(
+            "https://x.150sharingan2.workers.dev"
+            "https://sharfx.150sharingan2.workers.dev"
+          )
+          found=0
+          for host in "${hosts[@]}"; do
+            echo "Checking $host"
+            body="$(curl -fsSL --max-time 15 --retry 2 --retry-delay 2 "$host/shafx-deployment.txt?cachebust=$GITHUB_SHA" || true)"
+            if [ "$body" = "$MARKER" ]; then
+              echo "Production marker is live at $host"
+              found=1
+            else
+              echo "Marker not present at $host"
+            fi
+          done
+          if [ "$found" -ne 1 ]; then
+            echo "Neither candidate production host is serving the expected deployed marker."
+            exit 1
+          fi
