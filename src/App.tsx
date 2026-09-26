@@ -373,9 +373,6 @@ const TerminalContent: React.FC = () => {
       botOrderIds={botOrderIds}
       onBotOrder={handleBotOrder}
       onBotClose={(id) => handleClosePosition(id)}
-      derivConnectionId={activeProviderSelection?.connectionId}
-      derivAccountId={activeProviderSelection?.accountId}
-      derivEnvironment={activeProviderSelection?.environment}
       onReviewSetup={handleReviewSetup}
     />,
     liquidity: <LiquidityPanel key={selectedSymbol} symbol={selectedSymbol} price={currentPrice} precision={symbolSpec.pricePrecision} pipSize={symbolSpec.pipSize} candles={liveCandles} />,
