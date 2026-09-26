@@ -39,7 +39,7 @@ const handleDerivPublicMarketWebSocket = async (request: Request): Promise<Respo
   const pair = new WebSocketPair()
   const client = pair[0]
   const server = pair[1]
-  server.accept({ allowHalfOpen: true })
+  server.accept()
 
   const upstreamResponse = await fetch('https://ws.binaryws.com/websockets/v3', {
     headers: { Upgrade: 'websocket' },
@@ -51,7 +51,7 @@ const handleDerivPublicMarketWebSocket = async (request: Request): Promise<Respo
     return new Response(null, { status: 101, webSocket: client })
   }
 
-  upstream.accept({ allowHalfOpen: true })
+  upstream.accept()
 
   const closeBoth = (code = 1000, reason = 'closed'): void => {
     try { if (server.readyState === WebSocket.OPEN || server.readyState === WebSocket.CLOSING) server.close(code, reason) } catch {}
