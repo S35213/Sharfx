@@ -199,8 +199,9 @@ export const DERIV_PROVIDER_ADAPTER: ProviderAdapter = {
     }
   },
 
-  async getDepositInstructions(connection: ProviderConnection, _accountId: string): Promise<import('../core/types').ProviderFundingInstruction> {
+  async getDepositInstructions(connection: ProviderConnection, accountId: string): Promise<import('../core/types').ProviderFundingInstruction> {
     assertConnection(connection)
+    void accountId
     return {
       mode: 'redirect',
       providerUrl: 'https://app.deriv.com/cashier/deposit',
@@ -208,8 +209,9 @@ export const DERIV_PROVIDER_ADAPTER: ProviderAdapter = {
     }
   },
 
-  async getWithdrawalInstructions(connection: ProviderConnection, _accountId: string): Promise<import('../core/types').ProviderFundingInstruction> {
+  async getWithdrawalInstructions(connection: ProviderConnection, accountId: string): Promise<import('../core/types').ProviderFundingInstruction> {
     assertConnection(connection)
+    void accountId
     return {
       mode: 'redirect',
       providerUrl: 'https://app.deriv.com/cashier/withdraw',
