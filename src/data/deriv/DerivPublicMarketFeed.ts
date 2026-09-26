@@ -2,6 +2,12 @@ import type { OHLCV, Timeframe } from '../../types'
 
 export const DERIV_PUBLIC_WS_URL = 'wss://ws.binaryws.com/websockets/v3'
 
+export const getDerivMarketWebSocketUrl = (): string => {
+  if (typeof window === 'undefined') return DERIV_PUBLIC_WS_URL
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return protocol + '//' + window.location.host + '/api/deriv/public-market'
+}
+
 const timeframeSeconds: Record<Timeframe, number> = {
   M1: 60,
   M5: 300,
@@ -73,15 +79,14 @@ export class DerivPublicMarketFeed {
     if (this.stopped || generation !== this.connectionGeneration) return
     this.onStatus?.('connecting')
 
-    let wsUrl = DERIV_PUBLIC_WS_URL
+    let wsUrl = getDerivMarketWebSocketUrl()
     if (this.webSocketUrlProvider) {
       try {
         wsUrl = await this.webSocketUrlProvider()
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unable to obtain the authenticated Deriv market stream.'
         this.onStatus?.('error', message)
-        // Public market data remains a safe fallback when the authenticated URL cannot be obtained.
-        wsUrl = DERIV_PUBLIC_WS_URL
+        wsUrl = getDerivMarketWebSocketUrl()
       }
     }
 
@@ -153,14 +158,15 @@ export class DerivPublicMarketFeed {
       this.onStatus?.('error', 'Deriv market-data WebSocket connection failed.')
     }
 
-    socket.onclose = () => {
+    socket.onclose = (event) => {
       if (this.pingTimer !== null) {
         globalThis.clearInterval(this.pingTimer)
         this.pingTimer = null
       }
       if (this.stopped || generation !== this.connectionGeneration) return
       this.socket = null
-      this.onStatus?.('disconnected')
+      if (event.code !== 1000 && event.code !== 1001) this.onStatus?.('error', 'Market stream closed (' + event.code + '): ' + (event.reason || 'unknown reason'))
+      else this.onStatus?.('disconnected')
       this.scheduleReconnect(generation)
     }
   }
