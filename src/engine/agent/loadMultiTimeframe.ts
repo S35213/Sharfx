@@ -4,23 +4,24 @@ import { DerivPublicMarketFeed } from '../../data/deriv/DerivPublicMarketFeed'
 
 const loadDerivCandles = (symbol: string, timeframe: Timeframe): Promise<OHLCV[]> => new Promise((resolve, reject) => {
   const feed = new DerivPublicMarketFeed()
-  let timer: ReturnType<typeof setTimeout> | undefined
-
   const finish = (result: OHLCV[] | Error): void => {
-    if (timer) clearTimeout(timer)
     feed.disconnect()
     if (result instanceof Error) reject(result)
     else resolve(result)
   }
 
-  timer = setTimeout(() => finish(new Error('Deriv historical candle request timed out.')), 12000)
+  const timer = setTimeout(() => finish(new Error('Deriv historical candle request timed out.')), 12000)
+  const finishWithTimer = (result: OHLCV[] | Error): void => {
+    clearTimeout(timer)
+    finish(result)
+  }
 
   feed.connect(symbol, timeframe, {
     onUpdate: (candles) => {
-      if (candles.length >= 5) finish(candles)
+      if (candles.length >= 5) finishWithTimer(candles)
     },
     onStatus: (status, message) => {
-      if (status === 'error') finish(new Error(message || 'Deriv historical candle request failed.'))
+      if (status === 'error') finishWithTimer(new Error(message || 'Deriv historical candle request failed.'))
     },
   })
 })
