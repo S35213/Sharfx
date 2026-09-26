@@ -158,14 +158,33 @@ export const DERIV_PROVIDER_ADAPTER: ProviderAdapter = {
     const feed = new DerivPublicMarketFeed()
     let closed = false
 
+    const getAuthenticatedWebSocketUrl = async (): Promise<string> => {
+      const query = new URLSearchParams({
+        accountType: connection.environment === 'demo' ? 'demo' : 'real',
+        accountId: _accountId ?? connection.accountId ?? '',
+      })
+      if (!connection.connectionId.startsWith('account:')) query.set('connectionId', connection.connectionId)
+
+      const response = await fetch('/api/deriv/stream?' + query.toString(), {
+        credentials: 'include',
+        cache: 'no-store',
+      })
+      const data = await response.json().catch(() => ({})) as { wsUrl?: unknown; error?: unknown }
+      if (!response.ok || typeof data.wsUrl !== 'string' || !data.wsUrl) {
+        throw new Error(typeof data.error === 'string' ? data.error : 'Unable to obtain the authenticated Deriv market stream.')
+      }
+      return data.wsUrl
+    }
+
     feed.connect(symbol, timeframe, {
+      getWebSocketUrl: getAuthenticatedWebSocketUrl,
       onUpdate: (candles, price, epoch) => {
         if (closed) return
         onEvent({ type: 'market_snapshot', snapshot: toSnapshot(symbol, timeframe, candles, price, epoch) })
       },
       onStatus: (status, message) => {
         if (closed || status !== 'error') return
-        onEvent({ type: 'error', error: asNetworkError(message || 'Deriv public market-data stream failed.') })
+        onEvent({ type: 'error', error: asNetworkError(message || 'Deriv market-data stream failed.') })
       },
     })
 
