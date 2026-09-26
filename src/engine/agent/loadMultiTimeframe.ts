@@ -1,70 +1,74 @@
 import { useEffect, useState } from 'react'
 import { TIMEFRAMES, type OHLCV, type Timeframe } from '../../types'
-import { marketDataSource } from '../../data/createMarketDataSource'
+import { DerivPublicMarketFeed } from '../../data/deriv/DerivPublicMarketFeed'
 
-const TIMEFRAME_SECONDS: Record<Timeframe, number> = {
-  M1: 60,
-  M5: 300,
-  M15: 900,
-  M30: 1800,
-  H1: 3600,
-  H4: 14400,
-  D1: 86400,
-  W1: 604800,
-}
-const MONDAY_WEEK_ANCHOR_SECONDS = 345600
-const bucketStart = (time: number, timeframe: Timeframe): number => timeframe === 'W1' ? Math.floor((time - MONDAY_WEEK_ANCHOR_SECONDS) / 604800) * 604800 + MONDAY_WEEK_ANCHOR_SECONDS : Math.floor(time / TIMEFRAME_SECONDS[timeframe]) * TIMEFRAME_SECONDS[timeframe]
-
-const aggregateFromM1 = (base: OHLCV[], timeframe: Timeframe): OHLCV[] => {
-  const groups = new Map<number, OHLCV>()
-  for (const candle of base) {
-    const bucket = bucketStart(candle.time, timeframe)
-    const existing = groups.get(bucket)
-    if (!existing) {
-      groups.set(bucket, {
-        time: bucket,
-        open: candle.open,
-        high: candle.high,
-        low: candle.low,
-        close: candle.close,
-        volume: candle.volume ?? 0,
-      })
-      continue
-    }
-    existing.high = Math.max(existing.high, candle.high)
-    existing.low = Math.min(existing.low, candle.low)
-    existing.close = candle.close
-    existing.volume = (existing.volume ?? 0) + (candle.volume ?? 0)
+const loadDerivCandles = (symbol: string, timeframe: Timeframe): Promise<OHLCV[]> => new Promise((resolve, reject) => {
+  const feed = new DerivPublicMarketFeed()
+  const finish = (result: OHLCV[] | Error): void => {
+    feed.disconnect()
+    if (result instanceof Error) reject(result)
+    else resolve(result)
   }
-  return [...groups.values()].sort((a, b) => a.time - b.time).slice(-300)
-}
+
+  const timer = setTimeout(() => finish(new Error('Deriv historical candle request timed out.')), 12000)
+  const finishWithTimer = (result: OHLCV[] | Error): void => {
+    clearTimeout(timer)
+    finish(result)
+  }
+
+  feed.connect(symbol, timeframe, {
+    onUpdate: (candles) => {
+      if (candles.length >= 5) finishWithTimer(candles)
+    },
+    onStatus: (status, message) => {
+      if (status === 'error') finishWithTimer(new Error(message || 'Deriv historical candle request failed.'))
+    },
+  })
+})
 
 export const useMultiTimeframeCandles = (
   symbol: string,
   fallbackTimeframe: Timeframe,
   fallbackCandles: OHLCV[],
   baseM1Candles: OHLCV[] = [],
+  refreshKey = 0,
 ): Partial<Record<Timeframe, OHLCV[]>> => {
-  const [frames, setFrames] = useState<Partial<Record<Timeframe, OHLCV[]>>>({ [fallbackTimeframe]: fallbackCandles })
+  const [frames, setFrames] = useState<Partial<Record<Timeframe, OHLCV[]>>>(
+    fallbackCandles.length > 0 ? { [fallbackTimeframe]: fallbackCandles } : {},
+  )
 
   useEffect(() => {
     if (baseM1Candles.length > 0) {
-      const next = Object.fromEntries(TIMEFRAMES.map((tf) => [tf, aggregateFromM1(baseM1Candles, tf)]))
-      setFrames(next as Partial<Record<Timeframe, OHLCV[]>>)
       return
     }
-
-    let cancelled = false
-    const load = async () => {
-      const entries = await Promise.all(TIMEFRAMES.map(async (tf) => {
-        if (tf === fallbackTimeframe) return [tf, fallbackCandles] as const
-        try { return [tf, await marketDataSource.getCandles(symbol, tf)] as const } catch { return [tf, []] as const }
-      }))
-      if (!cancelled) setFrames(Object.fromEntries(entries.filter(([, data]) => data.length > 0)) as Partial<Record<Timeframe, OHLCV[]>>)
+    if (fallbackCandles.length > 0) {
+      setFrames((previous) => ({ ...previous, [fallbackTimeframe]: fallbackCandles }))
     }
+  }, [baseM1Candles.length, fallbackCandles, fallbackTimeframe])
+
+  useEffect(() => {
+    if (baseM1Candles.length > 0) return
+    let cancelled = false
+
+    const load = async (): Promise<void> => {
+      const results = await Promise.all(TIMEFRAMES.map(async (timeframe) => {
+        try {
+          return [timeframe, await loadDerivCandles(symbol, timeframe)] as const
+        } catch {
+          return [timeframe, []] as const
+        }
+      }))
+
+      if (cancelled) return
+
+      const next = Object.fromEntries(results.filter(([, data]) => data.length > 0)) as Partial<Record<Timeframe, OHLCV[]>>
+      if (fallbackCandles.length > 0) next[fallbackTimeframe] = fallbackCandles
+      setFrames(next)
+    }
+
     void load()
     return () => { cancelled = true }
-  }, [symbol, fallbackTimeframe, fallbackCandles, baseM1Candles])
+  }, [baseM1Candles.length, fallbackCandles, fallbackTimeframe, refreshKey, symbol])
 
   return frames
 }
