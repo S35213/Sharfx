@@ -72,6 +72,56 @@ describe('assessProviderReadiness', () => {
     expect(result.issues).not.toContain('LIVE_EXECUTION_DISABLED')
   })
 
+
+  it('does not block redirect-based funding when the adapter uses provider URLs', () => {
+    const redirectDescriptor: ProviderDescriptor = {
+      ...descriptor,
+      capabilities: {
+        ...descriptor.capabilities,
+        funding: { deposit: 'redirect', withdrawal: 'redirect' },
+      },
+    }
+    const adapter: ProviderAdapter = {
+      descriptor: redirectDescriptor,
+      getAccounts: async () => [],
+      getQuote: async () => ({ symbol: 'EURUSD', bid: 1, ask: 1.1, timestamp: new Date().toISOString() }),
+    }
+
+    const result = assessProviderReadiness(adapter)
+
+    expect(result.ready).toBe(true)
+    expect(result.missingMethods).toEqual([])
+  })
+
+  it('still requires adapter funding instructions for API-based funding', () => {
+    const apiFundingDescriptor: ProviderDescriptor = {
+      ...descriptor,
+      capabilities: {
+        ...descriptor.capabilities,
+        funding: { deposit: 'api', withdrawal: 'api' },
+      },
+    }
+    const adapter: ProviderAdapter = {
+      descriptor: apiFundingDescriptor,
+      getAccounts: async () => [],
+      getQuote: async () => ({ symbol: 'EURUSD', bid: 1, ask: 1.1, timestamp: new Date().toISOString() }),
+    }
+
+    const result = assessProviderReadiness(adapter)
+
+    expect(result.ready).toBe(false)
+    expect(result.missingMethods).toEqual(['getDepositInstructions', 'getWithdrawalInstructions'])
+  })
+
+
+  it('keeps the real Deriv adapter ready when funding is redirect-based', async () => {
+    const { DERIV_PROVIDER_ADAPTER } = await import('../deriv/adapter')
+    const result = assessProviderReadiness(DERIV_PROVIDER_ADAPTER)
+
+    expect(result.ready).toBe(true)
+    expect(result.missingMethods).toEqual([])
+  })
+
   it('allows a local execution adapter to remain available', () => {
     const simulatorDescriptor: ProviderDescriptor = {
       ...descriptor,
