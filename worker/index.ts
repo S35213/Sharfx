@@ -5,6 +5,7 @@ import derivAccounts from '../api/deriv/accounts.js'
 import derivCallback from '../api/deriv/callback.js'
 import derivLogin from '../api/deriv/login.js'
 import derivStream from '../api/deriv/stream.js'
+import derivOrder from '../api/deriv/order.js'
 import paystack from '../api/paystack.js'
 import providerConnections from '../api/providers/connections.js'
 import adminAuth from '../api/admin/auth.js'
@@ -37,6 +38,7 @@ const handlers: Record<string, LegacyHandler> = {
   '/api/deriv/callback': derivCallback,
   '/api/deriv/login': derivLogin,
   '/api/deriv/stream': derivStream,
+  '/api/deriv/order': derivOrder,
   '/api/paystack': paystack,
   '/api/providers/connections': providerConnections,
   '/api/admin/auth': adminAuth,
