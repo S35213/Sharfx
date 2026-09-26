@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react'
 import type { OHLCV, Timeframe } from '../../types'
 import '../../integrations/catalog'
 import { providerRegistry } from '../../integrations/core/providerRegistry'
-import { assessProviderReadiness } from '../../integrations/core/providerReadiness'
 import { validateProviderConnection } from '../../integrations/core/providerConnectionGuard'
 import type { ProviderConnection, ProviderStreamHandle } from '../../integrations/core/types'
 
