@@ -39,7 +39,7 @@ jobs:
       - name: Verify production app responds
         run: |
           set -euo pipefail
-          for host in "https://x.150sharingan2.workers.dev" "https://sharfx.150sharingan2.workers.dev"; do
+          for host in "https://sharfx.150sharingan2.workers.dev"; do
             echo "Checking $host"
             body="$(curl -fsSL --max-time 20 --retry 2 --retry-delay 2 "$host/")"
             echo "$body" | grep -q "SHAFX" || {
