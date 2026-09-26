@@ -4,7 +4,15 @@ export const DERIV_PUBLIC_WS_URL = 'wss://ws.binaryws.com/websockets/v3'
 
 export const getDerivMarketWebSocketUrl = (): string => {
   if (typeof window === 'undefined') return DERIV_PUBLIC_WS_URL
-  return DERIV_PUBLIC_WS_URL
+
+  // Production SHAFX runs on Cloudflare Workers. Route the public Deriv
+  // market socket through the same-origin Worker so mobile browsers do not
+  // depend on a direct cross-origin WebSocket path. Local development keeps
+  // the direct Deriv endpoint.
+  const hostname = window.location.hostname
+  if (hostname === 'localhost' || hostname === '127.0.0.1') return DERIV_PUBLIC_WS_URL
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${protocol}//${window.location.host}/api/deriv/public-market`
 }
 
 const timeframeSeconds: Record<Timeframe, number> = {
