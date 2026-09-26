@@ -58,24 +58,6 @@ const asNetworkError = (message: string): ProviderNormalizedError => ({
   retryable: true,
 })
 
-const getAuthenticatedWebSocketUrl = async (connection: ProviderConnection, accountId?: string): Promise<string> => {
-  const query = new URLSearchParams({
-    accountType: connection.environment === 'demo' ? 'demo' : 'real',
-    accountId: accountId ?? connection.accountId ?? '',
-  })
-  if (!connection.connectionId.startsWith('account:')) query.set('connectionId', connection.connectionId)
-
-  const response = await fetch('/api/deriv/stream?' + query.toString(), {
-    credentials: 'include',
-    cache: 'no-store',
-  })
-  const data = await response.json().catch(() => ({})) as { wsUrl?: unknown; error?: unknown }
-  if (!response.ok || typeof data.wsUrl !== 'string' || !data.wsUrl) {
-    throw new Error(typeof data.error === 'string' ? data.error : 'Unable to obtain the authenticated Deriv market stream.')
-  }
-  return data.wsUrl
-}
-
 interface DerivAccountApiRow {
   account_id?: unknown
   balance?: unknown
@@ -124,7 +106,6 @@ export const DERIV_PROVIDER_ADAPTER: ProviderAdapter = {
     const feed = new DerivPublicMarketFeed()
     return withTimeout(new Promise<ProviderQuote>((resolve, reject) => {
       feed.connect(symbol, 'M1', {
-        getWebSocketUrl: () => getAuthenticatedWebSocketUrl(connection, accountId),
         onUpdate: (_candles, price, epoch) => {
           feed.disconnect()
           resolve({ symbol, last: price, timestamp: new Date(epoch).toISOString() })
@@ -145,7 +126,6 @@ export const DERIV_PROVIDER_ADAPTER: ProviderAdapter = {
     const feed = new DerivPublicMarketFeed()
     return withTimeout(new Promise<ProviderCandle[]>((resolve, reject) => {
       feed.connect(symbol, timeframe, {
-        getWebSocketUrl: () => getAuthenticatedWebSocketUrl(connection, accountId),
         onUpdate: (candles) => {
           feed.disconnect()
           const count = Math.max(1, Math.min(1000, Math.trunc(limit)))
@@ -179,7 +159,6 @@ export const DERIV_PROVIDER_ADAPTER: ProviderAdapter = {
     let closed = false
 
     feed.connect(symbol, timeframe, {
-      getWebSocketUrl: () => getAuthenticatedWebSocketUrl(connection, _accountId),
       onUpdate: (candles, price, epoch) => {
         if (closed) return
         onEvent({ type: 'market_snapshot', snapshot: toSnapshot(symbol, timeframe, candles, price, epoch) })
