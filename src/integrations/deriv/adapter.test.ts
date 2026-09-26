@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DERIV_PROVIDER_ADAPTER } from './adapter'
 import type { ProviderConnection } from '../core/types'
+import { assessProviderReadiness } from '../core/providerReadiness'
 
 const connection: ProviderConnection = {
   providerId: 'deriv',
@@ -39,6 +40,24 @@ describe('Deriv provider adapter account discovery', () => {
       balance: 250,
     })
     expect(accounts[0]).not.toHaveProperty('secret')
+  })
+
+
+  it('is capability-complete for the provider registry, including advertised funding redirects', () => {
+    const result = assessProviderReadiness(DERIV_PROVIDER_ADAPTER)
+    expect(result.ready).toBe(true)
+    expect(result.missingMethods).toEqual([])
+  })
+
+  it('exposes official Deriv Cashier funding redirects', async () => {
+    await expect(DERIV_PROVIDER_ADAPTER.getDepositInstructions!()).resolves.toMatchObject({
+      mode: 'redirect',
+      providerUrl: 'https://app.deriv.com/cashier/deposit',
+    })
+    await expect(DERIV_PROVIDER_ADAPTER.getWithdrawalInstructions!()).resolves.toMatchObject({
+      mode: 'redirect',
+      providerUrl: 'https://app.deriv.com/cashier/withdraw',
+    })
   })
 
   it('fails closed when the account endpoint rejects', async () => {
