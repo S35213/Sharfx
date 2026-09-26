@@ -54,7 +54,7 @@ describe('assessProviderReadiness', () => {
     expect(result.missingMethods).toEqual([])
   })
 
-  it('keeps external live execution disabled even when an adapter implements placement', () => {
+  it('accepts an external adapter when live execution is implemented', () => {
     const executionDescriptor: ProviderDescriptor = {
       ...descriptor,
       capabilities: { ...descriptor.capabilities, orderPlacement: true },
@@ -68,14 +68,14 @@ describe('assessProviderReadiness', () => {
 
     const result = assessProviderReadiness(adapter)
 
-    expect(result.ready).toBe(false)
-    expect(result.issues).toContain('LIVE_EXECUTION_DISABLED')
+    expect(result.ready).toBe(true)
+    expect(result.issues).not.toContain('LIVE_EXECUTION_DISABLED')
   })
 
-  it('allows the simulator execution mode to remain a local simulation', () => {
+  it('allows a local execution adapter to remain available', () => {
     const simulatorDescriptor: ProviderDescriptor = {
       ...descriptor,
-      id: 'simulator',
+      id: 'local-test',
       executionMode: 'simulated',
       kind: 'other',
       capabilities: { ...descriptor.capabilities, orderPlacement: true },
