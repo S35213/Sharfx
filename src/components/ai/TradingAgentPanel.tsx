@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Activity, Bot, Play, RefreshCw, ShieldCheck, Sparkles, Square } from 'lucide-react'
 import { analyzeLiquidity } from '../../engine/liquidity'
 import { analyzeMarketStructure, findSwingPoints } from '../../engine/marketStructure'
@@ -253,33 +253,6 @@ export function TradingAgentPanel({
     return buildTradingContext(symbol, timeframe, candles, structure, supportResistance, liquidity, setup)
   }, [candles, currentPrice, symbol, timeframe])
 
-  const getAuthenticatedDerivWebSocketUrl = useCallback(async (): Promise<string> => {
-    const query = new URLSearchParams({
-      accountType: derivEnvironment === 'demo' ? 'demo' : 'real',
-      accountId: derivAccountId,
-    })
-    if (derivConnectionId && !derivConnectionId.startsWith('account:')) query.set('connectionId', derivConnectionId)
-
-    const response = await fetch('/api/deriv/stream?' + query.toString(), {
-      credentials: 'include',
-      cache: 'no-store',
-    })
-    const data = await response.json().catch(() => ({})) as { wsUrl?: unknown; error?: unknown }
-    if (!response.ok || typeof data.wsUrl !== 'string' || !data.wsUrl) {
-      throw new Error(typeof data.error === 'string' ? data.error : 'Unable to obtain the authenticated Deriv market stream.')
-    }
-    return data.wsUrl
-  }, [derivAccountId, derivConnectionId, derivEnvironment])
-
-  const timeframeFrames = useMultiTimeframeCandles(
-    symbol,
-    timeframe,
-    candles,
-    scanM1Candles,
-    scanNonce,
-    getAuthenticatedDerivWebSocketUrl,
-  )
-  const multiTimeframe = useMemo(() => analyzeMultiTimeframeBias(timeframeFrames), [timeframeFrames])
   const fastScanCandidates = useMemo(
     () => buildScanCandidates(timeframeFrames, symbol, currentPrice),
     [currentPrice, scanNonce, symbol, timeframeFrames],
