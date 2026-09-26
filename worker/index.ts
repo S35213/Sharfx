@@ -30,6 +30,51 @@ type LegacyResponse = {
 
 type LegacyHandler = (req: LegacyRequest, res: LegacyResponse) => Promise<unknown> | unknown
 
+
+const handleDerivPublicMarketWebSocket = async (request: Request): Promise<Response> => {
+  if ((request.headers.get('Upgrade') || '').toLowerCase() !== 'websocket') {
+    return new Response('Expected Upgrade: websocket', { status: 426 })
+  }
+
+  const pair = new WebSocketPair()
+  const client = pair[0]
+  const server = pair[1]
+  server.accept({ allowHalfOpen: true })
+
+  const upstreamResponse = await fetch('https://ws.binaryws.com/websockets/v3', {
+    headers: { Upgrade: 'websocket' },
+  })
+  const upstream = upstreamResponse.webSocket
+
+  if (!upstream) {
+    server.close(1011, 'Deriv market stream unavailable')
+    return new Response(null, { status: 101, webSocket: client })
+  }
+
+  upstream.accept({ allowHalfOpen: true })
+
+  const closeBoth = (code = 1000, reason = 'closed'): void => {
+    try { if (server.readyState === WebSocket.OPEN || server.readyState === WebSocket.CLOSING) server.close(code, reason) } catch {}
+    try { if (upstream.readyState === WebSocket.OPEN || upstream.readyState === WebSocket.CLOSING) upstream.close(code, reason) } catch {}
+  }
+
+  server.addEventListener('message', (event) => {
+    if (upstream.readyState === WebSocket.OPEN) upstream.send(event.data)
+  })
+  upstream.addEventListener('message', (event) => {
+    if (server.readyState === WebSocket.OPEN) server.send(event.data)
+  })
+  server.addEventListener('close', (event) => closeBoth(event.code || 1000, event.reason || 'client closed'))
+  upstream.addEventListener('close', (event) => closeBoth(event.code || 1000, event.reason || 'upstream closed'))
+  server.addEventListener('error', () => closeBoth(1011, 'client websocket error'))
+  upstream.addEventListener('error', () => closeBoth(1011, 'Deriv websocket error'))
+
+  return new Response(null, {
+    status: 101,
+    webSocket: client,
+  })
+}
+
 const handlers: Record<string, LegacyHandler> = {
   '/api/auth': auth,
   '/api/bot/store': botStore,
@@ -120,7 +165,7 @@ export default {
   }): Promise<Response> {
     const url = new URL(request.url)
 
-    if (url.pathname === '/owner') {
+    if (url.pathname === '/api/deriv/public-market' && request.headers.get('Upgrade')?.toLowerCase() === 'websocket') {\n      try {\n        return await handleDerivPublicMarketWebSocket(request)\n      } catch (error) {\n        const message = error instanceof Error ? error.message : 'Deriv market WebSocket proxy failed.'\n        return new Response(message, { status: 502 })\n      }\n    }\n\n    if (url.pathname === '/owner') {
       const ownerUrl = new URL('/owner.html', request.url)
       return env.ASSETS.fetch(ownerUrl.toString(), { headers: request.headers })
     }
