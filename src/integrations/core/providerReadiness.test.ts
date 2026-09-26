@@ -113,6 +113,15 @@ describe('assessProviderReadiness', () => {
     expect(result.missingMethods).toEqual(['getDepositInstructions', 'getWithdrawalInstructions'])
   })
 
+
+  it('keeps the real Deriv adapter ready when funding is redirect-based', async () => {
+    const { DERIV_PROVIDER_ADAPTER } = await import('../deriv/adapter')
+    const result = assessProviderReadiness(DERIV_PROVIDER_ADAPTER)
+
+    expect(result.ready).toBe(true)
+    expect(result.missingMethods).toEqual([])
+  })
+
   it('allows a local execution adapter to remain available', () => {
     const simulatorDescriptor: ProviderDescriptor = {
       ...descriptor,
