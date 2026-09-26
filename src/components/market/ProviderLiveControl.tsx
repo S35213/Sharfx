@@ -50,8 +50,10 @@ export const ProviderLiveControl: React.FC<ProviderLiveControlProps> = ({ provid
         setStatus('connecting')
         setErrorMessage(null)
         const adapter = providerRegistry.get(providerId)
-        const readiness = assessProviderReadiness(adapter)
-        if (!readiness.ready) throw new Error('Provider is not ready.')
+        // The chart only depends on the realtime market stream capability.
+        // Do not let unrelated broker capabilities (funding, positions, etc.) block market data.
+        const readiness = assessProviderReadiness(adapter, ['realtimeMarketData'])
+        if (!readiness.ready) throw new Error('Deriv market stream is not ready: ' + (readiness.missingMethods.join(', ') || 'missing market-data capability.'))
         const check = validateProviderConnection(adapter, connection)
         if (!check.allowed) throw new Error(check.reason || 'The broker connection is not usable.')
         if (typeof adapter.subscribe !== 'function') throw new Error('The selected broker does not provide a live market stream.')
