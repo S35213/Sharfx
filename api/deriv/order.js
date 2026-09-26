@@ -114,8 +114,6 @@ const place = async (req) => {
       amount: stake,
       basis: 'stake',
       contract_type: side === 'BUY' ? 'MULTUP' : 'MULTDOWN',
-      amount: stake,
-      basis: 'stake',
       currency,
       multiplier,
       limit_order: {
