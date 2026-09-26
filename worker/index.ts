@@ -165,7 +165,16 @@ export default {
   }): Promise<Response> {
     const url = new URL(request.url)
 
-    if (url.pathname === '/api/deriv/public-market' && request.headers.get('Upgrade')?.toLowerCase() === 'websocket') {\n      try {\n        return await handleDerivPublicMarketWebSocket(request)\n      } catch (error) {\n        const message = error instanceof Error ? error.message : 'Deriv market WebSocket proxy failed.'\n        return new Response(message, { status: 502 })\n      }\n    }\n\n    if (url.pathname === '/owner') {
+    if (url.pathname === '/api/deriv/public-market' && request.headers.get('Upgrade')?.toLowerCase() === 'websocket') {
+      try {
+        return await handleDerivPublicMarketWebSocket(request)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Deriv market WebSocket proxy failed.'
+        return new Response(message, { status: 502 })
+      }
+    }
+
+    if (url.pathname === '/owner') {
       const ownerUrl = new URL('/owner.html', request.url)
       return env.ASSETS.fetch(ownerUrl.toString(), { headers: request.headers })
     }
