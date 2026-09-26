@@ -38,9 +38,9 @@ interface Props {
 
 type RiskMode = 'SAFE' | 'NORMAL' | 'EXTREME'
 const riskModes: Record<RiskMode, { label: string; percent: number; description: string }> = {
-  SAFE: { label: 'Safe', percent: 0.25, description: 'Conservative simulated risk' },
-  NORMAL: { label: 'Normal', percent: 0.5, description: 'Balanced simulated risk' },
-  EXTREME: { label: 'Extreme', percent: 1, description: 'Highest simulated risk profile' },
+  SAFE: { label: 'Safe', percent: 0.25, description: 'Conservative broker risk' },
+  NORMAL: { label: 'Normal', percent: 0.5, description: 'Balanced broker risk' },
+  EXTREME: { label: 'Extreme', percent: 1, description: 'Highest broker risk profile' },
 }
 type Phase = 'READY' | 'ANALYZING' | 'RUNNING'
 const SCAN_TIMEFRAMES: Timeframe[] = ['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1', 'W1']
@@ -50,7 +50,6 @@ const BOT_CYCLE_SECONDS = 10 as const
 const BOT_RESULT_DELAY_MS = BOT_CYCLE_SECONDS * 1000
 const BOT_START_DELAY_MS = 1000 as const
 const BOT_RESULT_DISPLAY_MS = 1000 as const
-const SIMULATOR_LEVERAGE = 100
 
 const buildFallbackSetup = (frameCandles: OHLCV[], structureBias: 'Bullish' | 'Bearish' | 'Sideways' | 'Unclear', symbol: string, currentPrice: number, precision: number): import('../../engine/setup/types').SetupCandidate | null => {
   if ((structureBias !== 'Bullish' && structureBias !== 'Bearish') || frameCandles.length < 8) return null
@@ -83,7 +82,7 @@ const buildFallbackSetup = (frameCandles: OHLCV[], structureBias: 'Bullish' | 'B
     rewardDistance,
     confidence,
     rationale: ['Market structure is directional on this timeframe.', `Recent candle direction aligned ${Math.round(consistency * 100)}% with the structural flow.`],
-    invalidation: 'The simulated stop loss invalidates this setup.',
+    invalidation: 'The stop loss invalidates this setup.',
     liquidityTarget: null,
   }
 }
@@ -436,7 +435,7 @@ export function TradingAgentPanel({
         if (!autoTradingEnabled || phase !== 'RUNNING') return
         if (resumePending && !activeBotOrder && !botPositionId && !botDisplayedOrder) setResumePending(false)
         if (activeBotOrder || botPositionId || botDisplayedOrder) {
-          setStatus('MONITORING • waiting for the current simulated bot round to close')
+          setStatus('MONITORING • waiting for the current broker trade round to close')
           return
         }
         if (!symbolSpec || !onBotOrder || !derivConnectionId || !derivAccountId) {
@@ -541,7 +540,7 @@ export function TradingAgentPanel({
           // to remain behind in the Market/Orders panels.
           const closed = await onBotClose?.(order.id, exitPrice)
           if (!closed) {
-            setStatus('BOT ERROR • round result was calculated but the simulated position did not close.')
+            setStatus('BOT ERROR • round result was calculated but the broker position did not close.')
             setLastResult('WAIT')
             setBotDisplayedOrder(order)
             setBotPositionId(order.id)
@@ -896,7 +895,7 @@ export function TradingAgentPanel({
         {!lotFitsAccount && lotSizeValid && botRiskCalc?.isValid && (
           <div className="mt-3 rounded-xl border border-shafx-danger/25 bg-shafx-danger/[0.055] px-3 py-2.5">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[9px] font-semibold text-shafx-danger">BOT BLOCKED BY ACCOUNT MARGIN</span>
+              <span className="text-[9px] font-semibold text-shafx-danger">BOT BLOCKED BY ACCOUNT RISK</span>
               <span className="font-mono text-[9px] text-shafx-danger">{parsedLotSize.toFixed(2)} &gt; {accountMarginLotCeiling.toFixed(2)} lot</span>
             </div>
             <p className="mt-1 text-[8px] text-shafx-textMuted">The bot will not execute until the lot fits the account's available account margin.</p>
@@ -910,7 +909,7 @@ export function TradingAgentPanel({
               <div className="min-w-0 flex-1">
                 <div className="font-mono text-[8px] font-semibold uppercase tracking-[0.17em] text-shafx-accent">PREPARING NEXT ROUND</div>
                 <div className="mt-1 text-sm font-semibold">Checking lower timeframes first</div>
-                <p className="mt-1 text-[9px] leading-4 text-shafx-textMuted">The execution bot scans independently before it opens a simulated position.</p>
+                <p className="mt-1 text-[9px] leading-4 text-shafx-textMuted">The execution bot scans independently before it opens a broker position.</p>
               </div>
             </div>
           </div>
