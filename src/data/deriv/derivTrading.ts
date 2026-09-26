@@ -70,12 +70,6 @@ export async function placeDerivContract(input: PlaceInput): Promise<TradeOrder>
     riskRewardRatio: input.riskRewardRatio,
     status: 'open',
     openTime: providerOrder.timestamp || new Date().toISOString(),
-    metadata: {
-      provider: 'deriv',
-      contractId: String(providerOrder.providerOrderId),
-      environment: input.connection.environment,
-      multiplier: input.multiplier ?? 10,
-    },
   } as TradeOrder
 }
 
