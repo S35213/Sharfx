@@ -31,6 +31,7 @@ import { analyzeLiquidity } from './engine/liquidity'
 import { analyzeMarketStructure, findSwingPoints } from './engine/marketStructure'
 import { analyzeSupportResistance } from './engine/supportResistance'
 import type { AccountData, MarketAnalysis, MarketPair, OHLCV, SimulatedOrderDraft, SymbolSpec, TradeOrder } from './types'
+import type { SetupCandidate } from './engine/setup/types'
 import { mockWatchlist } from './data/mock/watchlist'
 
 const TerminalContent: React.FC = () => {
@@ -46,7 +47,7 @@ const TerminalContent: React.FC = () => {
   const [pendingOrders] = useState<TradeOrder[]>([])
   const [tradeHistory, setTradeHistory] = useState<TradeOrder[]>([])
   const [botOrderIds, setBotOrderIds] = useState<string[]>([])
-  const [reviewSetup, setReviewSetup] = useState<import('./engine/setup/types').SetupCandidate | null>(null)
+  const [reviewSetup, setReviewSetup] = useState<SetupCandidate | null>(null)
   const [liveMarketActive, setLiveMarketActive] = useState(false)
   const [chartSettings, setChartSettings] = useState<ChartWorkspaceSettings>(() => readChartWorkspaceSettings())
   const [toast, setToast] = useState<ToastMessage | null>(null)
@@ -315,7 +316,7 @@ const TerminalContent: React.FC = () => {
     }
   }, [accountData, derivOrderConnection, pushToast])
 
-  const handleReviewSetup = useCallback((setup): void => {
+  const handleReviewSetup = useCallback((setup?: SetupCandidate | null): void => {
     setReviewSetup(setup || null)
     setMobileTab('chat')
     setMobileDockOpen(false)
