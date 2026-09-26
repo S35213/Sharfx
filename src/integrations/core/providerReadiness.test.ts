@@ -94,6 +94,30 @@ describe('assessProviderReadiness', () => {
     expect(result.missingMethods).toEqual([])
   })
 
+  it('can scope readiness to the capability used by a market-data flow', () => {
+    const marketDescriptor: ProviderDescriptor = {
+      ...descriptor,
+      capabilities: {
+        ...descriptor.capabilities,
+        accountRead: true,
+        realtimeMarketData: true,
+      },
+    }
+    const adapter: ProviderAdapter = {
+      descriptor: marketDescriptor,
+      subscribe: async () => ({ streamId: 'stream-1', close: async () => undefined }),
+    }
+
+    const full = assessProviderReadiness(adapter)
+    const marketOnly = assessProviderReadiness(adapter, ['realtimeMarketData'])
+
+    expect(full.ready).toBe(false)
+    expect(full.missingMethods).toContain('getAccounts')
+    expect(full.missingMethods).toContain('subscribe')
+    expect(marketOnly.ready).toBe(true)
+    expect(marketOnly.missingMethods).toEqual([])
+  })
+
   it('still requires adapter funding instructions for API-based funding', () => {
     const apiFundingDescriptor: ProviderDescriptor = {
       ...descriptor,
