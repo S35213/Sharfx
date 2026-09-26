@@ -40,7 +40,7 @@ export interface ExecuteDerivTradeResult {
 export const executeDerivTrade = async (input: ExecuteDerivTradeInput): Promise<ExecuteDerivTradeResult> => {
   const decision = decideAgentAction(input.context)
   const setup = decision.setup
-  if (decision.action !== 'EXECUTE_SIMULATION' || !setup) return { decision, plan: null, order: null }
+  if (decision.action !== 'EXECUTE_TRADE' || !setup) return { decision, plan: null, order: null }
 
   let plan = prepareTradePlan({
     setup,
