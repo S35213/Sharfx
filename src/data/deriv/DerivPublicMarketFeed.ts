@@ -1,6 +1,6 @@
 import type { OHLCV, Timeframe } from '../../types'
 
-export const DERIV_PUBLIC_WS_URL = 'wss://api.derivws.com/trading/v1/options/ws/public'
+export const DERIV_PUBLIC_WS_URL = 'wss://ws.binaryws.com/websockets/v3'
 
 const timeframeSeconds: Record<Timeframe, number> = {
   M1: 60,
@@ -107,7 +107,7 @@ export class DerivPublicMarketFeed {
           socket.send(JSON.stringify({ ping: 1, req_id: Date.now() }))
         }
       }, 30000)
-      socket.send(JSON.stringify({ ticks_history: this.symbol, end: 'latest', count: 200, style: 'candles', granularity: timeframeSeconds[this.timeframe], subscribe: 0, req_id: 1 }))
+      socket.send(JSON.stringify({ ticks_history: this.symbol, end: 'latest', count: 300, style: 'candles', granularity: timeframeSeconds[this.timeframe], subscribe: 0, req_id: 1 }))
       socket.send(JSON.stringify({ ticks: this.symbol, subscribe: 1, req_id: 2 }))
     }
 
