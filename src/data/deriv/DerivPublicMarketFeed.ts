@@ -1,18 +1,19 @@
 import type { OHLCV, Timeframe } from '../../types'
 
 export const DERIV_PUBLIC_WS_URL = 'wss://api.derivws.com/trading/v1/options/ws/public'
+export const SHAFX_MARKET_PROXY_WS_URL = 'wss://sharfx.150sharingan2.workers.dev/api/deriv/public-market'
 
 export const getDerivMarketWebSocketUrl = (): string => {
   if (typeof window === 'undefined') return DERIV_PUBLIC_WS_URL
 
-  // Production SHAFX runs on Cloudflare Workers. Route the public Deriv
-  // market socket through the same-origin Worker so mobile browsers do not
-  // depend on a direct cross-origin WebSocket path. Local development keeps
+  // SHAFX production is currently served by Vercel while the market WebSocket
+  // proxy is deployed on the Cloudflare Worker. A same-origin /api URL would
+  // therefore hit Vercel, where this WebSocket route does not exist. Connect
+  // directly to the deployed Cloudflare proxy instead. Local development keeps
   // the direct Deriv endpoint.
   const hostname = window.location.hostname
   if (hostname === 'localhost' || hostname === '127.0.0.1') return DERIV_PUBLIC_WS_URL
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${protocol}//${window.location.host}/api/deriv/public-market`
+  return SHAFX_MARKET_PROXY_WS_URL
 }
 
 const timeframeSeconds: Record<Timeframe, number> = {
