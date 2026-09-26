@@ -54,8 +54,8 @@ const handleDerivPublicMarketWebSocket = async (request: Request): Promise<Respo
   upstream.accept()
 
   const closeBoth = (code = 1000, reason = 'closed'): void => {
-    try { if (server.readyState === WebSocket.OPEN || server.readyState === WebSocket.CLOSING) server.close(code, reason) } catch {}
-    try { if (upstream.readyState === WebSocket.OPEN || upstream.readyState === WebSocket.CLOSING) upstream.close(code, reason) } catch {}
+    try { if (server.readyState === WebSocket.OPEN || server.readyState === WebSocket.CLOSING) server.close(code, reason) } catch (error) { void error }
+    try { if (upstream.readyState === WebSocket.OPEN || upstream.readyState === WebSocket.CLOSING) upstream.close(code, reason) } catch (error) { void error }
   }
 
   server.addEventListener('message', (event) => {
