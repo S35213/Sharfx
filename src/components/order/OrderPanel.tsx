@@ -101,7 +101,6 @@ export const OrderPanel: React.FC<Props> = ({ symbol, currentPrice, bidPrice = c
   const riskCalc = useMemo(() => { if (![numEntry, numSL, numTP, numRisk].every(Number.isFinite)) return { ...emptyResult, errorMessage: 'Please fill in all fields with valid numbers.' }; return calculateRisk({ accountBalance, accountCurrency, riskPercent: numRisk, side: orderType, entryPrice: numEntry, stopLoss: numSL, takeProfit: numTP, symbolSpec, conversionRate }) }, [accountBalance, accountCurrency, conversionRate, numEntry, numRisk, numSL, numTP, orderType, symbolSpec])
   const parsedLotSize = Number(lotSize)
   const lotSizeIsValid = Number.isFinite(parsedLotSize) && parsedLotSize >= symbolSpec.minLotSize && parsedLotSize <= symbolSpec.maxLotSize && Math.abs((parsedLotSize / symbolSpec.lotStep) - Math.round(parsedLotSize / symbolSpec.lotStep)) < 1e-8
-  const marginLotCeiling = useMemo(() => Number.isFinite(accountBalance) && accountBalance > 0 ? Math.max(symbolSpec.minLotSize, accountBalance) : 0, [accountBalance, symbolSpec.minLotSize])
   const lotFitsAccountMargin = Number.isFinite(accountBalance) && accountBalance > 0 && parsedLotSize <= Math.max(symbolSpec.minLotSize, accountBalance)
   const canSubmit = riskCalc.isValid && lotSizeIsValid && lotFitsAccountMargin
 
