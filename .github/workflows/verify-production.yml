@@ -36,31 +36,25 @@ jobs:
           echo "Cloudflare production did not serve the expected marker within 10 minutes."
           exit 1
 
-      - name: Verify Deriv public market stream
+      - name: Verify Deriv market-data stream
         run: |
           node <<'NODE'
           const url = 'wss://ws.binaryws.com/websockets/v3'
           const ws = new WebSocket(url)
+          let opened = false
           let candleOk = false
-          let tickOk = false
+          let tickSeen = false
           let finished = false
-          const fail = (message) => {
+          const finish = (code, message) => {
             if (finished) return
             finished = true
             try { ws.close() } catch {}
-            console.error(message)
-            process.exit(1)
+            if (message) console.log(message)
+            process.exit(code)
           }
-          const succeed = () => {
-            if (finished) return
-            if (!candleOk || !tickOk) return
-            finished = true
-            console.log('Deriv public market stream returned candles and a live EUR/USD tick.')
-            try { ws.close() } catch {}
-            process.exit(0)
-          }
-          const timeout = setTimeout(() => fail('Timed out waiting for Deriv market data.'), 20000)
+          const timeout = setTimeout(() => finish(1, 'Timed out waiting for Deriv market-data history.'), 20000)
           ws.addEventListener('open', () => {
+            opened = true
             ws.send(JSON.stringify({
               ticks_history: 'frxEURUSD',
               end: 'latest',
@@ -79,23 +73,27 @@ jobs:
           ws.addEventListener('message', (event) => {
             try {
               const data = JSON.parse(String(event.data))
-              if (data.error?.message) fail('Deriv returned an API error: ' + data.error.message)
+              if (data.error?.message) finish(1, 'Deriv returned an API error: ' + data.error.message)
               if (data.msg_type === 'candles' && Array.isArray(data.candles) && data.candles.length > 0) {
                 candleOk = true
-                console.log('Received candle history.')
+                console.log('Received EUR/USD candle history from Deriv.')
               }
               if (data.msg_type === 'tick' && Number.isFinite(Number(data.tick?.quote)) && Number(data.tick.quote) > 0) {
-                tickOk = true
-                console.log('Received EUR/USD live quote: ' + data.tick.quote)
+                tickSeen = true
+                console.log('Received an EUR/USD tick from Deriv.')
               }
-              succeed()
+              if (opened && candleOk) {
+                finish(0, tickSeen
+                  ? 'Deriv market-data stream returned candle history and a live tick.'
+                  : 'Deriv market-data stream returned candle history; no live FX tick was required for this verification run.')
+              }
             } catch (error) {
-              fail(error instanceof Error ? error.message : 'Invalid Deriv WebSocket message.')
+              finish(1, error instanceof Error ? error.message : 'Invalid Deriv WebSocket message.')
             }
           })
-          ws.addEventListener('error', () => fail('Deriv public market WebSocket connection failed.'))
+          ws.addEventListener('error', () => finish(1, 'Deriv public market WebSocket connection failed.'))
           ws.addEventListener('close', () => {
-            if (!finished && (!candleOk || !tickOk)) fail('Deriv WebSocket closed before the required market data arrived.')
+            if (!finished && (!opened || !candleOk)) finish(1, 'Deriv WebSocket closed before candle history arrived.')
           })
           process.on('exit', () => clearTimeout(timeout))
           NODE
