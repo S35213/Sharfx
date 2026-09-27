@@ -16,11 +16,14 @@ interface ProviderLiveControlProps {
 
 type Status = 'waiting' | 'connecting' | 'live' | 'error'
 
-const toOHLCV = (time: string, open: number, high: number, low: number, close: number): OHLCV | null => {
+export const toOHLCV = (time: string, open: number, high: number, low: number, close: number): OHLCV | null => {
   const timestamp = Date.parse(time)
   if (![timestamp, open, high, low, close].every(Number.isFinite)) return null
   if (high < Math.max(open, close) || low > Math.min(open, close) || low > high) return null
-  return { time: timestamp, open, high, low, close }
+  // SHAFX OHLCV and Lightweight Charts use Unix seconds. Provider snapshots
+  // carry ISO timestamps (parsed here as milliseconds), so normalize at the
+  // adapter boundary before the chart receives them.
+  return { time: Math.floor(timestamp / 1000), open, high, low, close }
 }
 
 export const ProviderLiveControl: React.FC<ProviderLiveControlProps> = ({ providerId, connection, symbol, timeframe, onUpdate, onActiveChange }) => {
