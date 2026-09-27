@@ -27,6 +27,19 @@ const timeframeSeconds: Record<Timeframe, number> = {
   W1: 604800,
 }
 
+export const createDerivCandleHistoryRequest = (
+  symbol: string,
+  timeframe: Timeframe,
+  options: { end?: 'latest' | number; count?: number; reqId?: number } = {},
+) => ({
+  ticks_history: symbol,
+  end: options.end ?? 'latest',
+  count: options.count ?? 300,
+  style: 'candles' as const,
+  granularity: timeframeSeconds[timeframe],
+  req_id: options.reqId ?? 1,
+})
+
 export const toDerivSymbol = (symbol: string): string => {
   const normalized = symbol.replace('/', '').toUpperCase()
   return normalized.length === 6 ? `frx${normalized}` : symbol
@@ -131,6 +144,15 @@ export class DerivPublicMarketFeed {
     }
     this.socket = socket
 
+    const requestFallbackCandles = (): void => {
+      const request = createDerivCandleHistoryRequest(this.symbol, this.timeframe, {
+        end: Math.floor(Date.now() / 1000) - 172800,
+        count: 300,
+        reqId: 3,
+      })
+      socket.send(JSON.stringify(request))
+    }
+
     socket.onopen = () => {
       if (this.stopped || generation !== this.connectionGeneration) return
       this.reconnectAttempt = 0
@@ -141,7 +163,7 @@ export class DerivPublicMarketFeed {
           socket.send(JSON.stringify({ ping: 1, req_id: Date.now() }))
         }
       }, 30000)
-      socket.send(JSON.stringify({ ticks_history: this.symbol, end: 'latest', count: 300, style: 'candles', granularity: timeframeSeconds[this.timeframe], subscribe: 0, req_id: 1 }))
+      socket.send(JSON.stringify(createDerivCandleHistoryRequest(this.symbol, this.timeframe)))
       socket.send(JSON.stringify({ ticks: this.symbol, subscribe: 1, req_id: 2 }))
     }
 
@@ -156,15 +178,7 @@ export class DerivPublicMarketFeed {
             // Candle history may reject "latest" while a market is closed. Retry
             // against a known historical point so the chart can still render the
             // latest completed session instead of going blank for the weekend.
-            const fallbackEnd = Math.floor(Date.now() / 1000) - 172800
-            socket.send(JSON.stringify({
-              ticks_history: this.symbol,
-              end: fallbackEnd,
-              count: 600,
-              style: 'ticks',
-              subscribe: 0,
-              req_id: 3,
-            }))
+            requestFallbackCandles()
             return
           }
           if (marketClosed && response.req_id === 2) {
@@ -178,7 +192,14 @@ export class DerivPublicMarketFeed {
           return
         }
         if (response.msg_type === 'candles') {
-          this.candles = toCandles(response.candles).sort((a, b) => a.time - b.time).slice(-300)
+          const receivedCandles = toCandles(response.candles).sort((a, b) => a.time - b.time)
+          if (response.req_id === 1 && receivedCandles.length === 0) {
+            // A closed market can validly return an empty "latest" history response.
+            // Retry with a recent completed session so the chart still gets real candles.
+            requestFallbackCandles()
+            return
+          }
+          this.candles = receivedCandles.slice(-300)
           const lastCandle = this.candles[this.candles.length - 1]
           if (lastCandle) this.onUpdate?.(this.candles, lastCandle.close, Math.trunc(lastCandle.time))
           return
