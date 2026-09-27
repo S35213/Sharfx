@@ -8,6 +8,7 @@ describe('DerivPublicMarketFeed', () => {
 
   it('uses the deployed Cloudflare market proxy for production browsers', () => {
     vi.stubGlobal('window', { location: { hostname: 'shafx.vercel.app', protocol: 'https:', host: 'shafx.vercel.app' } })
+    expect(SHAFX_MARKET_PROXY_WS_URL).toBe('wss://sharfx.150sharingan2.workers.dev/api/deriv/public-market')
     expect(getDerivMarketWebSocketUrl()).toBe(SHAFX_MARKET_PROXY_WS_URL)
     vi.unstubAllGlobals()
   })
@@ -61,3 +62,4 @@ describe('DerivPublicMarketFeed', () => {
     expect(toDerivSymbol('1HZ100V')).toBe('1HZ100V')
   })
 })
+
