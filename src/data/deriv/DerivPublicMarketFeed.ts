@@ -210,9 +210,6 @@ export class DerivPublicMarketFeed {
           return
         }
         if (response.msg_type === 'candles') {
-          receivedMarketData = true
-          clearFirstDataTimer()
-          if (usingDirectFallback) this.forceDirectFallback = false
           const receivedCandles = toCandles(response.candles).sort((a, b) => a.time - b.time)
           if (response.req_id === 1 && receivedCandles.length === 0) {
             // A closed market can validly return an empty "latest" history response.
@@ -220,17 +217,20 @@ export class DerivPublicMarketFeed {
             requestFallbackCandles()
             return
           }
+          receivedMarketData = receivedCandles.length > 0 || receivedMarketData
+          clearFirstDataTimer()
+          if (usingDirectFallback) this.forceDirectFallback = false
           this.candles = receivedCandles.slice(-300)
           const lastCandle = this.candles[this.candles.length - 1]
           if (lastCandle) this.onUpdate?.(this.candles, lastCandle.close, Math.trunc(lastCandle.time))
           return
         }
         if (response.msg_type === 'history' && response.history) {
-          receivedMarketData = true
-          clearFirstDataTimer()
-          if (usingDirectFallback) this.forceDirectFallback = false
           const candles = toTickCandles(response.history.times, response.history.prices, timeframeSeconds[this.timeframe])
           if (candles.length) {
+            receivedMarketData = true
+            clearFirstDataTimer()
+            if (usingDirectFallback) this.forceDirectFallback = false
             this.candles = candles
             const lastCandle = this.candles[this.candles.length - 1]
             this.onUpdate?.(this.candles, lastCandle.close, Math.trunc(lastCandle.time))
