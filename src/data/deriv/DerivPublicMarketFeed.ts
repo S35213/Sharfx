@@ -1,7 +1,8 @@
 import type { OHLCV, Timeframe } from '../../types'
 
 export const DERIV_PUBLIC_WS_URL = 'wss://api.derivws.com/trading/v1/options/ws/public'
-export const SHAFX_MARKET_PROXY_WS_URL = 'wss://sharfx.150sharingan2.workers.dev/api/deriv/public-market'
+const DEFAULT_SHAFX_MARKET_PROXY_WS_URL = 'wss://sharfx.150sharingan2.workers.dev/api/deriv/public-market'
+export const SHAFX_MARKET_PROXY_WS_URL = import.meta.env.VITE_SHAFX_MARKET_WS_URL?.trim() || DEFAULT_SHAFX_MARKET_PROXY_WS_URL
 
 export const getDerivMarketWebSocketUrl = (): string => {
   if (typeof window === 'undefined') return DERIV_PUBLIC_WS_URL
@@ -280,3 +281,4 @@ export class DerivPublicMarketFeed {
     this.webSocketUrlProvider = undefined
   }
 }
+
