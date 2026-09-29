@@ -24,3 +24,35 @@ export const getConversionRate = (fromCurrency: string, toCurrency: string): num
   }
   return undefined
 }
+
+
+export const getSymbolSpec = (symbol: string): SymbolSpec => {
+  const normalized = symbol.replace('/', '').toUpperCase()
+  const existing = SYMBOL_SPECS[symbol]
+  if (existing) return existing
+  if (/^[A-Z]{6}$/.test(normalized)) {
+    const quoteCurrency = normalized.slice(3)
+    return {
+      symbol: normalized.slice(0, 3) + '/' + quoteCurrency,
+      baseCurrency: normalized.slice(0, 3),
+      quoteCurrency,
+      pipSize: quoteCurrency === 'JPY' ? 0.01 : 0.0001,
+      contractSize: 100000,
+      minLotSize: 0.01,
+      maxLotSize: 100,
+      lotStep: 0.01,
+      pricePrecision: quoteCurrency === 'JPY' ? 3 : 5,
+    }
+  }
+  return {
+    symbol,
+    baseCurrency: normalized.slice(0, 3) || 'USD',
+    quoteCurrency: normalized.slice(3) || 'USD',
+    pipSize: 0.0001,
+    contractSize: 100000,
+    minLotSize: 0.01,
+    maxLotSize: 100,
+    lotStep: 0.01,
+    pricePrecision: 5,
+  }
+}
