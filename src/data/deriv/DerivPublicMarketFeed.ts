@@ -47,10 +47,103 @@ export const toDerivSymbol = (symbol: string): string => {
   return normalized.length === 6 ? `frx${normalized}` : symbol
 }
 
+export interface DerivActiveSymbol {
+  symbol: string
+  displayName: string
+  market: string
+  pipSize?: number
+}
+
+export const formatForexSymbol = (symbol: string): string => {
+  const normalized = symbol.replace('/', '').toUpperCase().replace(/^FRX/, '')
+  return /^[A-Z]{6}$/.test(normalized) ? normalized.slice(0, 3) + '/' + normalized.slice(3) : symbol
+}
+
+const openPublicMarketSocket = (timeoutMs = 5000): Promise<WebSocket> => new Promise((resolve, reject) => {
+  const socket = new WebSocket(getDerivMarketWebSocketUrl())
+  const timer = globalThis.setTimeout(() => {
+    try { socket.close() } catch (error) { void error }
+    reject(new Error('Deriv public market socket timed out.'))
+  }, timeoutMs)
+  socket.onopen = () => {
+    globalThis.clearTimeout(timer)
+    resolve(socket)
+  }
+  socket.onerror = () => {
+    globalThis.clearTimeout(timer)
+    reject(new Error('Deriv public market socket failed.'))
+  }
+})
+
+export const fetchDerivActiveForexSymbols = async (): Promise<DerivActiveSymbol[]> => {
+  const socket = await openPublicMarketSocket()
+  return await new Promise((resolve, reject) => {
+    const timer = globalThis.setTimeout(() => {
+      try { socket.close() } catch (error) { void error }
+      reject(new Error('Deriv active-symbol request timed out.'))
+    }, 5000)
+    socket.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(String(event.data)) as DerivTickResponse
+        if (!Array.isArray(payload.active_symbols)) return
+        globalThis.clearTimeout(timer)
+        const rows = payload.active_symbols.flatMap((row) => {
+          const raw = typeof row.underlying_symbol === 'string' ? row.underlying_symbol : typeof row.symbol === 'string' ? row.symbol : ''
+          const market = typeof row.market === 'string' ? row.market : typeof row.underlying_symbol_type === 'string' ? row.underlying_symbol_type : ''
+          const normalized = raw.replace(/^frx/i, '').replace('/', '').toUpperCase()
+          if (!/^[A-Z]{6}$/.test(normalized) || (market && !/forex/i.test(market))) return []
+          const displayName = typeof row.underlying_symbol_name === 'string'
+            ? row.underlying_symbol_name
+            : typeof row.display_name === 'string'
+              ? row.display_name
+              : formatForexSymbol(normalized)
+          const pipSize = Number(row.pip_size ?? row.pip)
+          return [{ symbol: formatForexSymbol(normalized), displayName, market: 'forex', ...(Number.isFinite(pipSize) ? { pipSize } : {}) }]
+        })
+        try { socket.close() } catch (error) { void error }
+        resolve(Array.from(new Map(rows.map((row) => [row.symbol, row])).values()))
+      } catch (error) {
+        globalThis.clearTimeout(timer)
+        reject(error)
+      }
+    }
+  })
+}
+
+export const subscribeDerivForexQuotes = async (
+  symbols: string[],
+  onQuote: (symbol: string, quote: number, epoch: number) => void,
+): Promise<() => void> => {
+  if (!symbols.length) return () => undefined
+  const socket = await openPublicMarketSocket()
+  let stopped = false
+  const normalizedSymbols = symbols.map(toDerivSymbol)
+  socket.send(JSON.stringify({ ticks: normalizedSymbols, subscribe: 1, req_id: 7101 }))
+  socket.onmessage = (event) => {
+    if (stopped) return
+    try {
+      const payload = JSON.parse(String(event.data)) as DerivTickResponse
+      if (payload.msg_type !== 'tick' || typeof payload.tick?.symbol !== 'string') return
+      const quote = Number(payload.tick.quote)
+      const epoch = Number(payload.tick.epoch)
+      if (!Number.isFinite(quote) || quote <= 0 || !Number.isFinite(epoch)) return
+      onQuote(formatForexSymbol(payload.tick.symbol), quote, epoch)
+    } catch {
+      // Ignore malformed catalog messages without interrupting the quote watch.
+    }
+  }
+  return () => {
+    stopped = true
+    try { socket.close() } catch (error) { void error }
+  }
+}
+
 interface DerivTickResponse {
   msg_type?: string
   req_id?: number
   tick?: { epoch?: number; quote?: number; symbol?: string }
+  subscription?: { id?: string }
+  active_symbols?: Array<Record<string, unknown>>
   candles?: Array<{ epoch?: number; open?: number; high?: number; low?: number; close?: number }>
   history?: { times?: number[]; prices?: number[] }
   error?: { message?: string }
