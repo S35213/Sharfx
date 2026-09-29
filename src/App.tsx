@@ -24,8 +24,8 @@ import { AccountPanel } from './components/account/AccountPanel'
 import { TradesPanel } from './components/trades/TradesPanel'
 import { Toast, type ToastMessage } from './components/common/Toast'
 import { CHART_SETTINGS_EVENT, readChartWorkspaceSettings, type ChartWorkspaceSettings } from './app/chartSettings'
-import { SYMBOL_SPECS } from './data/mock/symbols'
-import { getProviderConnections, chooseDefaultProviderSelection, subscribeToProviderSelection, type ActiveProviderSelection } from './data/provider/providerConnections'
+import { getSymbolSpec, SYMBOL_SPECS } from './data/mock/symbols'
+import { getProviderConnections, chooseDefaultProviderSelection, getStoredProviderSelection, subscribeToProviderSelection, type ActiveProviderSelection } from './data/provider/providerConnections'
 import { ProviderAccountStreamManager, providerAccountStreamKey } from './data/provider/ProviderAccountStreamManager'
 import { analyzeLiquidity } from './engine/liquidity'
 import { analyzeMarketStructure, findSwingPoints } from './engine/marketStructure'
@@ -33,10 +33,11 @@ import { analyzeSupportResistance } from './engine/supportResistance'
 import type { AccountData, MarketAnalysis, MarketPair, OHLCV, SimulatedOrderDraft, SymbolSpec, TradeOrder } from './types'
 import type { SetupCandidate } from './engine/setup/types'
 import { mockWatchlist } from './data/mock/watchlist'
+import { fetchDerivActiveForexSymbols, subscribeDerivForexQuotes } from './data/deriv/DerivPublicMarketFeed'
 
 const TerminalContent: React.FC = () => {
   const { selectedSymbol, setSelectedSymbol, timeframe, setTimeframe } = useTerminal()
-  const [activeProviderSelection, setActiveProviderSelection] = useState<ActiveProviderSelection | null>(() => chooseDefaultProviderSelection([]))
+  const [activeProviderSelection, setActiveProviderSelection] = useState<ActiveProviderSelection | null>(() => getStoredProviderSelection())
   const [currentPrice, setCurrentPrice] = useState(0)
   const [marketTimestamp, setMarketTimestamp] = useState(0)
   const [liveCandles, setLiveCandles] = useState<OHLCV[]>([])
@@ -122,13 +123,49 @@ const TerminalContent: React.FC = () => {
   }, [pushToast])
 
   useEffect(() => {
-    const nextSpec = SYMBOL_SPECS[selectedSymbol] ?? SYMBOL_SPECS['EUR/USD']
-    setSymbolSpec(nextSpec)
+    setSymbolSpec(getSymbolSpec(selectedSymbol))
     setLiveCandles([])
     setCurrentPrice(0)
     setMarketTimestamp(0)
     setLiveMarketActive(false)
   }, [selectedSymbol, timeframe])
+
+  useEffect(() => {
+    let cancelled = false
+    let stopQuotes: (() => void) | undefined
+    const start = async (): Promise<void> => {
+      try {
+        const active = await fetchDerivActiveForexSymbols()
+        if (cancelled) return
+        const symbols = active.map((item) => item.symbol).filter(Boolean)
+        setWatchlist((previous) => {
+          const existing = new Map(previous.map((pair) => [pair.symbol, pair]))
+          for (const symbol of symbols) {
+            if (!existing.has(symbol)) existing.set(symbol, { symbol, price: 0, change: 0, changePercent: 0, status: 'closed' })
+          }
+          return Array.from(existing.values())
+        })
+        if (!symbols.length) return
+        stopQuotes = await subscribeDerivForexQuotes(symbols.slice(0, 150), (symbol, quote) => {
+          if (cancelled) return
+          setWatchlist((previous) => previous.map((pair) => {
+            if (pair.symbol !== symbol) return pair
+            const previousPrice = pair.price
+            const move = previousPrice > 0 ? quote - previousPrice : 0
+            const percent = previousPrice > 0 ? (move / previousPrice) * 100 : 0
+            return { ...pair, price: quote, change: move, changePercent: percent, status: 'open' }
+          }))
+        })
+      } catch {
+        // Keep the static fallback watchlist available when the catalog request is unavailable.
+      }
+    }
+    void start()
+    return () => {
+      cancelled = true
+      stopQuotes?.()
+    }
+  }, [])
 
   useEffect(() => {
     const manager = accountStreamManager.current
@@ -336,8 +373,13 @@ const TerminalContent: React.FC = () => {
   const showFunds = mobileTab === 'funds'
   const showAccount = mobileTab === 'account'
 
-  if (!accountData) {
-    return <div className="flex h-full min-h-[100svh] items-center justify-center bg-shafx-bg px-5 text-center text-sm text-shafx-textMuted">Connecting to your Deriv account…</div>
+  const resolvedAccountData = accountData ?? {
+    balance: 0,
+    equity: 0,
+    usedMargin: 0,
+    freeMargin: 0,
+    floatingPL: 0,
+    currency: 'USD',
   }
 
   const liveControl = <ProviderLiveControl
@@ -354,11 +396,11 @@ const TerminalContent: React.FC = () => {
       <FXMoveMatrix pairs={watchlist} />
       <MarketAnalysisPanel analysis={marketAnalysis} pricePrecision={symbolSpec.pricePrecision} pipSize={symbolSpec.pipSize} currentPrice={currentPrice} timeframe={timeframe} />
 <AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={liveCandles} setup={reviewSetup} onReviewSetup={() => handleReviewSetup(reviewSetup)} />
-      <OrderPanel symbol={selectedSymbol} currentPrice={currentPrice} bidPrice={currentPrice} askPrice={currentPrice} accountBalance={accountData?.balance ?? 0} accountCurrency={accountData?.currency ?? 'USD'} symbolSpec={symbolSpec} onSubmitOrder={(draft) => { void handleManualOrder(draft) }} aiSetup={reviewSetup} autoApplyAISetup={Boolean(reviewSetup)} />
+      <OrderPanel symbol={selectedSymbol} currentPrice={currentPrice} bidPrice={currentPrice} askPrice={currentPrice} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} onSubmitOrder={(draft) => { void handleManualOrder(draft) }} aiSetup={reviewSetup} autoApplyAISetup={Boolean(reviewSetup)} />
     </div>,
     chat: <div className="space-y-3">
       <AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={liveCandles} setup={reviewSetup} onReviewSetup={() => handleReviewSetup(reviewSetup)} />
-      <OrderPanel symbol={selectedSymbol} currentPrice={currentPrice} bidPrice={currentPrice} askPrice={currentPrice} accountBalance={accountData.balance} accountCurrency={accountData.currency} symbolSpec={symbolSpec} onSubmitOrder={(draft) => { void handleManualOrder(draft) }} aiSetup={reviewSetup} autoApplyAISetup={Boolean(reviewSetup)} />
+      <OrderPanel symbol={selectedSymbol} currentPrice={currentPrice} bidPrice={currentPrice} askPrice={currentPrice} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} onSubmitOrder={(draft) => { void handleManualOrder(draft) }} aiSetup={reviewSetup} autoApplyAISetup={Boolean(reviewSetup)} />
     </div>,
     bot: <TradingAgentPanel
       symbol={selectedSymbol}
@@ -406,10 +448,10 @@ const TerminalContent: React.FC = () => {
         <div className="shafx-landscape-secondary"><WorkspaceStatus provider={activeProviderName} mode="broker" symbol={selectedSymbol} price={currentPrice} precision={symbolSpec.pricePrecision} live={liveMarketActive} /></div>
         <div className="shafx-landscape-secondary border-b border-shafx-border bg-shafx-surface/70 px-2 py-2 sm:px-3">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <div className="rounded-xl border border-shafx-border bg-shafx-bg/80 px-3 py-2"><div className="flex items-center justify-between gap-2"><span className="text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted">Account</span><span className={accountModeTone + " font-mono text-[8px] font-bold"}>{accountModeLabel}</span></div><div className="mt-1 font-mono text-sm font-bold tabular-nums">{accountData.currency} {accountData.balance.toFixed(2)}</div></div>
-            <div className="rounded-xl border border-shafx-border bg-shafx-bg/80 px-3 py-2"><div className="text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted">Equity</div><div className="mt-1 font-mono text-sm font-bold tabular-nums">{accountData.currency} {accountData.equity.toFixed(2)}</div><div className={accountData.floatingPL >= 0 ? 'text-[8px] text-shafx-success' : 'text-[8px] text-shafx-danger'}>{accountData.floatingPL >= 0 ? '+' : ''}{accountData.floatingPL.toFixed(2)} floating</div></div>
+            <div className="rounded-xl border border-shafx-border bg-shafx-bg/80 px-3 py-2"><div className="flex items-center justify-between gap-2"><span className="text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted">Account</span><span className={accountModeTone + " font-mono text-[8px] font-bold"}>{accountModeLabel}</span></div><div className="mt-1 font-mono text-sm font-bold tabular-nums">{resolvedAccountData.currency} {resolvedAccountData.balance.toFixed(2)}</div></div>
+            <div className="rounded-xl border border-shafx-border bg-shafx-bg/80 px-3 py-2"><div className="text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted">Equity</div><div className="mt-1 font-mono text-sm font-bold tabular-nums">{accountData.currency} {resolvedAccountData.equity.toFixed(2)}</div><div className={accountData.floatingPL >= 0 ? 'text-[8px] text-shafx-success' : 'text-[8px] text-shafx-danger'}>{resolvedAccountData.floatingPL >= 0 ? '+' : ''}{resolvedAccountData.floatingPL.toFixed(2)} floating</div></div>
             <div className="rounded-xl border border-shafx-border bg-shafx-bg/80 px-3 py-2"><div className="text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted">Deriv connection</div><div className="mt-1 text-xs font-semibold">{liveMarketActive ? 'Live market stream' : 'Connecting'}</div><div className="text-[8px] text-shafx-textMuted">Auto reconnect enabled</div></div>
-            <div className="rounded-xl border border-shafx-border bg-shafx-bg/80 px-3 py-2"><div className="text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted">Free margin</div><div className="mt-1 font-mono text-sm font-bold tabular-nums">{accountData.currency} {accountData.freeMargin.toFixed(2)}</div></div>
+            <div className="rounded-xl border border-shafx-border bg-shafx-bg/80 px-3 py-2"><div className="text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted">Free margin</div><div className="mt-1 font-mono text-sm font-bold tabular-nums">{accountData.currency} {resolvedAccountData.freeMargin.toFixed(2)}</div></div>
           </div>
         </div>
 
