@@ -7,11 +7,9 @@ export const SHAFX_MARKET_PROXY_WS_URL = import.meta.env.VITE_SHAFX_MARKET_WS_UR
 export const getDerivMarketWebSocketUrl = (): string => {
   if (typeof window === 'undefined') return DERIV_PUBLIC_WS_URL
 
-  // SHAFX production is currently served by Vercel while the market WebSocket
-  // proxy is deployed on the Cloudflare Worker. A same-origin /api URL would
-  // therefore hit Vercel, where this WebSocket route does not exist. Connect
-  // directly to the deployed Cloudflare proxy instead. Local development keeps
-  // the direct Deriv endpoint.
+  // SHAFX production is served by the Cloudflare Worker. The public market
+  // WebSocket is proxied there so the deployed app has one controlled market-data
+  // entry point. Local development keeps the direct Deriv endpoint.
   const hostname = window.location.hostname
   if (hostname === 'localhost' || hostname === '127.0.0.1') return DERIV_PUBLIC_WS_URL
   return SHAFX_MARKET_PROXY_WS_URL
