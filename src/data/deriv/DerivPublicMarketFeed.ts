@@ -13,7 +13,9 @@ export const getDerivMarketWebSocketUrl = (): string => {
   // entry point. Local development keeps the direct Deriv endpoint.
   const hostname = window.location.hostname
   if (hostname === 'localhost' || hostname === '127.0.0.1') return DERIV_PUBLIC_WS_URL
-  if (hostname === 'sharfx-pr55-staging.150sharingan2.workers.dev') return import.meta.env.VITE_SHAFX_MARKET_WS_URL?.trim() || STAGING_SHAFX_MARKET_PROXY_WS_URL
+  // Staging uses Deriv's public socket directly so Cloudflare proxy latency/failure
+  // cannot hold the chart in CONNECTING. The deployed UI still runs on Cloudflare.
+  if (hostname === 'sharfx-pr55-staging.150sharingan2.workers.dev') return DERIV_PUBLIC_WS_URL
   return SHAFX_MARKET_PROXY_WS_URL
 }
 
