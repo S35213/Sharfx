@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createDerivCandleHistoryRequest, DERIV_PUBLIC_WS_URL, SHAFX_MARKET_PROXY_WS_URL, getDerivMarketWebSocketUrl, toDerivSymbol } from './DerivPublicMarketFeed'
+import { aggregateWeeklyCandles, createDerivCandleHistoryRequest, DERIV_PUBLIC_WS_URL, SHAFX_MARKET_PROXY_WS_URL, getDerivMarketWebSocketUrl, toDerivSymbol } from './DerivPublicMarketFeed'
 
 describe('DerivPublicMarketFeed', () => {
   it('uses the current public WebSocket endpoint for local fallback', () => {
@@ -57,6 +57,26 @@ describe('DerivPublicMarketFeed', () => {
       req_id: 3,
     })
   })
+  it('requests daily candles for W1 and aggregates them client-side', () => {
+    expect(createDerivCandleHistoryRequest('frxEURUSD', 'W1')).toEqual({
+      ticks_history: 'frxEURUSD',
+      end: 'latest',
+      count: 2100,
+      style: 'candles',
+      granularity: 86400,
+      req_id: 1,
+    })
+
+    expect(aggregateWeeklyCandles([
+      { time: Date.parse('2026-09-21T00:00:00.000Z'), open: 1.1, high: 1.2, low: 1.0, close: 1.15 },
+      { time: Date.parse('2026-09-22T00:00:00.000Z'), open: 1.15, high: 1.25, low: 1.1, close: 1.2 },
+      { time: Date.parse('2026-09-28T00:00:00.000Z'), open: 1.2, high: 1.3, low: 1.18, close: 1.28 },
+    ])).toEqual([
+      { time: Date.parse('2026-09-21T00:00:00.000Z'), open: 1.1, high: 1.25, low: 1.0, close: 1.2 },
+      { time: Date.parse('2026-09-28T00:00:00.000Z'), open: 1.2, high: 1.3, low: 1.18, close: 1.28 },
+    ])
+  })
+
 
   it('leaves non-forex symbols unchanged', () => {
     expect(toDerivSymbol('1HZ100V')).toBe('1HZ100V')
