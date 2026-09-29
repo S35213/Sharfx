@@ -59,19 +59,24 @@ export const formatForexSymbol = (symbol: string): string => {
   return /^[A-Z]{6}$/.test(normalized) ? normalized.slice(0, 3) + '/' + normalized.slice(3) : symbol
 }
 
-const openPublicMarketSocket = (timeoutMs = 5000): Promise<WebSocket> => new Promise((resolve, reject) => {
+const openPublicMarketSocket = (timeoutMs = 3500): Promise<WebSocket> => new Promise((resolve, reject) => {
   const socket = new WebSocket(getDerivMarketWebSocketUrl())
+  let settled = false
+  const finish = (action: 'resolve' | 'reject', value?: Error): void => {
+    if (settled) return
+    settled = true
+    globalThis.clearTimeout(timer)
+    if (action === 'resolve') resolve(socket)
+    else reject(value ?? new Error('Deriv public market socket failed.'))
+  }
   const timer = globalThis.setTimeout(() => {
     try { socket.close() } catch (error) { void error }
-    reject(new Error('Deriv public market socket timed out.'))
+    finish('reject', new Error('Deriv public market socket timed out.'))
   }, timeoutMs)
-  socket.onopen = () => {
-    globalThis.clearTimeout(timer)
-    resolve(socket)
-  }
-  socket.onerror = () => {
-    globalThis.clearTimeout(timer)
-    reject(new Error('Deriv public market socket failed.'))
+  socket.onopen = () => finish('resolve')
+  socket.onerror = () => finish('reject', new Error('Deriv public market socket failed.'))
+  socket.onclose = () => {
+    if (!settled) finish('reject', new Error('Deriv public market socket closed before connecting.'))
   }
 })
 
@@ -107,6 +112,7 @@ export const fetchDerivActiveForexSymbols = async (): Promise<DerivActiveSymbol[
         reject(error)
       }
     }
+    socket.send(JSON.stringify({ active_symbols: 'brief', req_id: 7100 }))
   })
 }
 
