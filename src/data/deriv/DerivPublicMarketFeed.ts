@@ -119,8 +119,8 @@ export const subscribeDerivForexQuotes = async (
   let stopped = false
   const normalizedSymbols = symbols.map(toDerivSymbol)
   socket.send(JSON.stringify({ ticks: normalizedSymbols, subscribe: 1, req_id: 7101 }))
-  socket.onmessage = () => {
-      if (stopped) return
+  socket.onmessage = (event: MessageEvent) => {
+    if (stopped) return
     try {
       const payload = JSON.parse(String(event.data)) as DerivTickResponse
       if (payload.msg_type !== 'tick' || typeof payload.tick?.symbol !== 'string') return
@@ -447,7 +447,7 @@ export class DerivPublicMarketFeed {
       this.onStatus?.('connecting')
     }
 
-    socket.onclose = (event) => {
+    socket.onclose = () => {
       clearFirstDataTimer()
       if (this.pingTimer !== null) {
         globalThis.clearInterval(this.pingTimer)
