@@ -132,6 +132,7 @@ export class DerivPublicMarketFeed {
   private historyRequestId = 0
   private nextRequestId = 10
   private historyRequestMode: 'latest' | 'fallback' = 'latest'
+  private tickSubscriptionId: string | null = null
 
   connect(
     symbol: string,
@@ -152,6 +153,7 @@ export class DerivPublicMarketFeed {
     this.historyRequestId = 1
     this.nextRequestId = 10
     this.historyRequestMode = 'latest'
+    this.tickSubscriptionId = null
     this.reconnectAttempt = 0
     this.forceDirectFallback = false
     this.stopped = false
@@ -171,6 +173,23 @@ export class DerivPublicMarketFeed {
     const socket = this.socket
     if (!this.stopped && socket && socket.readyState === WebSocket.OPEN) {
       this.requestHistory(socket, 'latest')
+    }
+  }
+
+  setSymbol(symbol: string): void {
+    const nextSymbol = toDerivSymbol(symbol)
+    if (nextSymbol === this.symbol) return
+    this.symbol = nextSymbol
+    this.candles = []
+    this.historyRequestMode = 'latest'
+    const socket = this.socket
+    if (!this.stopped && socket && socket.readyState === WebSocket.OPEN) {
+      if (this.tickSubscriptionId) {
+        socket.send(JSON.stringify({ forget: this.tickSubscriptionId, req_id: this.nextRequestId++ }))
+        this.tickSubscriptionId = null
+      }
+      this.requestHistory(socket, 'latest')
+      socket.send(JSON.stringify({ ticks: this.symbol, subscribe: 1, req_id: this.nextRequestId++ }))
     }
   }
 
@@ -236,9 +255,9 @@ export class DerivPublicMarketFeed {
         this.firstDataTimer = globalThis.setTimeout(() => {
           if (this.stopped || generation !== this.connectionGeneration || receivedMarketData) return
           this.forceDirectFallback = true
-          this.onStatus?.('error', 'The SHAFX market proxy connected but returned no market data. Retrying the public Deriv feed directly.')
+          this.onStatus?.('connecting')
           try { socket.close(1012, 'No market data from proxy') } catch (error) { void error }
-        }, 4000)
+        }, 2500)
       }
       this.requestHistory(socket, 'latest', 1)
       socket.send(JSON.stringify({ ticks: this.symbol, subscribe: 1, req_id: 2 }))
@@ -271,6 +290,9 @@ export class DerivPublicMarketFeed {
           this.onStatus?.('error', responseError)
           socket.close()
           return
+        }
+        if (response.subscription?.id && typeof response.subscription.id === 'string') {
+          this.tickSubscriptionId = response.subscription.id
         }
         if (response.msg_type === 'candles') {
           if (response.req_id !== this.historyRequestId) return
@@ -329,8 +351,7 @@ export class DerivPublicMarketFeed {
 
     socket.onerror = () => {
       if (this.stopped || generation !== this.connectionGeneration) return
-      if (this.forceDirectFallback && !receivedMarketData) return
-      this.onStatus?.('error', 'Deriv market-data WebSocket connection failed.')
+      this.onStatus?.('connecting')
     }
 
     socket.onclose = (event) => {
@@ -346,10 +367,8 @@ export class DerivPublicMarketFeed {
       if (switchingToDirectFallback) {
         this.onStatus?.('connecting')
         this.reconnectAttempt = 0
-      } else if (event.code !== 1000 && event.code !== 1001) {
-        this.onStatus?.('error', 'Market stream closed (' + event.code + '): ' + (event.reason || 'unknown reason'))
       } else {
-        this.onStatus?.('disconnected')
+        this.onStatus?.('connecting')
       }
       this.scheduleReconnect(generation)
     }
