@@ -16,18 +16,28 @@ interface ProviderLiveControlProps {
 
 type Status = 'waiting' | 'connecting' | 'live' | 'error'
 
-const toOHLCV = (time: string, open: number, high: number, low: number, close: number): OHLCV | null => {
+export const toOHLCV = (time: string, open: number, high: number, low: number, close: number): OHLCV | null => {
   const timestamp = Date.parse(time)
   if (![timestamp, open, high, low, close].every(Number.isFinite)) return null
   if (high < Math.max(open, close) || low > Math.min(open, close) || low > high) return null
-  return { time: timestamp, open, high, low, close }
+  // SHAFX OHLCV and Lightweight Charts use Unix seconds. Provider snapshots
+  // carry ISO timestamps (parsed here as milliseconds), so normalize at the
+  // adapter boundary before the chart receives them.
+  return { time: Math.floor(timestamp / 1000), open, high, low, close }
 }
 
 export const ProviderLiveControl: React.FC<ProviderLiveControlProps> = ({ providerId, connection, symbol, timeframe, onUpdate, onActiveChange }) => {
   const streamRef = useRef<ProviderStreamHandle | null>(null)
+  const onUpdateRef = useRef(onUpdate)
+  const onActiveChangeRef = useRef(onActiveChange)
   const [status, setStatus] = useState<Status>('waiting')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
+
+  useEffect(() => {
+    onUpdateRef.current = onUpdate
+    onActiveChangeRef.current = onActiveChange
+  }, [onUpdate, onActiveChange])
 
   useEffect(() => {
     let disposed = false
@@ -38,7 +48,7 @@ export const ProviderLiveControl: React.FC<ProviderLiveControlProps> = ({ provid
     }
     setStatus('waiting')
     setErrorMessage(null)
-    onActiveChange?.(false)
+    onActiveChangeRef.current?.(false)
     if (!connection) {
       void closeExisting()
       return () => { disposed = true }
@@ -58,7 +68,7 @@ export const ProviderLiveControl: React.FC<ProviderLiveControlProps> = ({ provid
           if (event.type === 'error') {
             setStatus('error')
             setErrorMessage(event.error instanceof Error ? event.error.message : 'The Deriv market stream reported an error.')
-            onActiveChange?.(false)
+            onActiveChangeRef.current?.(false)
             return
           }
           if (event.type !== 'market_snapshot') return
@@ -69,9 +79,9 @@ export const ProviderLiveControl: React.FC<ProviderLiveControlProps> = ({ provid
           const price = event.snapshot.quote.last ?? event.snapshot.quote.ask ?? event.snapshot.quote.bid
           const epoch = Date.parse(event.snapshot.quote.timestamp)
           if (!candles.length || !Number.isFinite(Number(price)) || !Number.isFinite(epoch)) return
-          onUpdate(candles, Number(price), epoch)
+          onUpdateRef.current(candles, Number(price), epoch)
           setStatus('live')
-          onActiveChange?.(true)
+          onActiveChangeRef.current?.(true)
         }, timeframe)
         if (disposed) { await stream.close(); return }
         streamRef.current = stream
@@ -79,7 +89,7 @@ export const ProviderLiveControl: React.FC<ProviderLiveControlProps> = ({ provid
         if (!disposed) {
           setStatus('error')
           setErrorMessage(error instanceof Error ? error.message : 'The Deriv market stream failed.')
-          onActiveChange?.(false)
+          onActiveChangeRef.current?.(false)
         }
       }
     }
@@ -88,7 +98,7 @@ export const ProviderLiveControl: React.FC<ProviderLiveControlProps> = ({ provid
       disposed = true
       void closeExisting()
     }
-  }, [connection, onActiveChange, onUpdate, providerId, symbol, timeframe])
+  }, [connection, providerId, symbol, timeframe])
 
   const label = status === 'live' ? 'LIVE' : status === 'connecting' ? 'CONNECTING' : status === 'error' ? 'RETRY' : 'WAITING'
   return <div className="relative">

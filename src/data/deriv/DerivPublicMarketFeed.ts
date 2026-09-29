@@ -1,16 +1,15 @@
 import type { OHLCV, Timeframe } from '../../types'
 
 export const DERIV_PUBLIC_WS_URL = 'wss://api.derivws.com/trading/v1/options/ws/public'
-export const SHAFX_MARKET_PROXY_WS_URL = 'wss://sharfx.150sharingan2.workers.dev/api/deriv/public-market'
+const DEFAULT_SHAFX_MARKET_PROXY_WS_URL = 'wss://sharfx.150sharingan2.workers.dev/api/deriv/public-market'
+export const SHAFX_MARKET_PROXY_WS_URL = import.meta.env.VITE_SHAFX_MARKET_WS_URL?.trim() || DEFAULT_SHAFX_MARKET_PROXY_WS_URL
 
 export const getDerivMarketWebSocketUrl = (): string => {
   if (typeof window === 'undefined') return DERIV_PUBLIC_WS_URL
 
-  // SHAFX production is currently served by Vercel while the market WebSocket
-  // proxy is deployed on the Cloudflare Worker. A same-origin /api URL would
-  // therefore hit Vercel, where this WebSocket route does not exist. Connect
-  // directly to the deployed Cloudflare proxy instead. Local development keeps
-  // the direct Deriv endpoint.
+  // SHAFX production is served by the Cloudflare Worker. The public market
+  // WebSocket is proxied there so the deployed app has one controlled market-data
+  // entry point. Local development keeps the direct Deriv endpoint.
   const hostname = window.location.hostname
   if (hostname === 'localhost' || hostname === '127.0.0.1') return DERIV_PUBLIC_WS_URL
   return SHAFX_MARKET_PROXY_WS_URL
@@ -26,6 +25,19 @@ const timeframeSeconds: Record<Timeframe, number> = {
   D1: 86400,
   W1: 604800,
 }
+
+export const createDerivCandleHistoryRequest = (
+  symbol: string,
+  timeframe: Timeframe,
+  options: { end?: 'latest' | number; count?: number; reqId?: number } = {},
+) => ({
+  ticks_history: symbol,
+  end: options.end ?? 'latest',
+  count: options.count ?? 300,
+  style: 'candles' as const,
+  granularity: timeframeSeconds[timeframe],
+  req_id: options.reqId ?? 1,
+})
 
 export const toDerivSymbol = (symbol: string): string => {
   const normalized = symbol.replace('/', '').toUpperCase()
@@ -81,6 +93,8 @@ export class DerivPublicMarketFeed {
   private onStatus?: (status: 'connecting' | 'connected' | 'disconnected' | 'error', message?: string) => void
   private webSocketUrlProvider?: () => Promise<string>
   private pingTimer: ReturnType<typeof setInterval> | null = null
+  private firstDataTimer: ReturnType<typeof setTimeout> | null = null
+  private forceDirectFallback = false
 
   connect(
     symbol: string,
@@ -99,6 +113,7 @@ export class DerivPublicMarketFeed {
     this.webSocketUrlProvider = callbacks.getWebSocketUrl
     this.candles = []
     this.reconnectAttempt = 0
+    this.forceDirectFallback = false
     this.stopped = false
     this.connectionGeneration += 1
     this.openSocket(this.connectionGeneration)
@@ -108,8 +123,8 @@ export class DerivPublicMarketFeed {
     if (this.stopped || generation !== this.connectionGeneration) return
     this.onStatus?.('connecting')
 
-    let wsUrl = getDerivMarketWebSocketUrl()
-    if (this.webSocketUrlProvider) {
+    let wsUrl = this.forceDirectFallback ? DERIV_PUBLIC_WS_URL : getDerivMarketWebSocketUrl()
+    if (this.webSocketUrlProvider && !this.forceDirectFallback) {
       try {
         wsUrl = await this.webSocketUrlProvider()
       } catch (error) {
@@ -130,6 +145,20 @@ export class DerivPublicMarketFeed {
       return
     }
     this.socket = socket
+    const usingDirectFallback = wsUrl === DERIV_PUBLIC_WS_URL
+    let receivedMarketData = false
+    const clearFirstDataTimer = (): void => {
+      if (this.firstDataTimer !== null) globalThis.clearTimeout(this.firstDataTimer)
+      this.firstDataTimer = null
+    }
+    const requestFallbackCandles = (): void => {
+      const request = createDerivCandleHistoryRequest(this.symbol, this.timeframe, {
+        end: Math.floor(Date.now() / 1000) - 172800,
+        count: 300,
+        reqId: 3,
+      })
+      socket.send(JSON.stringify(request))
+    }
 
     socket.onopen = () => {
       if (this.stopped || generation !== this.connectionGeneration) return
@@ -141,7 +170,16 @@ export class DerivPublicMarketFeed {
           socket.send(JSON.stringify({ ping: 1, req_id: Date.now() }))
         }
       }, 30000)
-      socket.send(JSON.stringify({ ticks_history: this.symbol, end: 'latest', count: 300, style: 'candles', granularity: timeframeSeconds[this.timeframe], subscribe: 0, req_id: 1 }))
+      clearFirstDataTimer()
+      if (!usingDirectFallback) {
+        this.firstDataTimer = globalThis.setTimeout(() => {
+          if (this.stopped || generation !== this.connectionGeneration || receivedMarketData) return
+          this.forceDirectFallback = true
+          this.onStatus?.('error', 'The SHAFX market proxy connected but returned no market data. Retrying the public Deriv feed directly.')
+          try { socket.close(1012, 'No market data from proxy') } catch (error) { void error }
+        }, 8000)
+      }
+      socket.send(JSON.stringify(createDerivCandleHistoryRequest(this.symbol, this.timeframe)))
       socket.send(JSON.stringify({ ticks: this.symbol, subscribe: 1, req_id: 2 }))
     }
 
@@ -156,15 +194,7 @@ export class DerivPublicMarketFeed {
             // Candle history may reject "latest" while a market is closed. Retry
             // against a known historical point so the chart can still render the
             // latest completed session instead of going blank for the weekend.
-            const fallbackEnd = Math.floor(Date.now() / 1000) - 172800
-            socket.send(JSON.stringify({
-              ticks_history: this.symbol,
-              end: fallbackEnd,
-              count: 600,
-              style: 'ticks',
-              subscribe: 0,
-              req_id: 3,
-            }))
+            requestFallbackCandles()
             return
           }
           if (marketClosed && response.req_id === 2) {
@@ -178,7 +208,17 @@ export class DerivPublicMarketFeed {
           return
         }
         if (response.msg_type === 'candles') {
-          this.candles = toCandles(response.candles).sort((a, b) => a.time - b.time).slice(-300)
+          const receivedCandles = toCandles(response.candles).sort((a, b) => a.time - b.time)
+          if (response.req_id === 1 && receivedCandles.length === 0) {
+            // A closed market can validly return an empty "latest" history response.
+            // Retry with a recent completed session so the chart still gets real candles.
+            requestFallbackCandles()
+            return
+          }
+          receivedMarketData = receivedCandles.length > 0 || receivedMarketData
+          clearFirstDataTimer()
+          if (usingDirectFallback) this.forceDirectFallback = false
+          this.candles = receivedCandles.slice(-300)
           const lastCandle = this.candles[this.candles.length - 1]
           if (lastCandle) this.onUpdate?.(this.candles, lastCandle.close, Math.trunc(lastCandle.time))
           return
@@ -186,6 +226,9 @@ export class DerivPublicMarketFeed {
         if (response.msg_type === 'history' && response.history) {
           const candles = toTickCandles(response.history.times, response.history.prices, timeframeSeconds[this.timeframe])
           if (candles.length) {
+            receivedMarketData = true
+            clearFirstDataTimer()
+            if (usingDirectFallback) this.forceDirectFallback = false
             this.candles = candles
             const lastCandle = this.candles[this.candles.length - 1]
             this.onUpdate?.(this.candles, lastCandle.close, Math.trunc(lastCandle.time))
@@ -193,6 +236,9 @@ export class DerivPublicMarketFeed {
           return
         }
         if (response.msg_type === 'tick' && response.tick?.quote !== undefined && response.tick.epoch !== undefined) {
+          receivedMarketData = true
+          clearFirstDataTimer()
+          if (usingDirectFallback) this.forceDirectFallback = false
           const price = Number(response.tick.quote)
           const epoch = Number(response.tick.epoch)
           if (!Number.isFinite(price) || !Number.isFinite(epoch) || price <= 0) {
@@ -219,12 +265,14 @@ export class DerivPublicMarketFeed {
     }
 
     socket.onclose = (event) => {
+      clearFirstDataTimer()
       if (this.pingTimer !== null) {
         globalThis.clearInterval(this.pingTimer)
         this.pingTimer = null
       }
       if (this.stopped || generation !== this.connectionGeneration) return
       this.socket = null
+      if (!receivedMarketData && !usingDirectFallback) this.forceDirectFallback = true
       if (event.code !== 1000 && event.code !== 1001) this.onStatus?.('error', 'Market stream closed (' + event.code + '): ' + (event.reason || 'unknown reason'))
       else this.onStatus?.('disconnected')
       this.scheduleReconnect(generation)
@@ -259,3 +307,4 @@ export class DerivPublicMarketFeed {
     this.webSocketUrlProvider = undefined
   }
 }
+

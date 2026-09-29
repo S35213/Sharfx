@@ -36,42 +36,27 @@ const handleDerivPublicMarketWebSocket = async (request: Request): Promise<Respo
     return new Response('Expected Upgrade: websocket', { status: 426 })
   }
 
-  const pair = new WebSocketPair()
-  const client = pair[0]
-  const server = pair[1]
-  server.accept({ allowHalfOpen: true })
-
+  // Cloudflare Workers can proxy a successful outbound WebSocket upgrade directly
+  // by returning the upstream response.webSocket. This avoids inserting a second
+  // WebSocketPair bridge that can interfere with message delivery.
   const upstreamResponse = await fetch('https://api.derivws.com/trading/v1/options/ws/public', {
     headers: { Upgrade: 'websocket' },
   })
-  const upstream = upstreamResponse.webSocket
 
-  if (!upstream) {
-    server.close(1011, 'Deriv market stream unavailable')
-    return new Response(null, { status: 101, webSocket: client })
+  if (upstreamResponse.status !== 101 || !upstreamResponse.webSocket) {
+    let detail = `Deriv upstream did not upgrade (HTTP ${upstreamResponse.status}).`
+    try {
+      const body = await upstreamResponse.text()
+      if (body) detail += ` ${body.slice(0, 300)}`
+    } catch (error) {
+      void error
+    }
+    return new Response(detail, { status: 502 })
   }
-
-  upstream.accept({ allowHalfOpen: true })
-
-  const closeBoth = (code = 1000, reason = 'closed'): void => {
-    try { if (server.readyState === WebSocket.OPEN || server.readyState === WebSocket.CLOSING) server.close(code, reason) } catch (error) { void error }
-    try { if (upstream.readyState === WebSocket.OPEN || upstream.readyState === WebSocket.CLOSING) upstream.close(code, reason) } catch (error) { void error }
-  }
-
-  server.addEventListener('message', (event) => {
-    if (upstream.readyState === WebSocket.OPEN) upstream.send(event.data)
-  })
-  upstream.addEventListener('message', (event) => {
-    if (server.readyState === WebSocket.OPEN) server.send(event.data)
-  })
-  server.addEventListener('close', (event) => closeBoth(event.code || 1000, event.reason || 'client closed'))
-  upstream.addEventListener('close', (event) => closeBoth(event.code || 1000, event.reason || 'upstream closed'))
-  server.addEventListener('error', () => closeBoth(1011, 'client websocket error'))
-  upstream.addEventListener('error', () => closeBoth(1011, 'Deriv websocket error'))
 
   return new Response(null, {
     status: 101,
-    webSocket: client,
+    webSocket: upstreamResponse.webSocket,
   })
 }
 
