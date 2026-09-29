@@ -7,7 +7,7 @@ describe('DerivPublicMarketFeed', () => {
   })
 
   it('uses the deployed Cloudflare market proxy for production browsers', () => {
-    vi.stubGlobal('window', { location: { hostname: 'shafx.vercel.app', protocol: 'https:', host: 'shafx.vercel.app' } })
+    vi.stubGlobal('window', { location: { hostname: 'sharfx.150sharingan2.workers.dev', protocol: 'https:', host: 'sharfx.150sharingan2.workers.dev' } })
     expect(SHAFX_MARKET_PROXY_WS_URL).toBe('wss://sharfx.150sharingan2.workers.dev/api/deriv/public-market')
     expect(getDerivMarketWebSocketUrl()).toBe(SHAFX_MARKET_PROXY_WS_URL)
     vi.unstubAllGlobals()
