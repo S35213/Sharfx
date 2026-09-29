@@ -355,6 +355,7 @@ const TerminalContent: React.FC = () => {
         symbol: draft.symbol,
         side: draft.type,
         stake: draft.lotSize,
+        currency: resolvedAccountData.currency,
         multiplier: 10,
         durationSeconds: 30,
         takeProfitAmount: draft.rewardAmount,
