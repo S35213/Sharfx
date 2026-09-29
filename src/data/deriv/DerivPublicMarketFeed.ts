@@ -26,6 +26,9 @@ const timeframeSeconds: Record<Timeframe, number> = {
   W1: 604800,
 }
 
+const historyGranularitySeconds = (timeframe: Timeframe): number => timeframe === 'W1' ? 86400 : timeframeSeconds[timeframe]
+const historyDefaultCount = (timeframe: Timeframe): number => timeframe === 'W1' ? 2100 : 300
+
 export const createDerivCandleHistoryRequest = (
   symbol: string,
   timeframe: Timeframe,
@@ -33,9 +36,9 @@ export const createDerivCandleHistoryRequest = (
 ) => ({
   ticks_history: symbol,
   end: options.end ?? 'latest',
-  count: options.count ?? 300,
+  count: options.count ?? historyDefaultCount(timeframe),
   style: 'candles' as const,
-  granularity: timeframeSeconds[timeframe],
+  granularity: historyGranularitySeconds(timeframe),
   req_id: options.reqId ?? 1,
 })
 
@@ -61,7 +64,38 @@ const toCandles = (items: DerivTickResponse['candles']): OHLCV[] => (items ?? []
   return [{ time: Math.trunc(epoch! * 1000), open: open!, high: high!, low: low!, close: close! }]
 })
 
-const toTickCandles = (times: number[] | undefined, prices: number[] | undefined, seconds: number): OHLCV[] => {
+const weekStartMs = (epochSeconds: number): number => {
+  const date = new Date(epochSeconds * 1000)
+  const dayOffset = (date.getUTCDay() + 6) % 7
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() - dayOffset)
+}
+
+export const aggregateWeeklyCandles = (candles: OHLCV[]): OHLCV[] => {
+  const buckets = new Map<number, OHLCV>()
+  for (const candle of candles) {
+    const bucket = weekStartMs(Math.floor(candle.time / 1000))
+    const existing = buckets.get(bucket)
+    if (!existing) {
+      buckets.set(bucket, { time: bucket, open: candle.open, high: candle.high, low: candle.low, close: candle.close })
+    } else {
+      buckets.set(bucket, {
+        ...existing,
+        high: Math.max(existing.high, candle.high),
+        low: Math.min(existing.low, candle.low),
+        close: candle.close,
+      })
+    }
+  }
+  return [...buckets.values()].sort((a, b) => a.time - b.time).slice(-300)
+}
+
+const candleBucketMs = (epochSeconds: number, timeframe: Timeframe): number => (
+  timeframe === 'W1'
+    ? weekStartMs(epochSeconds)
+    : Math.floor(epochSeconds / timeframeSeconds[timeframe]) * timeframeSeconds[timeframe] * 1000
+)
+
+const toTickCandles = (times: number[] | undefined, prices: number[] | undefined, timeframe: Timeframe): OHLCV[] => {
   if (!Array.isArray(times) || !Array.isArray(prices)) return []
   const buckets = new Map<number, OHLCV>()
   const length = Math.min(times.length, prices.length)
@@ -69,7 +103,7 @@ const toTickCandles = (times: number[] | undefined, prices: number[] | undefined
     const epoch = Number(times[index])
     const price = Number(prices[index])
     if (!Number.isFinite(epoch) || !Number.isFinite(price) || price <= 0) continue
-    const bucket = Math.floor(epoch / seconds) * seconds * 1000
+    const bucket = candleBucketMs(epoch, timeframe)
     const existing = buckets.get(bucket)
     if (!existing) {
       buckets.set(bucket, { time: bucket, open: price, high: price, low: price, close: price })
@@ -230,13 +264,18 @@ export class DerivPublicMarketFeed {
             // automatically the next time the socket is opened.
             return
           }
+          // A history request can fail for one timeframe without meaning the
+          // shared live socket is broken. Keep the socket alive so another
+          // timeframe can immediately request its own history.
+          if (response.req_id === this.historyRequestId) return
           this.onStatus?.('error', responseError)
           socket.close()
           return
         }
         if (response.msg_type === 'candles') {
           if (response.req_id !== this.historyRequestId) return
-          const receivedCandles = toCandles(response.candles).sort((a, b) => a.time - b.time)
+          const rawCandles = toCandles(response.candles).sort((a, b) => a.time - b.time)
+          const receivedCandles = this.timeframe === 'W1' ? aggregateWeeklyCandles(rawCandles) : rawCandles
           if (this.historyRequestMode === 'latest' && receivedCandles.length === 0) {
             // A closed market can validly return an empty "latest" history response.
             // Retry with a recent completed session so the chart still gets real candles.
@@ -253,7 +292,7 @@ export class DerivPublicMarketFeed {
         }
         if (response.msg_type === 'history' && response.history) {
           if (response.req_id !== this.historyRequestId) return
-          const candles = toTickCandles(response.history.times, response.history.prices, timeframeSeconds[this.timeframe])
+          const candles = toTickCandles(response.history.times, response.history.prices, this.timeframe)
           if (candles.length) {
             receivedMarketData = true
             clearFirstDataTimer()
@@ -275,7 +314,7 @@ export class DerivPublicMarketFeed {
             return
           }
           const epochMs = epoch * 1000
-          const bucket = Math.floor(epoch / timeframeSeconds[this.timeframe]) * timeframeSeconds[this.timeframe] * 1000
+          const bucket = candleBucketMs(epoch, this.timeframe)
           const last = this.candles[this.candles.length - 1]
           if (!last || last.time !== bucket) this.candles = [...this.candles, { time: bucket, open: price, high: price, low: price, close: price }]
           else this.candles = [...this.candles.slice(0, -1), { ...last, high: Math.max(last.high, price), low: Math.min(last.low, price), close: price }]
