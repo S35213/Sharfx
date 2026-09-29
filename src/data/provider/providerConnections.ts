@@ -58,7 +58,7 @@ export async function getProviderConnections(): Promise<ProviderConnectionRecord
 export function getStoredProviderSelection(): ActiveProviderSelection | null {
   if (!isBrowser()) return null
   try {
-    const raw = window.sessionStorage.getItem(SELECTION_KEY)
+    const raw = window.sessionStorage.getItem(SELECTION_KEY) || window.localStorage.getItem(SELECTION_KEY)
     if (!raw) return null
     const parsed = JSON.parse(raw) as Partial<ActiveProviderSelection>
     if (
@@ -79,13 +79,16 @@ export function getStoredProviderSelection(): ActiveProviderSelection | null {
 
 export function setStoredProviderSelection(selection: ActiveProviderSelection): void {
   if (!isBrowser()) return
-  window.sessionStorage.setItem(SELECTION_KEY, JSON.stringify(selection))
+  const raw = JSON.stringify(selection)
+  window.sessionStorage.setItem(SELECTION_KEY, raw)
+  window.localStorage.setItem(SELECTION_KEY, raw)
   window.dispatchEvent(new CustomEvent(CONNECTION_SELECTION_EVENT, { detail: selection }))
 }
 
 export function clearStoredProviderSelection(): void {
   if (!isBrowser()) return
   window.sessionStorage.removeItem(SELECTION_KEY)
+  window.localStorage.removeItem(SELECTION_KEY)
   window.dispatchEvent(new Event(CONNECTION_SELECTION_EVENT))
 }
 
