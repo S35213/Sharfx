@@ -30,11 +30,14 @@ export const ProviderLiveControl: React.FC<ProviderLiveControlProps> = ({ provid
   const streamRef = useRef<ProviderStreamHandle | null>(null)
   const onUpdateRef = useRef(onUpdate)
   const onActiveChangeRef = useRef(onActiveChange)
-  onUpdateRef.current = onUpdate
-  onActiveChangeRef.current = onActiveChange
   const [status, setStatus] = useState<Status>('waiting')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
+
+  useEffect(() => {
+    onUpdateRef.current = onUpdate
+    onActiveChangeRef.current = onActiveChange
+  }, [onUpdate, onActiveChange])
 
   useEffect(() => {
     let disposed = false
