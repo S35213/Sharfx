@@ -331,6 +331,16 @@ export class DerivPublicMarketFeed {
     this.socket = socket
     const usingDirectFallback = wsUrl === DERIV_PUBLIC_WS_URL
     let receivedMarketData = false
+    let socketOpenTimer: ReturnType<typeof setTimeout> | null = globalThis.setTimeout(() => {
+      if (this.stopped || generation !== this.connectionGeneration || socket.readyState === WebSocket.OPEN) return
+      if (!usingDirectFallback) this.forceDirectFallback = true
+      this.onStatus?.('connecting')
+      try { socket.close(1013, 'Market socket connection timeout') } catch (error) { void error }
+    }, 3500)
+    const clearSocketOpenTimer = (): void => {
+      if (socketOpenTimer !== null) globalThis.clearTimeout(socketOpenTimer)
+      socketOpenTimer = null
+    }
     const clearFirstDataTimer = (): void => {
       if (this.firstDataTimer !== null) globalThis.clearTimeout(this.firstDataTimer)
       this.firstDataTimer = null
@@ -341,6 +351,7 @@ export class DerivPublicMarketFeed {
 
     socket.onopen = () => {
       if (this.stopped || generation !== this.connectionGeneration) return
+      clearSocketOpenTimer()
       this.reconnectAttempt = 0
       this.onStatus?.('connected')
       if (this.pingTimer !== null) globalThis.clearInterval(this.pingTimer)
@@ -454,6 +465,7 @@ export class DerivPublicMarketFeed {
     }
 
     socket.onclose = () => {
+      clearSocketOpenTimer()
       clearFirstDataTimer()
       if (this.pingTimer !== null) {
         globalThis.clearInterval(this.pingTimer)
