@@ -119,8 +119,8 @@ export const subscribeDerivForexQuotes = async (
   let stopped = false
   const normalizedSymbols = symbols.map(toDerivSymbol)
   socket.send(JSON.stringify({ ticks: normalizedSymbols, subscribe: 1, req_id: 7101 }))
-  socket.onmessage = (event) => {
-    if (stopped) return
+  socket.onmessage = () => {
+      if (stopped) return
     try {
       const payload = JSON.parse(String(event.data)) as DerivTickResponse
       if (payload.msg_type !== 'tick' || typeof payload.tick?.symbol !== 'string') return
