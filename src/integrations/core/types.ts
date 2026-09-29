@@ -188,6 +188,7 @@ export interface ProviderStreamHandle {
   streamId: string
   close: () => Promise<void>
   setTimeframe?: (timeframe: string) => Promise<void>
+  setSymbol?: (symbol: string) => Promise<void>
 }
 
 export type ProviderErrorCode =
