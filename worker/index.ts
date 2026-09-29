@@ -39,7 +39,7 @@ const handleDerivPublicMarketWebSocket = async (request: Request): Promise<Respo
   // Cloudflare Workers can proxy a successful outbound WebSocket upgrade directly
   // by returning the upstream response.webSocket. This avoids inserting a second
   // WebSocketPair bridge that can interfere with message delivery.
-  const upstreamResponse = await fetch('https://ws.binaryws.com/websockets/v3', {
+  const upstreamResponse = await fetch('https://api.derivws.com/trading/v1/options/ws/public', {
     headers: { Upgrade: 'websocket' },
   })
 
