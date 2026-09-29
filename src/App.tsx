@@ -133,7 +133,28 @@ const TerminalContent: React.FC = () => {
   useEffect(() => {
     let cancelled = false
     let stopQuotes: (() => void) | undefined
+    const updateQuote = (symbol: string, quote: number) => {
+      if (cancelled) return
+      setWatchlist((previous) => previous.map((pair) => {
+        if (pair.symbol !== symbol) return pair
+        const previousPrice = pair.price
+        const move = previousPrice > 0 ? quote - previousPrice : 0
+        const percent = previousPrice > 0 ? (move / previousPrice) * 100 : 0
+        return { ...pair, price: quote, change: move, changePercent: percent, status: 'open' }
+      }))
+    }
+
     const start = async (): Promise<void> => {
+      // Subscribe to the known SHAFX FX watchlist immediately; the full Deriv
+      // catalog is discovered separately so it cannot delay the first prices.
+      let baselineStop: (() => void) | undefined
+      try {
+        baselineStop = await subscribeDerivForexQuotes(mockWatchlist.map((pair) => pair.symbol), (symbol, quote) => updateQuote(symbol, quote))
+      } catch {
+        // The chart's own feed remains independent if watchlist transport fails.
+      }
+
+      let discoveredStop: (() => void) | undefined
       try {
         const active = await fetchDerivActiveForexSymbols()
         if (cancelled) return
@@ -145,19 +166,17 @@ const TerminalContent: React.FC = () => {
           }
           return Array.from(existing.values())
         })
-        if (!symbols.length) return
-        stopQuotes = await subscribeDerivForexQuotes(symbols.slice(0, 150), (symbol, quote) => {
-          if (cancelled) return
-          setWatchlist((previous) => previous.map((pair) => {
-            if (pair.symbol !== symbol) return pair
-            const previousPrice = pair.price
-            const move = previousPrice > 0 ? quote - previousPrice : 0
-            const percent = previousPrice > 0 ? (move / previousPrice) * 100 : 0
-            return { ...pair, price: quote, change: move, changePercent: percent, status: 'open' }
-          }))
-        })
+        const extra = symbols.filter((symbol) => !mockWatchlist.some((pair) => pair.symbol === symbol))
+        if (extra.length) {
+          discoveredStop = await subscribeDerivForexQuotes(extra.slice(0, 142), (symbol, quote) => updateQuote(symbol, quote))
+        }
       } catch {
-        // Keep the static fallback watchlist available when the catalog request is unavailable.
+        // Keep baseline watchlist quotes available if catalog discovery fails.
+      }
+
+      stopQuotes = () => {
+        baselineStop?.()
+        discoveredStop?.()
       }
     }
     void start()
