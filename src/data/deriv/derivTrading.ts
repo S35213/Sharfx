@@ -11,6 +11,7 @@ interface PlaceInput {
   side: 'BUY' | 'SELL'
   stake: number
   multiplier?: number
+  durationSeconds?: number
   takeProfitAmount?: number
   stopLossAmount?: number
   entryPrice: number
@@ -38,6 +39,7 @@ export async function placeDerivContract(input: PlaceInput): Promise<TradeOrder>
         quantity: input.stake,
         stake: input.stake,
         multiplier: input.multiplier ?? 10,
+        durationSeconds: input.durationSeconds ?? 30,
         takeProfitAmount: input.rewardAmount,
         stopLossAmount: input.riskAmount,
         entryPrice: input.entryPrice,
