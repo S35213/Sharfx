@@ -2,6 +2,7 @@ import type { OHLCV, Timeframe } from '../../types'
 
 export const DERIV_PUBLIC_WS_URL = 'wss://api.derivws.com/trading/v1/options/ws/public'
 const DEFAULT_SHAFX_MARKET_PROXY_WS_URL = 'wss://sharfx.150sharingan2.workers.dev/api/deriv/public-market'
+const STAGING_SHAFX_MARKET_PROXY_WS_URL = 'wss://sharfx-pr55-staging.150sharingan2.workers.dev/api/deriv/public-market'
 export const SHAFX_MARKET_PROXY_WS_URL = import.meta.env.VITE_SHAFX_MARKET_WS_URL?.trim() || DEFAULT_SHAFX_MARKET_PROXY_WS_URL
 
 export const getDerivMarketWebSocketUrl = (): string => {
@@ -12,6 +13,7 @@ export const getDerivMarketWebSocketUrl = (): string => {
   // entry point. Local development keeps the direct Deriv endpoint.
   const hostname = window.location.hostname
   if (hostname === 'localhost' || hostname === '127.0.0.1') return DERIV_PUBLIC_WS_URL
+  if (hostname === 'sharfx-pr55-staging.150sharingan2.workers.dev') return import.meta.env.VITE_SHAFX_MARKET_WS_URL?.trim() || STAGING_SHAFX_MARKET_PROXY_WS_URL
   return SHAFX_MARKET_PROXY_WS_URL
 }
 
@@ -436,6 +438,7 @@ export class DerivPublicMarketFeed {
           return
         }
         if (response.msg_type === 'tick' && response.tick?.quote !== undefined && response.tick.epoch !== undefined) {
+          if (toDerivSymbol(formatForexSymbol(response.tick.symbol ?? '')) !== this.symbol) return
           receivedMarketData = true
           clearFirstDataTimer()
           if (usingDirectFallback) this.forceDirectFallback = false
