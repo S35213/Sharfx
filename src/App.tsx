@@ -279,14 +279,16 @@ const TerminalContent: React.FC = () => {
     .map((annotation) => ({ ...annotation, id: 'live-' + timeframe + '-' + annotation.id })), [liveCandles, selectedSymbol, timeframe])
 
   const tradeLines = useMemo<ChartAnnotation[]>(() => [], [])
-  const activeMarketConnection = useMemo(() => activeProviderSelection ? ({
-    providerId: activeProviderSelection.providerId,
-    connectionId: activeProviderSelection.connectionId,
-    accountId: activeProviderSelection.accountId,
-    environment: activeProviderSelection.environment,
+  // Deriv public market data requires no authenticated account. Keep chart startup
+  // independent from the slower OAuth/account synchronization path.
+  const activeMarketConnection = useMemo(() => ({
+    providerId: 'deriv',
+    connectionId: activeProviderSelection?.connectionId ?? 'public-market',
+    accountId: activeProviderSelection?.accountId,
+    environment: activeProviderSelection?.environment ?? 'demo',
     state: 'connected' as const,
     connectedAt: new Date().toISOString(),
-  }) : undefined, [activeProviderSelection?.providerId, activeProviderSelection?.connectionId, activeProviderSelection?.accountId, activeProviderSelection?.environment])
+  }), [activeProviderSelection?.providerId, activeProviderSelection?.connectionId, activeProviderSelection?.accountId, activeProviderSelection?.environment])
   const activeProviderName = 'Deriv'
   const accountModeLabel = activeProviderSelection?.environment === 'live' ? 'REAL ACCOUNT' : 'DEMO ACCOUNT'
   const accountModeTone = activeProviderSelection?.environment === 'live' ? 'text-shafx-accent' : 'text-shafx-success'
@@ -324,7 +326,7 @@ const TerminalContent: React.FC = () => {
   }, [derivOrderConnection, openPositions, pushToast, tradeHistory])
 
   const handleManualOrder = useCallback(async (draft: SimulatedOrderDraft): Promise<void> => {
-    if (!derivOrderConnection || !accountData) {
+    if (!derivOrderConnection) {
       pushToast('Connect a Deriv account before placing a trade.')
       return
     }
