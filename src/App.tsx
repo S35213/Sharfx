@@ -407,6 +407,9 @@ const TerminalContent: React.FC = () => {
     </div>,
     bot: <TradingAgentPanel
       symbol={selectedSymbol}
+      derivConnectionId={derivOrderConnection?.connectionId}
+      derivAccountId={derivOrderConnection?.accountId}
+      derivEnvironment={derivOrderConnection?.environment}
       timeframe={timeframe}
       candles={liveCandles}
       currentPrice={currentPrice}
@@ -482,7 +485,10 @@ const TerminalContent: React.FC = () => {
       </section>
 
       <aside className={showChat ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={liveCandles} setup={reviewSetup} onReviewSetup={() => handleReviewSetup(reviewSetup)} /><OrderPanel symbol={selectedSymbol} currentPrice={currentPrice} bidPrice={currentPrice} askPrice={currentPrice} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} onSubmitOrder={(draft) => { void handleManualOrder(draft) }} aiSetup={reviewSetup} autoApplyAISetup={Boolean(reviewSetup)} /></div></aside>
-      <aside className={showBot ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><TradingAgentPanel symbol={selectedSymbol} timeframe={timeframe} candles={liveCandles} currentPrice={currentPrice} activePosition={openPositions.find((order) => botOrderIds.includes(order.id)) ?? null} tradeHistory={tradeHistory} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} botOrderIds={botOrderIds} onBotOrder={handleBotOrder} onBotClose={(id) => handleClosePosition(id)} onReviewSetup={handleReviewSetup} /></aside>
+      <aside className={showBot ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><TradingAgentPanel symbol={selectedSymbol}
+      derivConnectionId={derivOrderConnection?.connectionId}
+      derivAccountId={derivOrderConnection?.accountId}
+      derivEnvironment={derivOrderConnection?.environment} timeframe={timeframe} candles={liveCandles} currentPrice={currentPrice} activePosition={openPositions.find((order) => botOrderIds.includes(order.id)) ?? null} tradeHistory={tradeHistory} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} botOrderIds={botOrderIds} onBotOrder={handleBotOrder} onBotClose={(id) => handleClosePosition(id)} onReviewSetup={handleReviewSetup} /></aside>
       <aside className={showHistory ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><TradesPanel positionsOnly openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={currentPrice} selectedSymbol={selectedSymbol} onClosePosition={(id) => { void handleClosePosition(id) }} /></div></aside>
       <aside className={showFunds ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><DerivCashierLinks /></div></aside>
       <aside className={showAccount ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><AccountPanel account={resolvedAccountData} activeProviderSelection={activeProviderSelection} /></div></aside>
