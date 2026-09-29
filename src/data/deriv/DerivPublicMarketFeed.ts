@@ -204,7 +204,7 @@ export class DerivPublicMarketFeed {
           this.forceDirectFallback = true
           this.onStatus?.('error', 'The SHAFX market proxy connected but returned no market data. Retrying the public Deriv feed directly.')
           try { socket.close(1012, 'No market data from proxy') } catch (error) { void error }
-        }, 8000)
+        }, 4000)
       }
       this.requestHistory(socket, 'latest', 1)
       socket.send(JSON.stringify({ ticks: this.symbol, subscribe: 1, req_id: 2 }))
@@ -290,6 +290,7 @@ export class DerivPublicMarketFeed {
 
     socket.onerror = () => {
       if (this.stopped || generation !== this.connectionGeneration) return
+      if (this.forceDirectFallback && !receivedMarketData) return
       this.onStatus?.('error', 'Deriv market-data WebSocket connection failed.')
     }
 
@@ -302,8 +303,15 @@ export class DerivPublicMarketFeed {
       if (this.stopped || generation !== this.connectionGeneration) return
       this.socket = null
       if (!receivedMarketData && !usingDirectFallback) this.forceDirectFallback = true
-      if (event.code !== 1000 && event.code !== 1001) this.onStatus?.('error', 'Market stream closed (' + event.code + '): ' + (event.reason || 'unknown reason'))
-      else this.onStatus?.('disconnected')
+      const switchingToDirectFallback = this.forceDirectFallback && !receivedMarketData
+      if (switchingToDirectFallback) {
+        this.onStatus?.('connecting')
+        this.reconnectAttempt = 0
+      } else if (event.code !== 1000 && event.code !== 1001) {
+        this.onStatus?.('error', 'Market stream closed (' + event.code + '): ' + (event.reason || 'unknown reason'))
+      } else {
+        this.onStatus?.('disconnected')
+      }
       this.scheduleReconnect(generation)
     }
   }
