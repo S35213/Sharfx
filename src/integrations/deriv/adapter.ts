@@ -157,11 +157,12 @@ export const DERIV_PROVIDER_ADAPTER: ProviderAdapter = {
     const symbol = symbols[0]
     const feed = new DerivPublicMarketFeed()
     let closed = false
+    let activeTimeframe = timeframe
 
     feed.connect(symbol, timeframe, {
       onUpdate: (candles, price, epoch) => {
         if (closed) return
-        onEvent({ type: 'market_snapshot', snapshot: toSnapshot(symbol, timeframe, candles, price, epoch) })
+        onEvent({ type: 'market_snapshot', snapshot: toSnapshot(symbol, activeTimeframe, candles, price, epoch) })
       },
       onStatus: (status, message) => {
         if (closed || status !== 'error') return
@@ -171,6 +172,11 @@ export const DERIV_PROVIDER_ADAPTER: ProviderAdapter = {
 
     return {
       streamId: `${connection.connectionId}:${symbol}:${timeframe}:${Date.now()}`,
+      setTimeframe: async (nextTimeframe: string) => {
+        if (!isTimeframe(nextTimeframe)) throw new Error(`Unsupported SHAFX timeframe for Deriv: ${nextTimeframe}`)
+        activeTimeframe = nextTimeframe
+        feed.setTimeframe(nextTimeframe)
+      },
       close: async () => {
         closed = true
         feed.disconnect()
