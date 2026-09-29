@@ -95,6 +95,9 @@ export class DerivPublicMarketFeed {
   private pingTimer: ReturnType<typeof setInterval> | null = null
   private firstDataTimer: ReturnType<typeof setTimeout> | null = null
   private forceDirectFallback = false
+  private historyRequestId = 0
+  private nextRequestId = 10
+  private historyRequestMode: 'latest' | 'fallback' = 'latest'
 
   connect(
     symbol: string,
@@ -112,11 +115,40 @@ export class DerivPublicMarketFeed {
     this.onStatus = callbacks.onStatus
     this.webSocketUrlProvider = callbacks.getWebSocketUrl
     this.candles = []
+    this.historyRequestId = 1
+    this.nextRequestId = 10
+    this.historyRequestMode = 'latest'
     this.reconnectAttempt = 0
     this.forceDirectFallback = false
     this.stopped = false
     this.connectionGeneration += 1
     this.openSocket(this.connectionGeneration)
+  }
+
+  /**
+   * Change the chart timeframe without tearing down the live market WebSocket.
+   * The existing tick subscription stays active; only candle history is reloaded
+   * at the newly selected granularity.
+   */
+  setTimeframe(timeframe: Timeframe): void {
+    this.timeframe = timeframe
+    this.candles = []
+    this.historyRequestMode = 'latest'
+    const socket = this.socket
+    if (!this.stopped && socket && socket.readyState === WebSocket.OPEN) {
+      this.requestHistory(socket, 'latest')
+    }
+  }
+
+  private requestHistory(socket: WebSocket, end: 'latest' | number, reqId?: number): void {
+    const id = reqId ?? this.nextRequestId++
+    this.historyRequestId = id
+    this.historyRequestMode = end === 'latest' ? 'latest' : 'fallback'
+    socket.send(JSON.stringify(createDerivCandleHistoryRequest(this.symbol, this.timeframe, {
+      end,
+      count: 300,
+      reqId: id,
+    })))
   }
 
   private async openSocket(generation: number): Promise<void> {
@@ -152,12 +184,7 @@ export class DerivPublicMarketFeed {
       this.firstDataTimer = null
     }
     const requestFallbackCandles = (): void => {
-      const request = createDerivCandleHistoryRequest(this.symbol, this.timeframe, {
-        end: Math.floor(Date.now() / 1000) - 172800,
-        count: 300,
-        reqId: 3,
-      })
-      socket.send(JSON.stringify(request))
+      this.requestHistory(socket, Math.floor(Date.now() / 1000) - 172800)
     }
 
     socket.onopen = () => {
@@ -179,7 +206,7 @@ export class DerivPublicMarketFeed {
           try { socket.close(1012, 'No market data from proxy') } catch (error) { void error }
         }, 8000)
       }
-      socket.send(JSON.stringify(createDerivCandleHistoryRequest(this.symbol, this.timeframe)))
+      this.requestHistory(socket, 'latest', 1)
       socket.send(JSON.stringify({ ticks: this.symbol, subscribe: 1, req_id: 2 }))
     }
 
@@ -190,7 +217,7 @@ export class DerivPublicMarketFeed {
         const responseError = response.error?.message ?? response.errors?.find((item) => typeof item?.message === 'string')?.message
         if (responseError) {
           const marketClosed = /market(?:\s+is)?\s+presently\s+closed/i.test(responseError)
-          if (response.req_id === 1) {
+          if (response.req_id === this.historyRequestId && this.historyRequestMode === 'latest') {
             // Candle history may reject "latest" while a market is closed. Retry
             // against a known historical point so the chart can still render the
             // latest completed session instead of going blank for the weekend.
@@ -208,8 +235,9 @@ export class DerivPublicMarketFeed {
           return
         }
         if (response.msg_type === 'candles') {
+          if (response.req_id !== this.historyRequestId) return
           const receivedCandles = toCandles(response.candles).sort((a, b) => a.time - b.time)
-          if (response.req_id === 1 && receivedCandles.length === 0) {
+          if (this.historyRequestMode === 'latest' && receivedCandles.length === 0) {
             // A closed market can validly return an empty "latest" history response.
             // Retry with a recent completed session so the chart still gets real candles.
             requestFallbackCandles()
@@ -224,6 +252,7 @@ export class DerivPublicMarketFeed {
           return
         }
         if (response.msg_type === 'history' && response.history) {
+          if (response.req_id !== this.historyRequestId) return
           const candles = toTickCandles(response.history.times, response.history.prices, timeframeSeconds[this.timeframe])
           if (candles.length) {
             receivedMarketData = true
