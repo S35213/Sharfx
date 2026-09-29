@@ -2,7 +2,7 @@ name: SHAFX CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, fix/market-feed-test-syntax-20260927]
   pull_request:
 
 permissions:
