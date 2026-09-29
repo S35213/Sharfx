@@ -78,6 +78,7 @@ export const executeDerivTrade = async (input: ExecuteDerivTradeInput): Promise<
     side: setup.direction,
     stake: lotSize,
     multiplier,
+    durationSeconds: 30,
     takeProfitAmount: estimatedReward,
     stopLossAmount: estimatedLoss,
     entryPrice: setup.entryPrice,
