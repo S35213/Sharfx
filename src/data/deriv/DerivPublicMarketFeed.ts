@@ -102,37 +102,45 @@ const openPublicMarketSocket = async (timeoutMs = 2500): Promise<WebSocket> => {
   const urls = publicMarketSocketUrls()
   if (urls.length === 1) return openSinglePublicMarketSocket(urls[0], timeoutMs)
 
-  return await new Promise((resolve, reject) => {
+  const attempts = urls.map((url) => openSinglePublicMarketSocket(url, timeoutMs).then(
+    (socket) => ({ socket, ok: true as const }),
+    (error) => ({ error, ok: false as const }),
+  ))
+  const winner = await new Promise<{ socket: WebSocket }>((resolve, reject) => {
     let settled = false
     let failures = 0
     let lastError: Error | null = null
-    const sockets = new Set<WebSocket>()
 
-    const fail = (error: unknown): void => {
-      failures += 1
-      lastError = error instanceof Error ? error : new Error('Deriv public market socket failed.')
-      if (!settled && failures >= urls.length) {
-        settled = true
-        reject(lastError)
-      }
-    }
-
-    urls.forEach((url) => {
-      void openSinglePublicMarketSocket(url, timeoutMs)
-        .then((socket) => {
-          if (settled) {
-            try { socket.close() } catch (error) { void error }
-            return
+    attempts.forEach((attempt) => {
+      void attempt.then((result) => {
+        if (result.ok) {
+          if (!settled) {
+            settled = true
+            resolve({ socket: result.socket })
+          } else {
+            try { result.socket.close() } catch (error) { void error }
           }
+          return
+        }
+        failures += 1
+        lastError = result.error instanceof Error ? result.error : new Error('Deriv public market socket failed.')
+        if (!settled && failures >= attempts.length) {
           settled = true
-          resolve(socket)
-          for (const other of sockets) {
-            try { other.close() } catch (error) { void error }
-          }
-        })
-        .catch(fail)
+          reject(lastError)
+        }
+      })
     })
   })
+
+  void Promise.all(attempts).then((results) => {
+    for (const result of results) {
+      if (result.ok && result.socket !== winner.socket) {
+        try { result.socket.close() } catch (error) { void error }
+      }
+    }
+  })
+
+  return winner.socket
 }
 
 export const fetchDerivActiveForexSymbols = async (): Promise<DerivActiveSymbol[]> => {
