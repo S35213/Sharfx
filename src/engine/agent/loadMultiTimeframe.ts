@@ -2,29 +2,13 @@ import { useEffect, useState } from 'react'
 import { TIMEFRAMES, type OHLCV, type Timeframe } from '../../types'
 import { DerivPublicMarketFeed } from '../../data/deriv/DerivPublicMarketFeed'
 
-const loadDerivCandles = (symbol: string, timeframe: Timeframe): Promise<OHLCV[]> => new Promise((resolve, reject) => {
-  const feed = new DerivPublicMarketFeed()
-  const finish = (result: OHLCV[] | Error): void => {
-    feed.disconnect()
-    if (result instanceof Error) reject(result)
-    else resolve(result)
+const loadDerivCandles = async (symbol: string, timeframes: Timeframe[]): Promise<Partial<Record<Timeframe, OHLCV[]>>> => {
+  try {
+    return await fetchDerivMultiTimeframeCandles(symbol, timeframes)
+  } catch {
+    return {}
   }
-
-  const timer = setTimeout(() => finish(new Error('Deriv historical candle request timed out.')), 12000)
-  const finishWithTimer = (result: OHLCV[] | Error): void => {
-    clearTimeout(timer)
-    finish(result)
-  }
-
-  feed.connect(symbol, timeframe, {
-    onUpdate: (candles) => {
-      if (candles.length >= 5) finishWithTimer(candles)
-    },
-    onStatus: (status, message) => {
-      if (status === 'error') finishWithTimer(new Error(message || 'Deriv historical candle request failed.'))
-    },
-  })
-})
+}
 
 export const useMultiTimeframeCandles = (
   symbol: string,
