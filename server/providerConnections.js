@@ -192,6 +192,16 @@ export const getProviderConnection = async (userId, connectionId, includeSecret 
   return Array.isArray(payload) ? payload[0] || null : null
 }
 
+export const getProviderAccount = async (userId, connectionId, providerAccountId) => {
+  const response = await rest('/shafx_provider_accounts?user_id=eq.' + encodeURIComponent(userId)
+    + '&connection_id=eq.' + encodeURIComponent(connectionId)
+    + '&provider_account_id=eq.' + encodeURIComponent(providerAccountId)
+    + '&select=id,connection_id,provider_id,provider_account_id,label,environment,currency,balance,equity,used_margin,free_margin,floating_pl,active,last_synced_at,metadata,created_at,updated_at')
+  const payload = await decodeJson(response, [])
+  if (!response.ok) throw new Error(payload?.message || 'Unable to load the selected provider account.')
+  return Array.isArray(payload) ? payload[0] || null : null
+}
+
 export const listProviderConnections = async (userId) => {
   const connectionResponse = await rest('/shafx_provider_connections?user_id=eq.' + encodeURIComponent(userId) + '&select=id,provider_id,label,environment,state,auth_method,expires_at,last_seen_at,metadata,created_at,updated_at&order=created_at.desc')
   const accountResponse = await rest('/shafx_provider_accounts?user_id=eq.' + encodeURIComponent(userId) + '&select=id,connection_id,provider_id,provider_account_id,label,environment,currency,balance,equity,used_margin,free_margin,floating_pl,active,last_synced_at,metadata,created_at,updated_at&order=created_at.desc')
