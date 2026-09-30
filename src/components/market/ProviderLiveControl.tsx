@@ -30,6 +30,7 @@ export const ProviderLiveControl: React.FC<ProviderLiveControlProps> = ({ provid
   const streamRef = useRef<ProviderStreamHandle | null>(null)
   const onUpdateRef = useRef(onUpdate)
   const onActiveChangeRef = useRef(onActiveChange)
+  const timeframeRef = useRef(timeframe)
   const [status, setStatus] = useState<Status>('waiting')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
@@ -37,7 +38,8 @@ export const ProviderLiveControl: React.FC<ProviderLiveControlProps> = ({ provid
   useEffect(() => {
     onUpdateRef.current = onUpdate
     onActiveChangeRef.current = onActiveChange
-  }, [onUpdate, onActiveChange])
+    timeframeRef.current = timeframe
+  }, [onUpdate, onActiveChange, timeframe])
 
 
   useEffect(() => {
@@ -64,7 +66,7 @@ export const ProviderLiveControl: React.FC<ProviderLiveControlProps> = ({ provid
         const check = validateProviderConnection(adapter, connection)
         if (!check.allowed) throw new Error(check.reason || 'The broker connection is not usable.')
         if (typeof adapter.subscribe !== 'function') throw new Error('The selected broker does not provide a live market stream.')
-        const startingTimeframe = timeframe
+        const startingTimeframe = timeframeRef.current
         const stream = await adapter.subscribe(connection, connection.accountId, [symbol], (event) => {
           if (disposed) return
           if (event.type === 'error') {
@@ -100,7 +102,17 @@ export const ProviderLiveControl: React.FC<ProviderLiveControlProps> = ({ provid
       disposed = true
       void closeExisting()
     }
-  }, [connection, providerId, symbol, timeframe])
+  }, [connection, providerId, symbol])
+
+  useEffect(() => {
+    const stream = streamRef.current
+    if (!stream) return
+    void stream.setTimeframe(timeframe).catch((error) => {
+      setStatus('error')
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to change the Deriv timeframe.')
+      onActiveChangeRef.current?.(false)
+    })
+  }, [timeframe])
 
   const label = status === 'live' ? 'LIVE' : status === 'connecting' ? 'CONNECTING' : status === 'error' ? 'RETRY' : 'WAITING'
   return <div className="relative">
