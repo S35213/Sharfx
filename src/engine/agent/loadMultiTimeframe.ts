@@ -32,19 +32,19 @@ export const useMultiTimeframeCandles = (
   }, [baseM1Candles.length, fallbackCandles, fallbackTimeframe])
 
   useEffect(() => {
-    if (baseM1Candles.length > 0) return
     let cancelled = false
 
     const load = async (): Promise<void> => {
       const next = await loadDerivCandles(symbol, TIMEFRAMES)
       if (cancelled) return
-      if (fallbackCandles.length > 0) next[fallbackTimeframe] = fallbackCandles
+      if (baseM1Candles.length > 0) next.M1 = baseM1Candles
+      else if (fallbackCandles.length > 0) next[fallbackTimeframe] = fallbackCandles
       setFrames(next)
     }
 
     void load()
     return () => { cancelled = true }
-  }, [baseM1Candles.length, fallbackCandles, fallbackTimeframe, refreshKey, symbol])
+  }, [baseM1Candles, fallbackCandles, fallbackTimeframe, refreshKey, symbol])
 
   return frames
 }
