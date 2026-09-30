@@ -31,6 +31,7 @@ describe('DerivPublicMarketFeed', () => {
       count: 300,
       style: 'candles',
       granularity: 60,
+      adjust_start_time: 1,
       req_id: 1,
     })
     expect(createDerivCandleHistoryRequest(toDerivSymbol('EUR/USD'), 'M1')).toEqual({
@@ -39,6 +40,7 @@ describe('DerivPublicMarketFeed', () => {
       count: 300,
       style: 'candles',
       granularity: 60,
+      adjust_start_time: 1,
       req_id: 1,
     })
   })
@@ -54,6 +56,7 @@ describe('DerivPublicMarketFeed', () => {
       count: 300,
       style: 'candles',
       granularity: 60,
+      adjust_start_time: 1,
       req_id: 3,
     })
   })
@@ -64,6 +67,7 @@ describe('DerivPublicMarketFeed', () => {
       count: 2100,
       style: 'candles',
       granularity: 86400,
+      adjust_start_time: 1,
       req_id: 1,
     })
 
