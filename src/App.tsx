@@ -42,7 +42,7 @@ const TerminalContent: React.FC = () => {
   const [marketTimestamp, setMarketTimestamp] = useState(0)
   const [liveCandles, setLiveCandles] = useState<OHLCV[]>([])
   const [accountData, setAccountData] = useState<AccountData | null>(null)
-  const [watchlist, setWatchlist] = useState<MarketPair[]>(() => mockWatchlist)
+  const [watchlist, setWatchlist] = useState<MarketPair[]>(() => mockWatchlist.map((pair) => ({ ...pair, price: 0, change: 0, changePercent: 0, status: 'closed' })))
   const [symbolSpec, setSymbolSpec] = useState<SymbolSpec>(() => SYMBOL_SPECS[selectedSymbol] ?? SYMBOL_SPECS['EUR/USD'])
   const [openPositions, setOpenPositions] = useState<TradeOrder[]>([])
   const [pendingOrders] = useState<TradeOrder[]>([])
