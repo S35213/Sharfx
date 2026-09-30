@@ -107,7 +107,9 @@ const place = async (req) => {
   const side = order.side === 'SELL' ? 'SELL' : 'BUY'
   const requestedStake = Number(order.stake ?? order.quantity)
   const stake = Math.max(1, requestedStake)
-  const multiplier = Math.max(1, Math.min(1000, Number(order.multiplier) || 10))
+  const VALID_DERIV_MULTIPLIERS = [100, 200, 300, 500, 800]
+  const requestedMultiplier = Number(order.multiplier)
+  const multiplier = VALID_DERIV_MULTIPLIERS.includes(requestedMultiplier) ? requestedMultiplier : VALID_DERIV_MULTIPLIERS[0]
   const durationSeconds = Math.max(5, Math.min(86400, Math.trunc(Number(order.durationSeconds) || 30)))
   let currency = String(account.currency || order.currency || '').trim().toUpperCase()
   if (!currency) {
