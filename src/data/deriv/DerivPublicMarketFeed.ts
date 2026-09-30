@@ -31,7 +31,7 @@ const timeframeSeconds: Record<Timeframe, number> = {
 }
 
 const historyGranularitySeconds = (timeframe: Timeframe): number => timeframe === 'W1' ? 86400 : timeframeSeconds[timeframe]
-const historyDefaultCount = (timeframe: Timeframe): number => timeframe === 'W1' ? 2100 : 300
+const historyDefaultCount = (timeframe: Timeframe): number => timeframe === 'W1' ? 650 : 300
 
 export const createDerivCandleHistoryRequest = (
   symbol: string,
@@ -216,7 +216,7 @@ export const fetchDerivMultiTimeframeCandles = async (
   const [m1, h1, d1] = await Promise.all([
     needsLower ? fetchAnchorHistory(symbol, 'M1', 600) : Promise.resolve([]),
     needsHourly ? fetchAnchorHistory(symbol, 'H1', 400) : Promise.resolve([]),
-    needsDaily ? fetchAnchorHistory(symbol, 'D1', 2100) : Promise.resolve([]),
+    needsDaily ? fetchAnchorHistory(symbol, 'D1', 700) : Promise.resolve([]),
   ])
 
   const results: Partial<Record<Timeframe, OHLCV[]>> = {}
