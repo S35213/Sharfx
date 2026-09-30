@@ -21,7 +21,8 @@ const requestWebSocketUrl = async (token, accountId) => {
   const data = await response.json().catch(() => ({}))
   const url = data?.data?.url
   if (!response.ok || typeof url !== 'string' || !url) {
-    throw new Error('Deriv did not provide an authenticated trading WebSocket.')
+    const detail = typeof data?.error?.message === 'string' ? data.error.message : typeof data?.message === 'string' ? data.message : 'Deriv did not provide an authenticated trading WebSocket.'
+    throw new Error('Deriv trading connection failed (' + response.status + '): ' + detail)
   }
   return url
 }
