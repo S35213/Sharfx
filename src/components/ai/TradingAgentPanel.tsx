@@ -339,16 +339,14 @@ export function TradingAgentPanel({
     if (!symbolSpec || !botRiskSetup) return null
     return calculateRisk({ accountBalance, accountCurrency, riskPercent: riskModes[riskMode].percent, side: botRiskSetup.direction, entryPrice: botRiskSetup.entryPrice, stopLoss: botRiskSetup.stopLoss, takeProfit: botRiskSetup.takeProfit, symbolSpec, conversionRate })
   }, [accountBalance, accountCurrency, botRiskSetup, conversionRate, riskMode, symbolSpec])
+  const accountDataReady = Number.isFinite(accountBalance) && accountBalance > 0
   const accountStakeCeiling = useMemo(() => {
-    if (!symbolSpec || !botRiskSetup || !Number.isFinite(accountBalance) || accountBalance <= 0) return 0
-    const stopDistancePips = Math.abs(botRiskSetup.entryPrice - botRiskSetup.stopLoss) / symbolSpec.pipSize
-    const quoteRate = symbolSpec.quoteCurrency === accountCurrency ? 1 : (Number.isFinite(conversionRate) && Number(conversionRate) > 0 ? Number(conversionRate) : 0)
-    const pipValuePerLot = symbolSpec.pipSize * symbolSpec.contractSize * quoteRate
-    if (!Number.isFinite(stopDistancePips) || stopDistancePips <= 0 || !Number.isFinite(pipValuePerLot) || pipValuePerLot <= 0) return 0
-    const lossPerLot = stopDistancePips * pipValuePerLot
+    if (!botRiskCalc?.isValid || !Number.isFinite(botRiskCalc.suggestedLotSize) || botRiskCalc.suggestedLotSize <= 0 || !Number.isFinite(botRiskCalc.estimatedLossAtStop) || botRiskCalc.estimatedLossAtStop <= 0) return 0
+    const lossPerLot = botRiskCalc.estimatedLossAtStop / botRiskCalc.suggestedLotSize
+    if (!Number.isFinite(lossPerLot) || lossPerLot <= 0) return 0
     return accountBalance / lossPerLot
-  }, [accountBalance, accountCurrency, botRiskSetup, conversionRate, symbolSpec])
-  const lotFitsAccount = Boolean(accountStakeCeiling > 0 && parsedLotSize > 0 && parsedLotSize <= accountStakeCeiling + 1e-8)
+  }, [accountBalance, botRiskCalc])
+  const lotFitsAccount = Boolean(accountDataReady && accountStakeCeiling > 0 && parsedLotSize > 0 && parsedLotSize <= accountStakeCeiling + 1e-8)
   const lotSizeValid = symbolSpec ? Number.isFinite(parsedLotSize) && parsedLotSize >= symbolSpec.minLotSize && parsedLotSize <= symbolSpec.maxLotSize && Math.abs((parsedLotSize / symbolSpec.lotStep) - Math.round(parsedLotSize / symbolSpec.lotStep)) < 1e-8 : false
 
   useEffect(() => {
@@ -493,6 +491,12 @@ export function TradingAgentPanel({
         }
         if (!lotSizeValid) {
           setStatus('BOT BLOCKED • choose a valid lot size for ' + symbol)
+          setAutoTradingEnabled(false)
+          setPhase('READY')
+          return
+        }
+        if (!accountDataReady) {
+          setStatus('ACCOUNT DATA WAIT • waiting for the selected Deriv account balance before sizing the bot trade')
           setAutoTradingEnabled(false)
           setPhase('READY')
           return
