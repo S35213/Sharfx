@@ -147,11 +147,23 @@ export const fetchDerivActiveForexSymbols = async (): Promise<DerivActiveSymbol[
 
 let multiTimeframeRequestId = 8100
 
+const HISTORY_CACHE_TTL_MS = 60000
+const anchorHistoryCache = new Map<string, { candles: OHLCV[]; receivedAt: number }>()
+const feedHistoryCache = new Map<string, { candles: OHLCV[]; price: number; epoch: number; receivedAt: number }>()
+
+const historyCacheKey = (symbol: string, timeframe: Timeframe): string => toDerivSymbol(symbol) + ':' + timeframe
+
 const fetchAnchorHistory = async (
   symbol: string,
   timeframe: Timeframe,
   count: number,
 ): Promise<OHLCV[]> => {
+  const key = historyCacheKey(symbol, timeframe)
+  const cached = anchorHistoryCache.get(key)
+  if (cached && Date.now() - cached.receivedAt < HISTORY_CACHE_TTL_MS && cached.candles.length > 0) {
+    return cached.candles.slice(-count)
+  }
+
   let socket: WebSocket
   try {
     socket = await openPublicMarketSocket(2800)
@@ -184,7 +196,9 @@ const fetchAnchorHistory = async (
         // discard a valid candles response merely because req_id is absent.
         if (payload.msg_type !== 'candles' || !Array.isArray(payload.candles)) return
         if (payload.req_id !== undefined && Number(payload.req_id) !== reqId) return
-        finish(toCandles(payload.candles).sort((a, b) => a.time - b.time).slice(-count))
+        const candles = toCandles(payload.candles).sort((a, b) => a.time - b.time).slice(-count)
+        if (candles.length) anchorHistoryCache.set(key, { candles, receivedAt: Date.now() })
+        finish(candles)
       } catch {
         // Ignore unrelated or malformed messages.
       }
@@ -434,6 +448,11 @@ export class DerivPublicMarketFeed {
     this.publicEndpointIndex = 0
     this.stopped = false
     this.connectionGeneration += 1
+    const cached = feedHistoryCache.get(historyCacheKey(this.symbol, this.timeframe))
+    if (cached && Date.now() - cached.receivedAt < HISTORY_CACHE_TTL_MS && cached.candles.length > 0) {
+      this.candles = cached.candles
+      this.onUpdate?.(cached.candles, cached.price, cached.epoch)
+    }
     this.openSocket(this.connectionGeneration)
   }
 
@@ -446,6 +465,11 @@ export class DerivPublicMarketFeed {
     this.timeframe = timeframe
     this.candles = []
     this.historyRequestMode = 'latest'
+    const cached = feedHistoryCache.get(historyCacheKey(this.symbol, this.timeframe))
+    if (cached && Date.now() - cached.receivedAt < HISTORY_CACHE_TTL_MS && cached.candles.length > 0) {
+      this.candles = cached.candles
+      this.onUpdate?.(cached.candles, cached.price, cached.epoch)
+    }
     const socket = this.socket
     if (!this.stopped && socket && socket.readyState === WebSocket.OPEN) {
       this.requestHistory(socket, 'latest')
@@ -592,7 +616,11 @@ export class DerivPublicMarketFeed {
           clearFirstDataTimer()
           this.candles = receivedCandles.slice(-300)
           const lastCandle = this.candles[this.candles.length - 1]
-          if (lastCandle) this.onUpdate?.(this.candles, lastCandle.close, Math.trunc(lastCandle.time))
+          if (lastCandle) {
+            const epoch = Math.trunc(lastCandle.time)
+            feedHistoryCache.set(historyCacheKey(this.symbol, this.timeframe), { candles: this.candles, price: lastCandle.close, epoch, receivedAt: Date.now() })
+            this.onUpdate?.(this.candles, lastCandle.close, epoch)
+          }
           return
         }
         if (response.msg_type === 'history' && response.history) {
@@ -603,7 +631,9 @@ export class DerivPublicMarketFeed {
             clearFirstDataTimer()
             this.candles = candles
             const lastCandle = this.candles[this.candles.length - 1]
-            this.onUpdate?.(this.candles, lastCandle.close, Math.trunc(lastCandle.time))
+            const epoch = Math.trunc(lastCandle.time)
+            feedHistoryCache.set(historyCacheKey(this.symbol, this.timeframe), { candles: this.candles, price: lastCandle.close, epoch, receivedAt: Date.now() })
+            this.onUpdate?.(this.candles, lastCandle.close, epoch)
           }
           return
         }
