@@ -341,6 +341,8 @@ export function TradingAgentPanel({
     .slice()
     .sort((a, b) => (b.executableSetup?.confidence ?? 0) - (a.executableSetup?.confidence ?? 0))
     .slice(0, 2)
+  const missingScanTimeframes = SCAN_TIMEFRAMES.filter((frame) => (timeframeFrames[frame] ?? []).length < 5)
+  const scanDataIncomplete = missingScanTimeframes.length > 0
   const activeBotOrder = activePosition && botOrderIds.includes(activePosition.id) ? activePosition : null
 
   const learning = useMemo(() => learnFromTrades(tradeHistory.filter((trade) => trade.status === 'closed').map((trade) => ({ symbol: trade.symbol, direction: trade.type, profit: trade.profit, riskRewardRatio: trade.riskRewardRatio }))), [tradeHistory])
@@ -844,6 +846,18 @@ export function TradingAgentPanel({
     setStatus('Automatic trading is OFF. No new bot trades will be opened.')
   }
 
+  useEffect(() => {
+    if (!scanComplete) return
+    setSelectedOpportunityTimeframe(topOpportunities[0]?.timeframe ?? null)
+    if (scanDataIncomplete) {
+      setStatus('DATA INCOMPLETE • unable to evaluate ' + missingScanTimeframes.join(', ') + ' yet. Scan again when the live histories are loaded.')
+      return
+    }
+    setStatus(topOpportunities.length > 0
+      ? topOpportunities.length + ' strongest timeframe' + (topOpportunities.length === 1 ? '' : 's') + ' ready: ' + topOpportunities.map((row) => row.timeframe).join(' + ') + '.'
+      : 'NO OPPORTUNITY • all available timeframes were evaluated and no directional setup passed the current rules.')
+  }, [missingScanTimeframes, scanComplete, scanDataIncomplete, topOpportunities])
+
   const rescanBot = (): void => {
     if (marketScanTimer.current) window.clearTimeout(marketScanTimer.current)
     if (scanInterval.current) window.clearInterval(scanInterval.current)
@@ -871,10 +885,6 @@ export function TradingAgentPanel({
       setScanSeconds(10)
       setScanComplete(true)
       setScanPhase('READY')
-      setSelectedOpportunityTimeframe(topOpportunities[0]?.timeframe ?? null)
-      setStatus(topOpportunities.length > 0
-        ? topOpportunities.length + ' strongest timeframe' + (topOpportunities.length === 1 ? '' : 's') + ' ready: ' + topOpportunities.map((row) => row.timeframe).join(' + ') + '.'
-        : 'No opportunity found for trade.')
     }, 10000)
   }
 
@@ -1107,10 +1117,16 @@ export function TradingAgentPanel({
                 </div>
               </div>
             )}
-            {scanComplete && topOpportunities.length === 0 && (
+            {scanComplete && scanDataIncomplete && (
+              <div className="rounded-xl border border-shafx-warning/25 bg-shafx-warning/[0.045] p-3">
+                <div className="font-mono text-[9px] font-black uppercase tracking-[0.16em] text-shafx-warning">DATA INCOMPLETE</div>
+                <p className="mt-1 text-[8px] leading-4 text-shafx-textMuted">The scanner does not have at least 5 candles for: {missingScanTimeframes.join(', ')}. SHAFX will not call this a trade failure until those histories are available.</p>
+              </div>
+            )}
+            {scanComplete && !scanDataIncomplete && topOpportunities.length === 0 && (
               <div className="rounded-xl border border-shafx-warning/25 bg-shafx-warning/[0.045] p-3">
                 <div className="font-mono text-[9px] font-black uppercase tracking-[0.16em] text-shafx-warning">NO OPPORTUNITY FOUND FOR TRADE</div>
-                <p className="mt-1 text-[8px] leading-4 text-shafx-textMuted">The scanner checked M1, M5, M15, M30, H1, H4, D1 and W1 and did not find a setup that passed the current market and account-risk filters.</p>
+                <p className="mt-1 text-[8px] leading-4 text-shafx-textMuted">All requested timeframes were loaded and no directional setup passed the current market-structure rules.</p>
               </div>
             )}
             <div className="rounded-xl border border-shafx-border bg-shafx-bg/60 p-2.5">
