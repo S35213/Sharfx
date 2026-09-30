@@ -404,7 +404,6 @@ export class DerivPublicMarketFeed {
   private webSocketUrlProvider?: () => Promise<string>
   private pingTimer: ReturnType<typeof setInterval> | null = null
   private firstDataTimer: ReturnType<typeof setTimeout> | null = null
-  private forceDirectFallback = false
   private publicEndpointIndex = 0
   private historyRequestId = 0
   private nextRequestId = 10
@@ -432,7 +431,6 @@ export class DerivPublicMarketFeed {
     this.historyRequestMode = 'latest'
     this.tickSubscriptionId = null
     this.reconnectAttempt = 0
-    this.forceDirectFallback = false
     this.publicEndpointIndex = 0
     this.stopped = false
     this.connectionGeneration += 1
