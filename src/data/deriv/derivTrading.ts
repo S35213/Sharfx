@@ -40,7 +40,26 @@ interface DerivBuyInput {
   quote: DerivProposalQuote
 }
 
-const postOrderApi = async (body: Record<string, unknown>): Promise<any> => {
+interface ProviderOrderPayload {
+  providerOrderId?: string
+  stake?: number
+  multiplier?: number
+  timestamp?: string
+  raw?: {
+    contractId?: string | number
+    spot?: number | string
+  }
+}
+
+interface OrderApiPayload {
+  ok?: boolean
+  quote?: DerivProposalQuote
+  order?: ProviderOrderPayload
+  stage?: string
+  error?: string
+}
+
+const postOrderApi = async (body: Record<string, unknown>): Promise<OrderApiPayload> => {
   const response = await fetch('/api/deriv/order', {
     method: 'POST',
     credentials: 'include',
@@ -48,8 +67,8 @@ const postOrderApi = async (body: Record<string, unknown>): Promise<any> => {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  const payload = await response.json().catch(() => ({}))
-  if (!response.ok || !payload?.ok) {
+  const payload = (await response.json().catch(() => ({}))) as OrderApiPayload
+  if (!response.ok || !payload.ok) {
     const stage = typeof payload?.stage === 'string' ? payload.stage + ': ' : ''
     throw new Error(stage + (typeof payload?.error === 'string' ? payload.error : 'Deriv request failed.'))
   }
@@ -71,7 +90,8 @@ export async function getDerivQuote(input: DerivQuoteInput): Promise<DerivPropos
       takeProfitAmount: input.takeProfitAmount ?? 0,
     },
   })
-  return payload.quote as DerivProposalQuote
+  if (!payload.quote) throw new Error('Deriv did not return a proposal quote.')
+  return payload.quote
 }
 
 export async function buyDerivProposal(input: DerivBuyInput): Promise<TradeOrder> {
@@ -83,14 +103,15 @@ export async function buyDerivProposal(input: DerivBuyInput): Promise<TradeOrder
     askPrice: input.quote.askPrice,
     quote: input.quote,
   })
+  if (!payload.order) throw new Error('Deriv did not return a purchased contract.')
   return normalizeTradeOrder(payload.order, input.quote)
 }
 
-const normalizeTradeOrder = (providerOrder: any, quote: DerivProposalQuote): TradeOrder => {
-  const stake = Number(providerOrder?.stake ?? quote.stake)
-  const multiplier = Number(providerOrder?.multiplier ?? quote.multiplier)
-  const providerOrderId = String(providerOrder?.providerOrderId ?? providerOrder?.raw?.contractId ?? '')
-  const entryPrice = Number(providerOrder?.raw?.spot ?? quote.spot ?? 0)
+const normalizeTradeOrder = (providerOrder: ProviderOrderPayload, quote: DerivProposalQuote): TradeOrder => {
+  const stake = Number(providerOrder.stake ?? quote.stake)
+  const multiplier = Number(providerOrder.multiplier ?? quote.multiplier)
+  const providerOrderId = String(providerOrder.providerOrderId ?? providerOrder.raw?.contractId ?? '')
+  const entryPrice = Number(providerOrder.raw?.spot ?? quote.spot ?? 0)
   const stopLossAmount = Number(quote.stopLossAmount ?? 0)
   const takeProfitAmount = Number(quote.takeProfitAmount ?? 0)
   const risk = Number.isFinite(stopLossAmount) && stopLossAmount > 0 ? stopLossAmount : stake
