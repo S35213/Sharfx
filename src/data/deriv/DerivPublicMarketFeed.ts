@@ -119,6 +119,98 @@ export const fetchDerivActiveForexSymbols = async (): Promise<DerivActiveSymbol[
   })
 }
 
+export const fetchDerivMultiTimeframeCandles = async (
+  symbol: string,
+  timeframes: Timeframe[],
+): Promise<Partial<Record<Timeframe, OHLCV[]>>> => {
+  const uniqueTimeframes = Array.from(new Set(timeframes))
+  if (!uniqueTimeframes.length) return {}
+
+  const socket = await openPublicMarketSocket()
+  const results: Partial<Record<Timeframe, OHLCV[]>> = {}
+  const pending = new Map<number, { timeframe: Timeframe; fallback: boolean }>()
+  let remaining = uniqueTimeframes.length
+
+  return await new Promise((resolve, reject) => {
+    const timer = globalThis.setTimeout(() => {
+      try { socket.close() } catch (error) { void error }
+      resolve(results)
+    }, 9000)
+
+    const finishOne = (timeframe: Timeframe, candles: OHLCV[]): void => {
+      results[timeframe] = candles
+      remaining -= 1
+      if (remaining <= 0) {
+        globalThis.clearTimeout(timer)
+        try { socket.close() } catch (error) { void error }
+        resolve(results)
+      }
+    }
+
+    socket.onmessage = (event: MessageEvent) => {
+      try {
+        const payload = JSON.parse(String(event.data)) as DerivTickResponse
+        const reqId = Number(payload.req_id)
+        const request = pending.get(reqId)
+        if (!request) return
+
+        if (payload.error?.message) {
+          if (!request.fallback) {
+            const fallbackReqId = reqId + 1000
+            pending.delete(reqId)
+            pending.set(fallbackReqId, { timeframe: request.timeframe, fallback: true })
+            socket.send(JSON.stringify(createDerivCandleHistoryRequest(toDerivSymbol(symbol), request.timeframe, {
+              end: Math.floor(Date.now() / 1000) - 172800,
+              count: 300,
+              reqId: fallbackReqId,
+            })))
+            return
+          }
+          pending.delete(reqId)
+          finishOne(request.timeframe, [])
+          return
+        }
+
+        if (payload.msg_type !== 'candles' || !Array.isArray(payload.candles)) return
+        const raw = toCandles(payload.candles).sort((a, b) => a.time - b.time)
+        const candles = request.timeframe === 'W1' ? aggregateWeeklyCandles(raw) : raw
+        if (!candles.length && !request.fallback) {
+          const fallbackReqId = reqId + 1000
+          pending.delete(reqId)
+          pending.set(fallbackReqId, { timeframe: request.timeframe, fallback: true })
+          socket.send(JSON.stringify(createDerivCandleHistoryRequest(toDerivSymbol(symbol), request.timeframe, {
+            end: Math.floor(Date.now() / 1000) - 172800,
+            count: 300,
+            reqId: fallbackReqId,
+          })))
+          return
+        }
+
+        pending.delete(reqId)
+        finishOne(request.timeframe, candles.slice(-300))
+      } catch {
+        // Ignore malformed responses; the bounded request timer will finish the batch.
+      }
+    }
+
+    socket.onerror = () => {
+      globalThis.clearTimeout(timer)
+      try { socket.close() } catch (error) { void error }
+      reject(new Error('Deriv multi-timeframe history connection failed.'))
+    }
+
+    uniqueTimeframes.forEach((timeframe, index) => {
+      const reqId = 8100 + index
+      pending.set(reqId, { timeframe, fallback: false })
+      socket.send(JSON.stringify(createDerivCandleHistoryRequest(toDerivSymbol(symbol), timeframe, {
+        end: 'latest',
+        count: 300,
+        reqId,
+      })))
+    })
+  })
+}
+
 export const subscribeDerivForexQuotes = async (
   symbols: string[],
   onQuote: (symbol: string, quote: number, epoch: number) => void,
