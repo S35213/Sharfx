@@ -29,7 +29,7 @@ export const useMultiTimeframeCandles = (
     if (fallbackCandles.length > 0) {
       setFrames((previous) => ({ ...previous, [fallbackTimeframe]: fallbackCandles }))
     }
-  }, [baseM1Candles.length, fallbackCandles, fallbackTimeframe])
+  }, [baseM1Candles.length, fallbackCandles.length, fallbackTimeframe])
 
   useEffect(() => {
     let cancelled = false
@@ -54,7 +54,7 @@ export const useMultiTimeframeCandles = (
 
     void load()
     return () => { cancelled = true }
-  }, [baseM1Candles, fallbackCandles, fallbackTimeframe, refreshKey, symbol])
+  }, [baseM1Candles.length, fallbackCandles.length, fallbackTimeframe, refreshKey, symbol])
 
   return frames
 }
