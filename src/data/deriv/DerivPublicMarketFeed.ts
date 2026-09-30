@@ -1,6 +1,7 @@
 import type { OHLCV, Timeframe } from '../../types'
 
 export const DERIV_PUBLIC_WS_URL = 'wss://api.derivws.com/trading/v1/options/ws/public'
+export const DERIV_LEGACY_PUBLIC_WS_URL = 'wss://ws.binaryws.com/websockets/v3'
 const DEFAULT_SHAFX_MARKET_PROXY_WS_URL = 'wss://sharfx.150sharingan2.workers.dev/api/deriv/public-market'
 export const SHAFX_MARKET_PROXY_WS_URL = import.meta.env.VITE_SHAFX_MARKET_WS_URL?.trim() || DEFAULT_SHAFX_MARKET_PROXY_WS_URL
 
@@ -11,10 +12,10 @@ export const getDerivMarketWebSocketUrl = (): string => {
   // WebSocket is proxied there so the deployed app has one controlled market-data
   // entry point. Local development keeps the direct Deriv endpoint.
   const hostname = window.location.hostname
-  if (hostname === 'localhost' || hostname === '127.0.0.1') return DERIV_PUBLIC_WS_URL
-  // Staging uses Deriv's public socket directly so Cloudflare proxy latency/failure
-  // cannot hold the chart in CONNECTING. The deployed UI still runs on Cloudflare.
-  if (hostname === 'sharfx-pr55-staging.150sharingan2.workers.dev') return DERIV_PUBLIC_WS_URL
+  if (hostname === 'localhost' || hostname === '127.0.0.1') return DERIV_LEGACY_PUBLIC_WS_URL
+  // Staging uses Deriv's proven public socket directly so Cloudflare proxy latency/failure
+  // cannot hold the chart in CONNECTING. Production still prefers the Cloudflare proxy.
+  if (hostname === 'sharfx-pr55-staging.150sharingan2.workers.dev') return DERIV_LEGACY_PUBLIC_WS_URL
   return SHAFX_MARKET_PROXY_WS_URL
 }
 
@@ -63,8 +64,20 @@ export const formatForexSymbol = (symbol: string): string => {
   return /^[A-Z]{6}$/.test(normalized) ? normalized.slice(0, 3) + '/' + normalized.slice(3) : symbol
 }
 
-const openPublicMarketSocket = (timeoutMs = 3500): Promise<WebSocket> => new Promise((resolve, reject) => {
-  const socket = new WebSocket(getDerivMarketWebSocketUrl())
+const publicMarketSocketUrls = (): string[] => Array.from(new Set([
+  getDerivMarketWebSocketUrl(),
+  DERIV_PUBLIC_WS_URL,
+  DERIV_LEGACY_PUBLIC_WS_URL,
+]))
+
+const openSinglePublicMarketSocket = (url: string, timeoutMs: number): Promise<WebSocket> => new Promise((resolve, reject) => {
+  let socket: WebSocket
+  try {
+    socket = new WebSocket(url)
+  } catch (error) {
+    reject(error instanceof Error ? error : new Error('Deriv public market socket could not be created.'))
+    return
+  }
   let settled = false
   const finish = (action: 'resolve' | 'reject', value?: Error): void => {
     if (settled) return
@@ -83,6 +96,18 @@ const openPublicMarketSocket = (timeoutMs = 3500): Promise<WebSocket> => new Pro
     if (!settled) finish('reject', new Error('Deriv public market socket closed before connecting.'))
   }
 })
+
+const openPublicMarketSocket = async (timeoutMs = 3000): Promise<WebSocket> => {
+  let lastError: Error | null = null
+  for (const url of publicMarketSocketUrls()) {
+    try {
+      return await openSinglePublicMarketSocket(url, timeoutMs)
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error('Deriv public market socket failed.')
+    }
+  }
+  throw lastError ?? new Error('No Deriv public market endpoint could be reached.')
+}
 
 export const fetchDerivActiveForexSymbols = async (): Promise<DerivActiveSymbol[]> => {
   const socket = await openPublicMarketSocket()
@@ -116,7 +141,7 @@ export const fetchDerivActiveForexSymbols = async (): Promise<DerivActiveSymbol[
         reject(error)
       }
     }
-    socket.send(JSON.stringify({ active_symbols: 'brief', req_id: 7100 }))
+    socket.send(JSON.stringify({ active_symbols: 'brief', product_type: 'basic', req_id: 7100 }))
   })
 }
 
@@ -129,7 +154,7 @@ const fetchAnchorHistory = async (
 ): Promise<OHLCV[]> => {
   let socket: WebSocket
   try {
-    socket = await openPublicMarketSocket(4500)
+    socket = await openPublicMarketSocket(2800)
   } catch {
     return []
   }
@@ -137,7 +162,7 @@ const fetchAnchorHistory = async (
   const reqId = multiTimeframeRequestId++
   return await new Promise((resolve) => {
     let settled = false
-    const timer = globalThis.setTimeout(() => finish([]), 5500)
+    const timer = globalThis.setTimeout(() => finish([]), 4200)
 
     const finish = (candles: OHLCV[]): void => {
       if (settled) return
@@ -459,7 +484,7 @@ export class DerivPublicMarketFeed {
     if (this.stopped || generation !== this.connectionGeneration) return
     this.onStatus?.('connecting')
 
-    let wsUrl = this.forceDirectFallback ? DERIV_PUBLIC_WS_URL : getDerivMarketWebSocketUrl()
+    let wsUrl = this.forceDirectFallback ? DERIV_LEGACY_PUBLIC_WS_URL : getDerivMarketWebSocketUrl()
     if (this.webSocketUrlProvider && !this.forceDirectFallback) {
       try {
         wsUrl = await this.webSocketUrlProvider()
@@ -481,7 +506,7 @@ export class DerivPublicMarketFeed {
       return
     }
     this.socket = socket
-    const usingDirectFallback = wsUrl === DERIV_PUBLIC_WS_URL
+    const usingDirectFallback = wsUrl === DERIV_PUBLIC_WS_URL || wsUrl === DERIV_LEGACY_PUBLIC_WS_URL
     let receivedMarketData = false
     let socketOpenTimer: ReturnType<typeof setTimeout> | null = globalThis.setTimeout(() => {
       if (this.stopped || generation !== this.connectionGeneration || socket.readyState === WebSocket.OPEN) return
