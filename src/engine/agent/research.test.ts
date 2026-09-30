@@ -12,7 +12,7 @@ describe('buildAgentResearch', () => {
   })
 
   it('flags strong higher-timeframe contradiction', () => {
-    const report = buildAgentResearch({ context, multiTimeframe: { dominantBias: 'Bearish', confidence: 80, aligned: false } })
+    const report = buildAgentResearch({ context, multiTimeframe: { dominantBias: 'Bearish', confidence: 80, aligned: false, higherTimeframeBias: 'Bearish', higherTimeframeConfidence: 80 } })
     expect(report.contradictions.length).toBe(1)
     expect(report.conclusion).toContain('waiting')
   })
