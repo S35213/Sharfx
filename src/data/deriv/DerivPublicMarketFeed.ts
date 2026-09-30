@@ -506,14 +506,13 @@ export class DerivPublicMarketFeed {
       return
     }
     this.socket = socket
-    const isProxyEndpoint = wsUrl === SHAFX_MARKET_PROXY_WS_URL
     let receivedMarketData = false
     let socketOpenTimer: ReturnType<typeof setTimeout> | null = globalThis.setTimeout(() => {
       if (this.stopped || generation !== this.connectionGeneration || socket.readyState === WebSocket.OPEN) return
       this.publicEndpointIndex = (this.publicEndpointIndex + 1) % Math.max(1, publicMarketSocketUrls().length)
       this.onStatus?.('connecting')
       try { socket.close(1013, 'Market socket connection timeout') } catch (error) { void error }
-    }, 3500)
+    }, 2800)
     const clearSocketOpenTimer = (): void => {
       if (socketOpenTimer !== null) globalThis.clearTimeout(socketOpenTimer)
       socketOpenTimer = null
@@ -543,7 +542,7 @@ export class DerivPublicMarketFeed {
         this.publicEndpointIndex = (this.publicEndpointIndex + 1) % Math.max(1, publicMarketSocketUrls().length)
         this.onStatus?.('connecting')
         try { socket.close(1012, 'No market data received within 5 seconds') } catch (error) { void error }
-      }, 5000)
+      }, 3200)
       this.requestHistory(socket, 'latest', 1)
       socket.send(JSON.stringify({ ticks: this.symbol, subscribe: 1, req_id: 2 }))
     }
@@ -580,7 +579,7 @@ export class DerivPublicMarketFeed {
           this.tickSubscriptionId = response.subscription.id
         }
         if (response.msg_type === 'candles') {
-          if (response.req_id !== this.historyRequestId) return
+          if (response.req_id !== undefined && Number(response.req_id) !== this.historyRequestId) return
           const rawCandles = toCandles(response.candles).sort((a, b) => a.time - b.time)
           const receivedCandles = this.timeframe === 'W1' ? aggregateWeeklyCandles(rawCandles) : rawCandles
           if (this.historyRequestMode === 'latest' && receivedCandles.length === 0) {
@@ -597,12 +596,11 @@ export class DerivPublicMarketFeed {
           return
         }
         if (response.msg_type === 'history' && response.history) {
-          if (response.req_id !== this.historyRequestId) return
+          if (response.req_id !== undefined && Number(response.req_id) !== this.historyRequestId) return
           const candles = toTickCandles(response.history.times, response.history.prices, this.timeframe)
           if (candles.length) {
             receivedMarketData = true
             clearFirstDataTimer()
-            if (usingDirectFallback) this.forceDirectFallback = false
             this.candles = candles
             const lastCandle = this.candles[this.candles.length - 1]
             this.onUpdate?.(this.candles, lastCandle.close, Math.trunc(lastCandle.time))
@@ -613,7 +611,6 @@ export class DerivPublicMarketFeed {
           if (toDerivSymbol(formatForexSymbol(response.tick.symbol ?? '')) !== this.symbol) return
           receivedMarketData = true
           clearFirstDataTimer()
-          if (usingDirectFallback) this.forceDirectFallback = false
           const price = Number(response.tick.quote)
           const epoch = Number(response.tick.epoch)
           if (!Number.isFinite(price) || !Number.isFinite(epoch) || price <= 0) {
@@ -659,7 +656,7 @@ export class DerivPublicMarketFeed {
 
   private scheduleReconnect(generation: number): void {
     if (this.stopped || generation !== this.connectionGeneration || this.reconnectTimer !== null) return
-    const baseDelay = this.reconnectAttempt === 0 ? 300 : Math.min(3000, 700 * (this.reconnectAttempt + 1))
+    const baseDelay = this.reconnectAttempt === 0 ? 250 : 750
     const jitter = Math.floor(Math.random() * 250)
     this.reconnectAttempt += 1
     this.reconnectTimer = globalThis.setTimeout(() => {
