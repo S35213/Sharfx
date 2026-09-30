@@ -86,6 +86,7 @@ describe('Deriv provider funding and readiness capabilities', () => {
         queueMicrotask(() => this.onmessage?.({
           data: JSON.stringify({
             msg_type: 'candles',
+            req_id: 1,
             candles: [{
               epoch: 1700000000,
               open: 1.08,
