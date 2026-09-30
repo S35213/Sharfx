@@ -14,6 +14,8 @@ export interface MultiTimeframeResult {
   dominantBias: MarketBias | null
   aligned: boolean
   confidence: number
+  higherTimeframeBias: MarketBias | null
+  higherTimeframeConfidence: number
   summary: string
 }
 
@@ -53,6 +55,15 @@ export const analyzeMultiTimeframeBias = (frames: Partial<Record<Timeframe, OHLC
     : bullishWeight > bearishWeight ? 'Bullish' : 'Bearish'
   const dominantWeight = dominantBias === 'Bullish' ? bullishWeight : dominantBias === 'Bearish' ? bearishWeight : 0
   const confidence = totalDirectionalWeight === 0 ? 0 : Math.round((dominantWeight / totalDirectionalWeight) * 100)
+  const higherDirectional = biases.filter((item) => ['H1', 'H4', 'D1', 'W1'].includes(item.timeframe) && (item.bias === 'Bullish' || item.bias === 'Bearish'))
+  const higherBullishWeight = higherDirectional.filter((item) => item.bias === 'Bullish').reduce((sum, item) => sum + item.weight, 0)
+  const higherBearishWeight = higherDirectional.filter((item) => item.bias === 'Bearish').reduce((sum, item) => sum + item.weight, 0)
+  const higherTotalWeight = higherBullishWeight + higherBearishWeight
+  const higherTimeframeBias: MarketBias | null = higherBullishWeight === higherBearishWeight
+    ? null
+    : higherBullishWeight > higherBearishWeight ? 'Bullish' : 'Bearish'
+  const higherDominantWeight = higherTimeframeBias === 'Bullish' ? higherBullishWeight : higherTimeframeBias === 'Bearish' ? higherBearishWeight : 0
+  const higherTimeframeConfidence = higherTotalWeight === 0 ? 0 : Math.round((higherDominantWeight / higherTotalWeight) * 100)
   const aligned = directional.length > 0 && (bullishWeight === totalDirectionalWeight || bearishWeight === totalDirectionalWeight)
 
   let summary = 'Timeframes are mixed or insufficient for a dominant directional bias.'
@@ -62,5 +73,5 @@ export const analyzeMultiTimeframeBias = (frames: Partial<Record<Timeframe, OHLC
       : `${dominantBias} bias has the stronger weighted evidence, but lower or higher timeframes disagree.`
   }
 
-  return { biases, dominantBias, aligned, confidence, summary }
+  return { biases, dominantBias, aligned, confidence, higherTimeframeBias, higherTimeframeConfidence, summary }
 }
