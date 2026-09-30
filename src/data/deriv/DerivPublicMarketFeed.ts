@@ -146,7 +146,12 @@ export const subscribeDerivForexQuotes = async (
         const epoch = Number(payload.history.times[index])
         const quote = Number(payload.history.prices[index])
         const requested = payload.req_id !== undefined ? payload.req_id - 7101 : -1
-        const symbol = requested >= 0 && requested < normalizedSymbols.length ? formatForexSymbol(normalizedSymbols[requested]) : ''
+        const requestedSymbol = typeof payload.echo_req?.ticks_history === 'string' ? payload.echo_req.ticks_history : ''
+        const symbol = requested >= 0 && requested < normalizedSymbols.length
+          ? formatForexSymbol(normalizedSymbols[requested])
+          : requestedSymbol
+            ? formatForexSymbol(requestedSymbol)
+            : ''
         if (symbol && Number.isFinite(epoch) && Number.isFinite(quote) && quote > 0) onQuote(symbol, quote, epoch)
       }
     } catch {
@@ -188,6 +193,7 @@ interface DerivTickResponse {
   history?: { times?: number[]; prices?: number[] }
   error?: { message?: string }
   errors?: Array<{ message?: string }>
+  echo_req?: { ticks_history?: string }
 }
 
 const toCandles = (items: DerivTickResponse['candles']): OHLCV[] => (items ?? []).flatMap((item) => {
