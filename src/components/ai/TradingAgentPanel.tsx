@@ -120,6 +120,25 @@ const buildFallbackSetup = (frameCandles: OHLCV[], structureBias: 'Bullish' | 'B
   }
 }
 
+const calculateAffordableLotCeiling = (
+  accountBalance: number,
+  accountCurrency: string,
+  setup: import('../../engine/setup/types').SetupCandidate | null,
+  symbolSpec: SymbolSpec | null,
+  conversionRate?: number,
+): number => {
+  if (!setup || !symbolSpec || !Number.isFinite(accountBalance) || accountBalance <= 0) return 0
+  const stopDistancePips = Math.abs(setup.entryPrice - setup.stopLoss) / symbolSpec.pipSize
+  if (!Number.isFinite(stopDistancePips) || stopDistancePips <= 0 || !Number.isFinite(symbolSpec.pipSize) || symbolSpec.pipSize <= 0 || !Number.isFinite(symbolSpec.contractSize) || symbolSpec.contractSize <= 0) return 0
+  const quoteRate = symbolSpec.quoteCurrency === accountCurrency
+    ? 1
+    : (Number.isFinite(conversionRate) && Number(conversionRate) > 0 ? Number(conversionRate) : 0)
+  if (!Number.isFinite(quoteRate) || quoteRate <= 0) return 0
+  const lossPerLot = stopDistancePips * symbolSpec.pipSize * symbolSpec.contractSize * quoteRate
+  if (!Number.isFinite(lossPerLot) || lossPerLot <= 0) return 0
+  return Math.min(symbolSpec.maxLotSize, accountBalance / lossPerLot)
+}
+
 const buildScanCandidates = (
   frames: Partial<Record<Timeframe, OHLCV[]>>,
   symbol: string,
@@ -340,12 +359,10 @@ export function TradingAgentPanel({
     return calculateRisk({ accountBalance, accountCurrency, riskPercent: riskModes[riskMode].percent, side: botRiskSetup.direction, entryPrice: botRiskSetup.entryPrice, stopLoss: botRiskSetup.stopLoss, takeProfit: botRiskSetup.takeProfit, symbolSpec, conversionRate })
   }, [accountBalance, accountCurrency, botRiskSetup, conversionRate, riskMode, symbolSpec])
   const accountDataReady = Number.isFinite(accountBalance) && accountBalance > 0
-  const accountStakeCeiling = useMemo(() => {
-    if (!botRiskCalc?.isValid || !Number.isFinite(botRiskCalc.suggestedLotSize) || botRiskCalc.suggestedLotSize <= 0 || !Number.isFinite(botRiskCalc.estimatedLossAtStop) || botRiskCalc.estimatedLossAtStop <= 0) return 0
-    const lossPerLot = botRiskCalc.estimatedLossAtStop / botRiskCalc.suggestedLotSize
-    if (!Number.isFinite(lossPerLot) || lossPerLot <= 0) return 0
-    return accountBalance / lossPerLot
-  }, [accountBalance, botRiskCalc])
+  const accountStakeCeiling = useMemo(
+    () => calculateAffordableLotCeiling(accountBalance, accountCurrency, botRiskSetup, symbolSpec, conversionRate),
+    [accountBalance, accountCurrency, botRiskSetup, conversionRate, symbolSpec],
+  )
   const lotFitsAccount = Boolean(accountDataReady && accountStakeCeiling > 0 && parsedLotSize > 0 && parsedLotSize <= accountStakeCeiling + 1e-8)
   const lotSizeValid = symbolSpec ? Number.isFinite(parsedLotSize) && parsedLotSize >= symbolSpec.minLotSize && parsedLotSize <= symbolSpec.maxLotSize && Math.abs((parsedLotSize / symbolSpec.lotStep) - Math.round(parsedLotSize / symbolSpec.lotStep)) < 1e-8 : false
 
@@ -501,12 +518,6 @@ export function TradingAgentPanel({
           setPhase('READY')
           return
         }
-        if (!lotFitsAccount) {
-          setStatus('BOT BLOCKED • ' + parsedLotSize.toFixed(2) + ' lot is above the account-affordable ceiling of ' + accountStakeCeiling.toFixed(2) + ' lot')
-          setAutoTradingEnabled(false)
-          setPhase('READY')
-          return
-        }
         if (pendingUnitCompletion || (cycleUnits >= (plan.maxDailyCycleUnits ?? Number.MAX_SAFE_INTEGER) && unitRound === 0)) {
           setAutoTradingEnabled(false)
           setPhase('READY')
@@ -524,6 +535,28 @@ export function TradingAgentPanel({
         setStatus(scan
           ? 'BOT ANALYSIS • ' + scan.setup.direction + ' on ' + scan.timeframe + ' • confidence ' + scan.setup.confidence + '%'
           : 'BOT ANALYSIS • using the current independent broker context…')
+
+        const executionSetup = scan?.setup ?? setup
+        if (!executionSetup) {
+          setLastResult('WAIT')
+          setStatus(buildBotDataWaitReason(timeframeFrames, currentPrice, marketReadRows) ?? 'SETUP WAIT • no executable setup was produced')
+          setAutoTradingEnabled(false)
+          setPhase('READY')
+          return
+        }
+        const executionAccountCeiling = calculateAffordableLotCeiling(accountBalance, accountCurrency, executionSetup, symbolSpec, conversionRate)
+        if (!accountDataReady) {
+          setStatus('ACCOUNT DATA WAIT • waiting for the selected Deriv account balance before sizing the bot trade')
+          setAutoTradingEnabled(false)
+          setPhase('READY')
+          return
+        }
+        if (executionAccountCeiling <= 0 || parsedLotSize > executionAccountCeiling + 1e-8) {
+          setStatus('BOT BLOCKED • ' + parsedLotSize.toFixed(2) + ' lot is above the account-affordable ceiling of ' + executionAccountCeiling.toFixed(2) + ' lot')
+          setAutoTradingEnabled(false)
+          setPhase('READY')
+          return
+        }
 
         const result = await executeDerivTrade({
           context: scan
