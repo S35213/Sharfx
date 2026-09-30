@@ -59,6 +59,7 @@ const TerminalContent: React.FC = () => {
   const [isLandscapeCompactViewport, setIsLandscapeCompactViewport] = useState(() => typeof window !== 'undefined' && window.matchMedia('(orientation: landscape) and (max-width: 999px)').matches)
   const accountStreamManager = useRef(new ProviderAccountStreamManager())
   const selectedSymbolRef = useRef(selectedSymbol)
+  const watchlistReferencePricesRef = useRef<Record<string, number>>({})
   const toastId = useRef(0)
 
   const pushToast = useCallback((text: string) => {
@@ -137,9 +138,12 @@ const TerminalContent: React.FC = () => {
       if (cancelled) return
       setWatchlist((previous) => previous.map((pair) => {
         if (pair.symbol !== symbol) return pair
-        const previousPrice = pair.price
-        const move = previousPrice > 0 ? quote - previousPrice : 0
-        const percent = previousPrice > 0 ? (move / previousPrice) * 100 : 0
+        const reference = watchlistReferencePricesRef.current[pair.symbol] > 0
+          ? watchlistReferencePricesRef.current[pair.symbol]
+          : quote
+        watchlistReferencePricesRef.current[pair.symbol] = reference
+        const move = reference > 0 ? quote - reference : 0
+        const percent = reference > 0 ? (move / reference) * 100 : 0
         return { ...pair, price: quote, change: move, changePercent: percent, status: 'open' }
       }))
     }
