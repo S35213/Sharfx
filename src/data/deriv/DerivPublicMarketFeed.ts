@@ -405,6 +405,7 @@ export class DerivPublicMarketFeed {
   private pingTimer: ReturnType<typeof setInterval> | null = null
   private firstDataTimer: ReturnType<typeof setTimeout> | null = null
   private forceDirectFallback = false
+  private publicEndpointIndex = 0
   private historyRequestId = 0
   private nextRequestId = 10
   private historyRequestMode: 'latest' | 'fallback' = 'latest'
@@ -432,6 +433,7 @@ export class DerivPublicMarketFeed {
     this.tickSubscriptionId = null
     this.reconnectAttempt = 0
     this.forceDirectFallback = false
+    this.publicEndpointIndex = 0
     this.stopped = false
     this.connectionGeneration += 1
     this.openSocket(this.connectionGeneration)
@@ -484,14 +486,14 @@ export class DerivPublicMarketFeed {
     if (this.stopped || generation !== this.connectionGeneration) return
     this.onStatus?.('connecting')
 
-    let wsUrl = this.forceDirectFallback ? DERIV_LEGACY_PUBLIC_WS_URL : getDerivMarketWebSocketUrl()
-    if (this.webSocketUrlProvider && !this.forceDirectFallback) {
+    const publicUrls = publicMarketSocketUrls()
+    let wsUrl = publicUrls[this.publicEndpointIndex % publicUrls.length] ?? getDerivMarketWebSocketUrl()
+    if (this.webSocketUrlProvider) {
       try {
         wsUrl = await this.webSocketUrlProvider()
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unable to obtain the authenticated Deriv market stream.'
+        const message = error instanceof Error ? error.message : 'Unable to obtain the Deriv market stream.'
         this.onStatus?.('error', message)
-        wsUrl = getDerivMarketWebSocketUrl()
       }
     }
 
@@ -506,11 +508,11 @@ export class DerivPublicMarketFeed {
       return
     }
     this.socket = socket
-    const usingDirectFallback = wsUrl === DERIV_PUBLIC_WS_URL || wsUrl === DERIV_LEGACY_PUBLIC_WS_URL
+    const isProxyEndpoint = wsUrl === SHAFX_MARKET_PROXY_WS_URL
     let receivedMarketData = false
     let socketOpenTimer: ReturnType<typeof setTimeout> | null = globalThis.setTimeout(() => {
       if (this.stopped || generation !== this.connectionGeneration || socket.readyState === WebSocket.OPEN) return
-      if (!usingDirectFallback) this.forceDirectFallback = true
+      this.publicEndpointIndex = (this.publicEndpointIndex + 1) % Math.max(1, publicMarketSocketUrls().length)
       this.onStatus?.('connecting')
       try { socket.close(1013, 'Market socket connection timeout') } catch (error) { void error }
     }, 3500)
@@ -538,14 +540,12 @@ export class DerivPublicMarketFeed {
         }
       }, 30000)
       clearFirstDataTimer()
-      if (!usingDirectFallback) {
-        this.firstDataTimer = globalThis.setTimeout(() => {
-          if (this.stopped || generation !== this.connectionGeneration || receivedMarketData) return
-          this.forceDirectFallback = true
-          this.onStatus?.('connecting')
-          try { socket.close(1012, 'No market data from proxy') } catch (error) { void error }
-        }, 2500)
-      }
+      this.firstDataTimer = globalThis.setTimeout(() => {
+        if (this.stopped || generation !== this.connectionGeneration || receivedMarketData) return
+        this.publicEndpointIndex = (this.publicEndpointIndex + 1) % Math.max(1, publicMarketSocketUrls().length)
+        this.onStatus?.('connecting')
+        try { socket.close(1012, 'No market data received within 5 seconds') } catch (error) { void error }
+      }, 5000)
       this.requestHistory(socket, 'latest', 1)
       socket.send(JSON.stringify({ ticks: this.symbol, subscribe: 1, req_id: 2 }))
     }
@@ -593,7 +593,6 @@ export class DerivPublicMarketFeed {
           }
           receivedMarketData = receivedCandles.length > 0 || receivedMarketData
           clearFirstDataTimer()
-          if (usingDirectFallback) this.forceDirectFallback = false
           this.candles = receivedCandles.slice(-300)
           const lastCandle = this.candles[this.candles.length - 1]
           if (lastCandle) this.onUpdate?.(this.candles, lastCandle.close, Math.trunc(lastCandle.time))
@@ -651,22 +650,19 @@ export class DerivPublicMarketFeed {
       }
       if (this.stopped || generation !== this.connectionGeneration) return
       this.socket = null
-      if (!receivedMarketData && !usingDirectFallback) this.forceDirectFallback = true
-      const switchingToDirectFallback = this.forceDirectFallback && !receivedMarketData
-      if (switchingToDirectFallback) {
-        this.onStatus?.('connecting')
+      if (!receivedMarketData) {
+        this.publicEndpointIndex = (this.publicEndpointIndex + 1) % Math.max(1, publicMarketSocketUrls().length)
         this.reconnectAttempt = 0
-      } else {
-        this.onStatus?.('connecting')
       }
+      this.onStatus?.('connecting')
       this.scheduleReconnect(generation)
     }
   }
 
   private scheduleReconnect(generation: number): void {
     if (this.stopped || generation !== this.connectionGeneration || this.reconnectTimer !== null) return
-    const baseDelay = Math.min(30000, 1000 * (2 ** Math.min(this.reconnectAttempt, 5)))
-    const jitter = Math.floor(Math.random() * Math.min(5000, Math.max(250, baseDelay * 0.2)))
+    const baseDelay = this.reconnectAttempt === 0 ? 300 : Math.min(3000, 700 * (this.reconnectAttempt + 1))
+    const jitter = Math.floor(Math.random() * 250)
     this.reconnectAttempt += 1
     this.reconnectTimer = globalThis.setTimeout(() => {
       this.reconnectTimer = null
