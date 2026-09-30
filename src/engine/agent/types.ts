@@ -29,6 +29,8 @@ export interface AgentContext {
     dominantBias: MarketBias | null
     confidence: number
     aligned: boolean
+    higherTimeframeBias?: MarketBias | null
+    higherTimeframeConfidence?: number
   }
   learning?: AgentLearningSummary
   research?: AgentResearchReport
