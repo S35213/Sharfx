@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useMemo } from 'react'
 import { Grid2x2, Info } from 'lucide-react'
 import type { MarketPair } from '../../types'
 
@@ -21,12 +21,6 @@ const tone = (value: number): string => {
 }
 
 export const FXMoveMatrix: React.FC<Props> = ({ pairs }) => {
-  const [tick, setTick] = useState(0)
-  useEffect(() => {
-    const timer = window.setInterval(() => setTick((value) => value + 1), 900)
-    return () => window.clearInterval(timer)
-  }, [])
-
   const matrix = useMemo(() => {
     const strength: Record<string, number> = {}
     currencies.forEach((currency) => { strength[currency] = 0 })
@@ -42,17 +36,15 @@ export const FXMoveMatrix: React.FC<Props> = ({ pairs }) => {
 
     return currencies.map((row, rowIndex) => currencies.map((column, columnIndex) => {
       if (row === column) return null
-      const rowDrift = Math.sin(tick * 0.72 + rowIndex * 0.63) * 0.018
-      const columnDrift = Math.sin(tick * 0.72 + columnIndex * 0.63) * 0.018
-      return Number((strength[row] - strength[column] + rowDrift - columnDrift).toFixed(2))
+      return Number((strength[row] - strength[column]).toFixed(2))
     }))
-  }, [pairs, tick])
+  }, [pairs])
 
   const covered = matrix.flat().filter((value): value is number => value !== null).length
 
   return <section className="rounded-2xl border border-shafx-border bg-shafx-surface">
     <header className="flex items-start justify-between gap-3 border-b border-shafx-border px-4 py-3">
-      <div className="flex items-center gap-2"><Grid2x2 className="h-4 w-4 text-shafx-accent" /><div><div className="flex items-center gap-2 text-xs font-semibold">FX move matrix <span className="inline-flex items-center gap-1 rounded-full border border-shafx-success/20 bg-shafx-success/5 px-1.5 py-0.5 text-[8px] font-semibold text-shafx-success"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-shafx-success" />LIVE SIM</span></div><div className="text-[9px] text-shafx-textMuted">Watchlist-derived relative moves • updating every ~1s • {covered} active cells</div></div></div>
+      <div className="flex items-center gap-2"><Grid2x2 className="h-4 w-4 text-shafx-accent" /><div><div className="flex items-center gap-2 text-xs font-semibold">FX move matrix <span className="inline-flex items-center gap-1 rounded-full border border-shafx-success/20 bg-shafx-success/5 px-1.5 py-0.5 text-[8px] font-semibold text-shafx-success"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-shafx-success" />LIVE</span></div><div className="text-[9px] text-shafx-textMuted">Watchlist-derived relative moves • following the live watchlist • {covered} active cells</div></div></div>
       <Info className="h-3.5 w-3.5 text-shafx-textMuted" />
     </header>
     <div className="overflow-auto p-3">
