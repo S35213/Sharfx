@@ -128,8 +128,6 @@ const place = async (req) => {
       basis: 'stake',
       contract_type: side === 'BUY' ? 'MULTUP' : 'MULTDOWN',
       currency,
-      duration: durationSeconds,
-      duration_unit: 's',
       multiplier,
       limit_order: {
         take_profit: Math.max(0, Number(order.takeProfitAmount) || 0),
