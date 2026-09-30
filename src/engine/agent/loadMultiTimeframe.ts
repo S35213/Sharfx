@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { TIMEFRAMES, type OHLCV, type Timeframe } from '../../types'
-import { DerivPublicMarketFeed } from '../../data/deriv/DerivPublicMarketFeed'
+import { fetchDerivMultiTimeframeCandles } from '../../data/deriv/DerivPublicMarketFeed'
 
 const loadDerivCandles = async (symbol: string, timeframes: Timeframe[]): Promise<Partial<Record<Timeframe, OHLCV[]>>> => {
   try {
@@ -23,29 +23,21 @@ export const useMultiTimeframeCandles = (
 
   useEffect(() => {
     if (baseM1Candles.length > 0) {
+      setFrames((previous) => ({ ...previous, M1: baseM1Candles }))
       return
     }
     if (fallbackCandles.length > 0) {
       setFrames((previous) => ({ ...previous, [fallbackTimeframe]: fallbackCandles }))
     }
-  }, [baseM1Candles.length, fallbackCandles, fallbackTimeframe])
+  }, [baseM1Candles, fallbackCandles, fallbackTimeframe])
 
   useEffect(() => {
     if (baseM1Candles.length > 0) return
     let cancelled = false
 
     const load = async (): Promise<void> => {
-      const results = await Promise.all(TIMEFRAMES.map(async (timeframe) => {
-        try {
-          return [timeframe, await loadDerivCandles(symbol, timeframe)] as const
-        } catch {
-          return [timeframe, []] as const
-        }
-      }))
-
+      const next = await loadDerivCandles(symbol, TIMEFRAMES)
       if (cancelled) return
-
-      const next = Object.fromEntries(results.filter(([, data]) => data.length > 0)) as Partial<Record<Timeframe, OHLCV[]>>
       if (fallbackCandles.length > 0) next[fallbackTimeframe] = fallbackCandles
       setFrames(next)
     }
