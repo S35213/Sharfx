@@ -161,7 +161,7 @@ export const fetchDerivMultiTimeframeCandles = async (
             pending.set(fallbackReqId, { timeframe: request.timeframe, fallback: true })
             socket.send(JSON.stringify(createDerivCandleHistoryRequest(toDerivSymbol(symbol), request.timeframe, {
               end: Math.floor(Date.now() / 1000) - 172800,
-              count: 300,
+              count: request.timeframe === 'W1' ? 2100 : 300,
               reqId: fallbackReqId,
             })))
             return
@@ -204,7 +204,7 @@ export const fetchDerivMultiTimeframeCandles = async (
       pending.set(reqId, { timeframe, fallback: false })
       socket.send(JSON.stringify(createDerivCandleHistoryRequest(toDerivSymbol(symbol), timeframe, {
         end: 'latest',
-        count: 300,
+        count: timeframe === 'W1' ? 2100 : 300,
         reqId,
       })))
     })
