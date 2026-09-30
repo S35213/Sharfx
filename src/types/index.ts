@@ -81,6 +81,12 @@ export interface TradeOrder {
   closeTime?: string
   exitPrice?: number
   profit?: number
+  providerOrderId?: string
+  brokerProduct?: 'DERIV_MULTIPLIER'
+  stake?: number
+  multiplier?: number
+  stopLossAmount?: number
+  takeProfitAmount?: number
 }
 
 export type SimulatedOrderDraft = Omit<TradeOrder, 'id' | 'openTime' | 'status'>
