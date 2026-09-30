@@ -51,7 +51,7 @@ export const TradesPanel: React.FC<Props> = ({ openPositions, pendingOrders, tra
                     <td className="px-4 py-2 font-mono tabular">{isDeriv ? (trade.entryPrice > 0 ? formatPrice(trade.entryPrice,p) : '—') : formatPrice(trade.entryPrice,p)}</td>
                     <td className="px-4 py-2 font-mono text-[9px] tabular">{protection}</td>
                     <td className={`px-4 py-2 font-mono font-semibold tabular ${profit >= 0 ? 'text-shafx-success' : 'text-shafx-danger'}`}>{profit >= 0 ? '+' : ''}{formatCurrency(profit)}</td>
-                    <td className="px-4 py-2">{isSelectedOpen ? <button type="button" onClick={() => void onClosePosition(trade.id)} className="inline-flex min-h-10 items-center gap-1 rounded border border-shafx-border px-2 text-xs text-shafx-textMuted hover:border-shafx-danger hover:text-shafx-danger" aria-label={`Close ${trade.id}`}><XCircle className="h-3.5 w-3.5" />Close</button> : '—'}</td>
+                    <td className="px-4 py-2">{isSelectedOpen ? <button type="button" onClick={() => void onClosePosition(trade.id)} className="inline-flex min-h-10 items-center gap-1 rounded border border-shafx-border px-2 text-xs text-shafx-textMuted hover:border-shafx-danger hover:text-shafx-danger" aria-label={`Close ${trade.id}`}><XCircle className="h-3.5 w-3.5" />Close @ {formatPrice(currentPrice,p)}</button> : '—'}</td>
                   </tr>
                 )
               })}
