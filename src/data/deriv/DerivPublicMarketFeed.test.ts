@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { aggregateWeeklyCandles, createDerivCandleHistoryRequest, DERIV_PUBLIC_WS_URL, SHAFX_MARKET_PROXY_WS_URL, getDerivMarketWebSocketUrl, toDerivSymbol } from './DerivPublicMarketFeed'
+import { aggregateWeeklyCandles, createDerivCandleHistoryRequest, DERIV_LEGACY_PUBLIC_WS_URL, DERIV_PUBLIC_WS_URL, SHAFX_MARKET_PROXY_WS_URL, getDerivMarketWebSocketUrl, toDerivSymbol } from './DerivPublicMarketFeed'
 
 describe('DerivPublicMarketFeed', () => {
   it('uses the current public WebSocket endpoint for local fallback', () => {
@@ -13,9 +13,9 @@ describe('DerivPublicMarketFeed', () => {
     vi.unstubAllGlobals()
   })
 
-  it('keeps localhost on the direct Deriv endpoint', () => {
+  it('keeps localhost on the legacy direct Deriv endpoint for maximum compatibility', () => {
     vi.stubGlobal('window', { location: { hostname: 'localhost', protocol: 'http:', host: 'localhost:5173' } })
-    expect(getDerivMarketWebSocketUrl()).toBe(DERIV_PUBLIC_WS_URL)
+    expect(getDerivMarketWebSocketUrl()).toBe(DERIV_LEGACY_PUBLIC_WS_URL)
     vi.unstubAllGlobals()
   })
 
