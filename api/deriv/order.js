@@ -106,7 +106,10 @@ const place = async (req) => {
   const symbol = String(order.symbol || '')
   const side = order.side === 'SELL' ? 'SELL' : 'BUY'
   const requestedStake = Number(order.stake ?? order.quantity)
-  const stake = Math.max(1, requestedStake)
+  const DERIV_MIN_STAKE = 1
+  if (!Number.isFinite(requestedStake) || requestedStake <= 0) throw new Error('Deriv trade requires a positive stake.')
+  if (requestedStake < DERIV_MIN_STAKE) throw new Error('Deriv minimum stake is 1 ' + String(account.currency || order.currency || 'unit') + '. Increase the risk amount before placing the trade.')
+  const stake = requestedStake
   const VALID_DERIV_MULTIPLIERS = [100, 200, 300, 500, 800]
   const requestedMultiplier = Number(order.multiplier)
   const multiplier = VALID_DERIV_MULTIPLIERS.includes(requestedMultiplier) ? requestedMultiplier : VALID_DERIV_MULTIPLIERS[0]
@@ -118,7 +121,7 @@ const place = async (req) => {
     currency = String(accountPayload?.data?.currency || '').trim().toUpperCase()
   }
   if (!/^[A-Z]{3}$/.test(currency)) currency = ''
-  if (!symbol || !currency || !Number.isFinite(requestedStake) || requestedStake <= 0) throw new Error('Deriv trade requires a valid symbol, currency and stake.')
+  if (!symbol || !currency) throw new Error('Deriv trade requires a valid symbol and account currency.')
   const wsUrl = await requestWebSocketUrl(token, accountId)
 
   let result
