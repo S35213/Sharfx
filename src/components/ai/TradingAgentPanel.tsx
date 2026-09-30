@@ -50,6 +50,40 @@ const BOT_RESULT_DELAY_MS = BOT_CYCLE_SECONDS * 1000
 const BOT_START_DELAY_MS = 1000 as const
 const BOT_RESULT_DISPLAY_MS = 1000 as const
 
+const buildBotDataWaitReason = (
+  frames: Partial<Record<Timeframe, OHLCV[]>>,
+  currentPrice: number,
+  marketReadRows: Array<{ timeframe: Timeframe; bias: 'Bullish' | 'Bearish' | 'Sideways' | 'Unclear'; structure: string; executableSetup: import('../../engine/setup/types').SetupCandidate | null }>,
+): string | null => {
+  if (!Number.isFinite(currentPrice) || currentPrice <= 0) return 'DATA WAIT • no valid live Deriv price is available'
+  const available = SCAN_TIMEFRAMES.filter((frame) => (frames[frame] ?? []).length >= 5)
+  if (available.length === 0) return 'DATA WAIT • no timeframe has enough live candles for the bot scan'
+  const missing = SCAN_TIMEFRAMES.filter((frame) => (frames[frame] ?? []).length < 5)
+  if (missing.length === SCAN_TIMEFRAMES.length) return 'DATA WAIT • no timeframe has enough live candles for the bot scan'
+  const blocked = marketReadRows
+    .filter((row) => !row.executableSetup)
+    .slice(0, 4)
+    .map((row) => {
+      if (row.structure === 'Insufficient Data' || row.bias === 'Unclear') return row.timeframe + ': insufficient structure'
+      if (row.bias === 'Sideways') return row.timeframe + ': sideways structure'
+      return row.timeframe + ': no aligned support/resistance + liquidity setup'
+    })
+  const suffix = missing.length > 0 ? ' • missing ' + missing.join(', ') : ''
+  return 'SETUP WAIT • no executable setup passed the current rules' + (blocked.length ? ' • ' + blocked.join(' | ') : '') + suffix
+}
+
+const classifyBotDecisionWait = (
+  rationale: string,
+  planValid: boolean | undefined,
+): string => {
+  if (planValid === false) return 'RISK BLOCK • ' + rationale
+  if (/higher-timeframe/i.test(rationale)) return 'HTF WAIT • ' + rationale
+  if (/research pass|contradictions/i.test(rationale)) return 'RESEARCH WAIT • ' + rationale
+  if (/repeated underperformance|caution/i.test(rationale)) return 'LEARNING WAIT • ' + rationale
+  if (/no valid setup|no executable setup/i.test(rationale) || !rationale) return 'SETUP WAIT • ' + (rationale || 'no executable setup was produced')
+  return 'RULE WAIT • ' + rationale
+}
+
 const buildFallbackSetup = (frameCandles: OHLCV[], structureBias: 'Bullish' | 'Bearish' | 'Sideways' | 'Unclear', symbol: string, currentPrice: number, precision: number): import('../../engine/setup/types').SetupCandidate | null => {
   if ((structureBias !== 'Bullish' && structureBias !== 'Bearish') || frameCandles.length < 8) return null
   const recent = frameCandles.slice(-8)
@@ -442,11 +476,11 @@ export function TradingAgentPanel({
           return
         }
         if (!tradingContext && !activeBotScan) {
-          setStatus('WAIT • waiting for a valid live Deriv price before trading')
+          setStatus(buildBotDataWaitReason(timeframeFrames, currentPrice, marketReadRows) ?? 'DATA WAIT • waiting for valid live market data')
           return
         }
         if (!research && !activeBotScan) {
-          setStatus('WAIT • waiting for live market analysis to initialize')
+          setStatus('ANALYSIS WAIT • waiting for live market analysis to initialize')
           return
         }
         if (!lotSizeValid) {
@@ -502,7 +536,7 @@ export function TradingAgentPanel({
           const planReason = result.plan && !result.plan.isValid ? result.plan.summary : ''
           const decisionReason = result.decision.rationale || 'No executable setup was produced.'
           const reason = planReason || decisionReason
-          setStatus('WAIT • ' + reason)
+          setStatus(classifyBotDecisionWait(reason, result.plan?.isValid))
           return
         }
 
@@ -588,7 +622,7 @@ export function TradingAgentPanel({
       } catch (error) {
         setAutoTradingEnabled(false)
         setPhase('READY')
-        setStatus('BOT ERROR • ' + (error instanceof Error ? error.message : 'Unable to open broker trade'))
+        setStatus('ORDER ERROR • ' + (error instanceof Error ? error.message : 'Unable to open broker trade'))
       } finally {
         runInFlightRef.current = false
       }
@@ -887,6 +921,14 @@ export function TradingAgentPanel({
             <p className="mt-1 text-[8px] text-shafx-textMuted">The bot will not execute until the lot fits the account's available account margin.</p>
           </div>
         )}
+
+        <div className="mt-3 rounded-xl border border-shafx-border bg-shafx-bg/60 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-mono text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted">BOT GATE</span>
+            <span className="font-mono text-[8px] text-shafx-textMuted">{activeBotScan ? 'candidate found' : 'no candidate'}</span>
+          </div>
+          <div className="mt-1 text-[9px] leading-4 text-shafx-text">{buildBotDataWaitReason(timeframeFrames, currentPrice, marketReadRows) ?? 'DATA READY • live candles and price are available; the execution gate will report the next rejection or order result.'}</div>
+        </div>
 
         {phase === 'ANALYZING' && (
           <div className="mt-3 rounded-xl border border-shafx-accent/20 bg-shafx-accent/[0.045] p-3.5">
