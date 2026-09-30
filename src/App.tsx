@@ -17,9 +17,9 @@ import { buildStructuralChartAnnotations } from './components/chart/buildAIChart
 import { Watchlist } from './components/watchlist/Watchlist'
 import { MarketAnalysisPanel } from './components/analysis/MarketAnalysis'
 import { AIAssistantPanel } from './components/ai/AIAssistantPanel'
-import { TradingAgentPanel } from './components/ai/TradingAgentPanel'
+import { SignalDeskPanel } from './components/ai/SignalDeskPanel'
 import { OrderPanel } from './components/order/OrderPanel'
-import { closeDerivContract, placeDerivContract } from './data/deriv/derivTrading'
+import { closeDerivContract } from './data/deriv/derivTrading'
 import { AccountPanel } from './components/account/AccountPanel'
 import { TradesPanel } from './components/trades/TradesPanel'
 import { Toast, type ToastMessage } from './components/common/Toast'
@@ -30,7 +30,7 @@ import { ProviderAccountStreamManager, providerAccountStreamKey } from './data/p
 import { analyzeLiquidity } from './engine/liquidity'
 import { analyzeMarketStructure, findSwingPoints } from './engine/marketStructure'
 import { analyzeSupportResistance } from './engine/supportResistance'
-import type { AccountData, MarketAnalysis, MarketPair, OHLCV, SimulatedOrderDraft, SymbolSpec, TradeOrder } from './types'
+import type { AccountData, MarketAnalysis, MarketPair, OHLCV, SymbolSpec, TradeOrder } from './types'
 import type { SetupCandidate } from './engine/setup/types'
 import { mockWatchlist } from './data/mock/watchlist'
 import { fetchDerivActiveForexSymbols, subscribeDerivForexQuotes } from './data/deriv/DerivPublicMarketFeed'
@@ -47,7 +47,6 @@ const TerminalContent: React.FC = () => {
   const [openPositions, setOpenPositions] = useState<TradeOrder[]>([])
   const [pendingOrders] = useState<TradeOrder[]>([])
   const [tradeHistory, setTradeHistory] = useState<TradeOrder[]>([])
-  const [botOrderIds, setBotOrderIds] = useState<string[]>([])
   const [reviewSetup, setReviewSetup] = useState<SetupCandidate | null>(null)
   const [liveMarketActive, setLiveMarketActive] = useState(false)
   const [chartSettings, setChartSettings] = useState<ChartWorkspaceSettings>(() => readChartWorkspaceSettings())
@@ -328,11 +327,6 @@ const TerminalContent: React.FC = () => {
       }
     : null
 
-  const handleBotOrder = useCallback((order: TradeOrder): void => {
-    setOpenPositions((current) => current.some((item) => item.id === order.id) ? current : [...current, order])
-    setBotOrderIds((current) => current.includes(order.id) ? current : [...current, order.id])
-  }, [])
-
   const handleClosePosition = useCallback(async (id: string): Promise<TradeOrder | null> => {
     const existing = openPositions.find((order) => order.id === id) || tradeHistory.find((order) => order.id === id)
     if (!derivOrderConnection) {
@@ -359,49 +353,6 @@ const TerminalContent: React.FC = () => {
     floatingPL: 0,
     currency: 'USD',
   }
-
-  const accountConversionRate = useMemo(() => {
-    const accountCurrency = resolvedAccountData.currency.toUpperCase()
-    const quoteCurrency = symbolSpec.quoteCurrency.toUpperCase()
-    if (quoteCurrency === accountCurrency) return 1
-    const direct = watchlist.find((pair) => pair.symbol.toUpperCase() === quoteCurrency + '/' + accountCurrency && Number(pair.price) > 0)
-    if (direct) return Number(direct.price)
-    const inverse = watchlist.find((pair) => pair.symbol.toUpperCase() === accountCurrency + '/' + quoteCurrency && Number(pair.price) > 0)
-    if (inverse) return 1 / Number(inverse.price)
-    return undefined
-  }, [resolvedAccountData.currency, symbolSpec.quoteCurrency, watchlist])
-
-  const handleManualOrder = useCallback(async (draft: SimulatedOrderDraft): Promise<void> => {
-    if (!derivOrderConnection) {
-      pushToast('Connect a Deriv account before placing a trade.')
-      return
-    }
-    try {
-      const order = await placeDerivContract({
-        connection: derivOrderConnection,
-        symbol: draft.symbol,
-        side: draft.type,
-        stake: Math.max(1, draft.riskAmount),
-        currency: resolvedAccountData.currency,
-        multiplier: 100,
-        durationSeconds: 30,
-        takeProfitAmount: draft.rewardAmount,
-        stopLossAmount: draft.riskAmount,
-        entryPrice: draft.entryPrice,
-        stopLoss: draft.stopLoss,
-        takeProfit: draft.takeProfit,
-        riskPercent: draft.riskPercent,
-        riskAmount: draft.riskAmount,
-        rewardAmount: draft.rewardAmount,
-        riskRewardRatio: draft.riskRewardRatio,
-      })
-      setOpenPositions((current) => [...current, order])
-      pushToast('Deriv ' + draft.type + ' trade opened.')
-      setReviewSetup(null)
-    } catch (error) {
-      pushToast(error instanceof Error ? error.message : 'Unable to place the Deriv trade.')
-    }
-  }, [accountData, derivOrderConnection, pushToast])
 
   const handleReviewSetup = useCallback((setup?: SetupCandidate | null): void => {
     setReviewSetup(setup || null)
@@ -437,29 +388,21 @@ const TerminalContent: React.FC = () => {
       <FXMoveMatrix pairs={watchlist} />
       <MarketAnalysisPanel analysis={marketAnalysis} pricePrecision={symbolSpec.pricePrecision} pipSize={symbolSpec.pipSize} currentPrice={currentPrice} timeframe={timeframe} />
 <AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={liveCandles} setup={reviewSetup} onReviewSetup={() => handleReviewSetup(reviewSetup)} />
-      <OrderPanel symbol={selectedSymbol} currentPrice={currentPrice} bidPrice={currentPrice} askPrice={currentPrice} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} onSubmitOrder={(draft) => { void handleManualOrder(draft) }} aiSetup={reviewSetup} autoApplyAISetup={Boolean(reviewSetup)} />
+      <OrderPanel symbol={selectedSymbol} currentPrice={currentPrice} bidPrice={currentPrice} askPrice={currentPrice} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} connection={derivOrderConnection} onTradeOpened={(order) => { setOpenPositions((current) => [...current, order]); setTradeHistory((current) => current.filter((item) => item.id !== order.id)); setReviewSetup(null); pushToast('Deriv ' + order.type + ' trade opened.') }} aiSetup={reviewSetup} />
     </div>,
     chat: <div className="space-y-3">
       <AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={liveCandles} setup={reviewSetup} onReviewSetup={() => handleReviewSetup(reviewSetup)} />
-      <OrderPanel symbol={selectedSymbol} currentPrice={currentPrice} bidPrice={currentPrice} askPrice={currentPrice} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} onSubmitOrder={(draft) => { void handleManualOrder(draft) }} aiSetup={reviewSetup} autoApplyAISetup={Boolean(reviewSetup)} />
+      <OrderPanel symbol={selectedSymbol} currentPrice={currentPrice} bidPrice={currentPrice} askPrice={currentPrice} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} connection={derivOrderConnection} onTradeOpened={(order) => { setOpenPositions((current) => [...current, order]); setTradeHistory((current) => current.filter((item) => item.id !== order.id)); setReviewSetup(null); pushToast('Deriv ' + order.type + ' trade opened.') }} aiSetup={reviewSetup} />
     </div>,
-    bot: <TradingAgentPanel
+    bot: <SignalDeskPanel
       symbol={selectedSymbol}
-      derivConnectionId={derivOrderConnection?.connectionId}
-      derivAccountId={derivOrderConnection?.accountId}
-      derivEnvironment={derivOrderConnection?.environment}
       timeframe={timeframe}
-      candles={liveCandles}
       currentPrice={currentPrice}
-      activePosition={openPositions.find((order) => botOrderIds.includes(order.id)) ?? null}
-      tradeHistory={tradeHistory}
+      analysis={marketAnalysis}
+      setup={reviewSetup}
       accountBalance={resolvedAccountData.balance}
       accountCurrency={resolvedAccountData.currency}
-      symbolSpec={symbolSpec}
-      conversionRate={accountConversionRate}
-      botOrderIds={botOrderIds}
-      onBotOrder={handleBotOrder}
-      onBotClose={(id) => handleClosePosition(id)}
+      connected={Boolean(derivOrderConnection)}
       onReviewSetup={handleReviewSetup}
     />,
     liquidity: <LiquidityPanel key={selectedSymbol} symbol={selectedSymbol} price={currentPrice} precision={symbolSpec.pricePrecision} pipSize={symbolSpec.pipSize} candles={liveCandles} />,
@@ -525,17 +468,14 @@ const TerminalContent: React.FC = () => {
         </div>
       </section>
 
-      <aside className={showChat ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={liveCandles} setup={reviewSetup} onReviewSetup={() => handleReviewSetup(reviewSetup)} /><OrderPanel symbol={selectedSymbol} currentPrice={currentPrice} bidPrice={currentPrice} askPrice={currentPrice} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} onSubmitOrder={(draft) => { void handleManualOrder(draft) }} aiSetup={reviewSetup} autoApplyAISetup={Boolean(reviewSetup)} /></div></aside>
-      <aside className={showBot ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><TradingAgentPanel symbol={selectedSymbol}
-      derivConnectionId={derivOrderConnection?.connectionId}
-      derivAccountId={derivOrderConnection?.accountId}
-      derivEnvironment={derivOrderConnection?.environment} timeframe={timeframe} candles={liveCandles} currentPrice={currentPrice} activePosition={openPositions.find((order) => botOrderIds.includes(order.id)) ?? null} tradeHistory={tradeHistory} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} botOrderIds={botOrderIds} onBotOrder={handleBotOrder} onBotClose={(id) => handleClosePosition(id)} onReviewSetup={handleReviewSetup} /></aside>
+      <aside className={showChat ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={liveCandles} setup={reviewSetup} onReviewSetup={() => handleReviewSetup(reviewSetup)} /><OrderPanel symbol={selectedSymbol} currentPrice={currentPrice} bidPrice={currentPrice} askPrice={currentPrice} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} connection={derivOrderConnection} onTradeOpened={(order) => { setOpenPositions((current) => [...current, order]); setTradeHistory((current) => current.filter((item) => item.id !== order.id)); setReviewSetup(null); pushToast('Deriv ' + order.type + ' trade opened.') }} aiSetup={reviewSetup} /></div></aside>
+      <aside className={showBot ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><SignalDeskPanel symbol={selectedSymbol} timeframe={timeframe} currentPrice={currentPrice} analysis={marketAnalysis} setup={reviewSetup} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} connected={Boolean(derivOrderConnection)} onReviewSetup={handleReviewSetup} /></aside>
       <aside className={showHistory ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><TradesPanel positionsOnly openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={currentPrice} selectedSymbol={selectedSymbol} onClosePosition={(id) => { void handleClosePosition(id) }} /></div></aside>
       <aside className={showFunds ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><DerivCashierLinks /></div></aside>
       <aside className={showAccount ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><AccountPanel account={resolvedAccountData} activeProviderSelection={activeProviderSelection} /></div></aside>
 
       <aside className="hidden w-[clamp(300px,28vw,420px)] min-w-0 flex-shrink-0 flex-col overflow-hidden border-l border-shafx-border bg-shafx-surface/50 lg:flex">
-        <div className="flex h-12 flex-shrink-0 items-center justify-between border-b border-shafx-border px-3"><div><div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Workspace panel</div><div className="text-sm font-semibold">{dock === 'insights' ? 'Market intelligence' : dock === 'chat' ? 'Chat & Order Ticket' : dock === 'bot' ? 'SHAFX Bot' : dock === 'liquidity' ? 'Liquidity & depth' : 'Deriv account'}</div></div><PanelRight className="h-4 w-4 text-shafx-textMuted" /></div>
+        <div className="flex h-12 flex-shrink-0 items-center justify-between border-b border-shafx-border px-3"><div><div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Workspace panel</div><div className="text-sm font-semibold">{dock === 'insights' ? 'Market intelligence' : dock === 'chat' ? 'Chat & Order Ticket' : dock === 'bot' ? 'SHAFX Signal Desk' : dock === 'liquidity' ? 'Liquidity & depth' : 'Deriv account'}</div></div><PanelRight className="h-4 w-4 text-shafx-textMuted" /></div>
         <div className="min-h-0 flex-1 overflow-y-auto p-3">{dockContent[dock === 'agent' || dock === 'research' ? 'insights' : dock]}</div>
       </aside>
     </main>
