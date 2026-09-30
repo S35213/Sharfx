@@ -185,9 +185,12 @@ const TerminalContent: React.FC = () => {
         baselineStop?.()
       }
     }
-    void start()
+    // Let the primary chart stream establish first; the watchlist is non-critical
+    // and opening several sockets at the same time can slow Deriv startup.
+    const startupTimer = window.setTimeout(() => { void start() }, 1200)
     return () => {
       cancelled = true
+      window.clearTimeout(startupTimer)
       stopQuotes?.()
     }
   }, [])
