@@ -60,12 +60,20 @@ export const executeDerivTrade = async (input: ExecuteDerivTradeInput): Promise<
   const multiplier = 100
   const lotMultiplier = plan.lotSize > 0 ? lotSize / plan.lotSize : 1
   const estimatedLoss = Number((plan.estimatedLoss * lotMultiplier).toFixed(2))
-  const stake = estimatedLoss
+  const brokerMinimumStake = 1
+  const stake = Math.max(brokerMinimumStake, estimatedLoss)
   const estimatedReward = Number((plan.estimatedReward * lotMultiplier).toFixed(2))
-  if (!Number.isFinite(stake) || stake < 1) {
+  if (!Number.isFinite(stake) || !Number.isFinite(estimatedLoss) || estimatedLoss <= 0) {
     return {
       decision,
-      plan: { ...plan, isValid: false, summary: 'Deriv minimum stake is 1 ' + input.accountCurrency + '. Current calculated risk is ' + stake.toFixed(2) + '.' },
+      plan: { ...plan, isValid: false, summary: 'The bot calculated an invalid monetary risk amount.' },
+      order: null,
+    }
+  }
+  if (!Number.isFinite(input.accountBalance) || input.accountBalance < brokerMinimumStake) {
+    return {
+      decision,
+      plan: { ...plan, isValid: false, summary: 'Deriv requires at least 1 ' + input.accountCurrency + ' to open this trade. Current account balance is below the broker minimum.' },
       order: null,
     }
   }
