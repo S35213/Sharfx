@@ -33,11 +33,21 @@ export const ProviderCapabilityPanel: React.FC<Props> = ({ descriptor, environme
       <Capability label="Market data" value={descriptor.capabilities.marketData && descriptor.capabilities.realtimeMarketData} detail="Quotes/candles with streaming when available" />
       <Capability label="Positions" value={descriptor.capabilities.positionsRead} />
       <Capability label="Orders" value={descriptor.capabilities.ordersRead} />
-      <Capability label="Order placement" value={executionReady} detail={executionReady ? 'Adapter method exists; SHAFX release gate still applies' : 'No placement adapter is advertised'} />
+      <Capability
+        label="Order placement"
+        value={executionReady && environment === 'demo'}
+        detail={
+          !executionReady
+            ? 'No placement adapter is advertised'
+            : environment === 'demo'
+              ? 'Demo order placement is enabled for testing.'
+              : 'Live order placement is disabled during SHAFX release testing.'
+        }
+      />
       <Capability label="Close position" value={descriptor.capabilities.positionClose} />
     </div>
 
-    <div className="mx-3 mb-3 rounded-xl border border-shafx-accent/20 bg-shafx-accent/5 p-3"><div className="flex items-start gap-2"><ShieldCheck className="mt-0.5 h-4 w-4 text-shafx-accent" /><div><div className="text-[10px] font-semibold">Deriv live account boundary</div><p className="mt-1 text-[9px] leading-4 text-shafx-textMuted">Market and account data are live. Real-money order placement remains disabled until the Deriv instrument mapping and server-side execution/reconciliation path are certified end to end.</p></div></div></div>
+    <div className="mx-3 mb-3 rounded-xl border border-shafx-accent/20 bg-shafx-accent/5 p-3"><div className="flex items-start gap-2"><ShieldCheck className="mt-0.5 h-4 w-4 text-shafx-accent" /><div><div className="text-[10px] font-semibold">Deriv execution boundary</div><p className="mt-1 text-[9px] leading-4 text-shafx-textMuted">{environment === 'demo' ? 'Market, account data, and demo order placement are enabled for end-to-end testing. Live order placement remains disabled during SHAFX release testing.' : 'Market and account data are available, but live order placement remains disabled during SHAFX release testing.'}</p></div></div></div>
 
     <footer className="grid grid-cols-2 gap-2 border-t border-shafx-border p-3 text-[9px]">
       <div className="flex items-center gap-2 rounded-xl border border-shafx-border bg-shafx-bg p-2.5 text-shafx-textMuted"><DatabaseZap className="h-3.5 w-3.5 text-shafx-accent" />Normalized market contract</div>
