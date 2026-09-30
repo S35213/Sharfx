@@ -36,28 +36,33 @@ const cellIcon = (value: number): React.ReactNode => {
 export const FXMoveMatrix: React.FC<Props> = ({ pairs }) => {
   const matrix = useMemo(() => {
     const strength: Record<string, number> = {}
+    const coveredCurrencies = new Set<string>()
     currencies.forEach((currency) => { strength[currency] = 0 })
 
     pairs.forEach((pair) => {
+      if (pair.status !== 'open' || !Number.isFinite(pair.price) || pair.price <= 0) return
       const split = splitPair(pair.symbol)
       if (!split) return
       const move = Number(pair.changePercent)
       if (!Number.isFinite(move)) return
+      coveredCurrencies.add(split[0])
+      coveredCurrencies.add(split[1])
       strength[split[0]] += move / 2
       strength[split[1]] -= move / 2
     })
 
     return currencies.map((row) => currencies.map((column) => {
-      if (row === column) return null
+      if (row === column || !coveredCurrencies.has(row) || !coveredCurrencies.has(column)) return null
       return Number((strength[row] - strength[column]).toFixed(2))
     }))
   }, [pairs])
 
+  const livePairCount = pairs.filter((pair) => pair.status === 'open' && Number.isFinite(pair.price) && pair.price > 0 && Number.isFinite(pair.changePercent)).length
   const covered = matrix.flat().filter((value): value is number => value !== null).length
 
   return <section className="rounded-2xl border border-shafx-border bg-shafx-surface">
     <header className="flex items-start justify-between gap-3 border-b border-shafx-border px-4 py-3">
-      <div className="flex items-center gap-2"><Grid2x2 className="h-4 w-4 text-shafx-accent" /><div><div className="flex items-center gap-2 text-xs font-semibold">FX move matrix <span className="inline-flex items-center gap-1 rounded-full border border-shafx-success/20 bg-shafx-success/5 px-1.5 py-0.5 text-[8px] font-semibold text-shafx-success"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-shafx-success" />LIVE</span></div><div className="text-[9px] text-shafx-textMuted">Live relative currency strength • green = stronger • red = weaker • {covered} active cells</div></div></div>
+      <div className="flex items-center gap-2"><Grid2x2 className="h-4 w-4 text-shafx-accent" /><div><div className="flex items-center gap-2 text-xs font-semibold">FX move matrix <span className="inline-flex items-center gap-1 rounded-full border border-shafx-success/20 bg-shafx-success/5 px-1.5 py-0.5 text-[8px] font-semibold text-shafx-success"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-shafx-success" />LIVE</span></div><div className="text-[9px] text-shafx-textMuted">Live relative currency strength • green = stronger • red = weaker • {livePairCount} live pairs • {covered} active cells</div></div></div>
       <Info className="h-3.5 w-3.5 text-shafx-textMuted" />
     </header>
     <div className="overflow-auto p-3">
