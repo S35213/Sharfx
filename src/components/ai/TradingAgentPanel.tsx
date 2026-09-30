@@ -42,6 +42,7 @@ const riskModes: Record<RiskMode, { label: string; percent: number; description:
   EXTREME: { label: 'Extreme', percent: 1, description: 'Highest broker risk profile' },
 }
 type Phase = 'READY' | 'ANALYZING' | 'RUNNING'
+const DERIV_ACCOUNT_LOT_LEVERAGE = 100
 const SCAN_TIMEFRAMES: Timeframe[] = ['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1', 'W1']
 const SCAN_SEQUENCE: Timeframe[] = ['M1', 'M5', 'M15', 'M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1', 'W1']
 const TIMEFRAME_SCAN_BONUS: Record<Timeframe, number> = { M1: 18, M5: 14, M15: 10, M30: 5, H1: 2, H4: 0, D1: -1, W1: -2 }
@@ -339,7 +340,15 @@ export function TradingAgentPanel({
     if (!symbolSpec || !botRiskSetup) return null
     return calculateRisk({ accountBalance, accountCurrency, riskPercent: riskModes[riskMode].percent, side: botRiskSetup.direction, entryPrice: botRiskSetup.entryPrice, stopLoss: botRiskSetup.stopLoss, takeProfit: botRiskSetup.takeProfit, symbolSpec, conversionRate })
   }, [accountBalance, accountCurrency, botRiskSetup, conversionRate, riskMode, symbolSpec])
-  const accountStakeCeiling = Number.isFinite(accountBalance) && accountBalance > 0 ? Math.max(symbolSpec?.minLotSize ?? 0.01, accountBalance) : 0
+  const accountStakeCeiling = useMemo(() => {
+    if (!symbolSpec || !botRiskSetup || !Number.isFinite(accountBalance) || accountBalance <= 0) return 0
+    const stopDistancePips = Math.abs(botRiskSetup.entryPrice - botRiskSetup.stopLoss) / symbolSpec.pipSize
+    const quoteRate = symbolSpec.quoteCurrency === accountCurrency ? 1 : (Number.isFinite(conversionRate) && Number(conversionRate) > 0 ? Number(conversionRate) : 0)
+    const pipValuePerLot = symbolSpec.pipSize * symbolSpec.contractSize * quoteRate
+    if (!Number.isFinite(stopDistancePips) || stopDistancePips <= 0 || !Number.isFinite(pipValuePerLot) || pipValuePerLot <= 0) return 0
+    const lossPerLot = stopDistancePips * pipValuePerLot
+    return accountBalance / lossPerLot
+  }, [accountBalance, accountCurrency, botRiskSetup, conversionRate, symbolSpec])
   const lotFitsAccount = Boolean(accountStakeCeiling > 0 && parsedLotSize > 0 && parsedLotSize <= accountStakeCeiling + 1e-8)
   const lotSizeValid = symbolSpec ? Number.isFinite(parsedLotSize) && parsedLotSize >= symbolSpec.minLotSize && parsedLotSize <= symbolSpec.maxLotSize && Math.abs((parsedLotSize / symbolSpec.lotStep) - Math.round(parsedLotSize / symbolSpec.lotStep)) < 1e-8 : false
 
@@ -906,7 +915,7 @@ export function TradingAgentPanel({
               <span className="font-mono">{botRunLotSize?.toFixed(2) ?? lotSize} lot/run</span>
             </div>
             <div className="flex items-center justify-between gap-2">
-              <span>Account affordability ceiling</span>
+              <span>Account stake ceiling</span>
               <span className={lotFitsAccount ? 'font-mono text-shafx-success' : 'font-mono text-shafx-danger'}>{accountStakeCeiling > 0 ? accountStakeCeiling.toFixed(2) + ' lot max' : '—'}</span>
             </div>
           </div>
@@ -918,7 +927,7 @@ export function TradingAgentPanel({
               <span className="text-[9px] font-semibold text-shafx-danger">BOT BLOCKED BY ACCOUNT RISK</span>
               <span className="font-mono text-[9px] text-shafx-danger">{parsedLotSize.toFixed(2)} &gt; {accountStakeCeiling.toFixed(2)} lot</span>
             </div>
-            <p className="mt-1 text-[8px] text-shafx-textMuted">The bot will not execute until the lot fits the account's available account margin.</p>
+            <p className="mt-1 text-[8px] text-shafx-textMuted">The bot will not execute until the estimated Deriv stake fits the account balance.</p>
           </div>
         )}
 
