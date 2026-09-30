@@ -60,6 +60,7 @@ const TerminalContent: React.FC = () => {
   const accountStreamManager = useRef(new ProviderAccountStreamManager())
   const selectedSymbolRef = useRef(selectedSymbol)
   const watchlistReferencePricesRef = useRef<Record<string, number>>({})
+  const candleCacheRef = useRef<Record<string, OHLCV[]>>({})
   const toastId = useRef(0)
 
   const pushToast = useCallback((text: string) => {
@@ -125,9 +126,12 @@ const TerminalContent: React.FC = () => {
 
   useEffect(() => {
     setSymbolSpec(getSymbolSpec(selectedSymbol))
-    setLiveCandles([])
-    setCurrentPrice(0)
-    setMarketTimestamp(0)
+    const cacheKey = selectedSymbol + ':' + timeframe
+    const cached = candleCacheRef.current[cacheKey] ?? []
+    setLiveCandles(cached)
+    const last = cached[cached.length - 1]
+    setCurrentPrice(last?.close ?? 0)
+    setMarketTimestamp(last ? Math.floor(last.time / 1000) : 0)
     setLiveMarketActive(false)
   }, [selectedSymbol, timeframe])
 
@@ -255,17 +259,15 @@ const TerminalContent: React.FC = () => {
       Number.isFinite(candle.close) &&
       (index === 0 || candle.time > candles[index - 1].time)
     )
+    const cacheKey = selectedSymbolRef.current + ':' + timeframe
+    candleCacheRef.current[cacheKey] = valid
     setLiveCandles(valid)
     setCurrentPrice(price)
     setMarketTimestamp(Math.floor(epoch / 1000))
-    setWatchlist((prev) => prev.map((pair) =>
-      pair.symbol === selectedSymbolRef.current ? { ...pair, price, change: valid.length > 1 ? price - valid[valid.length - 2].close : 0, changePercent: valid.length > 1 && valid[valid.length - 2].close !== 0 ? ((price - valid[valid.length - 2].close) / valid[valid.length - 2].close) * 100 : 0 } : pair
-    ))
-  }, [])
+  }, [timeframe])
 
   const handleLiveActiveChange = useCallback((active: boolean): void => {
     setLiveMarketActive(active)
-    if (!active) setLiveCandles([])
   }, [])
 
   const marketAnalysis = useMemo<MarketAnalysis>(() => {
