@@ -348,6 +348,15 @@ const TerminalContent: React.FC = () => {
     }
   }, [derivOrderConnection, openPositions, pushToast, tradeHistory])
 
+  const resolvedAccountData = accountData ?? {
+    balance: 0,
+    equity: 0,
+    usedMargin: 0,
+    freeMargin: 0,
+    floatingPL: 0,
+    currency: 'USD',
+  }
+
   const handleManualOrder = useCallback(async (draft: SimulatedOrderDraft): Promise<void> => {
     if (!derivOrderConnection) {
       pushToast('Connect a Deriv account before placing a trade.')
@@ -399,15 +408,6 @@ const TerminalContent: React.FC = () => {
   const showHistory = mobileTab === 'history'
   const showFunds = mobileTab === 'funds'
   const showAccount = mobileTab === 'account'
-
-  const resolvedAccountData = accountData ?? {
-    balance: 0,
-    equity: 0,
-    usedMargin: 0,
-    freeMargin: 0,
-    floatingPL: 0,
-    currency: 'USD',
-  }
 
   const liveControl = <ProviderLiveControl
     providerId="deriv"
