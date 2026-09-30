@@ -15,8 +15,10 @@ export const decideAgentAction = (context: AgentContext): AgentDecision => {
   if (!preferredSetup || preferredSetup.status !== 'candidate') return { state: 'NO_TRADE', action: 'WAIT', permission, symbol, timeframe, setup: null, rationale: 'No valid setup currently satisfies the agent rules. Waiting is the active decision.', approvalRequired: false, safety: permissionText(permission) }
 
   const setupBias = preferredSetup.direction === 'BUY' ? 'Bullish' : 'Bearish'
-  const higherTimeframeConflict = multiTimeframe?.dominantBias !== null && multiTimeframe?.dominantBias !== undefined && multiTimeframe.dominantBias !== setupBias && multiTimeframe.confidence >= 60
-  if (higherTimeframeConflict) return { state: 'NO_TRADE', action: 'WAIT', permission, symbol, timeframe, setup: preferredSetup, rationale: `The local ${preferredSetup.direction} setup conflicts with the stronger higher-timeframe ${multiTimeframe.dominantBias} evidence (${multiTimeframe.confidence}%). The agent will wait rather than force an entry.`, approvalRequired: false, safety: permissionText(permission) }
+  const higherTimeframeBias = multiTimeframe?.higherTimeframeBias ?? null
+  const higherTimeframeConfidence = multiTimeframe?.higherTimeframeConfidence ?? 0
+  const higherTimeframeConflict = higherTimeframeBias !== null && higherTimeframeBias !== setupBias && higherTimeframeConfidence >= 60
+  if (higherTimeframeConflict) return { state: 'NO_TRADE', action: 'WAIT', permission, symbol, timeframe, setup: preferredSetup, rationale: `The local ${preferredSetup.direction} setup conflicts with the stronger higher-timeframe ${higherTimeframeBias} evidence (${higherTimeframeConfidence}%). The agent will wait rather than force an entry.`, approvalRequired: false, safety: permissionText(permission) }
 
   const researchConflict = research?.contradictions.length ? research.contradictions.length > 0 : false
   if (researchConflict && (research?.agreement ?? 100) < 55) return { state: 'NO_TRADE', action: 'WAIT', permission, symbol, timeframe, setup: preferredSetup, rationale: `The research pass found unresolved contradictions (${research?.contradictions.join(' ') ?? 'mixed evidence'}). The agent will wait for cleaner evidence.`, approvalRequired: false, safety: permissionText(permission) }
