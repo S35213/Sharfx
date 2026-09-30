@@ -118,7 +118,9 @@ const place = async (req) => {
   if (!symbol || !currency || !Number.isFinite(requestedStake) || requestedStake <= 0) throw new Error('Deriv trade requires a valid symbol, currency and stake.')
   const wsUrl = await requestWebSocketUrl(token, accountId)
 
-  const result = await withSocket(wsUrl, async (socket) => {
+  let result
+  try {
+    result = await withSocket(wsUrl, async (socket) => {
     const proposal = await sendAndWait(socket, {
       proposal: 1,
       amount: stake,
@@ -144,7 +146,27 @@ const place = async (req) => {
       req_id: 2,
     }, 2)
     return normalizeBuy(buy, { ...order, symbol, side, quantity: stake })
-  })
+    })
+  } catch (error) {
+    await recordProviderAudit({
+      userId: user.id,
+      connectionId: connection.id,
+      accountId,
+      eventType: 'deriv_order_failed',
+      severity: 'error',
+      metadata: {
+        provider: 'deriv',
+        accountId,
+        symbol,
+        side,
+        requestedStake,
+        currency,
+        environment: account.environment,
+        error: error instanceof Error ? error.message : String(error),
+      },
+    })
+    throw error
+  }
 
   await recordProviderAudit({
     userId: user.id,
