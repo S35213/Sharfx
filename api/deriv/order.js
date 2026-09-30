@@ -1,5 +1,6 @@
 import { apiRequestGuard } from '../../server/authSecurity.js'
 import {
+  getProviderAccount,
   getProviderConnection,
   getShafxUser,
   readProviderSecret,
@@ -70,11 +71,13 @@ const requireConnection = async (req) => {
   const connection = await getProviderConnection(user.id, connectionId, true)
   if (!connection || connection.provider_id !== 'deriv') throw new Error('Deriv connection not found.')
   if (connection.state !== 'connected') throw new Error('Deriv connection is ' + connection.state + '.')
-  if (connection.environment !== 'demo') throw new Error('Live Deriv order execution is disabled in SHAFX release testing. Select the connected demo account.')
   if (connection.expires_at && new Date(connection.expires_at).getTime() <= Date.now()) throw new Error('Deriv authorization has expired. Reconnect Deriv.')
   if (String(connection.metadata?.accountCount || '') === '0') throw new Error('No Deriv trading accounts are available.')
+  const account = await getProviderAccount(user.id, connection.id, accountId)
+  if (!account || !account.active || account.provider_id !== 'deriv') throw new Error('Selected Deriv account is not available.')
+  if (account.environment !== 'demo') throw new Error('Live Deriv order execution is disabled in SHAFX release testing. Select the connected demo account.')
   const token = await readProviderSecret(connection.credential_ref)
-  return { user, connection, accountId, token }
+  return { user, connection, account, accountId, token }
 }
 
 const normalizeBuy = (payload, request) => {
@@ -97,7 +100,7 @@ const normalizeBuy = (payload, request) => {
 }
 
 const place = async (req) => {
-  const { user, connection, accountId, token } = await requireConnection(req)
+  const { user, connection, account, accountId, token } = await requireConnection(req)
   const order = req.body?.order && typeof req.body.order === 'object' ? req.body.order : {}
   const symbol = String(order.symbol || '')
   const side = order.side === 'SELL' ? 'SELL' : 'BUY'
@@ -105,7 +108,7 @@ const place = async (req) => {
   const stake = Math.max(1, requestedStake)
   const multiplier = Math.max(1, Math.min(1000, Number(order.multiplier) || 10))
   const durationSeconds = Math.max(5, Math.min(86400, Math.trunc(Number(order.durationSeconds) || 30)))
-  let currency = String(order.currency || '').trim().toUpperCase()
+  let currency = String(account.currency || order.currency || '').trim().toUpperCase()
   if (!currency) {
     const accountResponse = await fetch(DERIV_API + '/accounts/' + encodeURIComponent(accountId), { headers: { Authorization: 'Bearer ' + token } })
     const accountPayload = await accountResponse.json().catch(() => ({}))
