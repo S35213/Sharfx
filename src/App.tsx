@@ -357,6 +357,17 @@ const TerminalContent: React.FC = () => {
     currency: 'USD',
   }
 
+  const accountConversionRate = useMemo(() => {
+    const accountCurrency = resolvedAccountData.currency.toUpperCase()
+    const quoteCurrency = symbolSpec.quoteCurrency.toUpperCase()
+    if (quoteCurrency === accountCurrency) return 1
+    const direct = watchlist.find((pair) => pair.symbol.toUpperCase() === quoteCurrency + '/' + accountCurrency && Number(pair.price) > 0)
+    if (direct) return Number(direct.price)
+    const inverse = watchlist.find((pair) => pair.symbol.toUpperCase() === accountCurrency + '/' + quoteCurrency && Number(pair.price) > 0)
+    if (inverse) return 1 / Number(inverse.price)
+    return undefined
+  }, [resolvedAccountData.currency, symbolSpec.quoteCurrency, watchlist])
+
   const handleManualOrder = useCallback(async (draft: SimulatedOrderDraft): Promise<void> => {
     if (!derivOrderConnection) {
       pushToast('Connect a Deriv account before placing a trade.')
@@ -442,6 +453,7 @@ const TerminalContent: React.FC = () => {
       accountBalance={resolvedAccountData.balance}
       accountCurrency={resolvedAccountData.currency}
       symbolSpec={symbolSpec}
+      conversionRate={accountConversionRate}
       botOrderIds={botOrderIds}
       onBotOrder={handleBotOrder}
       onBotClose={(id) => handleClosePosition(id)}
