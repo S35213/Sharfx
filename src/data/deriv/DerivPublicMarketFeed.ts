@@ -175,11 +175,11 @@ export const fetchDerivMultiTimeframeCandles = async (
     const needsHourly = requested.some((timeframe) => ['H1', 'H4'].includes(timeframe))
     const needsDaily = requested.some((timeframe) => ['D1', 'W1'].includes(timeframe))
 
-    const [m1, h1, d1] = await Promise.all([
-      needsLower ? requestHistory('M1', 600) : Promise.resolve([]),
-      needsHourly ? requestHistory('H1', 400) : Promise.resolve([]),
-      needsDaily ? requestHistory('D1', 2100) : Promise.resolve([]),
-    ])
+    // Request each anchor history sequentially on the shared socket so the
+    // response handler for one request cannot replace another request's handler.
+    const m1 = needsLower ? await requestHistory('M1', 600) : []
+    const h1 = needsHourly ? await requestHistory('H1', 400) : []
+    const d1 = needsDaily ? await requestHistory('D1', 2100) : []
 
     const results: Partial<Record<Timeframe, OHLCV[]>> = {}
 
