@@ -42,7 +42,6 @@ const riskModes: Record<RiskMode, { label: string; percent: number; description:
   EXTREME: { label: 'Extreme', percent: 1, description: 'Highest broker risk profile' },
 }
 type Phase = 'READY' | 'ANALYZING' | 'RUNNING'
-const DERIV_ACCOUNT_LOT_LEVERAGE = 100
 const SCAN_TIMEFRAMES: Timeframe[] = ['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1', 'W1']
 const SCAN_SEQUENCE: Timeframe[] = ['M1', 'M5', 'M15', 'M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1', 'W1']
 const TIMEFRAME_SCAN_BONUS: Record<Timeframe, number> = { M1: 18, M5: 14, M15: 10, M30: 5, H1: 2, H4: 0, D1: -1, W1: -2 }
