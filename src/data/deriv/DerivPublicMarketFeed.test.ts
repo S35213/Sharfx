@@ -13,9 +13,9 @@ describe('DerivPublicMarketFeed', () => {
     vi.unstubAllGlobals()
   })
 
-  it('keeps localhost on the legacy direct Deriv endpoint for maximum compatibility', () => {
+  it('keeps localhost on the current direct Deriv endpoint', () => {
     vi.stubGlobal('window', { location: { hostname: 'localhost', protocol: 'http:', host: 'localhost:5173' } })
-    expect(getDerivMarketWebSocketUrl()).toBe(DERIV_LEGACY_PUBLIC_WS_URL)
+    expect(getDerivMarketWebSocketUrl()).toBe(DERIV_PUBLIC_WS_URL)
     vi.unstubAllGlobals()
   })
 
