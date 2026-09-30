@@ -34,7 +34,7 @@ export const FXMoveMatrix: React.FC<Props> = ({ pairs }) => {
       strength[split[1]] -= move / 2
     })
 
-    return currencies.map((row, rowIndex) => currencies.map((column, columnIndex) => {
+    return currencies.map((row) => currencies.map((column) => {
       if (row === column) return null
       return Number((strength[row] - strength[column]).toFixed(2))
     }))
