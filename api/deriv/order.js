@@ -8,9 +8,19 @@ import {
 } from '../../server/providerConnections.js'
 
 const DERIV_API = 'https://api.derivws.com/trading/v1/options'
+const MIN_STAKE = 1
+const MAX_MULTIPLIER = 10000
+
 const toDerivSymbol = (symbol) => {
   const normalized = String(symbol || '').replace('/', '').toUpperCase()
   return normalized.length === 6 ? 'frx' + normalized : String(symbol || '')
+}
+
+class StageError extends Error {
+  constructor(stage, message) {
+    super(message)
+    this.stage = stage
+  }
 }
 
 const requestWebSocketUrl = async (token, accountId) => {
@@ -22,7 +32,7 @@ const requestWebSocketUrl = async (token, accountId) => {
   const url = data?.data?.url
   if (!response.ok || typeof url !== 'string' || !url) {
     const detail = typeof data?.error?.message === 'string' ? data.error.message : typeof data?.message === 'string' ? data.message : 'Deriv did not provide an authenticated trading WebSocket.'
-    throw new Error('Deriv trading connection failed (' + response.status + '): ' + detail)
+    throw new StageError('AUTH', 'Deriv trading connection failed (' + response.status + '): ' + detail)
   }
   return url
 }
@@ -32,9 +42,9 @@ const withSocket = async (url, fn) => {
   let timeout
   try {
     await new Promise((resolve, reject) => {
-      timeout = setTimeout(() => reject(new Error('Deriv trading connection timed out.')), 10000)
+      timeout = setTimeout(() => reject(new StageError('AUTH', 'Deriv trading connection timed out.')), 10000)
       socket.addEventListener('open', () => { clearTimeout(timeout); resolve() }, { once: true })
-      socket.addEventListener('error', () => { clearTimeout(timeout); reject(new Error('Deriv trading connection failed.')) }, { once: true })
+      socket.addEventListener('error', () => { clearTimeout(timeout); reject(new StageError('AUTH', 'Deriv authenticated WebSocket failed to open.')) }, { once: true })
     })
     return await fn(socket)
   } finally {
@@ -43,15 +53,15 @@ const withSocket = async (url, fn) => {
   }
 }
 
-const sendAndWait = (socket, request, expectedReqId) => new Promise((resolve, reject) => {
-  const timeout = setTimeout(() => reject(new Error('Deriv trading request timed out.')), 10000)
+const sendAndWait = (socket, request, expectedReqId, stage) => new Promise((resolve, reject) => {
+  const timeout = setTimeout(() => reject(new StageError(stage, 'Deriv ' + stage.toLowerCase() + ' request timed out.')), 10000)
   const onMessage = (event) => {
     try {
       const payload = JSON.parse(String(event.data))
       if (Number(payload?.echo_req?.req_id) !== expectedReqId && Number(payload?.req_id) !== expectedReqId) return
       clearTimeout(timeout)
       socket.removeEventListener('message', onMessage)
-      if (payload?.error?.message) reject(new Error(payload.error.message))
+      if (payload?.error?.message) reject(new StageError(stage, payload.error.message))
       else resolve(payload)
     } catch (error) {
       clearTimeout(timeout)
@@ -65,94 +75,200 @@ const sendAndWait = (socket, request, expectedReqId) => new Promise((resolve, re
 
 const requireConnection = async (req) => {
   const user = await getShafxUser(req)
-  if (!user) throw new Error('SHAFX sign-in is required.')
+  if (!user) throw new StageError('AUTH', 'SHAFX sign-in is required.')
   const connectionId = typeof req.body?.connectionId === 'string' ? req.body.connectionId : ''
   const accountId = typeof req.body?.accountId === 'string' ? req.body.accountId : ''
-  if (!connectionId || !accountId) throw new Error('A connected Deriv account is required.')
+  if (!connectionId || !accountId) throw new StageError('ACCOUNT', 'A connected Deriv account is required.')
+
   const connection = await getProviderConnection(user.id, connectionId, true)
-  if (!connection || connection.provider_id !== 'deriv') throw new Error('Deriv connection not found.')
-  if (connection.state !== 'connected') throw new Error('Deriv connection is ' + connection.state + '.')
-  if (connection.expires_at && new Date(connection.expires_at).getTime() <= Date.now()) throw new Error('Deriv authorization has expired. Reconnect Deriv.')
-  if (String(connection.metadata?.accountCount || '') === '0') throw new Error('No Deriv trading accounts are available.')
+  if (!connection || connection.provider_id !== 'deriv') throw new StageError('AUTH', 'Deriv connection not found.')
+  if (connection.state !== 'connected') throw new StageError('AUTH', 'Deriv connection is ' + connection.state + '.')
+  if (connection.expires_at && new Date(connection.expires_at).getTime() <= Date.now()) throw new StageError('AUTH', 'Deriv authorization has expired. Reconnect Deriv.')
+  if (String(connection.metadata?.accountCount || '') === '0') throw new StageError('ACCOUNT', 'No Deriv trading accounts are available.')
+
   const account = await getProviderAccount(user.id, connection.id, accountId)
-  if (!account || !account.active || account.provider_id !== 'deriv') throw new Error('Selected Deriv account is not available.')
-  if (account.environment !== 'demo') throw new Error('Live Deriv order execution is disabled in SHAFX release testing. Select the connected demo account.')
+  if (!account || !account.active || account.provider_id !== 'deriv') throw new StageError('ACCOUNT', 'Selected Deriv account is not available.')
+  if (account.environment !== 'demo') throw new StageError('ACCOUNT', 'Live Deriv order execution is disabled in SHAFX release testing. Select the connected demo account.')
+
   const token = await readProviderSecret(connection.credential_ref)
   return { user, connection, account, accountId, token }
 }
 
-const normalizeBuy = (payload, request) => {
+const normalizeBuy = (payload, request, quote) => {
   const buy = payload?.buy || {}
   const contractId = String(buy.contract_id ?? '')
-  if (!contractId) throw new Error('Deriv did not return a contract ID.')
-  const buyPrice = Number(buy.buy_price ?? buy.price ?? 0)
+  if (!contractId) throw new StageError('BUY', 'Deriv did not return a contract ID.')
+  const buyPrice = Number(buy.buy_price ?? buy.price ?? quote.askPrice ?? 0)
   const spot = Number(buy.start_spot ?? buy.start_spot_display_value ?? 0)
   return {
     providerOrderId: contractId,
     status: 'filled',
     clientOrderId: request.clientOrderId,
-    symbol: request.symbol,
-    side: request.side,
-    quantity: Number(request.quantity),
+    symbol: quote.symbol,
+    side: quote.side,
+    quantity: Number(quote.stake),
+    stake: Number(quote.stake),
+    multiplier: Number(quote.multiplier),
     timestamp: new Date().toISOString(),
     message: 'Deriv contract purchased.',
-    raw: { contractId, buyPrice, spot },
+    raw: { contractId, buyPrice, spot, stake: quote.stake, multiplier: quote.multiplier },
   }
 }
 
-const place = async (req) => {
-  const { user, connection, account, accountId, token } = await requireConnection(req)
-  const order = req.body?.order && typeof req.body.order === 'object' ? req.body.order : {}
-  const symbol = String(order.symbol || '')
+const buildQuoteRequest = (order, account) => {
+  const symbol = String(order.symbol || '').trim()
   const side = order.side === 'SELL' ? 'SELL' : 'BUY'
-  const requestedStake = Number(order.stake ?? order.quantity)
-  const DERIV_MIN_STAKE = 1
-  if (!Number.isFinite(requestedStake) || requestedStake <= 0) throw new Error('Deriv trade requires a positive stake.')
-  if (requestedStake < DERIV_MIN_STAKE) throw new Error('Deriv minimum stake is 1 ' + String(account.currency || order.currency || 'unit') + '. Increase the risk amount before placing the trade.')
-  const stake = requestedStake
-  const VALID_DERIV_MULTIPLIERS = [100, 200, 300, 500, 800]
-  const requestedMultiplier = Number(order.multiplier)
-  const multiplier = VALID_DERIV_MULTIPLIERS.includes(requestedMultiplier) ? requestedMultiplier : VALID_DERIV_MULTIPLIERS[0]
-  const durationSeconds = Math.max(5, Math.min(86400, Math.trunc(Number(order.durationSeconds) || 30)))
-  let currency = String(account.currency || order.currency || '').trim().toUpperCase()
-  if (!currency) {
-    const accountResponse = await fetch(DERIV_API + '/accounts/' + encodeURIComponent(accountId), { headers: { Authorization: 'Bearer ' + token } })
-    const accountPayload = await accountResponse.json().catch(() => ({}))
-    currency = String(accountPayload?.data?.currency || '').trim().toUpperCase()
+  const stake = Number(order.stake)
+  const multiplier = Number(order.multiplier)
+  const currency = String(account.currency || order.currency || '').trim().toUpperCase()
+  const stopLossAmount = Number(order.stopLossAmount)
+  const takeProfitAmount = Number(order.takeProfitAmount)
+
+  if (!symbol) throw new StageError('MARKET', 'Select a Deriv market before requesting a quote.')
+  if (!currency) throw new StageError('ACCOUNT', 'The selected Deriv account has no currency.')
+  if (!Number.isFinite(stake) || stake < MIN_STAKE) throw new StageError('ACCOUNT', 'Deriv minimum multiplier stake is 1 ' + currency + '.')
+  if (!Number.isFinite(multiplier) || multiplier <= 0 || multiplier > MAX_MULTIPLIER) throw new StageError('PROPOSAL', 'Enter a valid multiplier between 1 and ' + MAX_MULTIPLIER + '.')
+  if (Number.isFinite(stopLossAmount) && stopLossAmount < 0) throw new StageError('PROPOSAL', 'Stop-loss amount cannot be negative.')
+  if (Number.isFinite(takeProfitAmount) && takeProfitAmount < 0) throw new StageError('PROPOSAL', 'Take-profit amount cannot be negative.')
+
+  return {
+    symbol,
+    side,
+    stake,
+    multiplier,
+    currency,
+    underlyingSymbol: toDerivSymbol(symbol),
+    stopLossAmount: Number.isFinite(stopLossAmount) && stopLossAmount > 0 ? stopLossAmount : 0,
+    takeProfitAmount: Number.isFinite(takeProfitAmount) && takeProfitAmount > 0 ? takeProfitAmount : 0,
   }
-  if (!/^[A-Z]{3}$/.test(currency)) currency = ''
-  if (!symbol || !currency) throw new Error('Deriv trade requires a valid symbol and account currency.')
+}
+
+const getQuote = async (req) => {
+  const { user, connection, accountId, token, account } = await requireConnection(req)
+  const order = req.body?.order && typeof req.body.order === 'object' ? req.body.order : {}
+  const requested = buildQuoteRequest(order, account)
   const wsUrl = await requestWebSocketUrl(token, accountId)
 
-  let result
   try {
-    result = await withSocket(wsUrl, async (socket) => {
-    const proposal = await sendAndWait(socket, {
-      proposal: 1,
-      amount: stake,
-      basis: 'stake',
-      contract_type: side === 'BUY' ? 'MULTUP' : 'MULTDOWN',
-      currency,
-      multiplier,
-      limit_order: {
-        take_profit: Math.max(0, Number(order.takeProfitAmount) || 0),
-        stop_loss: Math.max(0, Number(order.stopLossAmount) || 0),
-      },
-      underlying_symbol: toDerivSymbol(symbol),
-      duration: durationSeconds,
-      duration_unit: 's',
-      req_id: 1,
-    }, 1)
-    const proposalId = String(proposal?.proposal?.id || '')
-    const askPrice = Number(proposal?.proposal?.ask_price)
-    if (!proposalId || !Number.isFinite(askPrice) || askPrice <= 0) throw new Error('Deriv did not return a valid trade proposal.')
-    const buy = await sendAndWait(socket, {
-      buy: proposalId,
-      price: askPrice,
-      req_id: 2,
-    }, 2)
-    return normalizeBuy(buy, { ...order, symbol, side, quantity: stake })
+    const quote = await withSocket(wsUrl, async (socket) => {
+      const balanceResponse = await sendAndWait(socket, { balance: 1, req_id: 1 }, 1, 'ACCOUNT')
+      const balance = Number(balanceResponse?.balance?.balance)
+      if (Number.isFinite(balance) && balance < requested.stake) {
+        throw new StageError('ACCOUNT', 'Insufficient Deriv balance for the selected stake. Available: ' + balance.toFixed(2) + ' ' + requested.currency + '.')
+      }
+
+      // This is the SHAFX market contract check. Deriv is authoritative for
+      // whether the selected underlying supports the requested contract family.
+      await sendAndWait(socket, { contracts_for: requested.underlyingSymbol, req_id: 2 }, 2, 'MARKET')
+
+      const proposalBody = {
+        proposal: 1,
+        amount: requested.stake,
+        basis: 'stake',
+        contract_type: requested.side === 'BUY' ? 'MULTUP' : 'MULTDOWN',
+        currency: requested.currency,
+        multiplier: requested.multiplier,
+        underlying_symbol: requested.underlyingSymbol,
+        duration: 86400,
+        duration_unit: 's',
+        req_id: 3,
+      }
+      if (requested.stopLossAmount > 0 || requested.takeProfitAmount > 0) {
+        proposalBody.limit_order = {}
+        if (requested.stopLossAmount > 0) proposalBody.limit_order.stop_loss = requested.stopLossAmount
+        if (requested.takeProfitAmount > 0) proposalBody.limit_order.take_profit = requested.takeProfitAmount
+      }
+
+      const proposalResponse = await sendAndWait(socket, proposalBody, 3, 'PROPOSAL')
+      const proposal = proposalResponse?.proposal || {}
+      const proposalId = String(proposal.id || '')
+      const askPrice = Number(proposal.ask_price ?? proposal.display_value)
+      if (!proposalId || !Number.isFinite(askPrice) || askPrice <= 0) {
+        throw new StageError('PROPOSAL', 'Deriv returned an incomplete proposal.')
+      }
+
+      const payout = Number(proposal.payout)
+      const commission = Number(proposal.commission)
+      const spot = Number(proposal.spot ?? proposal.current_spot)
+      return {
+        proposalId,
+        symbol: requested.symbol,
+        side: requested.side,
+        contractType: requested.side === 'BUY' ? 'MULTUP' : 'MULTDOWN',
+        stake: requested.stake,
+        multiplier: requested.multiplier,
+        currency: requested.currency,
+        askPrice,
+        payout: Number.isFinite(payout) ? payout : undefined,
+        commission: Number.isFinite(commission) ? commission : undefined,
+        spot: Number.isFinite(spot) ? spot : undefined,
+        potentialProfit: Number.isFinite(payout) ? Number((payout - requested.stake).toFixed(2)) : undefined,
+        stopLossAmount: requested.stopLossAmount > 0 ? requested.stopLossAmount : undefined,
+        takeProfitAmount: requested.takeProfitAmount > 0 ? requested.takeProfitAmount : undefined,
+        quotedAt: new Date().toISOString(),
+      }
     })
+
+    await recordProviderAudit({
+      userId: user.id,
+      connectionId: connection.id,
+      accountId,
+      eventType: 'deriv_proposal_quoted',
+      metadata: { provider: 'deriv', accountId, symbol: requested.symbol, side: requested.side, stake: requested.stake, multiplier: requested.multiplier, proposalId: quote.proposalId, environment: account.environment },
+    })
+    return quote
+  } catch (error) {
+    await recordProviderAudit({
+      userId: user.id,
+      connectionId: connection.id,
+      accountId,
+      eventType: 'deriv_proposal_failed',
+      severity: 'error',
+      metadata: { provider: 'deriv', accountId, symbol: requested.symbol, side: requested.side, stake: requested.stake, multiplier: requested.multiplier, environment: account.environment, error: error instanceof Error ? error.message : String(error) },
+    })
+    throw error
+  }
+}
+
+const buy = async (req) => {
+  const { user, connection, accountId, token } = await requireConnection(req)
+  const proposalId = String(req.body?.proposalId || '')
+  const askPrice = Number(req.body?.askPrice)
+  const quote = req.body?.quote && typeof req.body.quote === 'object' ? req.body.quote : {}
+
+  if (!proposalId) throw new StageError('BUY', 'Deriv proposal ID is required.')
+  if (!Number.isFinite(askPrice) || askPrice <= 0) throw new StageError('BUY', 'Deriv ask price is required.')
+
+  const normalizedQuote = {
+    proposalId,
+    askPrice,
+    symbol: String(quote.symbol || ''),
+    side: quote.side === 'SELL' ? 'SELL' : 'BUY',
+    stake: Number(quote.stake),
+    multiplier: Number(quote.multiplier),
+  }
+  if (!normalizedQuote.symbol || !Number.isFinite(normalizedQuote.stake) || !Number.isFinite(normalizedQuote.multiplier)) {
+    throw new StageError('BUY', 'The quoted trade details are incomplete.')
+  }
+
+  const wsUrl = await requestWebSocketUrl(token, accountId)
+  try {
+    const result = await withSocket(wsUrl, async (socket) => {
+      const response = await sendAndWait(socket, {
+        buy: proposalId,
+        price: askPrice,
+        req_id: 1,
+      }, 1, 'BUY')
+      return normalizeBuy(response, req, normalizedQuote)
+    })
+    await recordProviderAudit({
+      userId: user.id,
+      connectionId: connection.id,
+      accountId,
+      eventType: 'deriv_order_placed',
+      metadata: { provider: 'deriv', accountId, contractId: result.providerOrderId, symbol: normalizedQuote.symbol, side: normalizedQuote.side, stake: normalizedQuote.stake, multiplier: normalizedQuote.multiplier, environment: account.environment },
+    })
+    return result
   } catch (error) {
     await recordProviderAudit({
       userId: user.id,
@@ -160,52 +276,20 @@ const place = async (req) => {
       accountId,
       eventType: 'deriv_order_failed',
       severity: 'error',
-      metadata: {
-        provider: 'deriv',
-        accountId,
-        symbol,
-        side,
-        requestedStake,
-        currency,
-        environment: account.environment,
-        error: error instanceof Error ? error.message : String(error),
-      },
+      metadata: { provider: 'deriv', accountId, symbol: normalizedQuote.symbol, side: normalizedQuote.side, stake: normalizedQuote.stake, multiplier: normalizedQuote.multiplier, environment: account.environment, error: error instanceof Error ? error.message : String(error) },
     })
     throw error
   }
-
-  await recordProviderAudit({
-    userId: user.id,
-    connectionId: connection.id,
-    accountId,
-    eventType: 'deriv_order_placed',
-    metadata: {
-      provider: 'deriv',
-      accountId,
-      contractId: result.providerOrderId,
-      symbol,
-      side,
-      stake,
-      requestedStake,
-      multiplier,
-      durationSeconds,
-      environment: account.environment,
-    },
-  })
-  return result
 }
 
 const sell = async (req) => {
   const { user, connection, accountId, token } = await requireConnection(req)
   const contractId = String(req.body?.providerOrderId || req.body?.positionId || '')
-  if (!contractId) throw new Error('Deriv contract ID is required to close the trade.')
+  if (!contractId) throw new StageError('CLOSE', 'Deriv contract ID is required to close the trade.')
+
   const wsUrl = await requestWebSocketUrl(token, accountId)
   const result = await withSocket(wsUrl, async (socket) => {
-    const response = await sendAndWait(socket, {
-      sell: Number(contractId),
-      price: 0,
-      req_id: 3,
-    }, 3)
+    const response = await sendAndWait(socket, { sell: Number(contractId), price: 0, req_id: 1 }, 1, 'CLOSE')
     const soldFor = Number(response?.sell?.sold_for ?? response?.sell?.sell_price ?? 0)
     const buyPrice = Number(response?.sell?.buy_price ?? 0)
     const profit = Number.isFinite(soldFor) && Number.isFinite(buyPrice) ? Number((soldFor - buyPrice).toFixed(2)) : undefined
@@ -227,16 +311,28 @@ const sell = async (req) => {
   return result
 }
 
+// Legacy one-click placement is intentionally retained for old code paths, but
+// the active SHAFX test UI uses quote -> confirm -> buy.
+const placeLegacy = async (req) => {
+  const quote = await getQuote(req)
+  return buy({ ...req, body: { ...req.body, proposalId: quote.proposalId, askPrice: quote.askPrice, quote } })
+}
+
 export default async function handler(req, res) {
   const guard = await apiRequestGuard(req, 'api:deriv-order', 30)
-  if (!guard.allowed) return res.status(guard.status).json({ ok: false, error: guard.error, retryAfterSeconds: guard.retryAfterSeconds })
-  if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' })
+  if (!guard.allowed) return res.status(guard.status).json({ ok: false, stage: 'SECURITY', error: guard.error, retryAfterSeconds: guard.retryAfterSeconds })
+  if (req.method !== 'POST') return res.status(405).json({ ok: false, stage: 'HTTP', error: 'Method not allowed' })
   res.setHeader('Cache-Control', 'no-store')
+
   try {
-    const action = String(req.body?.action || 'place')
-    const result = action === 'sell' ? await sell(req) : await place(req)
-    return res.status(200).json({ ok: true, order: result })
+    const action = String(req.body?.action || 'quote')
+    if (action === 'quote') return res.status(200).json({ ok: true, quote: await getQuote(req) })
+    if (action === 'buy') return res.status(200).json({ ok: true, order: await buy(req) })
+    if (action === 'sell') return res.status(200).json({ ok: true, order: await sell(req) })
+    if (action === 'place') return res.status(200).json({ ok: true, order: await placeLegacy(req) })
+    throw new StageError('HTTP', 'Unknown Deriv order action.')
   } catch (error) {
-    return res.status(400).json({ ok: false, error: error instanceof Error ? error.message : 'Deriv trade request failed.' })
+    const stage = error instanceof StageError ? error.stage : 'DERIV'
+    return res.status(400).json({ ok: false, stage, error: error instanceof Error ? error.message : 'Deriv trade request failed.' })
   }
 }
