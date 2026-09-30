@@ -65,12 +65,13 @@ export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, t
           <div className="mb-2 grid grid-cols-[1fr_75px_60px] gap-2 px-2 text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted"><span>Instrument</span><span className="text-right">Last</span><span className="text-right">Move</span></div>
           <div className="max-h-[calc(100dvh-225px)] space-y-1 overflow-y-auto sm:max-h-80">
             {filtered.map((item) => {
-              const selected = item === symbol && Number.isFinite(price) && price > 0
               const pair = pairs.find((entry) => entry.symbol === item)
+              const pairPrice = pair && Number.isFinite(pair.price) && pair.price > 0 ? pair.price : Number.NaN
+              const pairMove = pair && Number.isFinite(pair.changePercent) ? pair.changePercent : Number.NaN
               return <button key={item} type="button" onClick={() => choose(item)} className={'grid min-h-14 w-full grid-cols-[1fr_75px_60px] items-center gap-2 rounded-xl px-3 text-left ' + (item === symbol ? 'bg-shafx-accent/10 text-shafx-accent' : '')}>
-                <span className="min-w-0"><span className="block truncate text-xs font-semibold">{item}</span><span className="mt-0.5 block text-[8px] text-shafx-textMuted">{selected ? 'Live stream' : 'Select to stream'} • FX</span></span>
-                <span className="text-right font-mono text-[9px] tabular">{selected ? formatPrice(price, pricePrecision) : '—'}</span>
-                <span className="text-right font-mono text-[9px] tabular">{selected && pair?.changePercent !== undefined ? (pair.changePercent >= 0 ? '+' : '') + pair.changePercent.toFixed(2) + '%' : '—'}</span>
+                <span className="min-w-0"><span className="block truncate text-xs font-semibold">{item}</span><span className="mt-0.5 block text-[8px] text-shafx-textMuted">{Number.isFinite(pairPrice) ? 'Live stream' : 'Waiting for first quote'} • FX</span></span>
+                <span className="text-right font-mono text-[9px] tabular">{Number.isFinite(pairPrice) ? formatPrice(pairPrice, item.includes('JPY') ? 3 : 5) : '—'}</span>
+                <span className="text-right font-mono text-[9px] tabular">{Number.isFinite(pairMove) ? (pairMove >= 0 ? '+' : '') + pairMove.toFixed(2) + '%' : '—'}</span>
               </button>
             })}
             {!filtered.length && <div className="px-3 py-5 text-center text-xs text-shafx-textMuted">No matching Deriv market</div>}
