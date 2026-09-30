@@ -126,8 +126,8 @@ export const subscribeDerivForexQuotes = async (
   if (!symbols.length) return () => undefined
   const socket = await openPublicMarketSocket()
   let stopped = false
-  const normalizedSymbols = symbols.map(toDerivSymbol)
-  socket.send(JSON.stringify({ ticks: normalizedSymbols, subscribe: 1, req_id: 7101 }))
+  const normalizedSymbols = Array.from(new Set(symbols.map(toDerivSymbol).filter(Boolean)))
+
   socket.onmessage = (event: MessageEvent) => {
     if (stopped) return
     try {
@@ -141,6 +141,18 @@ export const subscribeDerivForexQuotes = async (
       // Ignore malformed catalog messages without interrupting the quote watch.
     }
   }
+
+  // Deriv's current public ticks endpoint subscribes to a specific symbol per
+  // request. Keep one socket for the whole Market Watch, but send one ticks
+  // request for each symbol rather than sending an array as the ticks value.
+  normalizedSymbols.forEach((symbol, index) => {
+    socket.send(JSON.stringify({
+      ticks: symbol,
+      subscribe: 1,
+      req_id: 7101 + index,
+    }))
+  })
+
   return () => {
     stopped = true
     try { socket.close() } catch (error) { void error }
