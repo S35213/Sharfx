@@ -7,15 +7,11 @@ import type { SymbolSpec, TradeOrder } from '../../types'
 
 const LEVERAGE = 100
 
-const accountMarginLotCeiling = (accountBalance: number, accountCurrency: string, symbolSpec: SymbolSpec, setup: SetupCandidate, conversionRate?: number): number => {
-  if (!Number.isFinite(accountBalance) || accountBalance <= 0) return 0
-  let exposurePerLot = symbolSpec.contractSize
-  if (symbolSpec.quoteCurrency === accountCurrency) exposurePerLot = symbolSpec.contractSize * setup.entryPrice
-  else if (symbolSpec.baseCurrency !== accountCurrency) {
-    if (!Number.isFinite(conversionRate) || Number(conversionRate) <= 0) return 0
-    exposurePerLot = symbolSpec.contractSize * setup.entryPrice * Number(conversionRate)
-  }
-  return accountBalance * LEVERAGE / exposurePerLot
+const accountAffordableLotCeiling = (accountBalance: number, plan: ReturnType<typeof prepareTradePlan>, lotSize: number): number => {
+  if (!Number.isFinite(accountBalance) || accountBalance <= 0 || !Number.isFinite(plan.estimatedLoss) || plan.estimatedLoss <= 0 || !Number.isFinite(plan.lotSize) || plan.lotSize <= 0) return 0
+  const lossPerLot = plan.estimatedLoss / plan.lotSize
+  if (!Number.isFinite(lossPerLot) || lossPerLot <= 0) return 0
+  return accountBalance / lossPerLot
 }
 
 export interface ExecuteDerivTradeInput {
@@ -58,14 +54,15 @@ export const executeDerivTrade = async (input: ExecuteDerivTradeInput): Promise<
     return { decision, plan: { ...plan, isValid: false, summary: 'Trade size is outside the selected symbol rules.' }, order: null }
   }
 
-  const marginCeiling = accountMarginLotCeiling(input.accountBalance, input.accountCurrency, input.symbolSpec, setup, input.conversionRate)
-  if (!Number.isFinite(marginCeiling) || marginCeiling <= 0 || lotSize > marginCeiling + 1e-8) {
-    return { decision, plan: { ...plan, isValid: false, summary: 'Trade size exceeds the selected Deriv account margin ceiling.' }, order: null }
+  const accountLotCeiling = accountAffordableLotCeiling(input.accountBalance, plan, lotSize)
+  if (!Number.isFinite(accountLotCeiling) || accountLotCeiling <= 0 || lotSize > accountLotCeiling + 1e-8) {
+    return { decision, plan: { ...plan, isValid: false, summary: 'Trade size exceeds the Deriv account balance when converted to the bot stake.' }, order: null }
   }
 
   const multiplier = 100
   const lotMultiplier = plan.lotSize > 0 ? lotSize / plan.lotSize : 1
   const estimatedLoss = Number((plan.estimatedLoss * lotMultiplier).toFixed(2))
+  const stake = estimatedLoss
   const estimatedReward = Number((plan.estimatedReward * lotMultiplier).toFixed(2))
 
   const order = await placeDerivContract({
@@ -76,7 +73,7 @@ export const executeDerivTrade = async (input: ExecuteDerivTradeInput): Promise<
     },
     symbol: input.symbolSpec.symbol,
     side: setup.direction,
-    stake: lotSize,
+    stake,
     currency: input.accountCurrency,
     multiplier,
     durationSeconds: 30,
