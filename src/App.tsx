@@ -170,10 +170,10 @@ const TerminalContent: React.FC = () => {
           }
           return Array.from(existing.values())
         })
-        const extra = symbols.filter((symbol) => !mockWatchlist.some((pair) => pair.symbol === symbol))
-        if (extra.length) {
-          discoveredStop = await subscribeDerivForexQuotes(extra.slice(0, 142), (symbol, quote) => updateQuote(symbol, quote))
-        }
+        // The terminal watcher stays on the curated SHAFX FX set. Discovered
+        // symbols remain selectable in the market picker, while the chart opens
+        // its own stream when a user selects one. This avoids flooding one public
+        // WebSocket with hundreds of simultaneous subscriptions.
       } catch {
         // Keep baseline watchlist quotes available if catalog discovery fails.
       }
