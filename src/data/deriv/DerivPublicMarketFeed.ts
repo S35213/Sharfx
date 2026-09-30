@@ -150,12 +150,15 @@ const fetchAnchorHistory = async (
     socket.onmessage = (event: MessageEvent): void => {
       try {
         const payload = JSON.parse(String(event.data)) as DerivTickResponse
-        if (Number(payload.req_id) !== reqId) return
         if (payload.error?.message) {
           finish([])
           return
         }
+        // This socket carries exactly one history request. Deriv documents
+        // req_id as optional and the newer API may omit echo_req, so do not
+        // discard a valid candles response merely because req_id is absent.
         if (payload.msg_type !== 'candles' || !Array.isArray(payload.candles)) return
+        if (payload.req_id !== undefined && Number(payload.req_id) !== reqId) return
         finish(toCandles(payload.candles).sort((a, b) => a.time - b.time).slice(-count))
       } catch {
         // Ignore unrelated or malformed messages.
