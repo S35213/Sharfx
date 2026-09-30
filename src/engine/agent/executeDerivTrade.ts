@@ -2,7 +2,6 @@ import { decideAgentAction } from './decideAgentAction'
 import { prepareTradePlan } from './prepareTradePlan'
 import { placeDerivContract } from '../../data/deriv/derivTrading'
 import type { AgentContext } from './types'
-import type { SetupCandidate } from '../setup/types'
 import type { SymbolSpec, TradeOrder } from '../../types'
 
 
