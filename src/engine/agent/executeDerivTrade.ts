@@ -5,9 +5,8 @@ import type { AgentContext } from './types'
 import type { SetupCandidate } from '../setup/types'
 import type { SymbolSpec, TradeOrder } from '../../types'
 
-const LEVERAGE = 100
 
-const accountAffordableLotCeiling = (accountBalance: number, plan: ReturnType<typeof prepareTradePlan>, lotSize: number): number => {
+const accountAffordableLotCeiling = (accountBalance: number, plan: ReturnType<typeof prepareTradePlan>): number => {
   if (!Number.isFinite(accountBalance) || accountBalance <= 0 || !Number.isFinite(plan.estimatedLoss) || plan.estimatedLoss <= 0 || !Number.isFinite(plan.lotSize) || plan.lotSize <= 0) return 0
   const lossPerLot = plan.estimatedLoss / plan.lotSize
   if (!Number.isFinite(lossPerLot) || lossPerLot <= 0) return 0
@@ -54,7 +53,7 @@ export const executeDerivTrade = async (input: ExecuteDerivTradeInput): Promise<
     return { decision, plan: { ...plan, isValid: false, summary: 'Trade size is outside the selected symbol rules.' }, order: null }
   }
 
-  const accountLotCeiling = accountAffordableLotCeiling(input.accountBalance, plan, lotSize)
+  const accountLotCeiling = accountAffordableLotCeiling(input.accountBalance, plan)
   if (!Number.isFinite(accountLotCeiling) || accountLotCeiling <= 0 || lotSize > accountLotCeiling + 1e-8) {
     return { decision, plan: { ...plan, isValid: false, summary: 'Trade size exceeds the Deriv account balance when converted to the bot stake.' }, order: null }
   }
