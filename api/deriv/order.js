@@ -70,6 +70,7 @@ const requireConnection = async (req) => {
   const connection = await getProviderConnection(user.id, connectionId, true)
   if (!connection || connection.provider_id !== 'deriv') throw new Error('Deriv connection not found.')
   if (connection.state !== 'connected') throw new Error('Deriv connection is ' + connection.state + '.')
+  if (connection.environment !== 'demo') throw new Error('Live Deriv order execution is disabled in SHAFX release testing. Select the connected demo account.')
   if (connection.expires_at && new Date(connection.expires_at).getTime() <= Date.now()) throw new Error('Deriv authorization has expired. Reconnect Deriv.')
   if (String(connection.metadata?.accountCount || '') === '0') throw new Error('No Deriv trading accounts are available.')
   const token = await readProviderSecret(connection.credential_ref)
