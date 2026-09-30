@@ -124,92 +124,80 @@ export const fetchDerivMultiTimeframeCandles = async (
   symbol: string,
   timeframes: Timeframe[],
 ): Promise<Partial<Record<Timeframe, OHLCV[]>>> => {
-  const uniqueTimeframes = Array.from(new Set(timeframes))
-  if (!uniqueTimeframes.length) return {}
+  const requested = Array.from(new Set(timeframes))
+  if (!requested.length) return {}
 
-  const socket = await openPublicMarketSocket()
-  const results: Partial<Record<Timeframe, OHLCV[]>> = {}
-  const pending = new Map<number, { timeframe: Timeframe; fallback: boolean }>()
-  let remaining = uniqueTimeframes.length
+  let socket: WebSocket
+  try {
+    socket = await openPublicMarketSocket()
+  } catch {
+    return {}
+  }
 
-  return await new Promise((resolve, reject) => {
-    const timer = globalThis.setTimeout(() => {
-      try { socket.close() } catch (error) { void error }
-      resolve(results)
-    }, 9000)
-
-    const finishOne = (timeframe: Timeframe, candles: OHLCV[]): void => {
-      results[timeframe] = candles
-      remaining -= 1
-      if (remaining <= 0) {
+  let nextReqId = 8100
+  const requestHistory = async (timeframe: Timeframe, count: number): Promise<OHLCV[]> => {
+    const reqId = nextReqId++
+    return await new Promise((resolve) => {
+      let settled = false
+      const timer = globalThis.setTimeout(() => finish([]), 5000)
+      const finish = (candles: OHLCV[]): void => {
+        if (settled) return
+        settled = true
         globalThis.clearTimeout(timer)
-        try { socket.close() } catch (error) { void error }
-        resolve(results)
+        if (socket.onmessage === handleMessage) socket.onmessage = null
+        resolve(candles)
       }
-    }
-
-    socket.onmessage = (event: MessageEvent) => {
-      try {
-        const payload = JSON.parse(String(event.data)) as DerivTickResponse
-        const reqId = Number(payload.req_id)
-        const request = pending.get(reqId)
-        if (!request) return
-
-        if (payload.error?.message) {
-          if (!request.fallback) {
-            const fallbackReqId = reqId + 1000
-            pending.delete(reqId)
-            pending.set(fallbackReqId, { timeframe: request.timeframe, fallback: true })
-            socket.send(JSON.stringify(createDerivCandleHistoryRequest(toDerivSymbol(symbol), request.timeframe, {
-              end: Math.floor(Date.now() / 1000) - 172800,
-              count: request.timeframe === 'W1' ? 2100 : 300,
-              reqId: fallbackReqId,
-            })))
+      const handleMessage = (event: MessageEvent): void => {
+        try {
+          const payload = JSON.parse(String(event.data)) as DerivTickResponse
+          if (Number(payload.req_id) !== reqId) return
+          if (payload.error?.message) {
+            finish([])
             return
           }
-          pending.delete(reqId)
-          finishOne(request.timeframe, [])
-          return
+          if (payload.msg_type !== 'candles' || !Array.isArray(payload.candles)) return
+          finish(toCandles(payload.candles).sort((a, b) => a.time - b.time).slice(-count))
+        } catch {
+          // Ignore unrelated or malformed messages for this request.
         }
-
-        if (payload.msg_type !== 'candles' || !Array.isArray(payload.candles)) return
-        const raw = toCandles(payload.candles).sort((a, b) => a.time - b.time)
-        const candles = request.timeframe === 'W1' ? aggregateWeeklyCandles(raw) : raw
-        if (!candles.length && !request.fallback) {
-          const fallbackReqId = reqId + 1000
-          pending.delete(reqId)
-          pending.set(fallbackReqId, { timeframe: request.timeframe, fallback: true })
-          socket.send(JSON.stringify(createDerivCandleHistoryRequest(toDerivSymbol(symbol), request.timeframe, {
-            end: Math.floor(Date.now() / 1000) - 172800,
-            count: historyDefaultCount(request.timeframe),
-            reqId: fallbackReqId,
-          })))
-          return
-        }
-
-        pending.delete(reqId)
-        finishOne(request.timeframe, candles.slice(-300))
-      } catch {
-        // Ignore malformed responses; the bounded request timer will finish the batch.
       }
-    }
-
-    socket.onerror = () => {
-      globalThis.clearTimeout(timer)
-      try { socket.close() } catch (error) { void error }
-      reject(new Error('Deriv multi-timeframe history connection failed.'))
-    }
-
-    uniqueTimeframes.forEach((timeframe, index) => {
-      const reqId = 8100 + index
-      pending.set(reqId, { timeframe, fallback: false })
+      socket.onmessage = handleMessage
       socket.send(JSON.stringify(createDerivCandleHistoryRequest(toDerivSymbol(symbol), timeframe, {
         end: 'latest',
-        count: timeframe === 'W1' ? 2100 : 300,
+        count,
         reqId,
       })))
     })
-  })
+  }
+
+  try {
+    const needsLower = requested.some((timeframe) => ['M1', 'M5', 'M15', 'M30'].includes(timeframe))
+    const needsHourly = requested.some((timeframe) => ['H1', 'H4'].includes(timeframe))
+    const needsDaily = requested.some((timeframe) => ['D1', 'W1'].includes(timeframe))
+
+    const [m1, h1, d1] = await Promise.all([
+      needsLower ? requestHistory('M1', 600) : Promise.resolve([]),
+      needsHourly ? requestHistory('H1', 400) : Promise.resolve([]),
+      needsDaily ? requestHistory('D1', 2100) : Promise.resolve([]),
+    ])
+
+    const results: Partial<Record<Timeframe, OHLCV[]>> = {}
+
+    for (const timeframe of requested) {
+      if (timeframe === 'M1') results.M1 = m1.slice(-300)
+      else if (timeframe === 'M5') results.M5 = aggregateCandles(m1, 'M5').slice(-300)
+      else if (timeframe === 'M15') results.M15 = aggregateCandles(m1, 'M15').slice(-300)
+      else if (timeframe === 'M30') results.M30 = aggregateCandles(m1, 'M30').slice(-300)
+      else if (timeframe === 'H1') results.H1 = h1.slice(-300)
+      else if (timeframe === 'H4') results.H4 = aggregateCandles(h1, 'H4').slice(-300)
+      else if (timeframe === 'D1') results.D1 = d1.slice(-300)
+      else if (timeframe === 'W1') results.W1 = aggregateWeeklyCandles(d1).slice(-300)
+    }
+
+    return results
+  } finally {
+    try { socket.close() } catch (error) { void error }
+  }
 }
 
 export const subscribeDerivForexQuotes = async (
@@ -319,6 +307,28 @@ export const aggregateWeeklyCandles = (candles: OHLCV[]): OHLCV[] => {
     }
   }
   return [...buckets.values()].sort((a, b) => a.time - b.time).slice(-300)
+}
+
+const aggregateCandles = (candles: OHLCV[], timeframe: Timeframe): OHLCV[] => {
+  if (!candles.length) return []
+  const buckets = new Map<number, OHLCV>()
+  for (const candle of candles) {
+    const epochSeconds = Math.floor(candle.time / 1000)
+    const bucket = candleBucketMs(epochSeconds, timeframe)
+    const existing = buckets.get(bucket)
+    if (!existing) {
+      buckets.set(bucket, { ...candle, time: bucket })
+    } else {
+      buckets.set(bucket, {
+        time: bucket,
+        open: existing.open,
+        high: Math.max(existing.high, candle.high),
+        low: Math.min(existing.low, candle.low),
+        close: candle.close,
+      })
+    }
+  }
+  return [...buckets.values()].sort((a, b) => a.time - b.time)
 }
 
 const candleBucketMs = (epochSeconds: number, timeframe: Timeframe): number => (
