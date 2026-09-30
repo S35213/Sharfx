@@ -43,7 +43,7 @@ export const executeDerivTrade = async (input: ExecuteDerivTradeInput): Promise<
     decision: {
       ...decision,
       action: 'WAIT',
-      reason: 'SHAFX broker execution is paused while the Deriv-native manual bridge is being rebuilt.',
+      rationale: 'SHAFX broker execution is paused while the Deriv-native manual bridge is being rebuilt.',
     },
     plan,
     order: null,
