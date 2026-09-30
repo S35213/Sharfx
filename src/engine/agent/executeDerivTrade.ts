@@ -63,7 +63,7 @@ export const executeDerivTrade = async (input: ExecuteDerivTradeInput): Promise<
     return { decision, plan: { ...plan, isValid: false, summary: 'Trade size exceeds the selected Deriv account margin ceiling.' }, order: null }
   }
 
-  const multiplier = 10
+  const multiplier = 100
   const lotMultiplier = plan.lotSize > 0 ? lotSize / plan.lotSize : 1
   const estimatedLoss = Number((plan.estimatedLoss * lotMultiplier).toFixed(2))
   const estimatedReward = Number((plan.estimatedReward * lotMultiplier).toFixed(2))
