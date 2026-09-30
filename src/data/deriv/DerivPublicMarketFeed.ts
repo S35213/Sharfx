@@ -132,24 +132,43 @@ export const subscribeDerivForexQuotes = async (
     if (stopped) return
     try {
       const payload = JSON.parse(String(event.data)) as DerivTickResponse
-      if (payload.msg_type !== 'tick' || typeof payload.tick?.symbol !== 'string') return
-      const quote = Number(payload.tick.quote)
-      const epoch = Number(payload.tick.epoch)
-      if (!Number.isFinite(quote) || quote <= 0 || !Number.isFinite(epoch)) return
-      onQuote(formatForexSymbol(payload.tick.symbol), quote, epoch)
+      if (payload.msg_type === 'tick' && typeof payload.tick?.symbol === 'string') {
+        const quote = Number(payload.tick.quote)
+        const epoch = Number(payload.tick.epoch)
+        if (Number.isFinite(quote) && quote > 0 && Number.isFinite(epoch)) {
+          onQuote(formatForexSymbol(payload.tick.symbol), quote, epoch)
+        }
+        return
+      }
+      if (payload.msg_type === 'history' && payload.history?.times?.length && payload.history?.prices?.length) {
+        const index = Math.min(payload.history.times.length, payload.history.prices.length) - 1
+        if (index < 0) return
+        const epoch = Number(payload.history.times[index])
+        const quote = Number(payload.history.prices[index])
+        const requested = payload.req_id !== undefined ? payload.req_id - 7101 : -1
+        const symbol = requested >= 0 && requested < normalizedSymbols.length ? formatForexSymbol(normalizedSymbols[requested]) : ''
+        if (symbol && Number.isFinite(epoch) && Number.isFinite(quote) && quote > 0) onQuote(symbol, quote, epoch)
+      }
     } catch {
       // Ignore malformed catalog messages without interrupting the quote watch.
     }
   }
 
-  // Deriv's current public ticks endpoint subscribes to a specific symbol per
-  // request. Keep one socket for the whole Market Watch, but send one ticks
-  // request for each symbol rather than sending an array as the ticks value.
+  // The public ticks endpoint accepts one symbol per request. Prime every
+  // watchlist row with the latest available price, then keep each symbol live.
   normalizedSymbols.forEach((symbol, index) => {
+    const reqId = 7101 + index
+    socket.send(JSON.stringify({
+      ticks_history: symbol,
+      end: 'latest',
+      count: 1,
+      style: 'ticks',
+      req_id: reqId,
+    }))
     socket.send(JSON.stringify({
       ticks: symbol,
       subscribe: 1,
-      req_id: 7101 + index,
+      req_id: reqId + normalizedSymbols.length,
     }))
   })
 
