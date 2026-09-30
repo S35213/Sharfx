@@ -183,7 +183,7 @@ const place = async (req) => {
       requestedStake,
       multiplier,
       durationSeconds,
-      environment: connection.environment,
+      environment: account.environment,
     },
   })
   return result
