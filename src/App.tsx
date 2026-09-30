@@ -451,7 +451,9 @@ const TerminalContent: React.FC = () => {
       status: 'available',
       executionMode: 'external',
       authMethods: ['oauth2'],
-      description: 'Connected Deriv account',
+      description: activeProviderSelection?.environment === 'demo'
+        ? 'Connected Deriv demo account • demo order placement is enabled for testing.'
+        : 'Connected Deriv live account • live order placement is disabled during SHAFX release testing.',
       capabilities: {
         accountRead: true, marketData: true, historicalCandles: true, realtimeMarketData: true, realtimeAccountData: true,
         positionsRead: false, ordersRead: false, orderPlacement: true, orderCancellation: false, orderModification: false,
