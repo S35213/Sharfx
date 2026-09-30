@@ -39,7 +39,17 @@ export const useMultiTimeframeCandles = (
       if (cancelled) return
       if (baseM1Candles.length > 0) next.M1 = baseM1Candles
       else if (fallbackCandles.length > 0) next[fallbackTimeframe] = fallbackCandles
-      setFrames(next)
+      // Do not wipe a working frame cache because one public-history request
+      // timed out or returned an empty result.
+      setFrames((previous) => {
+        const merged = { ...previous, ...next }
+        for (const timeframe of TIMEFRAMES) {
+          if ((next[timeframe] ?? []).length === 0 && (previous[timeframe] ?? []).length > 0) {
+            merged[timeframe] = previous[timeframe]
+          }
+        }
+        return merged
+      })
     }
 
     void load()
