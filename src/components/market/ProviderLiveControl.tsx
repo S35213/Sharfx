@@ -106,7 +106,7 @@ export const ProviderLiveControl: React.FC<ProviderLiveControlProps> = ({ provid
 
   useEffect(() => {
     const stream = streamRef.current
-    if (!stream) return
+    if (!stream || typeof stream.setTimeframe !== 'function') return
     void stream.setTimeframe(timeframe).catch((error) => {
       setStatus('error')
       setErrorMessage(error instanceof Error ? error.message : 'Unable to change the Deriv timeframe.')
