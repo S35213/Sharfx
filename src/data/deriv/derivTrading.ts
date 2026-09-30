@@ -48,6 +48,7 @@ interface ProviderOrderPayload {
   raw?: {
     contractId?: string | number
     spot?: number | string
+    profit?: number | string
   }
 }
 
