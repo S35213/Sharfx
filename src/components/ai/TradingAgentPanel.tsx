@@ -925,10 +925,15 @@ export function TradingAgentPanel({
         <div className="mt-3 rounded-xl border border-shafx-border bg-shafx-bg/60 p-3">
           <div className="flex items-center justify-between gap-2">
             <span className="font-mono text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted">CURRENT GATE</span>
-            <span className="font-mono text-[8px] text-shafx-textMuted">{activeBotScan ? 'candidate found' : 'no candidate'}</span>
+            <span className="font-mono text-[8px] text-shafx-textMuted">{/^ORDER ERROR •/i.test(status) ? 'order rejected' : activeBotScan ? 'candidate found' : 'no candidate'}</span>
           </div>
           <div className="mt-1 text-[9px] font-semibold leading-4 text-shafx-text">{status}</div>
-          <div className="mt-1 text-[8px] leading-4 text-shafx-textMuted">{buildBotDataWaitReason(timeframeFrames, currentPrice, marketReadRows) ?? 'DATA READY • live candles and price are available.'}</div>
+          {!/^ORDER ERROR •/i.test(status) && (
+            <div className="mt-1 text-[8px] leading-4 text-shafx-textMuted">
+              <span className="font-semibold uppercase tracking-[0.1em] text-shafx-textMuted">SCAN DIAGNOSTICS • </span>
+              {buildBotDataWaitReason(timeframeFrames, currentPrice, marketReadRows) ?? 'DATA READY • live candles and price are available.'}
+            </div>
+          )}
         </div>
 
         {phase === 'ANALYZING' && (
