@@ -40,22 +40,6 @@ export const ProviderLiveControl: React.FC<ProviderLiveControlProps> = ({ provid
     onActiveChangeRef.current = onActiveChange
   }, [onUpdate, onActiveChange])
 
-  useEffect(() => {
-    timeframeRef.current = timeframe
-    const stream = streamRef.current
-    if (!stream) return
-    setErrorMessage(null)
-    const update = async (): Promise<void> => {
-      try {
-        if (stream.setSymbol) await stream.setSymbol(symbol)
-        if (stream.setTimeframe) await stream.setTimeframe(timeframe)
-      } catch (error) {
-        setStatus('error')
-        setErrorMessage(error instanceof Error ? error.message : 'Unable to switch the selected market.')
-      }
-    }
-    void update()
-  }, [symbol, timeframe])
 
   useEffect(() => {
     let disposed = false
@@ -120,7 +104,7 @@ export const ProviderLiveControl: React.FC<ProviderLiveControlProps> = ({ provid
       disposed = true
       void closeExisting()
     }
-  }, [connection, providerId])
+  }, [connection, providerId, symbol, timeframe])
 
   const label = status === 'live' ? 'LIVE' : status === 'connecting' ? 'CONNECTING' : status === 'error' ? 'RETRY' : 'WAITING'
   return <div className="relative">
