@@ -42,6 +42,7 @@ export const createDerivCandleHistoryRequest = (
   count: options.count ?? historyDefaultCount(timeframe),
   style: 'candles' as const,
   granularity: historyGranularitySeconds(timeframe),
+  adjust_start_time: 1,
   req_id: options.reqId ?? 1,
 })
 
@@ -180,7 +181,7 @@ export const fetchDerivMultiTimeframeCandles = async (
           pending.set(fallbackReqId, { timeframe: request.timeframe, fallback: true })
           socket.send(JSON.stringify(createDerivCandleHistoryRequest(toDerivSymbol(symbol), request.timeframe, {
             end: Math.floor(Date.now() / 1000) - 172800,
-            count: 300,
+            count: historyDefaultCount(request.timeframe),
             reqId: fallbackReqId,
           })))
           return
@@ -430,7 +431,7 @@ export class DerivPublicMarketFeed {
     this.historyRequestMode = end === 'latest' ? 'latest' : 'fallback'
     socket.send(JSON.stringify(createDerivCandleHistoryRequest(this.symbol, this.timeframe, {
       end,
-      count: 300,
+      count: historyDefaultCount(this.timeframe),
       reqId: id,
     })))
   }
