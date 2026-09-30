@@ -136,6 +136,8 @@ const place = async (req) => {
         stop_loss: Math.max(0, Number(order.stopLossAmount) || 0),
       },
       underlying_symbol: toDerivSymbol(symbol),
+      duration: durationSeconds,
+      duration_unit: 's',
       req_id: 1,
     }, 1)
     const proposalId = String(proposal?.proposal?.id || '')
