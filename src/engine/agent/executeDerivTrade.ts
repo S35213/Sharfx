@@ -62,6 +62,13 @@ export const executeDerivTrade = async (input: ExecuteDerivTradeInput): Promise<
   const estimatedLoss = Number((plan.estimatedLoss * lotMultiplier).toFixed(2))
   const stake = estimatedLoss
   const estimatedReward = Number((plan.estimatedReward * lotMultiplier).toFixed(2))
+  if (!Number.isFinite(stake) || stake < 1) {
+    return {
+      decision,
+      plan: { ...plan, isValid: false, summary: 'Deriv minimum stake is 1 ' + input.accountCurrency + '. Current calculated risk is ' + stake.toFixed(2) + '.' },
+      order: null,
+    }
+  }
 
   const order = await placeDerivContract({
     connection: {
