@@ -40,7 +40,7 @@ export async function placeDerivContract(input: PlaceInput): Promise<TradeOrder>
         quantity: input.stake,
         stake: input.stake,
         currency: input.currency,
-        multiplier: input.multiplier ?? 10,
+        multiplier: input.multiplier ?? 100,
         durationSeconds: input.durationSeconds ?? 30,
         takeProfitAmount: input.rewardAmount,
         stopLossAmount: input.riskAmount,
