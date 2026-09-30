@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { aggregateWeeklyCandles, createDerivCandleHistoryRequest, DERIV_LEGACY_PUBLIC_WS_URL, DERIV_PUBLIC_WS_URL, SHAFX_MARKET_PROXY_WS_URL, getDerivMarketWebSocketUrl, toDerivSymbol } from './DerivPublicMarketFeed'
+import { aggregateWeeklyCandles, createDerivCandleHistoryRequest, DERIV_PUBLIC_WS_URL, SHAFX_MARKET_PROXY_WS_URL, getDerivMarketWebSocketUrl, toDerivSymbol } from './DerivPublicMarketFeed'
 
 describe('DerivPublicMarketFeed', () => {
   it('uses the current public WebSocket endpoint for local fallback', () => {
@@ -64,7 +64,7 @@ describe('DerivPublicMarketFeed', () => {
     expect(createDerivCandleHistoryRequest('frxEURUSD', 'W1')).toEqual({
       ticks_history: 'frxEURUSD',
       end: 'latest',
-      count: 2100,
+      count: 650,
       style: 'candles',
       granularity: 86400,
       adjust_start_time: 1,
