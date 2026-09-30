@@ -499,7 +499,10 @@ export function TradingAgentPanel({
         const order = result.order
         if (!order) {
           setLastResult('WAIT')
-          setStatus('WAIT • the Deriv risk/setup gate did not produce a valid trade')
+          const planReason = result.plan && !result.plan.isValid ? result.plan.summary : ''
+          const decisionReason = result.decision.rationale || 'No executable setup was produced.'
+          const reason = planReason || decisionReason
+          setStatus('WAIT • ' + reason)
           return
         }
 
