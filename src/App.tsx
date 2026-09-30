@@ -158,7 +158,6 @@ const TerminalContent: React.FC = () => {
         // The chart's own feed remains independent if watchlist transport fails.
       }
 
-      let discoveredStop: (() => void) | undefined
       try {
         const active = await fetchDerivActiveForexSymbols()
         if (cancelled) return
@@ -180,7 +179,6 @@ const TerminalContent: React.FC = () => {
 
       stopQuotes = () => {
         baselineStop?.()
-        discoveredStop?.()
       }
     }
     void start()
