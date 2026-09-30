@@ -381,7 +381,7 @@ const TerminalContent: React.FC = () => {
         connection: derivOrderConnection,
         symbol: draft.symbol,
         side: draft.type,
-        stake: draft.riskAmount,
+        stake: Math.max(1, draft.riskAmount),
         currency: resolvedAccountData.currency,
         multiplier: 100,
         durationSeconds: 30,
