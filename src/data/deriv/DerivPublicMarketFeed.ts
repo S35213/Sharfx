@@ -12,10 +12,11 @@ export const getDerivMarketWebSocketUrl = (): string => {
   // WebSocket is proxied there so the deployed app has one controlled market-data
   // entry point. Local development keeps the direct Deriv endpoint.
   const hostname = window.location.hostname
-  if (hostname === 'localhost' || hostname === '127.0.0.1') return DERIV_LEGACY_PUBLIC_WS_URL
-  // Staging uses Deriv's proven public socket directly so Cloudflare proxy latency/failure
-  // cannot hold the chart in CONNECTING. Production still prefers the Cloudflare proxy.
-  if (hostname === 'sharfx-pr55-staging.150sharingan2.workers.dev') return DERIV_LEGACY_PUBLIC_WS_URL
+  if (hostname === 'localhost' || hostname === '127.0.0.1') return DERIV_PUBLIC_WS_URL
+  // Staging and production both start with Deriv's current public endpoint. The
+  // legacy endpoint remains a fallback; the Cloudflare proxy remains available
+  // for deployments that explicitly configure it.
+  if (hostname === 'sharfx-pr55-staging.150sharingan2.workers.dev') return DERIV_PUBLIC_WS_URL
   return SHAFX_MARKET_PROXY_WS_URL
 }
 
@@ -97,16 +98,41 @@ const openSinglePublicMarketSocket = (url: string, timeoutMs: number): Promise<W
   }
 })
 
-const openPublicMarketSocket = async (timeoutMs = 3000): Promise<WebSocket> => {
-  let lastError: Error | null = null
-  for (const url of publicMarketSocketUrls()) {
-    try {
-      return await openSinglePublicMarketSocket(url, timeoutMs)
-    } catch (error) {
+const openPublicMarketSocket = async (timeoutMs = 2500): Promise<WebSocket> => {
+  const urls = publicMarketSocketUrls()
+  if (urls.length === 1) return openSinglePublicMarketSocket(urls[0], timeoutMs)
+
+  return await new Promise((resolve, reject) => {
+    let settled = false
+    let failures = 0
+    let lastError: Error | null = null
+    const sockets = new Set<WebSocket>()
+
+    const fail = (error: unknown): void => {
+      failures += 1
       lastError = error instanceof Error ? error : new Error('Deriv public market socket failed.')
+      if (!settled && failures >= urls.length) {
+        settled = true
+        reject(lastError)
+      }
     }
-  }
-  throw lastError ?? new Error('No Deriv public market endpoint could be reached.')
+
+    urls.forEach((url) => {
+      void openSinglePublicMarketSocket(url, timeoutMs)
+        .then((socket) => {
+          if (settled) {
+            try { socket.close() } catch (error) { void error }
+            return
+          }
+          settled = true
+          resolve(socket)
+          for (const other of sockets) {
+            try { other.close() } catch (error) { void error }
+          }
+        })
+        .catch(fail)
+    })
+  })
 }
 
 export const fetchDerivActiveForexSymbols = async (): Promise<DerivActiveSymbol[]> => {
