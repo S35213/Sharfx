@@ -103,14 +103,17 @@ SHAFX Signal Desk / analysis remains part of the product idea, but analysis does
 - [x] New Render service `sharfx-deriv-render` built successfully
 - [x] New Render service reached LIVE
 - [x] New Render service emitted no warning/error logs during the observed verification window after startup
-- [ ] Verify an actual external HTTP response from the Render service
+- [x] GitHub CI externally reached `https://sharfx-deriv-render.onrender.com/` and received HTTP 200
+- [x] GitHub CI confirmed the returned homepage contains `SHAFX`
+- [ ] Authenticated backend probe: current `/api/auth?action=me` returned HTTP 503 during the first smoke run because Render was missing `SUPABASE_SERVICE_ROLE_KEY`
+- [ ] Verify `/api/auth?action=me` returns the expected unauthenticated HTTP 401 after required Supabase server variables are configured
 - [ ] Verify the SHAFX UI loads in a browser
-- [ ] Verify API routes required by SHAFX are reachable
 - [ ] Verify Deriv OAuth callback works on the Render hostname
 
 ### 5. Broker proof-of-life
 
 - [ ] Sign into SHAFX test deployment
+- [ ] Configure Render server secrets required for SHAFX identity and Deriv OAuth
 - [ ] Connect Deriv OAuth/demo account
 - [ ] Confirm selected demo account/currency
 - [ ] Select EUR/USD
@@ -178,3 +181,17 @@ When a new action is completed, append it to the action tree and change its chec
 - Cloudflare Workers SDK issue matching the Render Workerd/NOSENTRY/Cap'n Proto error class: https://github.com/cloudflare/workerd/issues/7401
 - Render replacement service URL: https://sharfx-deriv-render.onrender.com
 - Render service dashboard: https://dashboard.render.com/web/srv-dav8hrt9fdbs73d690s0
+
+
+### 2026-10-01 — HTTP smoke test and environment discovery
+
+- Added a CI smoke step that performs an external HTTP request to the Render test service.
+- Smoke result: Render homepage returned **HTTP 200** and contained `SHAFX`.
+- Smoke result: `/api/auth?action=me` returned **HTTP 503**.
+- Inspected `api/auth.js` and confirmed the 503 is intentional when any of `SUPABASE_URL`, `SUPABASE_ANON_KEY`, or `SUPABASE_SERVICE_ROLE_KEY` is missing.
+- Set the SHAFX staging Supabase URL and anon key on Render.
+- Set `SHAfx_SITE_URL=https://sharfx-deriv-render.onrender.com`.
+- The missing server-side Supabase service-role credential is now the blocking configuration item for the authenticated backend path.
+- Do not paste service-role or Deriv secret values into chat. They must be entered directly into Render's environment/secrets settings.
+- Required next server secrets for the broker/auth proof: `SUPABASE_SERVICE_ROLE_KEY`, `DERIV_CLIENT_ID`, `DERIV_CLIENT_SECRET`, and `SHAFX_DERIV_SESSION_SECRET` (at least 32 characters). `SHAFX_ADMIN_KEY` is needed for the owner console; Paystack secrets are not required for the current broker proof.
+- **Current gate:** configure the required server secrets, then rerun the Render HTTP/auth smoke and continue to Deriv OAuth/demo proof-of-life.
