@@ -1,0 +1,34 @@
+name: Render test smoke
+
+on:
+  push:
+    branches:
+      - test/rebuild-deriv-native-manual-20260930
+    paths-ignore:
+      - 'docs/**'
+  workflow_dispatch:
+
+jobs:
+  render-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for Render test service
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="https://sharfx-deriv-render.onrender.com"
+          for attempt in $(seq 1 36); do
+            status="$(curl -sS -L -o /tmp/shafx-home.html -w '%{http_code}' --max-time 15 "$url/" || true)"
+            echo "Attempt $attempt: / -> HTTP $status"
+            if [ "$status" = "200" ]; then
+              break
+            fi
+            sleep 10
+          done
+
+          test -s /tmp/shafx-home.html
+          grep -qi '<html' /tmp/shafx-home.html
+
+          api_status="$(curl -sS -o /tmp/shafx-auth.json -w '%{http_code}' --max-time 15 "$url/api/auth?action=me" || true)"
+          echo "Auth probe -> HTTP $api_status"
+          test "$api_status" = "401"
