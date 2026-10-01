@@ -193,5 +193,14 @@ When a new action is completed, append it to the action tree and change its chec
 - Set `SHAfx_SITE_URL=https://sharfx-deriv-render.onrender.com`.
 - The missing server-side Supabase service-role credential is now the blocking configuration item for the authenticated backend path.
 - Do not paste service-role or Deriv secret values into chat. They must be entered directly into Render's environment/secrets settings.
-- Required next server secrets for the broker/auth proof: `SUPABASE_SERVICE_ROLE_KEY`, `DERIV_CLIENT_ID`, `DERIV_CLIENT_SECRET`, and `SHAFX_DERIV_SESSION_SECRET` (at least 32 characters). `SHAFX_ADMIN_KEY` is needed for the owner console; Paystack secrets are not required for the current broker proof.
+- Required next server configuration for the broker/auth proof: `SUPABASE_SERVICE_ROLE_KEY`, `DERIV_CLIENT_ID`, and `SHAFX_DERIV_SESSION_SECRET` (at least 32 characters). The current Deriv OAuth 2.0 + PKCE flow does **not** require a `DERIV_CLIENT_SECRET`; the deployed code does not read one, and Deriv's current OAuth documentation shows the authorization-code exchange using client ID + code verifier + redirect URI. `SHAFX_ADMIN_KEY` is needed for the owner console; Paystack secrets are not required for the current broker proof.
 - **Current gate:** configure the required server secrets, then rerun the Render HTTP/auth smoke and continue to Deriv OAuth/demo proof-of-life.
+
+
+### 2026-10-01 — Corrected Deriv credential requirements
+
+- Verified current Deriv OAuth 2.0 documentation: registered OAuth client requires a `client_id` and pre-registered `redirect_uri`; PKCE uses a generated `code_verifier`/challenge. The token exchange example does not require a client secret. citeturn301323search0
+- Verified the SHAFX rebuild code path `lib/deriv/oauth.js`: `exchangeCode()` passes client ID, code, verifier, and redirect URI, with no client-secret argument.
+- Therefore **do not create or enter a Deriv client secret for this test flow** unless the Deriv dashboard/API later requires one for this specific app configuration.
+- `SUPABASE_ANON_KEY` is already configured on the Render test service from the SHAFX Staging Supabase project.
+- Current missing server-side configuration remains `SUPABASE_SERVICE_ROLE_KEY` and `SHAFX_DERIV_SESSION_SECRET`; `DERIV_CLIENT_ID` also needs to be present on Render.
