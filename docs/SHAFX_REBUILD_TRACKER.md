@@ -95,15 +95,18 @@ SHAFX Signal Desk / analysis remains part of the product idea, but analysis does
 
 ### 4. Current runtime investigation
 
-- [x] Render logs show the service process is live
-- [x] Render logs also show repeated Cloudflare Workerd/NOSENTRY warnings:
-  `NOSENTRY RPC connection broken for non-DISCONNECTED reason`
-- [x] Render metrics currently show no HTTP request data for the observed period
-- [ ] Determine whether the warning is harmless or prevents reliable HTTP serving
-- [ ] Fix the runtime/start strategy if necessary
-- [ ] Verify an actual HTTP response from the Render service
-- [ ] Verify the SHAFX UI loads
+- [x] Render's first `sharfx-deriv-test2` runtime used `wrangler dev --local`
+- [x] That runtime produced repeated Workerd/NOSENTRY Cap'n Proto errors
+- [x] Cloudflare's current issue tracker documents this error class in Linux `wrangler dev`/Miniflare local development; this is a known local-runtime problem rather than evidence that the SHAFX application build is broken.
+- [x] Replaced the Render runtime with a plain Node HTTP server (`render-server.mjs`) so Render no longer runs the Cloudflare local Worker runtime
+- [x] Changed Render-hosted market data to use Deriv's public WebSocket directly instead of the Cloudflare market proxy
+- [x] New Render service `sharfx-deriv-render` built successfully
+- [x] New Render service reached LIVE
+- [x] New Render service emitted no warning/error logs during the observed verification window after startup
+- [ ] Verify an actual external HTTP response from the Render service
+- [ ] Verify the SHAFX UI loads in a browser
 - [ ] Verify API routes required by SHAFX are reachable
+- [ ] Verify Deriv OAuth callback works on the Render hostname
 
 ### 5. Broker proof-of-life
 
@@ -145,10 +148,16 @@ SHAFX Signal Desk / analysis remains part of the product idea, but analysis does
 - First deployment failed.
 - Retrieved Render build logs and identified missing dependency installation.
 - Created `sharfx-deriv-test2` with `npm install && npm run build`.
-- Confirmed deployment reached LIVE.
-- Retrieved runtime logs and found repeated Workerd/NOSENTRY warnings.
-- Render HTTP metrics for the observation window contained no request data.
-- **Current gate:** runtime/HTTP verification.
+- Confirmed `sharfx-deriv-test2` reached LIVE.
+- Retrieved runtime logs and found repeated Workerd/NOSENTRY warnings from the `wrangler dev --local` runtime.
+- Researched the exact error and found a current Cloudflare Workers SDK issue documenting the same Cap'n Proto/NOSENTRY failure class in Linux local `wrangler dev`/Miniflare environments.
+- Replaced the Render runtime with `render-server.mjs`, a Node HTTP server that serves `dist/client` and adapts SHAFX API handlers.
+- Created `sharfx-deriv-render` using `node render-server.mjs`.
+- Confirmed Render build success and LIVE status for the replacement service.
+- Observed no Render warning/error logs from the replacement runtime during the verification window.
+- Added direct Deriv public WebSocket selection for `*.onrender.com` deployments so market data does not depend on Cloudflare.
+- Added a Render smoke-test workflow file. It is present in the test branch, but GitHub did not report an executed smoke workflow for the observed commits, so it is not counted as a passed HTTP test.
+- **Current gate:** external HTTP/browser verification, then Deriv OAuth/demo proof-of-life.
 
 ## Handoff rule for future chats
 
@@ -161,3 +170,11 @@ Do not:
 - merge PR #57 before the checklist reaches the merge gate
 
 When a new action is completed, append it to the action tree and change its checkbox only after verification.
+
+
+## Evidence references
+
+- Cloudflare local development documentation: https://developers.cloudflare.com/workers/local-development/
+- Cloudflare Workers SDK issue matching the Render Workerd/NOSENTRY/Cap'n Proto error class: https://github.com/cloudflare/workerd/issues/7401
+- Render replacement service URL: https://sharfx-deriv-render.onrender.com
+- Render service dashboard: https://dashboard.render.com/web/srv-dav8hrt9fdbs73d690s0
