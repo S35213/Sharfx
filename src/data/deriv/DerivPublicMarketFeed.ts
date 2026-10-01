@@ -13,9 +13,11 @@ export const getDerivMarketWebSocketUrl = (): string => {
   // entry point. Local development keeps the direct Deriv endpoint.
   const hostname = window.location.hostname
   if (hostname === 'localhost' || hostname === '127.0.0.1') return DERIV_PUBLIC_WS_URL
-  // Staging and production both start with Deriv's current public endpoint. The
-  // legacy endpoint remains a fallback; the Cloudflare proxy remains available
-  // for deployments that explicitly configure it.
+  // Render test deployments do not run inside the Cloudflare Worker runtime,
+  // so the public market WebSocket should connect directly to Deriv there.
+  // WebSockets do not use browser CORS rules, and this avoids depending on the
+  // Cloudflare proxy while the alternate hosting test is running.
+  if (hostname.endsWith('.onrender.com')) return DERIV_PUBLIC_WS_URL
   if (hostname === 'sharfx-pr55-staging.150sharingan2.workers.dev') return DERIV_PUBLIC_WS_URL
   return SHAFX_MARKET_PROXY_WS_URL
 }
