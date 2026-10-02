@@ -35,7 +35,7 @@ const toPositiveNumber = (value: string): number => {
 }
 
 const QUICK_STAKES = ['1.00', '5.00', '10.00', '25.00']
-const QUICK_MULTIPLIERS = ['10', '25', '50', '100']
+const QUICK_MULTIPLIERS = ['50', '100', '150', '250', '500']
 
 export const OrderPanel: React.FC<Props> = ({
   symbol,
@@ -51,7 +51,7 @@ export const OrderPanel: React.FC<Props> = ({
 }) => {
   const [side, setSide] = useState<TradeSide>(aiSetup?.direction ?? 'BUY')
   const [stake, setStake] = useState('1.00')
-  const [multiplier, setMultiplier] = useState('25')
+  const [multiplier, setMultiplier] = useState('100')
   const [exitsOpen, setExitsOpen] = useState(false)
   const [stopLossAmount, setStopLossAmount] = useState('')
   const [takeProfitAmount, setTakeProfitAmount] = useState('')
