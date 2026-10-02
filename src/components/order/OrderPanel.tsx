@@ -156,7 +156,6 @@ export const OrderPanel: React.FC<Props> = ({
 
   const busy = state === 'quoting' || state === 'buying'
   const accountLabel = connection?.environment === 'live' ? 'LIVE' : connection ? 'DEMO' : 'OFFLINE'
-  const sideLabel = side === 'BUY' ? 'BUY UP' : 'SELL DOWN'
 
   return (
     <section className="overflow-hidden rounded-xl border border-shafx-border bg-shafx-surface shadow-[0_14px_34px_rgba(0,0,0,.22)]">
