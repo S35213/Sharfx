@@ -428,3 +428,13 @@ When a new action is completed, append it to the action tree and change its chec
 - Installed and relevant: **Figma** and **Canva**.
 - MagicPath is available in the plugin catalog but is not installed/eligible in this workspace, so it was not used.
 - I did not replace the SHAFX UI with a generic template. The new ticket is coded directly around SHAFX + Deriv Multiplier behavior.
+
+## 2026-10-02 — Multiplier/proposal buy-path correction
+- User-visible failure: `PROPOSAL: Multiplier is not in acceptable range. Accepts 100,200,300,500,800.`
+- Root cause: the experimental ticket still exposed older quick multiplier presets (50/100/150/250/500), while the connected Deriv EUR/USD demo market/account reported the current accepted set 100/200/300/500/800. The UI presets were aligned to the observed accepted set.
+- Second failure: `BUY: Unknown contract proposal`.
+- Root cause: SHAFX requested a proposal in one authenticated WebSocket and later attempted to buy that proposal through a newly opened authenticated WebSocket. Deriv's documented workflow keeps proposal and buy on the same WebSocket. The confirmation path now re-prices immediately and buys the fresh proposal on the same authenticated socket, avoiding stale/unknown proposal IDs.
+- Added `subscribe: 1` to multiplier proposal requests to match the current Deriv workflow example.
+- CI run `37012612863` completed SUCCESS; install, build, static smoke, lint, tests, audit, and Render rebuild-service verification all passed.
+- Render deployment for commit `9ade8da9f6561aa57c4cc43db9337a91e9051e78`: `dep-davr0bmnfi0s7385k480` status LIVE.
+- Authenticated demo proposal -> buy -> monitor -> close remains the final broker-proof gate; no real/demo contract purchase is claimed until an authenticated user interaction returns and verifies a Deriv contract ID.
