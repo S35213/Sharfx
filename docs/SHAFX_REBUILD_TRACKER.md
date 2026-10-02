@@ -268,3 +268,10 @@ When a new action is completed, append it to the action tree and change its chec
 - GitHub Actions run `37002217929` completed SUCCESS: install, build, lint, tests, audit, and Render verification all passed.
 - Exact Render/Deriv smoke evidence: homepage HTTP 200; active EUR/USD + M1/H1/D1 candles verified from Deriv public WebSocket; `/api/auth?action=me` HTTP 401.
 - **Pending security item (not changed):** Supabase staging reports `public.shafx_bot_catalog` with RLS disabled. It should not be silently changed because enabling RLS requires an intentional read policy; candidate remediation remains a deliberate follow-up.
+
+
+### 2026-10-02 — Demo-first regression test added and passed
+
+- Added `src/data/provider/providerConnections.test.ts` covering the exact rebuild rule: when an unselected Deriv connection has both active demo and live accounts, the default selection must choose the demo account.
+- CI run `37002455938` completed SUCCESS; the `npm test` step and Render verification step both completed successfully.
+- Render remained LIVE and the existing external smoke checks stayed green for this commit.
