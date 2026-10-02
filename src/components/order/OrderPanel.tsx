@@ -33,7 +33,7 @@ const toPositiveNumber = (value: string): number => {
 }
 
 const QUICK_STAKES = ['1.00', '5.00', '10.00', '25.00']
-const QUICK_MULTIPLIERS = ['50', '100', '150', '250', '500']
+const QUICK_MULTIPLIERS = ['100', '200', '300', '500', '800']
 
 export const OrderPanel: React.FC<Props> = ({
   symbol,
