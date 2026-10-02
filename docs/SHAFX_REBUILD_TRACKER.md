@@ -351,3 +351,15 @@ When a new action is completed, append it to the action tree and change its chec
 - It then stopped on tablet portrait `768x1024` because the test incorrectly demanded scrolling even when the landing content fit inside the viewport.
 - Corrected the test: scrolling is required only when measured document height exceeds the viewport; in every case the Create account button must still be reachable and the signup submit control must be scrollable into view.
 - **Verification status:** pending final universal browser smoke.
+
+### 2026-10-02 — Manual trading UX/root-cause fix
+
+- User-reported behavior: tapping the large BUY/SELL controls appeared to do nothing.
+- Root cause: those controls previously only changed the selected `side`; broker execution started only after a separate `GET DERIV QUOTE` button, which made the primary trading controls appear non-functional.
+- `src/components/order/OrderPanel.tsx` now makes BUY UP / SELL DOWN the actual first action: each click requests a live Deriv proposal immediately, with a visible loading state and error state.
+- After the proposal, SHARFX shows a compact Trade Review and requires an explicit `Place BUY UP` / `Place SELL DOWN` confirmation before calling Deriv `buy`.
+- Reworked the ticket around a unique SHARFX trader workflow: Direction → Trade size → Multiplier → optional SHARFX Protection → broker proposal → confirmation → contract ID.
+- Replaced the ambiguous `Use SHAFX Guard` button with a clear `SHARFX Protection` ON/OFF control. The preset visibly states that it sets max loss to 50% of stake and target profit to 100% of stake; the trader can edit those values before requesting the proposal.
+- Added quick stake and multiplier controls plus account-share context so the ticket is useful without presenting FX-lot semantics that do not match Deriv Multiplier contracts.
+- Current broker behavior remains demo-only for order execution; no live trade capability was enabled by this UI change.
+- **Verification status:** application build/CI and deployed Render smoke are still required. This change does not by itself prove a real demo contract purchase until an authenticated user completes the flow.
