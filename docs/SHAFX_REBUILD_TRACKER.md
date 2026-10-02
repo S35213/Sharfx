@@ -372,3 +372,23 @@ When a new action is completed, append it to the action tree and change its chec
 - M5 is shown as the chart/trader context; it is not incorrectly sent as the broker contract duration.
 - This is an original SHARFX workflow, not an MT5/Deriv visual copy.
 - **Verification:** pending CI/build/Render smoke and authenticated proposal check.
+
+
+### 2026-10-02 — Manual trade failure root cause + SHAFX-native ticket verified
+
+- The reported MULTDOWN proposal failure was traced to two concrete inputs rather than a generic connection problem:
+  1. SHAFX was sending a numeric Multiplier duration that Deriv rejected for the current Multiplier workflow. The experimental order bridge now sends the Deriv-native duration_unit: "s" proposal shape first and only falls back to short numeric durations when Deriv specifically reports a duration/date-expiry error.
+  2. The mobile ticket was allowing multiplier 25. Deriv's live public EUR/USD proposal response explicitly rejected that value and returned the accepted set 50, 100, 150, 250, 500. SHAFX now defaults to 100× and exposes only those accepted FX values in the quick controls.
+- The manual ticket was stripped down and redesigned as the original SHAFX SHAFX Order workflow:
+  Market → BUY UP / SELL DOWN → Stake + Multiplier → optional Auto exits → Review Order → Confirm.
+- Stop-loss/take-profit controls are now hidden behind Auto exits instead of dominating the main ticket. The UI explains them in plain language and keeps the broker-native stake/multiplier model visible.
+- BUY UP / SELL DOWN are the actual first action: tapping one requests the current Deriv proposal immediately. Nothing is bought until the explicit confirmation button is pressed.
+- Render deploy dep-davqit9mgk9c73c50910 for commit 34327a80f323aaef942db7da772a40b8a7047a76 reached LIVE.
+- Final SHAFX CI run 37009527626 completed SUCCESS. Build, static-server smoke, lint, 271 tests across 64 test files, npm audit, and the external Render verification gate all passed.
+- Exact external evidence from that final run:
+  - Render / → HTTP 200
+  - SHAFX_RENDER_STATIC_PASS
+  - DERIV_PUBLIC_SMOKE_PASS: active EUR/USD + M1/H1/D1 candles + MULTDOWN proposal verified
+  - Render /api/auth?action=me → HTTP 401
+- The automated evidence proves the corrected public EUR/USD Multiplier proposal path. It does not by itself prove an authenticated user-session demo purchase, contract monitoring, or close; those broker proof gates remain explicitly open until a real SHAFX demo session completes quote → confirm → buy → monitor → close.
+- Production/main and Cloudflare were not modified by this experiment.
