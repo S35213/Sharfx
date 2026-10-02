@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - test/rebuild-deriv-native-manual-20260930
-    paths-ignore:
-      - 'docs/**'
   workflow_dispatch:
 
 jobs:
