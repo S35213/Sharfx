@@ -55,7 +55,7 @@ const candlesRequest = (reqId, granularity, count) => ({
 const socket = await openSocket()
 
 try {
-  socket.send(JSON.stringify({ active_symbols: 'brief', product_type: 'basic', req_id: 100 }))
+  socket.send(JSON.stringify({ active_symbols: 'brief', req_id: 100 }))
   const symbols = await waitForMessage(socket, (payload) => payload.req_id === 100 && (payload.msg_type === 'active_symbols' || payload.error), 'active_symbols')
   if (!Array.isArray(symbols.active_symbols) || !symbols.active_symbols.some((row) => String(row.symbol || row.underlying_symbol || '').toLowerCase() === SYMBOL.toLowerCase())) {
     throw new Error('EUR/USD is not present in Deriv active symbols')
