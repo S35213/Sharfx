@@ -27,6 +27,7 @@ import { CHART_SETTINGS_EVENT, readChartWorkspaceSettings, type ChartWorkspaceSe
 import { getSymbolSpec, SYMBOL_SPECS } from './data/mock/symbols'
 import { getProviderConnections, chooseDefaultProviderSelection, getStoredProviderSelection, subscribeToProviderSelection, type ActiveProviderSelection } from './data/provider/providerConnections'
 import { ProviderAccountStreamManager, providerAccountStreamKey } from './data/provider/ProviderAccountStreamManager'
+import type { ProviderOrderResult, ProviderPosition, ProviderStreamEvent } from './integrations/core/types'
 import { analyzeLiquidity } from './engine/liquidity'
 import { analyzeMarketStructure, findSwingPoints } from './engine/marketStructure'
 import { analyzeSupportResistance } from './engine/supportResistance'
@@ -34,6 +35,75 @@ import type { AccountData, MarketAnalysis, MarketPair, OHLCV, SymbolSpec, TradeO
 import type { SetupCandidate } from './engine/setup/types'
 import { mockWatchlist } from './data/mock/watchlist'
 import { fetchDerivActiveForexSymbols, subscribeDerivForexQuotes } from './data/deriv/DerivPublicMarketFeed'
+
+const normalizeProviderSymbol = (value: string): string => {
+  if (/^frx[A-Z0-9]{6}$/i.test(value)) {
+    const pair = value.slice(3).toUpperCase()
+    return pair.slice(0, 3) + '/' + pair.slice(3)
+  }
+  return value
+}
+
+const providerPositionToTrade = (position: ProviderPosition): TradeOrder => {
+  const metadata = position.metadata || {}
+  const stake = Number(metadata.stake ?? position.quantity ?? 0)
+  const multiplierValue = Number(metadata.multiplier ?? 0)
+  const entryPrice = Number(position.entryPrice ?? 0)
+  return {
+    id: String(position.id),
+    symbol: normalizeProviderSymbol(position.symbol),
+    type: position.side,
+    lotSize: Number.isFinite(stake) ? stake : 0,
+    entryPrice: Number.isFinite(entryPrice) ? entryPrice : 0,
+    stopLoss: position.stopLoss ?? null,
+    takeProfit: position.takeProfit ?? null,
+    riskPercent: 0,
+    riskAmount: Number.isFinite(stake) ? stake : 0,
+    rewardAmount: 0,
+    riskRewardRatio: 0,
+    status: 'open',
+    openTime: typeof metadata.purchaseTime === 'number'
+      ? new Date(metadata.purchaseTime * 1000).toISOString()
+      : new Date().toISOString(),
+    profit: Number.isFinite(position.unrealizedPL) ? position.unrealizedPL : 0,
+    providerOrderId: String(position.id),
+    brokerProduct: 'DERIV_MULTIPLIER',
+    stake: Number.isFinite(stake) ? stake : 0,
+    multiplier: Number.isFinite(multiplierValue) && multiplierValue > 0 ? multiplierValue : undefined,
+  }
+}
+
+const providerOrderToTrade = (order: ProviderOrderResult): TradeOrder | null => {
+  const raw = (order.raw && typeof order.raw === 'object') ? order.raw as Record<string, unknown> : {}
+  const contractId = String(order.providerOrderId || raw.contractId || '')
+  if (!contractId) return null
+  const stake = Number(raw.stake ?? order.quantity ?? 0)
+  const profit = Number(raw.profit)
+  const symbol = normalizeProviderSymbol(String(order.symbol || raw.symbol || ''))
+  return {
+    id: contractId,
+    symbol: symbol || 'EUR/USD',
+    type: order.side === 'SELL' ? 'SELL' : 'BUY',
+    lotSize: Number.isFinite(stake) ? stake : 0,
+    entryPrice: Number(raw.entryPrice ?? raw.startSpot ?? raw.buyPrice ?? 0),
+    stopLoss: null,
+    takeProfit: null,
+    riskPercent: 0,
+    riskAmount: Number.isFinite(stake) ? stake : 0,
+    rewardAmount: 0,
+    riskRewardRatio: 0,
+    status: 'closed',
+    openTime: typeof raw.purchaseTime === 'number'
+      ? new Date(raw.purchaseTime * 1000).toISOString()
+      : order.timestamp || new Date().toISOString(),
+    closeTime: order.timestamp || new Date().toISOString(),
+    profit: Number.isFinite(profit) ? profit : 0,
+    providerOrderId: contractId,
+    brokerProduct: 'DERIV_MULTIPLIER',
+    stake: Number.isFinite(stake) ? stake : undefined,
+    multiplier: Number(raw.multiplier) > 0 ? Number(raw.multiplier) : undefined,
+  }
+}
 
 const TerminalContent: React.FC = () => {
   const { selectedSymbol, setSelectedSymbol, timeframe, setTimeframe } = useTerminal()
@@ -242,6 +312,36 @@ const TerminalContent: React.FC = () => {
           (status) => {
             if (cancelled) return
             if (status === 'error') pushToast('Deriv account stream interrupted. SHAFX is reconnecting.')
+          },
+          (event: ProviderStreamEvent) => {
+            if (cancelled || key !== providerAccountStreamKey({
+              providerId: activeProviderSelection.providerId,
+              connectionId: activeProviderSelection.connectionId,
+              accountId: activeProviderSelection.accountId ?? '',
+              accountType: activeProviderSelection.environment === 'demo' ? 'demo' : 'real',
+            })) return
+
+            if (event.type === 'position') {
+              const trade = providerPositionToTrade(event.position)
+              setOpenPositions((current) => {
+                const next = current.filter((item) => item.id !== trade.id)
+                return [...next, trade].sort((a, b) => b.openTime.localeCompare(a.openTime))
+              })
+              setTradeHistory((current) => current.filter((item) => item.id !== trade.id))
+              return
+            }
+
+            if (event.type === 'order') {
+              const raw = (event.order.raw && typeof event.order.raw === 'object') ? event.order.raw as Record<string, unknown> : {}
+              if (raw.closed !== true) return
+              const trade = providerOrderToTrade(event.order)
+              if (!trade) return
+              setOpenPositions((current) => current.filter((item) => item.id !== trade.id))
+              setTradeHistory((current) => {
+                const next = [trade, ...current.filter((item) => item.id !== trade.id)]
+                return next.sort((a, b) => String(b.closeTime || b.openTime).localeCompare(String(a.closeTime || a.openTime)))
+              })
+            }
           },
         )
       } catch (error) {
