@@ -45,6 +45,8 @@ jobs:
           test -s /tmp/shafx-home.html
           grep -qi 'SHAFX' /tmp/shafx-home.html
 
+          node scripts/deriv-public-smoke.mjs
+
           auth_status="$(curl -sS -o /tmp/shafx-auth.json -w '%{http_code}' --max-time 15 "$url/api/auth?action=me" || true)"
           echo "Render auth probe -> HTTP $auth_status"
           test "$auth_status" = "401"
