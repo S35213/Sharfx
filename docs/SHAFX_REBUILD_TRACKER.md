@@ -42,7 +42,7 @@ SHAFX Signal Desk / analysis remains part of the product idea, but analysis does
 - **Base branch:** `fix/market-feed-test-syntax-20260927`
 - **Test branch:** `test/rebuild-deriv-native-manual-20260930`
 - **PR:** #57
-- **Latest rebuild commit at tracker update:** pending white-screen verification commit
+- **Latest rebuild commit at tracker update:** pending final external white-screen verification commit
 - **Cloudflare production:** `sharfx` — not being changed by this test
 - **Render test service:** `sharfx-deriv-render`
 - **Render URL:** https://sharfx-deriv-render.onrender.com
@@ -275,7 +275,9 @@ When a new action is completed, append it to the action tree and change its chec
 - Added `src/data/provider/providerConnections.test.ts` covering the exact rebuild rule: when an unselected Deriv connection has both active demo and live accounts, the default selection must choose the demo account.
 - CI run `37002455938` completed SUCCESS; the `npm test` step and Render verification step both completed successfully.
 - Render remained LIVE and the existing external smoke checks stayed green for this commit.
-\n\n### 2026-10-02 — Render white-screen investigation started\n\n- User reported the experimental Render URL opens to a blank white page on both laptop and phone.\n- Reviewed the live Render runtime and the static-serving path in `render-server.mjs`.\n- Root cause identified in the server fallback behavior: a missing client asset such as a JavaScript bundle was falling back to `index.html` with HTTP 200, so the browser could receive HTML where it expected JavaScript and leave `#root` empty.\n- Hardened Render static serving so extension-bearing missing assets return 404 instead of the SPA HTML, and normalized optional `/Sharfx/` asset prefixes.\n- Added startup-time client-asset validation, a `/__shafx/health` endpoint, and `scripts/render-static-smoke.mjs` to verify homepage, built asset status/content types, missing-asset 404 behavior, and the health endpoint.\n- Added the static smoke to CI before lint/tests.\n- **Verification status:** pending the new commit's build, CI, Render deployment, and external smoke verification. No browser UI pass is claimed yet.\n
+\n\n### 2026-10-02 — Render white-screen investigation started
+
+- User reported the experimental Render URL opens to a blank white page on both laptop and phone.\n- Reviewed the live Render runtime and the static-serving path in `render-server.mjs`.\n- Root cause identified in the server fallback behavior: a missing client asset such as a JavaScript bundle was falling back to `index.html` with HTTP 200, so the browser could receive HTML where it expected JavaScript and leave `#root` empty.\n- Hardened Render static serving so extension-bearing missing assets return 404 instead of the SPA HTML, and normalized optional `/Sharfx/` asset prefixes.\n- Added startup-time client-asset validation, a `/__shafx/health` endpoint, and `scripts/render-static-smoke.mjs` to verify homepage, built asset status/content types, missing-asset 404 behavior, and the health endpoint.\n- Added the static smoke to CI before lint/tests.\n- **Verification status:** pending the new commit's build, CI, Render deployment, and external smoke verification. No browser UI pass is claimed yet.\n
 
 ### 2026-10-02 — Static smoke found and isolated a second /Sharfx/ path bug
 
@@ -285,3 +287,9 @@ When a new action is completed, append it to the action tree and change its chec
 - Corrective patch: URL paths are now normalized by removing leading slashes before filesystem path validation, while retaining traversal protection.
 - The smoke test now explicitly checks a prefixed missing asset under /Sharfx/assets/... as well as the unprefixed path.
 - Verification status: pending rerun of build, static smoke, Render deployment, and external Render smoke.
+
+### 2026-10-02 — Render-specific smoke workflow hardening
+
+- Run 37003141541 for the previous white-screen fix failed before any Render request because `actions/setup-node` was configured with npm caching but this repository has no lockfile.
+- The Render smoke workflow is being corrected to remove lockfile-dependent npm caching and to verify the public Render homepage's referenced JavaScript/CSS assets, their HTTP 200 status, their content types, both prefixed and unprefixed missing-asset 404 behavior, and `/__shafx/health`.
+- This external asset gate is the final automated check for the white-screen fix; browser UI verification remains a separate unchecked gate.

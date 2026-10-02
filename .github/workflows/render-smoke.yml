@@ -14,7 +14,6 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: npm
       - name: Wait for Render test service
         shell: bash
         run: |
@@ -31,8 +30,41 @@ jobs:
 
           test -s /tmp/shafx-home.html
           grep -qi '<html' /tmp/shafx-home.html
+          grep -qi 'SHAFX' /tmp/shafx-home.html
 
-          auth_status="$(curl -sS -o /tmp/shafx-auth.json -w '%{http_code}' --max-time 15 "$url/api/auth?action=me" || true)"
-          echo "Auth probe -> HTTP $auth_status"
-          test "$auth_status" = "401"
+          mapfile -t asset_refs < <(
+            grep -oE '(src|href)="[^"]+"' /tmp/shafx-home.html |
+              sed -E 's/^(src|href)="//; s/"$//' |
+              grep -E '^/.*\.(js|css)(\?.*)?$' || true
+          )
+          test "${#asset_refs[@]}" -gt 0
+
+          for ref in "${asset_refs[@]}"; do
+            path_only="${ref%%?*}"
+            status="$(curl -sS -L -o /dev/null -w '%{http_code}' --max-time 15 "${url}${ref}")"
+            content_type="$(curl -sS -L -o /dev/null -w '%{content_type}' --max-time 15 "${url}${ref}")"
+            echo "Asset ${ref} -> HTTP ${status} content-type ${content_type}"
+            test "${status}" = "200"
+            case "${path_only}" in
+              *.js) echo "${content_type}" | grep -qi 'javascript' ;;
+              *.css) echo "${content_type}" | grep -qi 'css' ;;
+              *) echo "Unexpected asset reference: ${ref}" >&2; exit 1 ;;
+            esac
+          done
+
+          for missing in             "/assets/__shafx_missing_asset__.js"             "/Sharfx/assets/__shafx_missing_asset__.js"; do
+            status="$(curl -sS -L -o /dev/null -w '%{http_code}' --max-time 15 "${url}${missing}" || true)"
+            echo "Missing asset ${missing} -> HTTP ${status}"
+            test "${status}" = "404"
+          done
+
+          health_status="$(curl -sS -o /tmp/shafx-health.json -w '%{http_code}' --max-time 15 "${url}/__shafx/health")"
+          echo "Health probe -> HTTP ${health_status}"
+          test "${health_status}" = "200"
+          grep -q '"ok":true' /tmp/shafx-health.json
+
+          auth_status="$(curl -sS -o /tmp/shafx-auth.json -w '%{http_code}' --max-time 15 "${url}/api/auth?action=me" || true)"
+          echo "Auth probe -> HTTP ${auth_status}"
+          test "${auth_status}" = "401"
+
           node scripts/deriv-public-smoke.mjs
