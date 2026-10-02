@@ -191,8 +191,18 @@ input::placeholder { color: #667285; }
 @media (prefers-reduced-motion:reduce){.shafx-brand-intro,.shafx-brand-intro *,.shafx-brand-transition,.shafx-brand-transition *{animation:none!important;transition:none!important}.shafx-brand-intro,.shafx-brand-transition{opacity:0;visibility:hidden;pointer-events:none}}
 /* Universal viewport polish: keep SHARFX spatial instead of cramped when the device rotates. */
 @media (min-width: 1000px) {
-  body { overflow: hidden; }
-  #root { height: 100svh; }
+  /* Public/auth pages must remain document-scrollable on desktop.
+     The trading terminal has its own scoped viewport lock via
+     .shafx-terminal-root, so changing the global document here does not
+     remove the terminal's compact desktop behavior. */
+  body {
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+  #root {
+    height: auto;
+    min-height: 100svh;
+  }
   .shafx-chart-stage { min-height: 0; }
 }
 

@@ -322,3 +322,11 @@ When a new action is completed, append it to the action tree and change its chec
 - Exact public evidence: homepage HTTP 200; JavaScript assets HTTP 200 with `application/javascript`; CSS asset HTTP 200 with `text/css`; missing asset 404 for both `/assets/...` and `/Sharfx/assets/...`; `/__shafx/health` HTTP 200; `/api/auth?action=me` HTTP 401; `DERIV_PUBLIC_SMOKE_PASS` for EUR/USD M1/H1/D1.
 - Render deployment `dep-davplq79nhgc7387a90g` for commit `3f91019f3c3882b9b73ff1150896870b3218a3de` reached **LIVE** with the hardened server.
 - **White-screen verification status:** the public static-serving failure is fixed and externally verified. Interactive browser UI rendering remains a separate unchecked item because no authenticated browser automation session is available in the current execution environment.
+
+### 2026-10-02 — Universal viewport/accessibility fix started
+
+- User reported that the Render SHAFX page worked on the URL but the laptop/HP could not scroll far enough to reach the account-creation controls.
+- Root cause identified in the global desktop CSS: for viewports `>= 1000px`, `body` was forced to `overflow: hidden` and `#root` was fixed to `height: 100svh`.
+- This global lock was inappropriate for the public welcome/auth pages because their content can exceed one viewport height, especially the create-account and email-verification states.
+- Corrective change: keep the document scrollable on desktop (`body` overflow-y auto, `#root` height auto/min-height) while leaving the trading terminal's own scoped desktop height/overflow rules unchanged.
+- **Verification status:** pending responsive CI, Render deployment, and public smoke verification. Browser visual verification remains separate.
