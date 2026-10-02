@@ -33,13 +33,12 @@ try {
     if (landingScrollState.bodyOverflowY === 'hidden') {
       throw new Error(viewport.name + ': landing page body overflow-y remained hidden')
     }
-    if (landingScrollState.documentHeight <= landingScrollState.viewportHeight + 1) {
-      throw new Error(viewport.name + ': landing page is not document-scrollable')
+    const landingNeedsScroll = landingScrollState.documentHeight > landingScrollState.viewportHeight + 1
+    if (landingNeedsScroll) {
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+      const afterScrollY = await page.evaluate(() => window.scrollY)
+      if (afterScrollY <= 0) throw new Error(viewport.name + ': document scroll position did not move when content exceeded the viewport')
     }
-
-    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
-    const afterScrollY = await page.evaluate(() => window.scrollY)
-    if (afterScrollY <= 0) throw new Error(viewport.name + ': document scroll position did not move')
     await createAccount.scrollIntoViewIfNeeded()
     const landingButtonRect = await createAccount.boundingBox()
     if (!landingButtonRect || landingButtonRect.top < 0 || landingButtonRect.bottom > viewport.height) {

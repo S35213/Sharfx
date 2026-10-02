@@ -344,3 +344,10 @@ When a new action is completed, append it to the action tree and change its chec
 - Corrected the browser test to validate the actual user-reported path: the public landing page must be document-scrollable, `window.scrollY` must move, the landing-page Create account button must be bringable into the viewport, and the account form's submit button must remain reachable after opening signup.
 - The code under test is unchanged by this correction.
 - **Verification status:** pending corrected universal browser smoke.
+
+### 2026-10-02 — Responsive smoke rule refined for fitting tablet layouts
+
+- Browser smoke run `37004348341` passed the full public asset/auth/Deriv checks and passed the phone `390x844` responsive path (`landingDocHeight=1359`, confirming real document scrolling).
+- It then stopped on tablet portrait `768x1024` because the test incorrectly demanded scrolling even when the landing content fit inside the viewport.
+- Corrected the test: scrolling is required only when measured document height exceeds the viewport; in every case the Create account button must still be reachable and the signup submit control must be scrollable into view.
+- **Verification status:** pending final universal browser smoke.
