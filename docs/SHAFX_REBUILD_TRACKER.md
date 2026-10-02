@@ -438,3 +438,12 @@ When a new action is completed, append it to the action tree and change its chec
 - CI run `37012612863` completed SUCCESS; install, build, static smoke, lint, tests, audit, and Render rebuild-service verification all passed.
 - Render deployment for commit `9ade8da9f6561aa57c4cc43db9337a91e9051e78`: `dep-davr0bmnfi0s7385k480` status LIVE.
 - Authenticated demo proposal -> buy -> monitor -> close remains the final broker-proof gate; no real/demo contract purchase is claimed until an authenticated user interaction returns and verifies a Deriv contract ID.
+
+## 2026-10-02 — Durable live trade state and browser-restart reconciliation
+- User-visible issue: newly opened Deriv trades appeared with fixed `0` profit and disappeared after browser restart.
+- Root cause: SHAFX manual trade state lived only in React memory. The authenticated Deriv account stream subscribed only to balance/transaction and did not restore open contracts, subscribe to `proposal_open_contract`, or load `profit_table` history.
+- Fix: the Deriv account stream now requests the authenticated `portfolio` and `profit_table` on startup/reconnect, subscribes to each open contract with `proposal_open_contract`, emits live open-contract P/L updates, and emits closed-contract/history events. SHAFX now hydrates open positions and history from those provider events after browser restart.
+- Provider stream manager now forwards account position/order events to the terminal so the trade table is updated from authoritative Deriv state rather than only local React state.
+- CI run `37031094292` SUCCESS: install, build, static smoke, lint, tests, audit, and Render rebuild verification all passed.
+- Render deployment `dep-davtaodckfvc73c6m3jg` LIVE for commit `73c33658800090ba6f986e5309e18158b040b3cd`.
+- Main/production/Cloudflare untouched. The final broker-proof gate remains an authenticated user demo contract that is opened, visibly reprices in SHAFX, survives browser refresh/restart, and then closes with recorded P/L.
