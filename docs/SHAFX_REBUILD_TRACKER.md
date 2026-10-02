@@ -108,6 +108,7 @@ SHAFX Signal Desk / analysis remains part of the product idea, but analysis does
 - [ ] Authenticated backend probe: current `/api/auth?action=me` returned HTTP 503 during the first smoke run because Render was missing `SUPABASE_SERVICE_ROLE_KEY`
 - [x] Verified `/api/auth?action=me` returns the expected unauthenticated HTTP 401 after the three required server credentials were configured
 - [ ] Verify the SHAFX UI loads interactively in a browser
+- [x] Verify Render public market smoke reaches Deriv and returns EUR/USD M1/H1/D1 candles
 - [ ] Verify Deriv OAuth callback works on the Render hostname
 
 ### 5. Broker proof-of-life
@@ -228,3 +229,25 @@ When a new action is completed, append it to the action tree and change its chec
 - Exact Render evidence on the same verification run: homepage HTTP 200 and /api/auth?action=me HTTP 401.
 - Browser automation is not available from the current execution environment: the installed Chromium is blocked by the environment, so no authenticated interactive UI/OAuth session has been claimed.
 - Current gate: real SHAFX login → Deriv OAuth → demo account selection → authenticated market/contract validation → proposal → explicit confirmation → demo buy → contract monitoring → close → SHAFX history.
+
+
+### 2026-10-02 — Deriv public market smoke verified
+
+- Added a non-destructive Deriv public WebSocket smoke check for EUR/USD.
+- First attempt failed correctly and exposed a test-harness issue: Deriv rejected `active_symbols` with `Properties not allowed: product_type`.
+- Corrected the smoke request by removing the unsupported `product_type` field.
+- Render deployed the correction in commit `fae58bed0c28ea49be5afbd16d2dcbceafa4afc6` and reached LIVE.
+- GitHub Actions run `37001593683` completed **SUCCESS**.
+- Exact smoke evidence: `DERIV_PUBLIC_SMOKE_PASS: active EUR/USD + M1/H1/D1 candles verified`.
+- Exact Render evidence in the same run: homepage HTTP 200 and `/api/auth?action=me` HTTP 401.
+- Build, lint, unit tests, npm audit, Render availability, Deriv public market smoke, and auth configuration probe all passed in that run.
+- **Current gate:** interactive SHAFX sign-in + Deriv OAuth/demo-account connection. No demo order has been claimed successful yet.
+
+### 2026-10-02 — Supabase staging verification
+
+- Confirmed SHAFX Staging Supabase project is ACTIVE_HEALTHY.
+- Confirmed broker tables exist: `shafx_provider_connections`, `shafx_provider_accounts`, `shafx_provider_order_intents`, and `shafx_provider_audit_events`.
+- Confirmed server-only provider-secret RPCs exist and are restricted to server-side execution.
+- Current staging data contains an existing Deriv connection with credential reference and two Deriv accounts (one demo USD and one live USD). This was observed in staging; it is not treated as proof of the current user-session OAuth flow or as proof of a successful demo trade.
+- Security finding documented: `public.shafx_bot_catalog` has RLS disabled. This was not auto-remediated because enabling RLS without an access policy could change intended access. 
+
