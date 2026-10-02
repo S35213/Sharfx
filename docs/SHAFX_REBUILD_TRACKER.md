@@ -392,3 +392,39 @@ When a new action is completed, append it to the action tree and change its chec
   - Render /api/auth?action=me → HTTP 401
 - The automated evidence proves the corrected public EUR/USD Multiplier proposal path. It does not by itself prove an authenticated user-session demo purchase, contract monitoring, or close; those broker proof gates remain explicitly open until a real SHAFX demo session completes quote → confirm → buy → monitor → close.
 - Production/main and Cloudflare were not modified by this experiment.
+
+
+### 2026-10-02 — Buy-path runtime error fixed + compact terminal-style ticket verified
+
+- The user's exact runtime error `DERIV: account is not defined` was a real SHAFX code bug in `api/deriv/order.js`: the `buy()` path destructured `user, connection, accountId, token` from `requireConnection()` but later referenced `account.environment`. The selected `account` object was therefore undefined at audit/error handling time after the broker buy response path.
+- Fixed by including `account` in the buy-path destructuring. No secret or credential change was required.
+- The manual ticket was redesigned again into a denser, professional-terminal-style SHAFX layout:
+  - compact `TRADE / DERIV` header with `EUR/USD · M5 · Multiplier`
+  - large but compact BUY UP / SELL DOWN quote controls
+  - stake and multiplier controls side-by-side
+  - accepted EUR/USD multiplier presets 50/100/150/250/500
+  - compact ENTRY / RISK / balance summary
+  - Stop loss / Take profit moved under an optional Protection drawer
+  - live proposal review and explicit confirmation remain separate
+  - no long instructional cards or oversized explanatory copy
+  - M5 remains chart context; Deriv Multiplier remains the broker contract model
+- The first compact-ticket commit failed only because of one unused `sideLabel` variable. That was removed and the subsequent build passed.
+- A pre-existing flaky realtime simulator test then failed at a wall-clock minute boundary. The test was made deterministic with Vitest fake time; this was a test-stability correction, not a change to the market simulation behavior.
+- Final commit: `07e65d320963b694d23b74ccbc4c6708b973d0b7`
+- Final Render deployment: `dep-davqreojo6nc738thm2g` — **LIVE**
+- Final SHAFX CI run: **37011466802 — SUCCESS**
+  - Build PASS
+  - static server PASS
+  - lint PASS (0 errors; existing warnings remain)
+  - 64 test files / 271 tests PASS
+  - npm audit PASS
+  - external Render verification PASS
+  - `DERIV_PUBLIC_SMOKE_PASS: active EUR/USD + M1/H1/D1 candles + MULTDOWN proposal verified`
+- Production/main and Cloudflare remained untouched.
+- Authenticated demo quote → buy → monitor → close is still an explicit broker-proof gate; the public smoke proves the proposal path, not a user's private authenticated purchase.
+
+### Design tooling checked
+
+- Installed and relevant: **Figma** and **Canva**.
+- MagicPath is available in the plugin catalog but is not installed/eligible in this workspace, so it was not used.
+- I did not replace the SHAFX UI with a generic template. The new ticket is coded directly around SHAFX + Deriv Multiplier behavior.
