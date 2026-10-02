@@ -259,3 +259,12 @@ When a new action is completed, append it to the action tree and change its chec
 - Re-ran the cancelled `verify` job successfully. Final job ID: 110821402611, conclusion: success.
 - Exact rerun evidence: Render homepage HTTP 200; `DERIV_PUBLIC_SMOKE_PASS: active EUR/USD + M1/H1/D1 candles verified`; `/api/auth?action=me` HTTP 401.
 - The current Render deployment remains LIVE for the rebuild branch.
+
+
+### 2026-10-02 — Demo-first account selection fix verified
+
+- Found and fixed a test-flow issue in `src/data/provider/providerConnections.ts`: when Deriv has both demo and live active accounts and no stored account selection exists, SHAFX now prefers an active demo account before falling back to another active account.
+- Verified Render deployed commit `6f983040dd6164cefa9b6c8dfeaa39169fa91f3c` to LIVE.
+- GitHub Actions run `37002217929` completed SUCCESS: install, build, lint, tests, audit, and Render verification all passed.
+- Exact Render/Deriv smoke evidence: homepage HTTP 200; active EUR/USD + M1/H1/D1 candles verified from Deriv public WebSocket; `/api/auth?action=me` HTTP 401.
+- **Pending security item (not changed):** Supabase staging reports `public.shafx_bot_catalog` with RLS disabled. It should not be silently changed because enabling RLS requires an intentional read policy; candidate remediation remains a deliberate follow-up.
