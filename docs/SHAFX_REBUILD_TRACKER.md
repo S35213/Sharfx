@@ -42,7 +42,7 @@ SHAFX Signal Desk / analysis remains part of the product idea, but analysis does
 - **Base branch:** `fix/market-feed-test-syntax-20260927`
 - **Test branch:** `test/rebuild-deriv-native-manual-20260930`
 - **PR:** #57
-- **Latest rebuild commit at tracker update:** `8d0bd6b4a02551b1c7766c7df1d2ac62108db61b`
+- **Latest rebuild commit at tracker update:** pending white-screen verification commit
 - **Cloudflare production:** `sharfx` — not being changed by this test
 - **Render test service:** `sharfx-deriv-render`
 - **Render URL:** https://sharfx-deriv-render.onrender.com
@@ -52,7 +52,7 @@ SHAFX Signal Desk / analysis remains part of the product idea, but analysis does
 - **Render plan:** Free
 - **Render branch:** `test/rebuild-deriv-native-manual-20260930`
 - **Render build command:** `npm install && npm run build`
-- **Render start command:** `npx wrangler dev --local --ip 0.0.0.0 --port $PORT`
+- **Render start command:** `node render-server.mjs`
 
 ## Action tree
 
@@ -275,3 +275,4 @@ When a new action is completed, append it to the action tree and change its chec
 - Added `src/data/provider/providerConnections.test.ts` covering the exact rebuild rule: when an unselected Deriv connection has both active demo and live accounts, the default selection must choose the demo account.
 - CI run `37002455938` completed SUCCESS; the `npm test` step and Render verification step both completed successfully.
 - Render remained LIVE and the existing external smoke checks stayed green for this commit.
+\n\n### 2026-10-02 — Render white-screen investigation started\n\n- User reported the experimental Render URL opens to a blank white page on both laptop and phone.\n- Reviewed the live Render runtime and the static-serving path in `render-server.mjs`.\n- Root cause identified in the server fallback behavior: a missing client asset such as a JavaScript bundle was falling back to `index.html` with HTTP 200, so the browser could receive HTML where it expected JavaScript and leave `#root` empty.\n- Hardened Render static serving so extension-bearing missing assets return 404 instead of the SPA HTML, and normalized optional `/Sharfx/` asset prefixes.\n- Added startup-time client-asset validation, a `/__shafx/health` endpoint, and `scripts/render-static-smoke.mjs` to verify homepage, built asset status/content types, missing-asset 404 behavior, and the health endpoint.\n- Added the static smoke to CI before lint/tests.\n- **Verification status:** pending the new commit's build, CI, Render deployment, and external smoke verification. No browser UI pass is claimed yet.\n

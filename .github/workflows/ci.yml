@@ -23,6 +23,9 @@ jobs:
           package-manager-cache: false
       - run: npm install
       - run: npm run build
+      - name: Verify Node Render static server
+        shell: bash
+        run: node scripts/render-static-smoke.mjs
       - run: npm run lint
       - run: npm test
       - run: npm audit --audit-level=high

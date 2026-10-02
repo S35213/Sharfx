@@ -133,24 +133,45 @@ const invokeHandler = async (handler, req, res, requestUrl) => {
   res.end(responseBody ?? '')
 }
 
+const stripRenderBase = (pathname) => {
+  for (const prefix of ['/Sharfx', '/sharfx']) {
+    if (pathname === prefix) return '/'
+    if (pathname.startsWith(prefix + '/')) return pathname.slice(prefix.length)
+  }
+  return pathname
+}
+
 const safeClientPath = (pathname) => {
   const decoded = decodeURIComponent(pathname)
   const normalized = path.normalize(decoded)
-  if (normalized.includes('..') || path.isAbsolute(normalized)) return null
-  return normalized.replace(/^[/\\]+/, '')
+  const segments = normalized.split(/[\\/]+/).filter(Boolean)
+  if (segments.includes('..') || path.isAbsolute(normalized)) return null
+  return segments.join('/')
 }
 
 const serveClient = async (requestUrl, req, res) => {
-  let relative = safeClientPath(requestUrl.pathname)
-  if (!relative || relative === '') relative = 'index.html'
+  const normalizedPathname = stripRenderBase(requestUrl.pathname)
+  let relative = safeClientPath(normalizedPathname)
+  const isOwnerRoute = normalizedPathname === '/owner' || normalizedPathname === '/owner/'
+
+  if (!relative || relative === '') relative = isOwnerRoute ? 'owner.html' : 'index.html'
   if (relative === 'owner') relative = 'owner.html'
 
   let filePath = path.join(clientRoot, relative)
+
   try {
     const stat = await fs.stat(filePath)
     if (stat.isDirectory()) filePath = path.join(filePath, 'index.html')
   } catch {
-    filePath = path.join(clientRoot, requestUrl.pathname === '/owner' ? 'owner.html' : 'index.html')
+    const requestedExtension = path.extname(relative)
+    const canUseSpaFallback = normalizedPathname === '/' || normalizedPathname.endsWith('/') || !requestedExtension
+
+    if (!canUseSpaFallback) {
+      sendJsonError(res, 404, 'SHAFX client asset not found.')
+      return
+    }
+
+    filePath = path.join(clientRoot, isOwnerRoute ? 'owner.html' : 'index.html')
   }
 
   try {
@@ -159,6 +180,7 @@ const serveClient = async (requestUrl, req, res) => {
     res.statusCode = 200
     res.setHeader('Content-Type', contentTypes[ext] || 'application/octet-stream')
     res.setHeader('Cache-Control', ext === '.html' ? 'no-cache' : 'public, max-age=31536000, immutable')
+    res.setHeader('X-Content-Type-Options', 'nosniff')
     if (req.method === 'HEAD') res.end()
     else res.end(body)
   } catch {
@@ -166,9 +188,28 @@ const serveClient = async (requestUrl, req, res) => {
   }
 }
 
+const verifyClientBuild = async () => {
+  const indexPath = path.join(clientRoot, 'index.html')
+  const html = await fs.readFile(indexPath, 'utf8')
+  if (!html.includes('<div id="root"></div>')) throw new Error('SHAFX client index.html is missing #root.')
+
+  const refs = Array.from(html.matchAll(/(?:src|href)="([^"]+)"/g), (match) => match[1])
+  const localRefs = refs.filter((ref) => ref && !ref.startsWith('data:') && !ref.startsWith('http:') && !ref.startsWith('https:') && !ref.startsWith('//'))
+
+  for (const ref of localRefs) {
+    const normalizedPathname = stripRenderBase(new URL(ref, 'http://127.0.0.1/').pathname)
+    const relative = safeClientPath(normalizedPathname)
+    if (!relative) continue
+    const candidate = path.join(clientRoot, relative)
+    await fs.access(candidate)
+  }
+
+  console.log('SHAFX_CLIENT_STATIC_PASS: ' + localRefs.length + ' local client references verified')
+}
+
 const server = createServer(async (req, res) => {
   try {
-    const requestUrl = new URL(req.url || '/', `http://127.0.0.1:${process.env.PORT || '10000'}`)
+    const requestUrl = new URL(req.url || '/', 'http://127.0.0.1:' + (process.env.PORT || '10000'))
     const handler = handlers[requestUrl.pathname]
 
     if (handler) {
@@ -182,6 +223,13 @@ const server = createServer(async (req, res) => {
         return
       }
       await invokeHandler(handler, req, res, requestUrl)
+      return
+    }
+
+    if (requestUrl.pathname === '/__shafx/health') {
+      res.statusCode = 200
+      res.setHeader('Content-Type', 'application/json; charset=utf-8')
+      res.end(JSON.stringify({ ok: true, service: 'sharfx-deriv-render', clientStatic: true }))
       return
     }
 
@@ -199,6 +247,13 @@ const server = createServer(async (req, res) => {
 })
 
 const port = Number(process.env.PORT || 10000)
-server.listen(port, '0.0.0.0', () => {
-  console.log(`SHAFX Render server listening on 0.0.0.0:${port}`)
-})
+verifyClientBuild()
+  .then(() => {
+    server.listen(port, '0.0.0.0', () => {
+      console.log('SHAFX Render server listening on 0.0.0.0:' + port)
+    })
+  })
+  .catch((error) => {
+    console.error('SHAFX_CLIENT_STATIC_FAIL:', error instanceof Error ? error.message : String(error))
+    process.exit(1)
+  })

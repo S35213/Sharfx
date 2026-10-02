@@ -10,6 +10,11 @@ jobs:
   render-smoke:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
       - name: Wait for Render test service
         shell: bash
         run: |
@@ -27,8 +32,7 @@ jobs:
           test -s /tmp/shafx-home.html
           grep -qi '<html' /tmp/shafx-home.html
 
+          auth_status="$(curl -sS -o /tmp/shafx-auth.json -w '%{http_code}' --max-time 15 "$url/api/auth?action=me" || true)"
+          echo "Auth probe -> HTTP $auth_status"
+          test "$auth_status" = "401"
           node scripts/deriv-public-smoke.mjs
-
-          api_status="$(curl -sS -o /tmp/shafx-auth.json -w '%{http_code}' --max-time 15 "$url/api/auth?action=me" || true)"
-          echo "Auth probe -> HTTP $api_status"
-          test "$api_status" = "401"
