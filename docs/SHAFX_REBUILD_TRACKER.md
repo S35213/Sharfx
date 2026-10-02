@@ -42,11 +42,11 @@ SHAFX Signal Desk / analysis remains part of the product idea, but analysis does
 - **Base branch:** `fix/market-feed-test-syntax-20260927`
 - **Test branch:** `test/rebuild-deriv-native-manual-20260930`
 - **PR:** #57
-- **Latest rebuild commit at tracker update:** `e52f1949b49428c2cea9be598dd7c7293fabc48f`
+- **Latest rebuild commit at tracker update:** `8d0bd6b4a02551b1c7766c7df1d2ac62108db61b`
 - **Cloudflare production:** `sharfx` — not being changed by this test
-- **Render test service:** `sharfx-deriv-test2`
-- **Render URL:** https://sharfx-deriv-test2.onrender.com
-- **Render service ID:** `srv-dav8cfmgekts73fvv54g`
+- **Render test service:** `sharfx-deriv-render`
+- **Render URL:** https://sharfx-deriv-render.onrender.com
+- **Render service ID:** `srv-dav8hrt9fdbs73d690s0`
 - **Render workspace:** `tea-dav85cugekts73fv54i0`
 - **Render region:** Frankfurt
 - **Render plan:** Free
@@ -106,8 +106,8 @@ SHAFX Signal Desk / analysis remains part of the product idea, but analysis does
 - [x] GitHub CI externally reached `https://sharfx-deriv-render.onrender.com/` and received HTTP 200
 - [x] GitHub CI confirmed the returned homepage contains `SHAFX`
 - [ ] Authenticated backend probe: current `/api/auth?action=me` returned HTTP 503 during the first smoke run because Render was missing `SUPABASE_SERVICE_ROLE_KEY`
-- [ ] Verify `/api/auth?action=me` returns the expected unauthenticated HTTP 401 after required Supabase server variables are configured
-- [ ] Verify the SHAFX UI loads in a browser
+- [x] Verified `/api/auth?action=me` returns the expected unauthenticated HTTP 401 after the three required server credentials were configured
+- [ ] Verify the SHAFX UI loads interactively in a browser
 - [ ] Verify Deriv OAuth callback works on the Render hostname
 
 ### 5. Broker proof-of-life
@@ -196,6 +196,16 @@ When a new action is completed, append it to the action tree and change its chec
 - Required next server configuration for the broker/auth proof: `SUPABASE_SERVICE_ROLE_KEY`, `DERIV_CLIENT_ID`, and `SHAFX_DERIV_SESSION_SECRET` (at least 32 characters). The current Deriv OAuth 2.0 + PKCE flow does **not** require a `DERIV_CLIENT_SECRET`; the deployed code does not read one, and Deriv's current OAuth documentation shows the authorization-code exchange using client ID + code verifier + redirect URI. `SHAFX_ADMIN_KEY` is needed for the owner console; Paystack secrets are not required for the current broker proof.
 - **Current gate:** configure the required server secrets, then rerun the Render HTTP/auth smoke and continue to Deriv OAuth/demo proof-of-life.
 
+
+### 2026-10-02 — Server credentials accepted and Render auth smoke passed
+
+- User entered `SUPABASE_SERVICE_ROLE_KEY`, `DERIV_CLIENT_ID`, and `SHAFX_DERIV_SESSION_SECRET` directly in the Render environment.
+- Updated `.github/workflows/render-smoke.yml` so the rebuild-branch smoke is triggered by pushes to the test branch rather than being skipped for docs-only changes.
+- Render auto-deployed commit `8d0bd6b4a02551b1c7766c7df1d2ac62108db61b` and reached **LIVE**.
+- GitHub Actions run `37000659224` completed **SUCCESS**: `npm install`, build, lint, tests, audit, and the Render verification step all passed.
+- External Render smoke evidence: homepage `/` returned HTTP 200 and `/api/auth?action=me` returned HTTP 401 (not 503). This verifies the backend is now configured enough to recognize an unauthenticated request instead of failing configuration.
+- Render service had no error-level or 5xx logs during the verification window.
+- **Current gate:** Deriv OAuth/demo proof-of-life and end-to-end manual quote → confirm → buy → monitor → close.
 
 ### 2026-10-01 — Corrected Deriv credential requirements
 
