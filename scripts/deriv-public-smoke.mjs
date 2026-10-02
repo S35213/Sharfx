@@ -86,7 +86,7 @@ try {
     contract_type: 'MULTDOWN',
     currency: 'USD',
     duration_unit: 's',
-    multiplier: 25,
+    multiplier: 100,
     underlying_symbol: SYMBOL,
     req_id: 104,
   }))
