@@ -337,3 +337,10 @@ When a new action is completed, append it to the action tree and change its chec
 - The smoke exercises the public welcome → Create account path at phone `390x844`, tablet portrait `768x1024`, tablet landscape `1024x768`, laptop `1366x768`, and TV `1920x1080` viewports.
 - It verifies the signup inputs render, the document is not globally locked with `overflow-y: hidden`, and the account-creation button can be scrolled into the viewport.
 - **Verification status:** pending the universal browser smoke run and Render deployment.
+
+### 2026-10-02 — Responsive smoke assertion corrected
+
+- Browser smoke run `37004194214` reached the live Render site and completed the asset/auth/Deriv checks, then failed only because the test incorrectly required the signup form itself to exceed the phone viewport height.
+- Corrected the browser test to validate the actual user-reported path: the public landing page must be document-scrollable, `window.scrollY` must move, the landing-page Create account button must be bringable into the viewport, and the account form's submit button must remain reachable after opening signup.
+- The code under test is unchanged by this correction.
+- **Verification status:** pending corrected universal browser smoke.

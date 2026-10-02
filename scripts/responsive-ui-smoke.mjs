@@ -19,6 +19,34 @@ try {
     await page.waitForTimeout(1700)
 
     const createAccount = page.getByRole('button', { name: 'Create account', exact: true })
+    const landingScrollState = await page.evaluate(() => {
+      const root = document.documentElement
+      const body = document.body
+      return {
+        viewportHeight: window.innerHeight,
+        documentHeight: Math.max(root.scrollHeight, body.scrollHeight),
+        bodyOverflowY: getComputedStyle(body).overflowY,
+        rootHeight: root.getBoundingClientRect().height,
+      }
+    })
+
+    if (landingScrollState.bodyOverflowY === 'hidden') {
+      throw new Error(viewport.name + ': landing page body overflow-y remained hidden')
+    }
+    if (landingScrollState.documentHeight <= landingScrollState.viewportHeight + 1) {
+      throw new Error(viewport.name + ': landing page is not document-scrollable')
+    }
+
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+    const afterScrollY = await page.evaluate(() => window.scrollY)
+    if (afterScrollY <= 0) throw new Error(viewport.name + ': document scroll position did not move')
+    await createAccount.scrollIntoViewIfNeeded()
+    const landingButtonRect = await createAccount.boundingBox()
+    if (!landingButtonRect || landingButtonRect.top < 0 || landingButtonRect.bottom > viewport.height) {
+      throw new Error(viewport.name + ': landing Create account button could not be brought into the viewport')
+    }
+
+    await page.evaluate(() => window.scrollTo(0, 0))
     await createAccount.click()
     await page.getByRole('heading', { name: 'Create your SHARFX account', exact: true }).waitFor({ state: 'visible', timeout: 10000 })
 
@@ -43,18 +71,15 @@ try {
       throw new Error(viewport.name + ': account-create button could not be scrolled into the viewport')
     }
 
-    if (viewport.height <= 844 && scrollState.documentHeight <= scrollState.viewportHeight + 1) {
-      throw new Error(viewport.name + ': expected a scrollable page for the signup form')
-    }
-
-    if (scrollState.bodyOverflowY === 'hidden') throw new Error(viewport.name + ': body overflow-y remained hidden')
+    if (scrollState.bodyOverflowY === 'hidden') throw new Error(viewport.name + ': signup page body overflow-y remained hidden')
 
     console.log(
       'SHAFX_RESPONSIVE_PASS:',
       viewport.name,
       viewport.width + 'x' + viewport.height,
       'signup inputs=', await requiredInputs.count(),
-      'docHeight=', scrollState.documentHeight,
+      'landingDocHeight=', landingScrollState.documentHeight,
+      'signupDocHeight=', scrollState.documentHeight,
       'viewportHeight=', scrollState.viewportHeight,
     )
 
