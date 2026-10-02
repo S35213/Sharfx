@@ -68,3 +68,7 @@ jobs:
           test "${auth_status}" = "401"
 
           node scripts/deriv-public-smoke.mjs
+
+          npm install --no-save --no-package-lock playwright@1.55.0
+          npx playwright install --with-deps chromium
+          SHAFX_TEST_URL="$url" node scripts/responsive-ui-smoke.mjs

@@ -330,3 +330,10 @@ When a new action is completed, append it to the action tree and change its chec
 - This global lock was inappropriate for the public welcome/auth pages because their content can exceed one viewport height, especially the create-account and email-verification states.
 - Corrective change: keep the document scrollable on desktop (`body` overflow-y auto, `#root` height auto/min-height) while leaving the trading terminal's own scoped desktop height/overflow rules unchanged.
 - **Verification status:** pending responsive CI, Render deployment, and public smoke verification. Browser visual verification remains separate.
+
+### 2026-10-02 — Universal browser smoke added
+
+- Added `scripts/responsive-ui-smoke.mjs` using Playwright.
+- The smoke exercises the public welcome → Create account path at phone `390x844`, tablet portrait `768x1024`, tablet landscape `1024x768`, laptop `1366x768`, and TV `1920x1080` viewports.
+- It verifies the signup inputs render, the document is not globally locked with `overflow-y: hidden`, and the account-creation button can be scrolled into the viewport.
+- **Verification status:** pending the universal browser smoke run and Render deployment.
