@@ -251,3 +251,11 @@ When a new action is completed, append it to the action tree and change its chec
 - Current staging data contains an existing Deriv connection with credential reference and two Deriv accounts (one demo USD and one live USD). This was observed in staging; it is not treated as proof of the current user-session OAuth flow or as proof of a successful demo trade.
 - Security finding documented: `public.shafx_bot_catalog` has RLS disabled. This was not auto-remediated because enabling RLS without an access policy could change intended access. 
 
+
+
+### 2026-10-02 — Verification rerun completed successfully
+
+- The tracker commit's first SHAFX CI attempt was cancelled after its verification steps had already completed successfully; it was not treated as a pass on that basis.
+- Re-ran the cancelled `verify` job successfully. Final job ID: 110821402611, conclusion: success.
+- Exact rerun evidence: Render homepage HTTP 200; `DERIV_PUBLIC_SMOKE_PASS: active EUR/USD + M1/H1/D1 candles verified`; `/api/auth?action=me` HTTP 401.
+- The current Render deployment remains LIVE for the rebuild branch.
