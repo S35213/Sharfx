@@ -143,9 +143,9 @@ const stripRenderBase = (pathname) => {
 
 const safeClientPath = (pathname) => {
   const decoded = decodeURIComponent(pathname)
-  const normalized = path.normalize(decoded)
+  const normalized = path.normalize(decoded).replace(/^[/\\]+/, '')
   const segments = normalized.split(/[\\/]+/).filter(Boolean)
-  if (segments.includes('..') || path.isAbsolute(normalized)) return null
+  if (segments.includes('..')) return null
   return segments.join('/')
 }
 

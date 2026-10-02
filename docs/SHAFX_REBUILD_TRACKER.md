@@ -276,3 +276,12 @@ When a new action is completed, append it to the action tree and change its chec
 - CI run `37002455938` completed SUCCESS; the `npm test` step and Render verification step both completed successfully.
 - Render remained LIVE and the existing external smoke checks stayed green for this commit.
 \n\n### 2026-10-02 — Render white-screen investigation started\n\n- User reported the experimental Render URL opens to a blank white page on both laptop and phone.\n- Reviewed the live Render runtime and the static-serving path in `render-server.mjs`.\n- Root cause identified in the server fallback behavior: a missing client asset such as a JavaScript bundle was falling back to `index.html` with HTTP 200, so the browser could receive HTML where it expected JavaScript and leave `#root` empty.\n- Hardened Render static serving so extension-bearing missing assets return 404 instead of the SPA HTML, and normalized optional `/Sharfx/` asset prefixes.\n- Added startup-time client-asset validation, a `/__shafx/health` endpoint, and `scripts/render-static-smoke.mjs` to verify homepage, built asset status/content types, missing-asset 404 behavior, and the health endpoint.\n- Added the static smoke to CI before lint/tests.\n- **Verification status:** pending the new commit's build, CI, Render deployment, and external smoke verification. No browser UI pass is claimed yet.\n
+
+### 2026-10-02 — Static smoke found and isolated a second /Sharfx/ path bug
+
+- CI run 37002955939 correctly failed the new local Render static smoke before lint/tests.
+- Failure evidence: JS asset /Sharfx/assets/main-DexiJF2F.js returned text/html; charset=utf-8.
+- Root cause: the first static-serving hardening stripped the /Sharfx prefix, but then rejected the remaining URL path because it was still treated as an absolute filesystem path. That forced the SPA index.html fallback, reproducing the white-screen failure mode.
+- Corrective patch: URL paths are now normalized by removing leading slashes before filesystem path validation, while retaining traversal protection.
+- The smoke test now explicitly checks a prefixed missing asset under /Sharfx/assets/... as well as the unprefixed path.
+- Verification status: pending rerun of build, static smoke, Render deployment, and external Render smoke.

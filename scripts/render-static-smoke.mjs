@@ -47,6 +47,9 @@ try {
     if (/\.css$/i.test(ref) && !contentType.includes('css')) throw new Error('CSS asset ' + ref + ' returned ' + contentType)
   }
 
+  const prefixedMissing = await fetch(baseUrl + '/Sharfx/assets/__shafx_missing_asset__.js')
+  if (prefixedMissing.status !== 404) throw new Error('Prefixed missing JS asset returned HTTP ' + prefixedMissing.status + ' instead of 404')
+
   const missing = await fetch(baseUrl + '/assets/__shafx_missing_asset__.js')
   if (missing.status !== 404) throw new Error('Missing JS asset returned HTTP ' + missing.status + ' instead of 404')
 
