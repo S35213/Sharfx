@@ -293,3 +293,10 @@ When a new action is completed, append it to the action tree and change its chec
 - Run 37003141541 for the previous white-screen fix failed before any Render request because `actions/setup-node` was configured with npm caching but this repository has no lockfile.
 - The Render smoke workflow is being corrected to remove lockfile-dependent npm caching and to verify the public Render homepage's referenced JavaScript/CSS assets, their HTTP 200 status, their content types, both prefixed and unprefixed missing-asset 404 behavior, and `/__shafx/health`.
 - This external asset gate is the final automated check for the white-screen fix; browser UI verification remains a separate unchecked gate.
+
+### 2026-10-02 — Public Render asset smoke reached the live JS asset successfully
+
+- Render smoke run 37003309438 reached the public URL and verified `/assets/main-DRWdhYDK.js` returned HTTP 200 with `application/javascript; charset=utf-8`.
+- The run stopped only because the shell's query-string path extraction treated the literal `?` as a wildcard and misclassified the already-valid `.js` path.
+- Corrective test-only patch: strip query strings with `sed` before the extension check; no application-serving code was changed in this step.
+- Remaining verification: complete the public asset loop, both missing-asset 404 checks, health/auth probes, and Deriv public smoke.

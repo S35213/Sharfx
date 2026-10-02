@@ -40,7 +40,7 @@ jobs:
           test "${#asset_refs[@]}" -gt 0
 
           for ref in "${asset_refs[@]}"; do
-            path_only="${ref%%?*}"
+            path_only="$(printf '%s' "$ref" | sed 's/[?].*$//')"
             status="$(curl -sS -L -o /dev/null -w '%{http_code}' --max-time 15 "${url}${ref}")"
             content_type="$(curl -sS -L -o /dev/null -w '%{content_type}' --max-time 15 "${url}${ref}")"
             echo "Asset ${ref} -> HTTP ${status} content-type ${content_type}"
