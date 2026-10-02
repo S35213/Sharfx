@@ -258,7 +258,7 @@ const getQuote = async (req) => {
 }
 
 const buy = async (req) => {
-  const { user, connection, accountId, token } = await requireConnection(req)
+  const { user, connection, accountId, token, account } = await requireConnection(req)
   const proposalId = String(req.body?.proposalId || '')
   const askPrice = Number(req.body?.askPrice)
   const quote = req.body?.quote && typeof req.body.quote === 'object' ? req.body.quote : {}
