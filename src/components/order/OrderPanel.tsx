@@ -4,7 +4,8 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   CheckCircle2,
-  Clock3,
+  ChevronDown,
+  Info,
   LoaderCircle,
   ShieldCheck,
   Sparkles,
@@ -50,8 +51,8 @@ export const OrderPanel: React.FC<Props> = ({
 }) => {
   const [side, setSide] = useState<TradeSide>(aiSetup?.direction ?? 'BUY')
   const [stake, setStake] = useState('1.00')
-  const [multiplier, setMultiplier] = useState('100')
-  const [protectionEnabled, setProtectionEnabled] = useState(false)
+  const [multiplier, setMultiplier] = useState('25')
+  const [exitsOpen, setExitsOpen] = useState(false)
   const [stopLossAmount, setStopLossAmount] = useState('')
   const [takeProfitAmount, setTakeProfitAmount] = useState('')
   const [quote, setQuote] = useState<DerivProposalQuote | null>(null)
@@ -73,7 +74,7 @@ export const OrderPanel: React.FC<Props> = ({
   const takeValue = toPositiveNumber(takeProfitAmount)
   const accountHasMinimum = Number.isFinite(accountBalance) && accountBalance >= 1
   const stakeFitsBalance = Number.isFinite(accountBalance) && stakeValue >= 1 && stakeValue <= accountBalance + 1e-8
-  const protectionValid = stopValue >= 0 && stopValue <= stakeValue + 1e-8 && takeValue >= 0
+  const exitsValid = stopValue >= 0 && stopValue <= stakeValue + 1e-8 && takeValue >= 0
   const inputsValid =
     Boolean(connection) &&
     accountHasMinimum &&
@@ -81,38 +82,40 @@ export const OrderPanel: React.FC<Props> = ({
     Number.isFinite(multiplierValue) &&
     multiplierValue > 0 &&
     multiplierValue <= 10000 &&
-    protectionValid
+    exitsValid
 
   const selectedEntry = side === 'BUY' ? askPrice : bidPrice
+  const balanceShare = Number.isFinite(accountBalance) && accountBalance > 0
+    ? (stakeValue / accountBalance) * 100
+    : 0
+
   const quotePotentialProfit = useMemo(() => {
     if (!quote || !Number.isFinite(quote.payout)) return null
     return Number((Number(quote.payout) - quote.stake).toFixed(2))
   }, [quote])
 
-  const balanceShare = Number.isFinite(accountBalance) && accountBalance > 0
-    ? (stakeValue / accountBalance) * 100
-    : 0
-
-  const applyProtectionPreset = (enabled: boolean, nextStake = stakeValue): void => {
-    setProtectionEnabled(enabled)
-    if (!enabled) {
-      setStopLossAmount('')
-      setTakeProfitAmount('')
-      return
-    }
-    const safeStake = Math.max(0.01, nextStake)
-    setStopLossAmount(Math.max(0.01, safeStake * 0.5).toFixed(2))
-    setTakeProfitAmount(Math.max(0.01, safeStake).toFixed(2))
+  const toggleExits = (): void => {
+    setExitsOpen((open) => {
+      if (open) {
+        setStopLossAmount('')
+        setTakeProfitAmount('')
+        setQuote(null)
+        setState('idle')
+      }
+      return !open
+    })
   }
 
   const chooseStake = (value: string): void => {
     const numeric = Number(value)
-    const next = Number.isFinite(numeric) && numeric <= accountBalance ? value : stake
-    setStake(next)
+    if (!Number.isFinite(numeric) || numeric > accountBalance) return
+    setStake(value)
     setQuote(null)
     setState('idle')
     setError('')
-    if (protectionEnabled) applyProtectionPreset(true, Number(next))
+    if (exitsOpen && stopLossAmount) {
+      setStopLossAmount(Math.min(Number(stopLossAmount), numeric).toFixed(2))
+    }
   }
 
   const chooseMultiplier = (value: string): void => {
@@ -125,8 +128,8 @@ export const OrderPanel: React.FC<Props> = ({
   const requestQuote = async (requestedSide: TradeSide = side): Promise<void> => {
     if (!connection || !inputsValid) {
       setError(!connection
-        ? 'Connect a Deriv demo account before placing a manual trade.'
-        : 'Check the stake, multiplier, and protection values before continuing.')
+        ? 'Connect a Deriv demo account before placing a trade.'
+        : 'Check your stake, multiplier, and exit rules.')
       setState('error')
       return
     }
@@ -145,14 +148,14 @@ export const OrderPanel: React.FC<Props> = ({
         stake: stakeValue,
         currency: accountCurrency,
         multiplier: multiplierValue,
-        stopLossAmount: protectionEnabled && stopValue > 0 ? stopValue : undefined,
-        takeProfitAmount: protectionEnabled && takeValue > 0 ? takeValue : undefined,
+        stopLossAmount: exitsOpen && stopValue > 0 ? stopValue : undefined,
+        takeProfitAmount: exitsOpen && takeValue > 0 ? takeValue : undefined,
       })
       setQuote(nextQuote)
       setState('quoted')
     } catch (err) {
       setState('error')
-      setError(err instanceof Error ? err.message : 'Unable to get a Deriv proposal.')
+      setError(err instanceof Error ? err.message : 'Unable to get a live Deriv price.')
     }
   }
 
@@ -172,51 +175,195 @@ export const OrderPanel: React.FC<Props> = ({
   }
 
   const busy = state === 'quoting' || state === 'buying'
-  const accountLabel = connection ? (connection.environment === 'demo' ? 'DEMO ACCOUNT' : 'REAL ACCOUNT') : 'NOT CONNECTED'
+  const accountLabel = connection?.environment === 'live' ? 'LIVE' : connection ? 'DEMO' : 'OFFLINE'
+  const accountTone = connection ? 'text-shafx-success' : 'text-shafx-danger'
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-shafx-border bg-shafx-surface shadow-[0_18px_50px_rgba(0,0,0,.22)]">
-      <div className="border-b border-shafx-border bg-shafx-bg/80 px-3 py-2.5 sm:px-4">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0"><div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-shafx-accent shadow-[0_0_10px_rgba(139,92,246,.7)]" /><h3 className="text-sm font-semibold">TradeDock</h3><span className="rounded border border-shafx-border px-1.5 py-0.5 font-mono text-[7px] font-bold uppercase tracking-[.16em] text-shafx-textMuted">SHARFX</span></div><p className="mt-0.5 text-[8px] text-shafx-textMuted">Fast manual execution · Deriv Multiplier</p></div>
-          <div className="text-right"><div className="font-mono text-[8px] font-bold text-shafx-success">{connection ? 'CONNECTED' : 'OFFLINE'}</div><div className="font-mono text-[8px] text-shafx-textMuted">{symbol} · M5</div></div>
+    <section className="overflow-hidden rounded-2xl border border-shafx-border bg-shafx-surface shadow-[0_16px_40px_rgba(0,0,0,.2)]">
+      <header className="flex items-center justify-between gap-3 border-b border-shafx-border bg-shafx-bg/80 px-3 py-3 sm:px-4">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-shafx-accent shadow-[0_0_10px_rgba(139,92,246,.65)]" />
+            <h3 className="text-sm font-semibold">SHAFX Order</h3>
+            <span className="rounded-md border border-shafx-border px-1.5 py-0.5 font-mono text-[7px] font-bold uppercase tracking-[.15em] text-shafx-textMuted">MULTIPLIER</span>
+          </div>
+          <p className="mt-0.5 text-[8px] text-shafx-textMuted">A simple execution ticket built for SHAFX</p>
         </div>
-      </div>
+        <div className="text-right">
+          <div className={"font-mono text-[8px] font-bold " + accountTone}>{accountLabel}</div>
+          <div className="font-mono text-[8px] text-shafx-textMuted">{symbol}</div>
+        </div>
+      </header>
+
       <div className="space-y-2.5 p-2.5 sm:p-3.5">
         <div className="grid grid-cols-[1fr_auto] gap-2">
-          <div className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2.5"><div className="flex items-center justify-between gap-2"><span className="text-[8px] font-semibold uppercase tracking-[.14em] text-shafx-textMuted">Market</span><span className="font-mono text-[8px] text-shafx-textMuted">{accountLabel}</span></div><div className="mt-1 flex items-end justify-between gap-2"><b className="font-mono text-sm">{symbol}</b><span className="font-mono text-xs tabular-nums text-shafx-text">{selectedEntry.toFixed(symbolSpec.pricePrecision)}</span></div></div>
-          <div className="min-w-[92px] rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2.5 text-right"><span className="text-[8px] uppercase tracking-[.14em] text-shafx-textMuted">Balance</span><b className="mt-1 block font-mono text-xs tabular-nums">{accountCurrency} {Number.isFinite(accountBalance) ? accountBalance.toFixed(2) : '0.00'}</b></div>
-        </div>
-
-        <div className="rounded-2xl border border-shafx-border bg-shafx-bg/70 p-2">
-          <div className="mb-2 flex items-center justify-between px-1"><div><div className="text-[8px] font-semibold uppercase tracking-[.15em] text-shafx-textMuted">Trade direction</div><div className="mt-0.5 text-[8px] text-shafx-textMuted">One tap requests the live broker quote.</div></div><span className={"rounded-md px-2 py-1 font-mono text-[8px] font-bold " + (side === 'BUY' ? 'bg-shafx-success/10 text-shafx-success' : 'bg-shafx-danger/10 text-shafx-danger')}>{side === 'BUY' ? 'UP' : 'DOWN'}</span></div>
-          <div className="grid grid-cols-2 gap-2">
-            <button type="button" onClick={() => void requestQuote('BUY')} disabled={busy || state === 'opened'} aria-label="Buy up" className="group min-h-[74px] rounded-xl border border-shafx-success/25 bg-shafx-success/[.07] px-3 py-2 text-left transition hover:border-shafx-success/50 hover:bg-shafx-success/[.11] disabled:cursor-wait disabled:opacity-60"><div className="flex items-center justify-between"><span className="flex items-center gap-1.5 text-xs font-bold text-shafx-success"><ArrowUpRight className="h-4 w-4" />BUY</span><span className="font-mono text-[8px] text-shafx-textMuted">UP</span></div><div className="mt-1 font-mono text-sm tabular-nums">{askPrice.toFixed(symbolSpec.pricePrecision)}</div><div className="mt-1 text-[7px] text-shafx-textMuted">Rise / Multiplier</div></button>
-            <button type="button" onClick={() => void requestQuote('SELL')} disabled={busy || state === 'opened'} aria-label="Sell down" className="group min-h-[74px] rounded-xl border border-shafx-danger/25 bg-shafx-danger/[.07] px-3 py-2 text-left transition hover:border-shafx-danger/50 hover:bg-shafx-danger/[.11] disabled:cursor-wait disabled:opacity-60"><div className="flex items-center justify-between"><span className="flex items-center gap-1.5 text-xs font-bold text-shafx-danger"><ArrowDownRight className="h-4 w-4" />SELL</span><span className="font-mono text-[8px] text-shafx-textMuted">DOWN</span></div><div className="mt-1 font-mono text-sm tabular-nums">{bidPrice.toFixed(symbolSpec.pricePrecision)}</div><div className="mt-1 text-[7px] text-shafx-textMuted">Fall / Multiplier</div></button>
+          <div className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2.5">
+            <div className="text-[8px] font-semibold uppercase tracking-[.14em] text-shafx-textMuted">Market</div>
+            <div className="mt-1 flex items-end justify-between gap-2">
+              <b className="font-mono text-sm">{symbol}</b>
+              <span className="font-mono text-xs tabular-nums">{selectedEntry.toFixed(symbolSpec.pricePrecision)}</span>
+            </div>
+          </div>
+          <div className="min-w-[96px] rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2.5 text-right">
+            <span className="text-[8px] uppercase tracking-[.14em] text-shafx-textMuted">Available</span>
+            <b className="mt-1 block font-mono text-xs tabular-nums">{accountCurrency} {Number.isFinite(accountBalance) ? accountBalance.toFixed(2) : '0.00'}</b>
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-2">
-          <div className="rounded-xl border border-shafx-border bg-shafx-bg p-2.5"><div className="flex items-center justify-between"><span className="text-[8px] font-semibold uppercase tracking-[.14em] text-shafx-textMuted">Stake</span><span className="font-mono text-[8px] text-shafx-textMuted">{balanceShare.toFixed(1)}% balance</span></div><div className="mt-1.5 flex items-center rounded-lg border border-shafx-border bg-shafx-surface px-2.5"><span className="font-mono text-[9px] text-shafx-textMuted">{accountCurrency}</span><input aria-label="Stake" type="number" min="1" step="0.01" value={stake} onChange={(e) => chooseStake(e.target.value)} className="min-w-0 flex-1 bg-transparent px-2 py-2 font-mono text-sm outline-none" /></div><div className="mt-1.5 flex gap-1">{QUICK_STAKES.map((value) => <button key={value} type="button" disabled={Number(value) > accountBalance} onClick={() => chooseStake(value)} className={"min-h-7 flex-1 rounded-md border text-[7px] font-bold " + (stake === value ? 'border-shafx-accent/40 bg-shafx-accent/10 text-shafx-accent' : 'border-shafx-border bg-shafx-surface text-shafx-textMuted')}>{value}</button>)}</div></div>
-          <div className="rounded-xl border border-shafx-border bg-shafx-bg p-2.5"><div className="flex items-center justify-between"><span className="text-[8px] font-semibold uppercase tracking-[.14em] text-shafx-textMuted">Multiplier</span><span className="font-mono text-[8px] text-shafx-textMuted">Risk engine</span></div><div className="mt-1.5 flex items-center rounded-lg border border-shafx-border bg-shafx-surface px-2.5"><input aria-label="Multiplier" type="number" min="1" max="10000" step="1" value={multiplier} onChange={(e) => chooseMultiplier(e.target.value)} className="min-w-0 flex-1 bg-transparent py-2 font-mono text-sm outline-none" /><span className="font-mono text-[9px] text-shafx-textMuted">×</span></div><div className="mt-1.5 flex gap-1">{QUICK_MULTIPLIERS.map((value) => <button key={value} type="button" onClick={() => chooseMultiplier(value)} className={"min-h-7 flex-1 rounded-md border text-[7px] font-bold " + (multiplier === value ? 'border-shafx-accent/40 bg-shafx-accent/10 text-shafx-accent' : 'border-shafx-border bg-shafx-surface text-shafx-textMuted')}>{value}×</button>)}</div></div>
+          <button type="button" onClick={() => void requestQuote('BUY')} disabled={busy || state === 'opened'} className="min-h-[76px] rounded-xl border border-shafx-success/30 bg-shafx-success/[.07] px-3 py-2.5 text-left transition hover:border-shafx-success/55 hover:bg-shafx-success/[.11] disabled:cursor-wait disabled:opacity-60">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-xs font-bold text-shafx-success"><ArrowUpRight className="h-4 w-4" />BUY UP</span>
+              <span className="rounded-md bg-shafx-success/10 px-1.5 py-1 font-mono text-[7px] text-shafx-success">LONG</span>
+            </div>
+            <div className="mt-2 font-mono text-sm tabular-nums">{askPrice.toFixed(symbolSpec.pricePrecision)}</div>
+            <div className="mt-0.5 text-[7px] text-shafx-textMuted">Tap for live price</div>
+          </button>
+
+          <button type="button" onClick={() => void requestQuote('SELL')} disabled={busy || state === 'opened'} className="min-h-[76px] rounded-xl border border-shafx-danger/30 bg-shafx-danger/[.07] px-3 py-2.5 text-left transition hover:border-shafx-danger/55 hover:bg-shafx-danger/[.11] disabled:cursor-wait disabled:opacity-60">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-xs font-bold text-shafx-danger"><ArrowDownRight className="h-4 w-4" />SELL DOWN</span>
+              <span className="rounded-md bg-shafx-danger/10 px-1.5 py-1 font-mono text-[7px] text-shafx-danger">SHORT</span>
+            </div>
+            <div className="mt-2 font-mono text-sm tabular-nums">{bidPrice.toFixed(symbolSpec.pricePrecision)}</div>
+            <div className="mt-0.5 text-[7px] text-shafx-textMuted">Tap for live price</div>
+          </button>
         </div>
 
-        <button type="button" role="switch" aria-checked={protectionEnabled} onClick={() => applyProtectionPreset(!protectionEnabled)} className={"flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left " + (protectionEnabled ? 'border-shafx-accent/30 bg-shafx-accent/[.06]' : 'border-shafx-border bg-shafx-bg/60')}><span className="flex items-center gap-2"><ShieldCheck className={"h-4 w-4 " + (protectionEnabled ? 'text-shafx-accent' : 'text-shafx-textMuted')} /><span><b className="block text-[9px]">SHARFX Protection</b><span className="block text-[7px] text-shafx-textMuted">{protectionEnabled ? 'Max loss + target profit are active' : 'Optional · tap to add trade limits'}</span></span></span><span className={"rounded-full px-2.5 py-1 font-mono text-[7px] font-bold " + (protectionEnabled ? 'bg-shafx-accent/15 text-shafx-accent' : 'bg-shafx-border/60 text-shafx-textMuted')}>{protectionEnabled ? 'ON' : 'OFF'}</span></button>
+        <div className="rounded-xl border border-shafx-border bg-shafx-bg/70 p-2.5">
+          <div className="mb-2 flex items-center justify-between">
+            <div>
+              <div className="text-[8px] font-semibold uppercase tracking-[.14em] text-shafx-textMuted">Trade setup</div>
+              <div className="mt-0.5 text-[7px] text-shafx-textMuted">Stake is your maximum loss before Deriv stop-out.</div>
+            </div>
+            <span className="font-mono text-[8px] text-shafx-textMuted">{balanceShare.toFixed(1)}% of balance</span>
+          </div>
 
-        {protectionEnabled && <div className="grid grid-cols-2 gap-2 rounded-xl border border-shafx-border bg-shafx-bg p-2.5"><label className="text-[8px] text-shafx-textMuted">Max loss<input type="number" min="0" step="0.01" value={stopLossAmount} onChange={(e) => { setStopLossAmount(e.target.value); setQuote(null); setState('idle') }} className="mt-1 w-full rounded-lg border border-shafx-danger/20 bg-shafx-surface px-2.5 py-2 font-mono text-xs outline-none" /></label><label className="text-[8px] text-shafx-textMuted">Target profit<input type="number" min="0" step="0.01" value={takeProfitAmount} onChange={(e) => { setTakeProfitAmount(e.target.value); setQuote(null); setState('idle') }} className="mt-1 w-full rounded-lg border border-shafx-success/20 bg-shafx-surface px-2.5 py-2 font-mono text-xs outline-none" /></label><div className="col-span-2 text-[7px] text-shafx-textMuted">Preset: max loss 50% of stake · target profit 100% of stake. Deriv validates the final contract limits.</div></div>}
+          <div className="grid grid-cols-2 gap-2">
+            <label className="block">
+              <span className="text-[8px] text-shafx-textMuted">Stake</span>
+              <div className="mt-1 flex items-center rounded-lg border border-shafx-border bg-shafx-surface px-2.5">
+                <span className="font-mono text-[9px] text-shafx-textMuted">{accountCurrency}</span>
+                <input aria-label="Stake" type="number" min="1" step="0.01" value={stake} onChange={(e) => chooseStake(e.target.value)} className="min-w-0 flex-1 bg-transparent px-2 py-2 font-mono text-sm outline-none" />
+              </div>
+            </label>
+            <label className="block">
+              <span className="text-[8px] text-shafx-textMuted">Multiplier</span>
+              <div className="mt-1 flex items-center rounded-lg border border-shafx-border bg-shafx-surface px-2.5">
+                <input aria-label="Multiplier" type="number" min="1" max="10000" step="1" value={multiplier} onChange={(e) => chooseMultiplier(e.target.value)} className="min-w-0 flex-1 bg-transparent py-2 font-mono text-sm outline-none" />
+                <span className="font-mono text-[9px] text-shafx-textMuted">×</span>
+              </div>
+            </label>
+          </div>
 
-        {aiSetup && <div className="flex items-center justify-between gap-2 rounded-xl border border-shafx-accent/20 bg-shafx-accent/[.04] px-3 py-2"><span className="flex items-center gap-2 text-[8px]"><Sparkles className="h-3 w-3 text-shafx-accent" /><b>SHARFX setup</b><span className="text-shafx-textMuted">{aiSetup.direction} · {aiSetup.confidence}%</span></span><span className="font-mono text-[8px] text-shafx-textMuted">Entry {aiSetup.entryPrice}</span></div>}
+          <div className="mt-1.5 flex gap-1.5">
+            {QUICK_STAKES.map((value) => (
+              <button key={value} type="button" disabled={Number(value) > accountBalance} onClick={() => chooseStake(value)} className={"min-h-7 flex-1 rounded-md border text-[7px] font-bold " + (stake === value ? 'border-shafx-accent/40 bg-shafx-accent/10 text-shafx-accent' : 'border-shafx-border bg-shafx-surface text-shafx-textMuted')}>
+                {value}
+              </button>
+            ))}
+          </div>
+          <div className="mt-1.5 flex gap-1.5">
+            {QUICK_MULTIPLIERS.map((value) => (
+              <button key={value} type="button" onClick={() => chooseMultiplier(value)} className={"min-h-7 flex-1 rounded-md border text-[7px] font-bold " + (multiplier === value ? 'border-shafx-accent/40 bg-shafx-accent/10 text-shafx-accent' : 'border-shafx-border bg-shafx-surface text-shafx-textMuted')}>
+                {value}×
+              </button>
+            ))}
+          </div>
+        </div>
 
-        {state === 'quoting' && <div className="flex items-center gap-2 rounded-xl border border-shafx-accent/20 bg-shafx-accent/[.05] p-3 text-[8px] text-shafx-textMuted"><LoaderCircle className="h-4 w-4 animate-spin text-shafx-accent" /><span><b className="text-shafx-text">Getting live quote…</b> Deriv is validating this market and trade size.</span></div>}
+        <button type="button" onClick={toggleExits} aria-expanded={exitsOpen} className={"flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left " + (exitsOpen ? 'border-shafx-accent/25 bg-shafx-accent/[.05]' : 'border-shafx-border bg-shafx-bg/60')}>
+          <span className="flex items-center gap-2">
+            <ShieldCheck className={"h-4 w-4 " + (exitsOpen ? 'text-shafx-accent' : 'text-shafx-textMuted')} />
+            <span>
+              <b className="block text-[9px]">Auto exits</b>
+              <span className="block text-[7px] text-shafx-textMuted">{exitsOpen ? 'Stop loss + take profit' : 'Optional risk controls'}</span>
+            </span>
+          </span>
+          <ChevronDown className={"h-4 w-4 text-shafx-textMuted transition-transform " + (exitsOpen ? 'rotate-180' : '')} />
+        </button>
 
-        {quote && <div className="rounded-2xl border border-shafx-accent/25 bg-shafx-accent/[.05] p-3"><div className="flex items-center justify-between gap-2"><div><div className="text-[9px] font-bold tracking-[.12em]">ORDER PREVIEW</div><div className="mt-0.5 text-[7px] text-shafx-textMuted">Nothing is purchased until you confirm.</div></div><span className={"rounded-md px-2 py-1 font-mono text-[8px] font-bold " + (quote.side === 'BUY' ? 'bg-shafx-success/10 text-shafx-success' : 'bg-shafx-danger/10 text-shafx-danger')}>{quote.side === 'BUY' ? 'BUY UP' : 'SELL DOWN'}</span></div><div className="mt-2 grid grid-cols-3 gap-1.5"><div className="rounded-lg bg-shafx-bg px-2 py-2"><span className="block text-[7px] text-shafx-textMuted">Stake</span><b className="font-mono text-[9px]">{quote.stake.toFixed(2)}</b></div><div className="rounded-lg bg-shafx-bg px-2 py-2"><span className="block text-[7px] text-shafx-textMuted">Multiplier</span><b className="font-mono text-[9px]">{quote.multiplier}×</b></div><div className="rounded-lg bg-shafx-bg px-2 py-2"><span className="block text-[7px] text-shafx-textMuted">Profit</span><b className="font-mono text-[9px] text-shafx-success">{quotePotentialProfit !== null ? (quotePotentialProfit >= 0 ? '+' : '') + quotePotentialProfit.toFixed(2) : '—'}</b></div></div><button type="button" onClick={() => void confirmBuy()} disabled={state === 'buying' || state === 'opened'} className="mt-2.5 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-shafx-primary px-4 text-[9px] font-bold text-white disabled:opacity-60">{state === 'buying' ? <><LoaderCircle className="h-4 w-4 animate-spin" />PLACING TRADE…</> : state === 'opened' ? <><CheckCircle2 className="h-4 w-4" />TRADE OPEN</> : <>CONFIRM {quote.side === 'BUY' ? 'BUY UP' : 'SELL DOWN'} <ArrowUpRight className="h-3.5 w-3.5" /></>}</button></div>}
+        {exitsOpen && (
+          <div className="rounded-xl border border-shafx-border bg-shafx-bg p-2.5">
+            <div className="mb-2 flex items-start gap-2 text-[7px] leading-4 text-shafx-textMuted">
+              <Info className="mt-0.5 h-3 w-3 shrink-0 text-shafx-accent" />
+              <span><b className="text-shafx-text">Stop loss</b> closes the position when your loss reaches the amount you choose. <b className="text-shafx-text">Take profit</b> closes it when your target profit is reached.</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="block text-[8px] text-shafx-textMuted">
+                Stop loss
+                <input aria-label="Stop loss amount" type="number" min="0" step="0.01" value={stopLossAmount} onChange={(e) => { setStopLossAmount(e.target.value); setQuote(null); setState('idle') }} placeholder="0.00" className="mt-1 w-full rounded-lg border border-shafx-danger/20 bg-shafx-surface px-2.5 py-2 font-mono text-xs outline-none" />
+                <span className="mt-1 block text-[7px]">max {accountCurrency} {stakeValue.toFixed(2)}</span>
+              </label>
+              <label className="block text-[8px] text-shafx-textMuted">
+                Take profit
+                <input aria-label="Take profit amount" type="number" min="0" step="0.01" value={takeProfitAmount} onChange={(e) => { setTakeProfitAmount(e.target.value); setQuote(null); setState('idle') }} placeholder="0.00" className="mt-1 w-full rounded-lg border border-shafx-success/20 bg-shafx-surface px-2.5 py-2 font-mono text-xs outline-none" />
+                <span className="mt-1 block text-[7px]">target profit amount</span>
+              </label>
+            </div>
+          </div>
+        )}
 
-        {!connection && <div className="rounded-xl border border-shafx-danger/20 bg-shafx-danger/10 p-2.5 text-[8px] text-shafx-danger">Connect a Deriv demo account before placing a manual trade.</div>}
-        {stakeValue > accountBalance && <div className="text-[8px] text-shafx-danger">Stake exceeds the selected account balance.</div>}
-        {stopValue > stakeValue && <div className="text-[8px] text-shafx-danger">Max loss cannot exceed the opening stake.</div>}
-        {state === 'opened' && <div className="rounded-xl border border-shafx-success/25 bg-shafx-success/[.05] p-3 text-[8px] text-shafx-success"><div className="flex items-center gap-2 font-semibold"><CheckCircle2 className="h-4 w-4" />Trade opened through Deriv</div><div className="mt-1 text-shafx-textMuted">Contract ID: <span className="font-mono text-shafx-text">{openedContractId || 'assigned by Deriv'}</span></div></div>}
-        {state === 'error' && <div className="rounded-xl border border-shafx-danger/25 bg-shafx-danger/10 p-3"><div className="flex items-center gap-2 text-[9px] font-bold text-shafx-danger"><AlertCircle className="h-4 w-4" />Trade step failed</div><div className="mt-1 break-words text-[8px] leading-4 text-shafx-danger">{error}</div></div>}
-        {!quote && state !== 'quoting' && state !== 'error' && <div className="flex items-center gap-2 px-1 text-[7px] leading-4 text-shafx-textMuted"><Clock3 className="h-3 w-3 shrink-0" /><span><b className="text-shafx-text">SHARFX flow:</b> choose Buy/Sell → live quote → confirm → open position. The chart timeframe (M5) is separate from the broker contract duration.</span></div>}
+        {aiSetup && (
+          <div className="flex items-center justify-between gap-2 rounded-xl border border-shafx-accent/20 bg-shafx-accent/[.04] px-3 py-2">
+            <span className="flex items-center gap-2 text-[8px]"><Sparkles className="h-3 w-3 text-shafx-accent" /><b>SHAFX signal</b><span className="text-shafx-textMuted">{aiSetup.direction} · {aiSetup.confidence}%</span></span>
+            <span className="font-mono text-[8px] text-shafx-textMuted">Entry {aiSetup.entryPrice}</span>
+          </div>
+        )}
+
+        {state === 'quoting' && (
+          <div className="flex items-center gap-2 rounded-xl border border-shafx-accent/20 bg-shafx-accent/[.05] p-3 text-[8px] text-shafx-textMuted">
+            <LoaderCircle className="h-4 w-4 animate-spin text-shafx-accent" />
+            <span><b className="text-shafx-text">Getting live price…</b> SHAFX is asking Deriv for a current proposal.</span>
+          </div>
+        )}
+
+        {quote && (
+          <div className="rounded-2xl border border-shafx-accent/25 bg-shafx-accent/[.05] p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <div className="text-[9px] font-bold tracking-[.12em]">REVIEW ORDER</div>
+                <div className="mt-0.5 text-[7px] text-shafx-textMuted">Nothing is bought until you confirm.</div>
+              </div>
+              <span className={"rounded-md px-2 py-1 font-mono text-[8px] font-bold " + (quote.side === 'BUY' ? 'bg-shafx-success/10 text-shafx-success' : 'bg-shafx-danger/10 text-shafx-danger')}>
+                {quote.side === 'BUY' ? 'BUY UP' : 'SELL DOWN'}
+              </span>
+            </div>
+
+            <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+              <div className="rounded-lg bg-shafx-bg px-2 py-2"><span className="block text-[7px] text-shafx-textMuted">Entry</span><b className="font-mono text-[9px]">{quote.spot?.toFixed(symbolSpec.pricePrecision) ?? selectedEntry.toFixed(symbolSpec.pricePrecision)}</b></div>
+              <div className="rounded-lg bg-shafx-bg px-2 py-2"><span className="block text-[7px] text-shafx-textMuted">Stake</span><b className="font-mono text-[9px]">{quote.stake.toFixed(2)}</b></div>
+              <div className="rounded-lg bg-shafx-bg px-2 py-2"><span className="block text-[7px] text-shafx-textMuted">Multiplier</span><b className="font-mono text-[9px]">{quote.multiplier}×</b></div>
+              <div className="rounded-lg bg-shafx-bg px-2 py-2"><span className="block text-[7px] text-shafx-textMuted">Est. profit</span><b className="font-mono text-[9px] text-shafx-success">{quotePotentialProfit !== null ? (quotePotentialProfit >= 0 ? '+' : '') + quotePotentialProfit.toFixed(2) : '—'}</b></div>
+            </div>
+
+            <button type="button" onClick={() => void confirmBuy()} disabled={state === 'buying' || state === 'opened'} className="mt-2.5 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-shafx-primary px-4 text-[9px] font-bold text-white disabled:opacity-60">
+              {state === 'buying' ? <><LoaderCircle className="h-4 w-4 animate-spin" />PLACING {quote.side === 'BUY' ? 'BUY UP' : 'SELL DOWN'}…</> : state === 'opened' ? <><CheckCircle2 className="h-4 w-4" />TRADE OPEN</> : <>CONFIRM {quote.side === 'BUY' ? 'BUY UP' : 'SELL DOWN'} <ArrowUpRight className="h-3.5 w-3.5" /></>}
+            </button>
+          </div>
+        )}
+
+        {!connection && (
+          <div className="rounded-xl border border-shafx-danger/20 bg-shafx-danger/10 p-2.5 text-[8px] text-shafx-danger">
+            Connect your Deriv demo account before placing an order.
+          </div>
+        )}
+        {stakeValue > accountBalance && <div className="text-[8px] text-shafx-danger">Stake exceeds your available balance.</div>}
+        {stopValue > stakeValue && <div className="text-[8px] text-shafx-danger">Stop loss cannot be greater than the opening stake.</div>}
+
+        {state === 'opened' && (
+          <div className="rounded-xl border border-shafx-success/25 bg-shafx-success/[.05] p-3 text-[8px] text-shafx-success">
+            <div className="flex items-center gap-2 font-semibold"><CheckCircle2 className="h-4 w-4" />Trade opened through Deriv</div>
+            <div className="mt-1 text-shafx-textMuted">Contract ID: <span className="font-mono text-shafx-text">{openedContractId || 'assigned by Deriv'}</span></div>
+          </div>
+        )}
+
+        {state === 'error' && (
+          <div className="rounded-xl border border-shafx-danger/25 bg-shafx-danger/10 p-3">
+            <div className="flex items-center gap-2 text-[9px] font-bold text-shafx-danger"><AlertCircle className="h-4 w-4" />ORDER FAILED</div>
+            <div className="mt-1 break-words text-[8px] leading-4 text-shafx-danger">{error}</div>
+          </div>
+        )}
       </div>
     </section>
   )
