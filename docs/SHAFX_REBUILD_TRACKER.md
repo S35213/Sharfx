@@ -42,7 +42,7 @@ SHAFX Signal Desk / analysis remains part of the product idea, but analysis does
 - **Base branch:** `fix/market-feed-test-syntax-20260927`
 - **Test branch:** `test/rebuild-deriv-native-manual-20260930`
 - **PR:** #57
-- **Latest rebuild commit at tracker update:** pending final external white-screen verification commit
+- **Latest rebuild commit at tracker update:** `3f91019f3c3882b9b73ff1150896870b3218a3de`
 - **Cloudflare production:** `sharfx` — not being changed by this test
 - **Render test service:** `sharfx-deriv-render`
 - **Render URL:** https://sharfx-deriv-render.onrender.com
@@ -104,6 +104,9 @@ SHAFX Signal Desk / analysis remains part of the product idea, but analysis does
 - [x] New Render service reached LIVE
 - [x] New Render service emitted no warning/error logs during the observed verification window after startup
 - [x] GitHub CI externally reached `https://sharfx-deriv-render.onrender.com/` and received HTTP 200
+- [x] Public Render smoke verified every built JavaScript/CSS reference returns HTTP 200 with the expected content type
+- [x] Public Render smoke verified missing client assets return HTTP 404 for both `/assets/...` and `/Sharfx/assets/...`
+- [x] Public Render smoke verified `/__shafx/health` returns HTTP 200 and unauthenticated `/api/auth?action=me` returns HTTP 401
 - [x] GitHub CI confirmed the returned homepage contains `SHAFX`
 - [ ] Authenticated backend probe: current `/api/auth?action=me` returned HTTP 503 during the first smoke run because Render was missing `SUPABASE_SERVICE_ROLE_KEY`
 - [x] Verified `/api/auth?action=me` returns the expected unauthenticated HTTP 401 after the three required server credentials were configured
@@ -275,9 +278,18 @@ When a new action is completed, append it to the action tree and change its chec
 - Added `src/data/provider/providerConnections.test.ts` covering the exact rebuild rule: when an unselected Deriv connection has both active demo and live accounts, the default selection must choose the demo account.
 - CI run `37002455938` completed SUCCESS; the `npm test` step and Render verification step both completed successfully.
 - Render remained LIVE and the existing external smoke checks stayed green for this commit.
-\n\n### 2026-10-02 — Render white-screen investigation started
 
-- User reported the experimental Render URL opens to a blank white page on both laptop and phone.\n- Reviewed the live Render runtime and the static-serving path in `render-server.mjs`.\n- Root cause identified in the server fallback behavior: a missing client asset such as a JavaScript bundle was falling back to `index.html` with HTTP 200, so the browser could receive HTML where it expected JavaScript and leave `#root` empty.\n- Hardened Render static serving so extension-bearing missing assets return 404 instead of the SPA HTML, and normalized optional `/Sharfx/` asset prefixes.\n- Added startup-time client-asset validation, a `/__shafx/health` endpoint, and `scripts/render-static-smoke.mjs` to verify homepage, built asset status/content types, missing-asset 404 behavior, and the health endpoint.\n- Added the static smoke to CI before lint/tests.\n- **Verification status:** pending the new commit's build, CI, Render deployment, and external smoke verification. No browser UI pass is claimed yet.\n
+
+### 2026-10-02 — Render white-screen investigation started
+
+- User reported the experimental Render URL opens to a blank white page on both laptop and phone.
+- Reviewed the live Render runtime and the static-serving path in `render-server.mjs`.
+- Root cause identified in the server fallback behavior: a missing client asset such as a JavaScript bundle was falling back to `index.html` with HTTP 200, so the browser could receive HTML where it expected JavaScript and leave `#root` empty.
+- Hardened Render static serving so extension-bearing missing assets return 404 instead of the SPA HTML, and normalized optional `/Sharfx/` asset prefixes.
+- Added startup-time client-asset validation, a `/__shafx/health` endpoint, and `scripts/render-static-smoke.mjs` to verify homepage, built asset status/content types, missing-asset 404 behavior, and the health endpoint.
+- Added the static smoke to CI before lint/tests.
+- **Verification status:** pending the new commit's build, CI, Render deployment, and external smoke verification. No browser UI pass is claimed yet.
+
 
 ### 2026-10-02 — Static smoke found and isolated a second /Sharfx/ path bug
 
@@ -300,3 +312,13 @@ When a new action is completed, append it to the action tree and change its chec
 - The run stopped only because the shell's query-string path extraction treated the literal `?` as a wildcard and misclassified the already-valid `.js` path.
 - Corrective test-only patch: strip query strings with `sed` before the extension check; no application-serving code was changed in this step.
 - Remaining verification: complete the public asset loop, both missing-asset 404 checks, health/auth probes, and Deriv public smoke.
+
+### 2026-10-02 — Render white-screen fix fully automated and verified
+
+- Root cause chain verified: missing client assets were being served by the SPA fallback as `index.html`; the `/Sharfx/` URL prefix then exposed a second path-normalization bug that also returned HTML for JavaScript requests.
+- Commit `7bf0805b9073c572e57fb747948444b9649d45d5` corrected URL-path normalization. CI run `37003145699` completed SUCCESS, including the Render-equivalent static smoke.
+- Render-specific smoke workflow was hardened to test the public asset URLs directly and to remove lockfile-dependent npm caching.
+- Final Render-specific smoke run `37003384638` completed SUCCESS against `https://sharfx-deriv-render.onrender.com`.
+- Exact public evidence: homepage HTTP 200; JavaScript assets HTTP 200 with `application/javascript`; CSS asset HTTP 200 with `text/css`; missing asset 404 for both `/assets/...` and `/Sharfx/assets/...`; `/__shafx/health` HTTP 200; `/api/auth?action=me` HTTP 401; `DERIV_PUBLIC_SMOKE_PASS` for EUR/USD M1/H1/D1.
+- Render deployment `dep-davplq79nhgc7387a90g` for commit `3f91019f3c3882b9b73ff1150896870b3218a3de` reached **LIVE** with the hardened server.
+- **White-screen verification status:** the public static-serving failure is fixed and externally verified. Interactive browser UI rendering remains a separate unchecked item because no authenticated browser automation session is available in the current execution environment.
