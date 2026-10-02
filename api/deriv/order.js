@@ -143,6 +143,35 @@ const buildQuoteRequest = (order, account) => {
   }
 }
 
+const acceptedMultipliersFromError = (message) => {
+  const match = String(message || '').match(/accepts?\\s+([0-9,\\s]+)/i)
+  if (!match) return []
+  return [...match[1].matchAll(/\\d+(?:\\.\\d+)?/g)]
+    .map((item) => Number(item[0]))
+    .filter((value) => Number.isFinite(value) && value > 0)
+}
+
+const proposalRequest = (requested, durationVariant, reqId) => ({
+  proposal: 1,
+  amount: requested.stake,
+  basis: 'stake',
+  contract_type: requested.side === 'BUY' ? 'MULTUP' : 'MULTDOWN',
+  currency: requested.currency,
+  multiplier: requested.multiplier,
+  underlying_symbol: requested.underlyingSymbol,
+  ...durationVariant,
+  subscribe: 1,
+  req_id: reqId,
+  ...(requested.stopLossAmount > 0 || requested.takeProfitAmount > 0
+    ? {
+        limit_order: {
+          ...(requested.stopLossAmount > 0 ? { stop_loss: requested.stopLossAmount } : {}),
+          ...(requested.takeProfitAmount > 0 ? { take_profit: requested.takeProfitAmount } : {}),
+        },
+      }
+    : {}),
+})
+
 const getQuote = async (req) => {
   const { user, connection, accountId, token, account } = await requireConnection(req)
   const order = req.body?.order && typeof req.body.order === 'object' ? req.body.order : {}
@@ -175,22 +204,7 @@ const getQuote = async (req) => {
       let proposalError = null
 
       for (let index = 0; index < durationVariants.length; index += 1) {
-        const proposalBody = {
-          proposal: 1,
-          amount: requested.stake,
-          basis: 'stake',
-          contract_type: requested.side === 'BUY' ? 'MULTUP' : 'MULTDOWN',
-          currency: requested.currency,
-          multiplier: requested.multiplier,
-          underlying_symbol: requested.underlyingSymbol,
-          ...durationVariants[index],
-          req_id: 3 + index,
-        }
-        if (requested.stopLossAmount > 0 || requested.takeProfitAmount > 0) {
-          proposalBody.limit_order = {}
-          if (requested.stopLossAmount > 0) proposalBody.limit_order.stop_loss = requested.stopLossAmount
-          if (requested.takeProfitAmount > 0) proposalBody.limit_order.take_profit = requested.takeProfitAmount
-        }
+        const proposalBody = proposalRequest(requested, durationVariants[index], 3 + index)
 
         try {
           proposalResponse = await sendAndWait(socket, proposalBody, 3 + index, 'PROPOSAL')
@@ -199,6 +213,13 @@ const getQuote = async (req) => {
         } catch (error) {
           proposalError = error
           const message = error instanceof Error ? error.message : String(error)
+          const accepted = acceptedMultipliersFromError(message)
+          if (accepted.length > 0) {
+            throw new StageError(
+              'PROPOSAL',
+              'Multiplier ' + requested.multiplier + ' is not supported for this Deriv market/account. Accepted: ' + accepted.join(', ') + '.',
+            )
+          }
           if (!/duration|date_expiry/i.test(message) || index === durationVariants.length - 1) throw error
         }
       }
@@ -259,41 +280,101 @@ const getQuote = async (req) => {
 
 const buy = async (req) => {
   const { user, connection, accountId, token, account } = await requireConnection(req)
+  const quote = req.body?.quote && typeof req.body.quote === 'object' ? req.body.quote : {}
   const proposalId = String(req.body?.proposalId || '')
   const askPrice = Number(req.body?.askPrice)
-  const quote = req.body?.quote && typeof req.body.quote === 'object' ? req.body.quote : {}
+  const symbol = String(quote.symbol || '').trim()
+  const side = quote.side === 'SELL' ? 'SELL' : 'BUY'
+  const stake = Number(quote.stake)
+  const multiplier = Number(quote.multiplier)
+  const currency = String(account.currency || quote.currency || '').trim().toUpperCase()
+  const stopLossAmount = Number(quote.stopLossAmount)
+  const takeProfitAmount = Number(quote.takeProfitAmount)
 
-  if (!proposalId) throw new StageError('BUY', 'Deriv proposal ID is required.')
-  if (!Number.isFinite(askPrice) || askPrice <= 0) throw new StageError('BUY', 'Deriv ask price is required.')
-
-  const normalizedQuote = {
-    proposalId,
-    askPrice,
-    symbol: String(quote.symbol || ''),
-    side: quote.side === 'SELL' ? 'SELL' : 'BUY',
-    stake: Number(quote.stake),
-    multiplier: Number(quote.multiplier),
-  }
-  if (!normalizedQuote.symbol || !Number.isFinite(normalizedQuote.stake) || !Number.isFinite(normalizedQuote.multiplier)) {
+  if (!symbol || !Number.isFinite(stake) || !Number.isFinite(multiplier) || !currency) {
     throw new StageError('BUY', 'The quoted trade details are incomplete.')
   }
 
+  const requested = buildQuoteRequest({
+    symbol,
+    side,
+    stake,
+    multiplier,
+    currency,
+    stopLossAmount,
+    takeProfitAmount,
+  }, account)
   const wsUrl = await requestWebSocketUrl(token, accountId)
+
   try {
     const result = await withSocket(wsUrl, async (socket) => {
+      // A proposal can become unusable between the review screen and the
+      // confirmation tap. Re-price immediately before buying, on the SAME
+      // authenticated WebSocket, following Deriv's documented workflow.
+      let freshProposal
+      const durationVariants = [
+        { duration_unit: 's' },
+        { duration: 300, duration_unit: 's' },
+        { duration: 60, duration_unit: 's' },
+      ]
+      let proposalError = null
+
+      for (let index = 0; index < durationVariants.length; index += 1) {
+        try {
+          freshProposal = await sendAndWait(
+            socket,
+            proposalRequest(requested, durationVariants[index], 10 + index),
+            10 + index,
+            'PROPOSAL',
+          )
+          proposalError = null
+          break
+        } catch (error) {
+          proposalError = error
+          const message = error instanceof Error ? error.message : String(error)
+          const accepted = acceptedMultipliersFromError(message)
+          if (accepted.length > 0) {
+            throw new StageError(
+              'PROPOSAL',
+              'Multiplier ' + requested.multiplier + ' is not supported for this Deriv market/account. Accepted: ' + accepted.join(', ') + '.',
+            )
+          }
+          if (!/duration|date_expiry/i.test(message) || index === durationVariants.length - 1) throw error
+        }
+      }
+
+      if (!freshProposal) throw proposalError || new StageError('PROPOSAL', 'Deriv did not return a fresh proposal.')
+
+      const fresh = freshProposal?.proposal || {}
+      const freshProposalId = String(fresh.id || '')
+      const freshAskPrice = Number(fresh.ask_price ?? fresh.display_value)
+      if (!freshProposalId || !Number.isFinite(freshAskPrice) || freshAskPrice <= 0) {
+        throw new StageError('PROPOSAL', 'Deriv returned an incomplete proposal at confirmation.')
+      }
+
+      // Keep the confirmation price authoritative: never buy above the
+      // freshly quoted ask. The original screen quote is display-only.
       const response = await sendAndWait(socket, {
-        buy: proposalId,
-        price: askPrice,
-        req_id: 1,
-      }, 1, 'BUY')
-      return normalizeBuy(response, req, normalizedQuote)
+        buy: freshProposalId,
+        price: freshAskPrice,
+        req_id: 20,
+      }, 20, 'BUY')
+      return normalizeBuy(response, req, {
+        proposalId: freshProposalId,
+        askPrice: freshAskPrice,
+        symbol: requested.symbol,
+        side: requested.side,
+        stake: requested.stake,
+        multiplier: requested.multiplier,
+      })
     })
+
     await recordProviderAudit({
       userId: user.id,
       connectionId: connection.id,
       accountId,
       eventType: 'deriv_order_placed',
-      metadata: { provider: 'deriv', accountId, contractId: result.providerOrderId, symbol: normalizedQuote.symbol, side: normalizedQuote.side, stake: normalizedQuote.stake, multiplier: normalizedQuote.multiplier, environment: account.environment },
+      metadata: { provider: 'deriv', accountId, contractId: result.providerOrderId, symbol: requested.symbol, side: requested.side, stake: requested.stake, multiplier: requested.multiplier, environment: account.environment },
     })
     return result
   } catch (error) {
@@ -303,7 +384,7 @@ const buy = async (req) => {
       accountId,
       eventType: 'deriv_order_failed',
       severity: 'error',
-      metadata: { provider: 'deriv', accountId, symbol: normalizedQuote.symbol, side: normalizedQuote.side, stake: normalizedQuote.stake, multiplier: normalizedQuote.multiplier, environment: account.environment, error: error instanceof Error ? error.message : String(error) },
+      metadata: { provider: 'deriv', accountId, symbol: requested.symbol, side: requested.side, stake: requested.stake, multiplier: requested.multiplier, environment: account.environment, error: error instanceof Error ? error.message : String(error) },
     })
     throw error
   }
