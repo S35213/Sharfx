@@ -4,15 +4,10 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   CheckCircle2,
-  CircleDollarSign,
   Clock3,
-  Gauge,
   LoaderCircle,
   ShieldCheck,
   Sparkles,
-  Target,
-  Wallet,
-  Zap,
 } from 'lucide-react'
 import type { SymbolSpec, TradeSide, TradeOrder } from '../../types'
 import type { SetupCandidate } from '../../engine/setup/types'
@@ -178,7 +173,6 @@ export const OrderPanel: React.FC<Props> = ({
 
   const busy = state === 'quoting' || state === 'buying'
   const accountLabel = connection ? (connection.environment === 'demo' ? 'DEMO ACCOUNT' : 'REAL ACCOUNT') : 'NOT CONNECTED'
-  const sideAccent = side === 'BUY' ? 'text-shafx-success' : 'text-shafx-danger'
 
   return (
     <section className="overflow-hidden rounded-2xl border border-shafx-border bg-shafx-surface shadow-[0_18px_50px_rgba(0,0,0,.22)]">
