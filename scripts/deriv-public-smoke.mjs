@@ -79,7 +79,29 @@ try {
     if (values.some((value) => !Number.isFinite(value))) throw new Error(label + ' returned invalid OHLC data')
   }
 
-  console.log('DERIV_PUBLIC_SMOKE_PASS: active EUR/USD + M1/H1/D1 candles verified')
+  socket.send(JSON.stringify({
+    proposal: 1,
+    amount: 1,
+    basis: 'stake',
+    contract_type: 'MULTDOWN',
+    currency: 'USD',
+    duration_unit: 's',
+    multiplier: 25,
+    underlying_symbol: SYMBOL,
+    req_id: 104,
+  }))
+  const proposal = await waitForMessage(
+    socket,
+    (payload) => Number(payload.req_id) === 104 && (payload.msg_type === 'proposal' || payload.error),
+    'MULTDOWN proposal',
+  )
+  const proposalId = String(proposal.proposal?.id || '')
+  const askPrice = Number(proposal.proposal?.ask_price ?? proposal.proposal?.display_value)
+  if (!proposalId || !Number.isFinite(askPrice) || askPrice <= 0) {
+    throw new Error('MULTDOWN proposal returned without a valid id/ask price')
+  }
+
+  console.log('DERIV_PUBLIC_SMOKE_PASS: active EUR/USD + M1/H1/D1 candles + MULTDOWN proposal verified')
 } finally {
   try { socket.close() } catch {}
 }
