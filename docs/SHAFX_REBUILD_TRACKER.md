@@ -363,3 +363,12 @@ When a new action is completed, append it to the action tree and change its chec
 - Added quick stake and multiplier controls plus account-share context so the ticket is useful without presenting FX-lot semantics that do not match Deriv Multiplier contracts.
 - Current broker behavior remains demo-only for order execution; no live trade capability was enabled by this UI change.
 - **Verification status:** application build/CI and deployed Render smoke are still required. This change does not by itself prove a real demo contract purchase until an authenticated user completes the flow.
+
+
+### 2026-10-02 — MULTDOWN duration fix + new TradeDock UI
+
+- Fixed the reported `PROPOSAL: Invalid input (duration or date_expiry) for this contract type (MULTDOWN)` path by replacing the hard-coded 24-hour proposal duration with a 1-hour duration for the experimental Multiplier quote request.
+- Rebuilt the manual order panel as the new SHARFX-native **TradeDock**: compact market header, familiar BUY/SELL direction buttons, stake, multiplier, optional SHARFX Protection, order preview, and one explicit confirmation action.
+- M5 is shown as the chart/trader context; it is not incorrectly sent as the broker contract duration.
+- This is an original SHARFX workflow, not an MT5/Deriv visual copy.
+- **Verification:** pending CI/build/Render smoke and authenticated proposal check.

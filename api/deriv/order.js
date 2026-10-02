@@ -169,7 +169,8 @@ const getQuote = async (req) => {
         currency: requested.currency,
         multiplier: requested.multiplier,
         underlying_symbol: requested.underlyingSymbol,
-        duration: 86400,
+        // Multiplier duration is market-dependent; 24h was rejected for FX MULTDOWN.
+        duration: 3600,
         duration_unit: 's',
         req_id: 3,
       }
