@@ -214,3 +214,17 @@ When a new action is completed, append it to the action tree and change its chec
 - Therefore **do not create or enter a Deriv client secret for this test flow** unless the Deriv dashboard/API later requires one for this specific app configuration.
 - `SUPABASE_ANON_KEY` is already configured on the Render test service from the SHAFX Staging Supabase project.
 - Current missing server-side configuration remains `SUPABASE_SERVICE_ROLE_KEY` and `SHAFX_DERIV_SESSION_SECRET`; `DERIV_CLIENT_ID` also needs to be present on Render.
+
+
+### 2026-10-02 — Broker plumbing + public market smoke verified
+
+- Verified the staging Supabase project is active and contains the SHAFX provider tables required by the rebuild: provider connections, provider accounts, provider order intents, and provider audit events.
+- Verified the three provider-secret RPC functions exist and are SECURITY DEFINER with privileges restricted to service_role/postgres; the app's provider credential reference is therefore not exposed through the normal public roles.
+- Verified the staging database currently has one existing Deriv OAuth connection and both a demo USD account and a live USD account. The rebuild still disables live Deriv order execution in code; these existing records were not mutated during this test.
+- Added scripts/deriv-public-smoke.mjs to test Deriv's current public WebSocket without credentials or order execution.
+- The first run failed because the smoke request included an unsupported product_type field in active_symbols. Removed that field and reran the gate.
+- Final verification after the fix: GitHub Actions run 37001593683 completed SUCCESS. Build, lint, tests, audit, Render HTTP/auth smoke, and the Deriv public-market smoke all passed.
+- Exact Deriv smoke evidence: active EUR/USD + M1/H1/D1 candles verified from the Deriv public WebSocket endpoint.
+- Exact Render evidence on the same verification run: homepage HTTP 200 and /api/auth?action=me HTTP 401.
+- Browser automation is not available from the current execution environment: the installed Chromium is blocked by the environment, so no authenticated interactive UI/OAuth session has been claimed.
+- Current gate: real SHAFX login → Deriv OAuth → demo account selection → authenticated market/contract validation → proposal → explicit confirmation → demo buy → contract monitoring → close → SHAFX history.
