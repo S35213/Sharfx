@@ -161,26 +161,52 @@ const getQuote = async (req) => {
       // whether the selected underlying supports the requested contract family.
       await sendAndWait(socket, { contracts_for: requested.underlyingSymbol, req_id: 2 }, 2, 'MARKET')
 
-      const proposalBody = {
-        proposal: 1,
-        amount: requested.stake,
-        basis: 'stake',
-        contract_type: requested.side === 'BUY' ? 'MULTUP' : 'MULTDOWN',
-        currency: requested.currency,
-        multiplier: requested.multiplier,
-        underlying_symbol: requested.underlyingSymbol,
-        // Multiplier duration is market-dependent; 24h was rejected for FX MULTDOWN.
-        duration: 3600,
-        duration_unit: 's',
-        req_id: 3,
-      }
-      if (requested.stopLossAmount > 0 || requested.takeProfitAmount > 0) {
-        proposalBody.limit_order = {}
-        if (requested.stopLossAmount > 0) proposalBody.limit_order.stop_loss = requested.stopLossAmount
-        if (requested.takeProfitAmount > 0) proposalBody.limit_order.take_profit = requested.takeProfitAmount
+      // Deriv's current Multiplier workflow treats the position as open-ended;
+      // the official example sends duration_unit without a numeric duration.
+      // Older SHAFX code hard-coded 24h, which Deriv rejected for MULTDOWN.
+      // Keep a small compatibility fallback for accounts/markets that still
+      // require an explicit short duration.
+      const durationVariants = [
+        { duration_unit: 's' },
+        { duration: 300, duration_unit: 's' },
+        { duration: 60, duration_unit: 's' },
+      ]
+      let proposalResponse = null
+      let proposalError = null
+
+      for (let index = 0; index < durationVariants.length; index += 1) {
+        const proposalBody = {
+          proposal: 1,
+          amount: requested.stake,
+          basis: 'stake',
+          contract_type: requested.side === 'BUY' ? 'MULTUP' : 'MULTDOWN',
+          currency: requested.currency,
+          multiplier: requested.multiplier,
+          underlying_symbol: requested.underlyingSymbol,
+          ...durationVariants[index],
+          req_id: 3 + index,
+        }
+        if (requested.stopLossAmount > 0 || requested.takeProfitAmount > 0) {
+          proposalBody.limit_order = {}
+          if (requested.stopLossAmount > 0) proposalBody.limit_order.stop_loss = requested.stopLossAmount
+          if (requested.takeProfitAmount > 0) proposalBody.limit_order.take_profit = requested.takeProfitAmount
+        }
+
+        try {
+          proposalResponse = await sendAndWait(socket, proposalBody, 3 + index, 'PROPOSAL')
+          proposalError = null
+          break
+        } catch (error) {
+          proposalError = error
+          const message = error instanceof Error ? error.message : String(error)
+          if (!/duration|date_expiry/i.test(message) || index === durationVariants.length - 1) throw error
+        }
       }
 
-      const proposalResponse = await sendAndWait(socket, proposalBody, 3, 'PROPOSAL')
+      if (!proposalResponse) {
+        throw proposalError || new StageError('PROPOSAL', 'Deriv did not return a proposal.')
+      }
+
       const proposal = proposalResponse?.proposal || {}
       const proposalId = String(proposal.id || '')
       const askPrice = Number(proposal.ask_price ?? proposal.display_value)
