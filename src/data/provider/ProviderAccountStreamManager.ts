@@ -2,6 +2,7 @@ import type { ProviderAccountSnapshot } from '../../integrations/core/types'
 import { ProviderAccountStream } from './ProviderAccountStream'
 import { ProviderAccountCache } from './ProviderAccountCache'
 import { providerTelemetry } from '../../integrations/core/providerTelemetry'
+import type { ProviderStreamEvent } from '../../integrations/core/types'
 
 export interface ProviderAccountStreamSpec {
   providerId: string
@@ -16,6 +17,7 @@ export interface ManagedStreamSession {
   spec: ProviderAccountStreamSpec
   onSnapshot?: (snapshot: ProviderAccountSnapshot) => void
   onStatus?: (status: ManagedProviderStreamStatus) => void
+  onEvent?: (event: ProviderStreamEvent) => void
   retryAttempt: number
   retryTimer?: ReturnType<typeof setTimeout>
   stopped: boolean
