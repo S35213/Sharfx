@@ -98,16 +98,15 @@ try {
   const proposalError = String(proposal.error?.message || '')
   if (proposalError && /market is presently closed|market.*closed|market will open/i.test(proposalError)) {
     console.log('DERIV_PUBLIC_SMOKE_PASS: active EUR/USD + M1/H1/D1 candles verified; proposal skipped because the market is closed')
-    return
-  }
+  } else {
+    const proposalId = String(proposal.proposal?.id || '')
+    const askPrice = Number(proposal.proposal?.ask_price ?? proposal.proposal?.display_value)
+    if (!proposalId || !Number.isFinite(askPrice) || askPrice <= 0) {
+      throw new Error('MULTDOWN proposal returned without a valid id/ask price')
+    }
 
-  const proposalId = String(proposal.proposal?.id || '')
-  const askPrice = Number(proposal.proposal?.ask_price ?? proposal.proposal?.display_value)
-  if (!proposalId || !Number.isFinite(askPrice) || askPrice <= 0) {
-    throw new Error('MULTDOWN proposal returned without a valid id/ask price')
+    console.log('DERIV_PUBLIC_SMOKE_PASS: active EUR/USD + M1/H1/D1 candles + MULTDOWN proposal verified')
   }
-
-  console.log('DERIV_PUBLIC_SMOKE_PASS: active EUR/USD + M1/H1/D1 candles + MULTDOWN proposal verified')
 } finally {
   try { socket.close() } catch {}
 }
