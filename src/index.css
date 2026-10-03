@@ -285,3 +285,10 @@ input::placeholder { color: #667285; }
     width: 100%;
   }
 }
+
+@media (min-width: 1000px) {
+  /* desktop-workstation-width: keep side panels useful but subordinate to the chart */
+  .shafx-terminal-root .shafx-side-nav { width: 48px; }
+  .shafx-terminal-root .shafx-watchlist-panel { width: clamp(210px, 18vw, 240px); }
+  .shafx-terminal-root .shafx-workspace-panel { width: clamp(300px, 23vw, 360px); }
+}
