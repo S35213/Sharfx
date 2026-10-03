@@ -515,3 +515,22 @@ When a new action is completed, append it to the action tree and change its chec
   - Render rebuild/public verification PASS
 - Main/production and Cloudflare were not modified.
 - Interactive visual behavior is implemented and the deployed build is healthy, but this environment still does not have the user's authenticated browser session for a direct mouse/touch visual replay of the terminal itself.
+
+
+## 2026-10-03 — Desktop trading workstation hierarchy
+
+- User-provided PC screenshot showed the desktop terminal was too vertically stacked: oversized status/KPI cards were consuming chart area, the left column mixed watchlist and account, and the right workspace panel defaulted to an information/capability view instead of the actual trading ticket.
+- Desktop research checked current TradingView Desktop/layout/watchlist guidance and MetaTrader 5 interface guidance. Common desktop organization is a persistent market/watchlist area, a dominant chart workspace with dedicated analysis controls, and a focused order/position area that can remain accessible without covering the chart. citeturn129105search0turn129105search1turn129105search3turn129105search12
+- SHAFX desktop was restructured without changing the mobile layout:
+  - left rail + dedicated 230px watchlist only; the bulky AccountPanel was removed from that column;
+  - compact one-row desktop market/account status strip replaces the four large KPI cards;
+  - chart becomes the dominant center workspace and is allowed to flex vertically instead of using the large fixed mobile-oriented chart height;
+  - dedicated timeframe rail remains outside the chart canvas;
+  - right panel defaults to the actual Deriv OrderPanel instead of the broker capability matrix;
+  - Market intelligence/AI, Signal Desk, Liquidity and other tools remain accessible through the existing workspace rail;
+  - bottom open/pending/history area is reduced to a compact 176–192px desktop band so positions remain visible without crushing the chart;
+  - duplicate timeframe display was removed from the top navigation.
+- Final application commit: 1e7eb2b4591c05f81dd534e37345e6c975936149
+- Final Render deployment: dep-db0ctnajtthc73f381q0 — LIVE
+- Final SHAFX CI: 37114159616 — SUCCESS
+- Main/production and Cloudflare were not modified.
