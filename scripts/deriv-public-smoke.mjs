@@ -1,7 +1,7 @@
 const WS_URL = 'wss://api.derivws.com/trading/v1/options/ws/public'
 const SYMBOL = 'frxEURUSD'
 
-const waitForMessage = (socket, predicate, label, timeoutMs = 10000) => new Promise((resolve, reject) => {
+const waitForMessage = (socket, predicate, label, timeoutMs = 10000, allowError = false) => new Promise((resolve, reject) => {
   let timer = setTimeout(() => {
     socket.removeEventListener('message', onMessage)
     reject(new Error(label + ' timed out'))
@@ -13,7 +13,7 @@ const waitForMessage = (socket, predicate, label, timeoutMs = 10000) => new Prom
       if (!predicate(payload)) return
       clearTimeout(timer)
       socket.removeEventListener('message', onMessage)
-      if (payload.error?.message) reject(new Error(label + ': ' + payload.error.message))
+      if (payload.error?.message && !allowError) reject(new Error(label + ': ' + payload.error.message))
       else resolve(payload)
     } catch {
       // Ignore unrelated malformed frames.
@@ -94,6 +94,8 @@ try {
     socket,
     (payload) => Number(payload.req_id) === 104 && (payload.msg_type === 'proposal' || payload.error),
     'MULTDOWN proposal',
+    10000,
+    true,
   )
   const proposalError = String(proposal.error?.message || '')
   if (proposalError && /market is presently closed|market.*closed|market will open/i.test(proposalError)) {
