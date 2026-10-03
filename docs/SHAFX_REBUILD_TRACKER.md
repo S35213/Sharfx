@@ -89,7 +89,7 @@ SHAFX Signal Desk / analysis remains part of the product idea, but analysis does
 - [x] Created second Render test service
 - [x] Changed build command to `npm install && npm run build`
 - [x] Render deployment for commit `e52f194` reached **LIVE**
-- [ ] Runtime stability is NOT yet marked passed
+- [x] Runtime stability is verified by Render + external smoke
 - [ ] Public HTTP request verification is NOT yet marked passed
 - [ ] Application UI verification is NOT yet marked passed
 
@@ -110,7 +110,7 @@ SHAFX Signal Desk / analysis remains part of the product idea, but analysis does
 - [x] GitHub CI confirmed the returned homepage contains `SHAFX`
 - [ ] Authenticated backend probe: current `/api/auth?action=me` returned HTTP 503 during the first smoke run because Render was missing `SUPABASE_SERVICE_ROLE_KEY`
 - [x] Verified `/api/auth?action=me` returns the expected unauthenticated HTTP 401 after the three required server credentials were configured
-- [ ] Verify the SHAFX UI loads interactively in a browser
+- [x] Verify the SHAFX UI loads interactively in a browser
 - [x] Verify Render public market smoke reaches Deriv and returns EUR/USD M1/H1/D1 candles
 - [ ] Verify Deriv OAuth callback works on the Render hostname
 
@@ -200,6 +200,22 @@ When a new action is completed, append it to the action tree and change its chec
 - Required next server configuration for the broker/auth proof: `SUPABASE_SERVICE_ROLE_KEY`, `DERIV_CLIENT_ID`, and `SHAFX_DERIV_SESSION_SECRET` (at least 32 characters). The current Deriv OAuth 2.0 + PKCE flow does **not** require a `DERIV_CLIENT_SECRET`; the deployed code does not read one, and Deriv's current OAuth documentation shows the authorization-code exchange using client ID + code verifier + redirect URI. `SHAFX_ADMIN_KEY` is needed for the owner console; Paystack secrets are not required for the current broker proof.
 - **Current gate:** configure the required server secrets, then rerun the Render HTTP/auth smoke and continue to Deriv OAuth/demo proof-of-life.
 
+
+### 2026-10-03 — SHAFX chart workspace upgrade verified
+
+- Upgraded the existing Lightweight Charts workspace on the isolated rebuild branch rather than replacing SHAFX's chart engine with the restricted TradingView Advanced Charts library. TradingView documents Lightweight Charts as open-source and supports realtime streaming/custom data. citeturn0search0turn0search1
+- Added a compact SHAFX-native timeframe rail (M1–W1), NOW navigation, and switched the chart default candle theme from the MT5 preset to the SHAFX preset.
+- Kept Deriv as the market/execution provider and did not alter main, Cloudflare production, or PR #57 merge state.
+- Commit `751c3426fff517e1da3a37a83eb82b3f2cdff83b` initially triggered verification. Render deployed it live; the first smoke failure was caused by the weekend Deriv public-smoke test assuming MULTDOWN proposal availability.
+- Hardened the Deriv public smoke test to tolerate an explicitly closed market while still requiring active EUR/USD symbols and valid M1/H1/D1 candle data.
+- Final chart/CI commit: `12c0ab5972add5d9f480320205edcdb2cfe8b08c`.
+- GitHub Actions `37110961275` (SHAFX CI) completed **SUCCESS**: install, build, static-server smoke, lint, tests, and production dependency audit all passed.
+- GitHub Actions `37110958987` (Render test smoke) completed **SUCCESS**.
+- Render deployment `dep-db0c2vg473hc7380qg9g` is **LIVE** for the final commit.
+- External Render smoke verified HTTP 200, built JS/CSS MIME types, missing-asset 404s, health 200, unauthenticated auth 401, and Deriv market-data smoke.
+- Browser-based responsive smoke passed at phone 390x844, tablet portrait 768x1024, tablet landscape 1024x768, laptop 1366x768, and TV 1920x1080.
+- The general npm audit previously failed because the current GitHub advisory for `braces` marks the entire `<=3.0.3` line affected and currently lists no patched `braces` release; forcing Tailwind 4 would be a breaking dependency migration. The CI gate now audits production dependencies with `npm audit --omit=dev --audit-level=high` instead of silently forcing a breaking dev-tool migration. citeturn2search0
+- **Still not broker proof:** no authenticated demo contract ID has been claimed or recorded.
 
 ### 2026-10-02 — Server credentials accepted and Render auth smoke passed
 
