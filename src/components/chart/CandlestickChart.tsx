@@ -294,7 +294,6 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       chart.timeScale().applyOptions({
         barSpacing: initialBarSpacing,
         minBarSpacing: 1,
-        maxBarSpacing: 36,
         rightOffset: 3,
         visible: true,
       })
