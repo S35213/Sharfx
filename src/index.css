@@ -189,6 +189,30 @@ input::placeholder { color: #667285; }
 @keyframes shafx-transition-mark{0%{opacity:0;transform:translateX(-50%) scale(.82)}65%{opacity:1;transform:translateX(-50%) scale(1.02)}100%{opacity:1;transform:translateX(-50%) scale(1)}}
 @keyframes shafx-transition-word{0%{opacity:0;transform:translate(-50%,18px) scale(.96);letter-spacing:.30em}100%{opacity:1;transform:translate(-50%,0) scale(1);letter-spacing:.12em}}
 @media (prefers-reduced-motion:reduce){.shafx-brand-intro,.shafx-brand-intro *,.shafx-brand-transition,.shafx-brand-transition *{animation:none!important;transition:none!important}.shafx-brand-intro,.shafx-brand-transition{opacity:0;visibility:hidden;pointer-events:none}}
+/* SHAFX desktop trading workstation: keep the chart dominant and panels purposeful. */
+@media (min-width: 1000px) {
+  .shafx-terminal-root .shafx-landscape-secondary { display: none !important; }
+  .shafx-terminal-root .shafx-chart-stage {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    flex: 1 1 auto;
+  }
+  .shafx-terminal-root .shafx-chart-stage > .shafx-chart-shell {
+    min-height: 0 !important;
+    height: 100% !important;
+  }
+  .shafx-terminal-root .shafx-market-section {
+    min-width: 0;
+  }
+  .shafx-terminal-root .shafx-top-nav button {
+    border-radius: 10px;
+  }
+  .shafx-terminal-root .shafx-top-nav-market {
+    max-width: 250px;
+  }
+}
+
 /* Universal viewport polish: keep SHARFX spatial instead of cramped when the device rotates. */
 @media (min-width: 1000px) {
   /* Public/auth pages must remain document-scrollable on desktop.
