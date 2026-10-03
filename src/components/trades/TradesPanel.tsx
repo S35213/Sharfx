@@ -46,6 +46,7 @@ export const TradesPanel: React.FC<Props> = ({ openPositions, pendingOrders, tra
                     <td className="px-4 py-2 text-shafx-textMuted"><span className="block">Open {formatTimestamp(trade.openTime)}</span>{trade.closeTime && <span className="mt-0.5 block text-[9px] text-shafx-textMuted">Close {formatTimestamp(trade.closeTime)}</span>}</td>
                     <td className={`px-4 py-2 font-semibold ${trade.type === 'BUY' ? 'text-shafx-success' : 'text-shafx-danger'}`}>{trade.type}</td>
                     <td className="px-4 py-2 font-medium">{trade.symbol}</td>
+                    <td className="px-4 py-2 font-mono tabular text-shafx-accent">{trade.chartTimeframe ?? '—'}</td>
                     <td className="px-4 py-2 font-mono tabular">{stake.toFixed(2)}</td>
                     <td className="px-4 py-2 font-mono tabular">{isDeriv ? (trade.multiplier ?? '—') + '×' : '—'}</td>
                     <td className="px-4 py-2 font-mono tabular">{isDeriv ? (trade.entryPrice > 0 ? formatPrice(trade.entryPrice,p) : '—') : formatPrice(trade.entryPrice,p)}</td>
