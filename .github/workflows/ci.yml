@@ -23,6 +23,34 @@ jobs:
           package-manager-cache: false
       - run: npm install
       - run: npm run build
+      - name: Verify Node Render static server
+        shell: bash
+        run: node scripts/render-static-smoke.mjs
       - run: npm run lint
       - run: npm test
-      - run: npm audit --audit-level=high
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Verify Render rebuild service
+        if: github.event_name == 'pull_request' && github.head_ref == 'test/rebuild-deriv-native-manual-20260930'
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="https://sharfx-deriv-render.onrender.com"
+          for attempt in $(seq 1 36); do
+            status="$(curl -sS -L -o /tmp/shafx-home.html -w '%{http_code}' --max-time 15 "$url/" || true)"
+            echo "Render attempt $attempt/36: / -> HTTP $status"
+            if [ "$status" = "200" ]; then
+              break
+            fi
+            sleep 10
+          done
+
+          test -s /tmp/shafx-home.html
+          grep -qi 'SHAFX' /tmp/shafx-home.html
+
+          node scripts/deriv-public-smoke.mjs
+
+          auth_status="$(curl -sS -o /tmp/shafx-auth.json -w '%{http_code}' --max-time 15 "$url/api/auth?action=me" || true)"
+          echo "Render auth probe -> HTTP $auth_status"
+          test "$auth_status" = "401"

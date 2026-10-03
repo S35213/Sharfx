@@ -39,17 +39,6 @@ const prepareData = (data: OHLCV[]): CandlestickData[] => {
     .map((c) => ({ time: c.time as UTCTimestamp, open: c.open, high: c.high, low: c.low, close: c.close }))
 }
 
-const timeframeMeta = (timeframe?: Timeframe, data: CandlestickData[] = []): { label: string; interval: string } => {
-  if (timeframe) {
-    const labels: Record<Timeframe, string> = { M1: '1m', M5: '5m', M15: '15m', M30: '30m', H1: '1h', H4: '4h', D1: '1d', W1: '1w' }
-    return { label: timeframe, interval: labels[timeframe] }
-  }
-  if (data.length < 2) return { label: '—', interval: 'candle' }
-  const seconds = Number(data[1].time) - Number(data[0].time)
-  const known: Record<number, { label: string; interval: string }> = { 60: { label: 'M1', interval: '1m' }, 300: { label: 'M5', interval: '5m' }, 900: { label: 'M15', interval: '15m' }, 1800: { label: 'M30', interval: '30m' }, 3600: { label: 'H1', interval: '1h' }, 14400: { label: 'H4', interval: '4h' }, 86400: { label: 'D1', interval: '1d' }, 604800: { label: 'W1', interval: '1w' } }
-  return known[seconds] ?? { label: 'Custom', interval: `${Math.round(seconds / 60)}m` }
-}
-
 const VISIBLE_BARS_BY_TIMEFRAME: Record<Timeframe, number> = {
   M1: 120,
   M5: 100,
@@ -78,17 +67,17 @@ const TIMEFRAME_SECONDS: Record<Timeframe, number> = {
 }
 const timeframeSecondsFor = (nextTimeframe: Timeframe): number => TIMEFRAME_SECONDS[nextTimeframe]
 
-export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, symbol, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [], candleTheme = 'mt5', chartMode = 'candles', marketTimestamp, onTimeframeChange, replayMode = false }) => {
+export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, symbol, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [], candleTheme = 'shafx', chartMode = 'candles', marketTimestamp, onTimeframeChange, replayMode = false }) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ShafxSeries | null>(null)
+  const seriesConfigRef = useRef<{ chartMode: ChartMode; pipSize: number } | null>(null)
   const chartData = useMemo(() => prepareData(data), [data])
   const visualData = useMemo(() => {
     if (chartMode === 'candles' || chartMode === 'bars') return chartData
     return chartData.map((candle) => ({ time: candle.time, value: candle.close }))
   }, [chartData, chartMode])
   const lastClose = chartData.length ? Number(chartData[chartData.length - 1]?.close) : Number.NaN
-  const meta = timeframeMeta(timeframe, chartData)
   const [userLevels, setUserLevels] = useState<UserLevel[]>([])
   const [measureStart, setMeasureStart] = useState<number | null>(null)
   const [measureEnd, setMeasureEnd] = useState<number | null>(null)
@@ -105,6 +94,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const renderedFirstTimeRef = useRef<number | null>(null)
   const renderedLastTimeRef = useRef<number | null>(null)
   const [crosshairInfo, setCrosshairInfo] = useState<{ price: number; time: string } | null>(null)
+  const [hoverCandle, setHoverCandle] = useState<{ time: number; open?: number; high?: number; low?: number; close: number } | null>(null)
   const [timelineMarks, setTimelineMarks] = useState<Array<{ x: number; label: string }>>([])
   // Fullscreen is an explicit user action only. Device rotation must never pin the chart.
 
@@ -153,12 +143,13 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
+
     const chart = createChart(el, {
       layout: { background: { type: ColorType.Solid, color: '#070A0F' }, textColor: '#8A96A8', attributionLogo: false },
       grid: showGrid ? { vertLines: { color: '#131A23' }, horzLines: { color: '#131A23' } } : { vertLines: { color: 'transparent' }, horzLines: { color: 'transparent' } },
       width: el.clientWidth,
       height: Math.max(280, el.clientHeight),
-      crosshair: { mode: 1, vertLine: { color: '#667285', width: 1, style: 2, labelBackgroundColor: '#202A38' }, horzLine: { color: '#667285', width: 1, style: 2, labelBackgroundColor: '#202A38' } },
+      crosshair: { mode: 0, vertLine: { color: '#667285', width: 1, style: 2, labelBackgroundColor: '#202A38' }, horzLine: { color: '#667285', width: 1, style: 2, labelBackgroundColor: '#202A38' } },
       rightPriceScale: { borderColor: '#202A38', minimumWidth: el.clientWidth < 640 ? 78 : 94, alignLabels: true, ticksVisible: true, scaleMargins: { top: 0.08, bottom: 0.08 } },
       timeScale: {
         visible: true,
@@ -171,28 +162,15 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         uniformDistribution: true,
         rightOffset: 3,
         barSpacing: 5,
-        minBarSpacing: 0.5,
+        minBarSpacing: 1,
         tickMarkFormatter: () => '',
       },
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
       handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true },
       kineticScroll: { touch: true, mouse: false },
     })
-    const colors = candleColors[candleTheme]
-    const precision = Math.max(2, Math.round(Math.log10(1 / Math.max(pipSize, 0.00001))))
-    let series: ShafxSeries
-    if (chartMode === 'bars') {
-      series = chart.addBarSeries({ priceFormat: { type: 'price', precision, minMove: Math.max(pipSize, 0.00001) }, upColor: colors.up, downColor: colors.down, openVisible: true, thinBars: false, priceLineVisible: false, lastValueVisible: false })
-    } else if (chartMode === 'wave') {
-      series = chart.addLineSeries({ color: colors.up, lineWidth: 2, crosshairMarkerVisible: true, priceLineVisible: false, lastValueVisible: false })
-    } else if (chartMode === 'area') {
-      series = chart.addAreaSeries({ lineColor: colors.up, topColor: colors.up + '66', bottomColor: colors.up + '05', lineWidth: 2, priceLineVisible: false, lastValueVisible: false })
-    } else {
-      series = chart.addCandlestickSeries({ priceFormat: { type: 'price', precision, minMove: Math.max(pipSize, 0.00001) }, upColor: colors.up, downColor: colors.down, borderUpColor: colors.up, borderDownColor: colors.down, wickUpColor: colors.up, wickDownColor: colors.down, priceLineVisible: false, lastValueVisible: false })
-    }
 
     chartRef.current = chart
-    seriesRef.current = series
     const ro = new ResizeObserver(([entry]) => {
       if (!entry) return
       const { width, height: h } = entry.contentRect
@@ -214,34 +192,11 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       chart.remove()
       chartRef.current = null
       seriesRef.current = null
+      seriesConfigRef.current = null
       marketBidLineRef.current = null
       marketAskLineRef.current = null
     }
-  }, [chartMode])
-
-  useEffect(() => {
-    const series = seriesRef.current
-    if (!series) return
-    const colors = candleColors[candleTheme]
-
-    if (chartMode === 'wave') {
-      series.applyOptions({ color: colors.up, lineColor: colors.up })
-    } else if (chartMode === 'area') {
-      series.applyOptions({ lineColor: colors.up, topColor: colors.up + '66', bottomColor: colors.up + '05' })
-    } else if (chartMode === 'bars') {
-      series.applyOptions({ upColor: colors.up, downColor: colors.down })
-    } else {
-      series.applyOptions({
-        upColor: colors.up,
-        downColor: colors.down,
-        borderUpColor: colors.up,
-        borderDownColor: colors.down,
-        wickUpColor: colors.up,
-        wickDownColor: colors.down,
-      })
-    }
-  }, [candleTheme, chartMode])
-
+  }, [])
   useEffect(() => {
     const chart = chartRef.current
     if (!chart) return
@@ -253,29 +208,107 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   }, [showGrid])
 
   useEffect(() => {
-    const series = seriesRef.current
     const chart = chartRef.current
-    if (!series || !chart || !visualData.length) return
+    if (!chart || !visualData.length) return
 
+    const colors = candleColors[candleTheme]
+    const precision = Math.max(2, Math.round(Math.log10(1 / Math.max(pipSize, 0.00001))) + 1)
+    const currentConfig = seriesConfigRef.current
+    const needsNewSeries =
+      !seriesRef.current ||
+      !currentConfig ||
+      currentConfig.chartMode !== chartMode ||
+      currentConfig.pipSize !== pipSize
+
+    if (needsNewSeries) {
+      if (seriesRef.current) {
+        try { chart.removeSeries(seriesRef.current) } catch { /* stale series during a live mode switch */ }
+        seriesRef.current = null
+      }
+
+      let nextSeries: ShafxSeries
+      if (chartMode === 'bars') {
+        nextSeries = chart.addBarSeries({
+          priceFormat: { type: 'price', precision, minMove: Math.max(pipSize, 0.00001) },
+          upColor: colors.up,
+          downColor: colors.down,
+          openVisible: true,
+          thinBars: false,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        })
+      } else if (chartMode === 'wave') {
+        nextSeries = chart.addLineSeries({
+          color: colors.up,
+          lineWidth: 2,
+          crosshairMarkerVisible: true,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        })
+      } else if (chartMode === 'area') {
+        nextSeries = chart.addAreaSeries({
+          lineColor: colors.up,
+          topColor: colors.up + '66',
+          bottomColor: colors.up + '05',
+          lineWidth: 2,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        })
+      } else {
+        nextSeries = chart.addCandlestickSeries({
+          priceFormat: { type: 'price', precision, minMove: Math.max(pipSize, 0.00001) },
+          upColor: colors.up,
+          downColor: colors.down,
+          borderUpColor: colors.up,
+          borderDownColor: colors.down,
+          wickUpColor: colors.up,
+          wickDownColor: colors.down,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        })
+      }
+
+      seriesRef.current = nextSeries
+      seriesConfigRef.current = { chartMode, pipSize }
+    }
+
+    const series = seriesRef.current
+    if (!series) return
+
+    // This is deliberately in the same effect as series creation. A mode switch
+    // therefore receives the current candles immediately instead of waiting for
+    // the next timeframe/data update.
+    series.setData(visualData)
+
+    if (chartMode === 'wave') {
+      series.applyOptions({ color: colors.up, lineColor: colors.up })
+    } else if (chartMode === 'area') {
+      series.applyOptions({ lineColor: colors.up, topColor: colors.up + '66', bottomColor: colors.up + '05' })
+    } else if (chartMode === 'bars') {
+      series.applyOptions({
+        upColor: colors.up,
+        downColor: colors.down,
+        priceFormat: { type: 'price', precision, minMove: Math.max(pipSize, 0.00001) },
+      })
+    } else {
+      series.applyOptions({
+        upColor: colors.up,
+        downColor: colors.down,
+        borderUpColor: colors.up,
+        borderDownColor: colors.down,
+        wickUpColor: colors.up,
+        wickDownColor: colors.down,
+        priceFormat: { type: 'price', precision, minMove: Math.max(pipSize, 0.00001) },
+      })
+    }
+
+    const lastIndex = visualData.length - 1
+    const lastTime = Number(visualData[lastIndex].time)
     const firstTime = Number(visualData[0].time)
-    const lastTime = Number(visualData[visualData.length - 1].time)
     const symbolChanged = previousSymbolRef.current !== symbol
     const timeframeChanged = previousTimeframeRef.current !== timeframe
-    // Replay can jump backwards when the user presses Start. In that case the
-    // previous visible range can be beyond the new dataset, so reset to the
-    // live edge instead of leaving the chart looking unchanged.
     const replayWindowReset = renderedLastTimeRef.current !== null && lastTime < renderedLastTimeRef.current
     const rangeNeedsReset = !viewInitializedRef.current || symbolChanged || timeframeChanged || replayWindowReset
-
-    // Realtime ticks update only the latest bar. Replacing the whole series and
-    // calling scrollToRealTime on every tick was resetting the user's pinch zoom
-    // and horizontal position after their finger was released.
-    const canUpdateLatestBar =
-      !symbolChanged &&
-      !timeframeChanged &&
-      renderedFirstTimeRef.current === firstTime &&
-      renderedLastTimeRef.current !== null &&
-      lastTime >= renderedLastTimeRef.current
 
     const previousLastTime = renderedLastTimeRef.current
     const previousLastIndex = latestIndexRef.current
@@ -286,18 +319,13 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         !visibleRange ||
         (previousLastIndex >= 0 && visibleRange.to >= previousLastIndex - 1))
     const isNewBar = previousLastTime !== null && lastTime > previousLastTime
+    const isModeSwitch = currentConfig?.chartMode !== chartMode || currentConfig?.pipSize !== pipSize
 
-    if (canUpdateLatestBar) {
+    if (!rangeNeedsReset && !isModeSwitch && previousLastTime !== null && lastTime === previousLastTime) {
       series.update(visualData[visualData.length - 1])
-    } else {
-      series.setData(visualData)
     }
 
-    const lastIndex = visualData.length - 1
     if (rangeNeedsReset) {
-      // Every timeframe gets the same normal, zoomed-out starting view.
-      // Never carry the previous timeframe's pinch/bar-spacing zoom into the
-      // new timeframe. The user can zoom in manually after switching.
       chart.timeScale().resetTimeScale()
       const containerWidth = containerRef.current?.clientWidth ?? 640
       const plotWidth = Math.max(280, containerWidth - (containerWidth < 640 ? 82 : 96))
@@ -305,7 +333,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       const initialBarSpacing = Math.max(5, Math.min(20, plotWidth / Math.max(1, targetBars)))
       chart.timeScale().applyOptions({
         barSpacing: initialBarSpacing,
-        minBarSpacing: 0.5,
+        minBarSpacing: 1,
         rightOffset: 3,
         visible: true,
       })
@@ -314,9 +342,6 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       series.priceScale().applyOptions({ autoScale: true, scaleMargins: { top: 0.08, bottom: 0.08 } })
       followRealtimeRef.current = true
     } else if (isNewBar && wasFollowingRealtime) {
-      // Only follow the newest bar when the user is already at the live edge.
-      // When the user has panned back into history, never pull them back to
-      // the front just because a new simulator/provider tick arrived.
       chart.timeScale().scrollToRealTime()
       followRealtimeRef.current = true
     }
@@ -327,8 +352,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     previousTimeframeRef.current = timeframe
     renderedFirstTimeRef.current = firstTime
     renderedLastTimeRef.current = lastTime
-  }, [visualData, symbol, timeframe])
-
+  }, [visualData, symbol, timeframe, chartMode, pipSize, candleTheme])
   useEffect(() => {
     const chart = chartRef.current
     if (!chart || !chartData.length || !timeframe) {
@@ -380,8 +404,12 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         marks.push({ x: Number(x), label })
       }
 
-      // Always keep the axis readable on very dense views.
-      setTimelineMarks(marks.slice(-14))
+      const selected: Array<{ x: number; label: string }> = []
+      for (const mark of marks.sort((a, b) => a.x - b.x)) {
+        const previous = selected[selected.length - 1]
+        if (!previous || mark.x - previous.x >= minimumLabelSpacing) selected.push(mark)
+      }
+      setTimelineMarks(selected)
     }
 
     updateTimeline()
@@ -495,6 +523,42 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     )
   }, [askPrice, bidPrice, lastClose, showPriceLabels])
 
+
+  useEffect(() => {
+    const chart = chartRef.current
+    if (!chart) return
+
+    const handler = (param: Parameters<NonNullable<Parameters<IChartApi['subscribeCrosshairMove']>[0]>>[0]) => {
+      if (!param.time) {
+        setHoverCandle(null)
+        return
+      }
+      const targetTime = Number(param.time)
+      let closest: OHLCV | undefined
+      let closestDistance = Number.POSITIVE_INFINITY
+      for (const candle of data) {
+        const distance = Math.abs(Number(candle.time) - targetTime)
+        if (distance < closestDistance) {
+          closest = candle
+          closestDistance = distance
+        }
+      }
+      if (!closest || closestDistance > Math.max(1, timeframe ? TIMEFRAME_SECONDS[timeframe] : 3600)) {
+        setHoverCandle(null)
+        return
+      }
+      setHoverCandle({
+        time: Math.floor(Number(closest.time) / 1000),
+        open: closest.open,
+        high: closest.high,
+        low: closest.low,
+        close: closest.close,
+      })
+    }
+
+    chart.subscribeCrosshairMove(handler)
+    return () => chart.unsubscribeCrosshairMove(handler)
+  }, [data, timeframe])
 
   useEffect(() => {
     const chart = chartRef.current
@@ -766,13 +830,17 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const chartFullscreen = isFullscreen;
 
   return <div ref={containerRef} onPointerDownCapture={handleChartPointerDown} onPointerMoveCapture={handleChartPointerMove} onPointerUpCapture={handleChartPointerUp} onPointerCancel={handleChartPointerCancel} onPointerDown={placeTool} className={`shafx-chart-shell relative w-full overflow-hidden border border-shafx-border bg-shafx-bg touch-pan-y ${['level', 'alert', 'measure'].includes(toolMode) ? 'cursor-crosshair' : ''} ${chartFullscreen ? 'fixed inset-0 z-[200] h-[100svh] w-screen' : ''}`} style={{ height: chartFullscreen ? '100svh' : height, minHeight: 280 }}>
-    <div className="pointer-events-none absolute left-3 top-3 z-10 hidden items-center gap-2 rounded-xl border border-shafx-border bg-shafx-bg/90 px-2.5 py-1.5 text-[9px] font-semibold backdrop-blur sm:flex"><span className="text-shafx-accent">SHAFX</span><span className="text-shafx-textMuted">•</span><span className="text-shafx-textMuted">{timeframe ?? 'PRICE'} workspace</span></div>
-    <div className="pointer-events-none absolute right-3 top-3 z-10 hidden rounded-xl border border-shafx-border bg-shafx-bg/90 px-2.5 py-1.5 text-[9px] font-semibold text-shafx-text backdrop-blur sm:block">{meta.label} <span className="font-normal text-shafx-textMuted">• {meta.interval}</span></div>
-    <div className="pointer-events-none absolute left-3 top-3 z-10 flex items-center gap-2 rounded-xl border border-shafx-border/70 bg-shafx-surface/88 px-2.5 py-1.5 shadow-md backdrop-blur">
-      <span className="font-mono text-[8px] font-bold uppercase tracking-[0.12em] text-shafx-textMuted">{replayMode ? 'REPLAY' : timeframe ?? 'PRICE'}</span>
+    <div className="pointer-events-none absolute left-3 top-3 z-30 flex items-center gap-2 rounded-xl border border-shafx-border/70 bg-shafx-surface/88 px-2.5 py-1.5 shadow-md backdrop-blur">
       {!replayMode && countdown !== null && <span className="font-mono text-[8px] font-semibold tabular text-shafx-accent">CLOSE {formatCountdown(countdown)}</span>}
       {replayMode && <span className="font-mono text-[8px] font-semibold tabular text-shafx-accent">HISTORICAL</span>}
     </div>
+    {hoverCandle && (
+      <div className="pointer-events-none absolute left-3 top-12 z-30 rounded-xl border border-shafx-border/80 bg-shafx-surface/92 px-2.5 py-1.5 font-mono text-[8px] shadow-md backdrop-blur sm:text-[9px]">
+        <span className="mr-2 text-shafx-textMuted">{new Date(hoverCandle.time * 1000).toLocaleString('en-GB', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short', hour12: false })}</span>
+        {hoverCandle.open !== undefined && <><span className="text-shafx-textMuted">O</span> <b>{hoverCandle.open.toFixed(quotePrecision)}</b> <span className="ml-1 text-shafx-textMuted">H</span> <b>{Number(hoverCandle.high).toFixed(quotePrecision)}</b> <span className="ml-1 text-shafx-textMuted">L</span> <b>{Number(hoverCandle.low).toFixed(quotePrecision)}</b> <span className="ml-1 text-shafx-textMuted">C</span> <b>{hoverCandle.close.toFixed(quotePrecision)}</b></>}
+        {hoverCandle.open === undefined && <><span className="text-shafx-textMuted">PRICE</span> <b>{hoverCandle.close.toFixed(quotePrecision)}</b></>}
+      </div>
+    )}
     <div className="absolute right-3 top-3 z-20 flex items-center gap-1">
       <div className="pointer-events-none hidden items-center gap-1 rounded-xl border border-shafx-border/70 bg-shafx-surface/85 px-1 py-0.5 shadow-md backdrop-blur sm:flex">
         <span className="rounded-lg px-1.5 py-0.5 text-[8px] font-bold tabular text-shafx-success"><span className="mr-1 text-[8px] uppercase tracking-[0.12em]">SELL</span>{Number.isFinite(displayBid) ? displayBid.toFixed(quotePrecision) : '—'}</span>
