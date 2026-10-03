@@ -815,15 +815,14 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
 
   return <div ref={containerRef} onPointerDownCapture={handleChartPointerDown} onPointerMoveCapture={handleChartPointerMove} onPointerUpCapture={handleChartPointerUp} onPointerCancel={handleChartPointerCancel} onPointerDown={placeTool} className={`shafx-chart-shell relative w-full overflow-hidden border border-shafx-border bg-shafx-bg touch-pan-y ${['level', 'alert', 'measure'].includes(toolMode) ? 'cursor-crosshair' : ''} ${chartFullscreen ? 'fixed inset-0 z-[200] h-[100svh] w-screen' : ''}`} style={{ height: chartFullscreen ? '100svh' : height, minHeight: 280 }}>
     <div className="pointer-events-none absolute left-3 top-3 z-30 flex items-center gap-2 rounded-xl border border-shafx-border/70 bg-shafx-surface/88 px-2.5 py-1.5 shadow-md backdrop-blur">
-      <span className="font-mono text-[8px] font-bold uppercase tracking-[0.12em] text-shafx-textMuted">{replayMode ? 'REPLAY' : timeframe ?? 'PRICE'}</span>
       {!replayMode && countdown !== null && <span className="font-mono text-[8px] font-semibold tabular text-shafx-accent">CLOSE {formatCountdown(countdown)}</span>}
       {replayMode && <span className="font-mono text-[8px] font-semibold tabular text-shafx-accent">HISTORICAL</span>}
     </div>
     {hoverCandle && (
       <div className="pointer-events-none absolute left-3 top-12 z-30 rounded-xl border border-shafx-border/80 bg-shafx-surface/92 px-2.5 py-1.5 font-mono text-[8px] shadow-md backdrop-blur sm:text-[9px]">
         <span className="mr-2 text-shafx-textMuted">{new Date(hoverCandle.time * 1000).toLocaleString('en-GB', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short', hour12: false })}</span>
-        {hoverCandle.open !== undefined && <><span className="text-shafx-textMuted">O</span> <b>{hoverCandle.open .toFixed(quotePrecision)}</b> <span className="ml-1 text-shafx-textMuted">H</span> <b>{Number(hoverCandle.high) .toFixed(quotePrecision)}</b> <span className="ml-1 text-shafx-textMuted">L</span> <b>{Number(hoverCandle.low) .toFixed(quotePrecision)}</b> <span className="ml-1 text-shafx-textMuted">C</span> <b>{hoverCandle.close .toFixed(quotePrecision)}</b></>}
-        {hoverCandle.open === undefined && <><span className="text-shafx-textMuted">PRICE</span> <b>{hoverCandle.close.toFixed(5)}</b></>}
+        {hoverCandle.open !== undefined && <><span className="text-shafx-textMuted">O</span> <b>{hoverCandle.open.toFixed(quotePrecision)}</b> <span className="ml-1 text-shafx-textMuted">H</span> <b>{Number(hoverCandle.high).toFixed(quotePrecision)}</b> <span className="ml-1 text-shafx-textMuted">L</span> <b>{Number(hoverCandle.low).toFixed(quotePrecision)}</b> <span className="ml-1 text-shafx-textMuted">C</span> <b>{hoverCandle.close.toFixed(quotePrecision)}</b></>}
+        {hoverCandle.open === undefined && <><span className="text-shafx-textMuted">PRICE</span> <b>{hoverCandle.close.toFixed(quotePrecision)}</b></>}
       </div>
     )}
     <div className="absolute right-3 top-3 z-20 flex items-center gap-1">
