@@ -85,6 +85,7 @@ export interface TradeOrder {
   brokerProduct?: 'DERIV_MULTIPLIER'
   stake?: number
   multiplier?: number
+  chartTimeframe?: Timeframe
   stopLossAmount?: number
   takeProfitAmount?: number
 }
