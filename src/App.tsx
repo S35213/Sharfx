@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { PanelRight, SlidersHorizontal } from 'lucide-react'
+
 import { TerminalProvider, useTerminal } from './app/TerminalContext'
 import { ErrorBoundary } from './app/ErrorBoundary'
 import { TopNav } from './components/layout/TopNav'
