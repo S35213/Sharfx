@@ -488,7 +488,6 @@ const TerminalContent: React.FC = () => {
       <FXMoveMatrix pairs={watchlist} />
       <MarketAnalysisPanel analysis={marketAnalysis} pricePrecision={symbolSpec.pricePrecision} pipSize={symbolSpec.pipSize} currentPrice={currentPrice} timeframe={timeframe} />
 <AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={liveCandles} setup={reviewSetup} onReviewSetup={() => handleReviewSetup(reviewSetup)} />
-      <OrderPanel symbol={selectedSymbol} currentPrice={currentPrice} bidPrice={currentPrice} askPrice={currentPrice} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} timeframe={timeframe} connection={derivOrderConnection} onTradeOpened={(order) => { setOpenPositions((current) => [...current, order]); setTradeHistory((current) => current.filter((item) => item.id !== order.id)); setReviewSetup(null); pushToast('Deriv ' + order.type + ' trade opened on ' + (order.chartTimeframe ?? timeframe) + '.') }} aiSetup={reviewSetup} />
     </div>,
     chat: <div className="space-y-3">
       <AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={liveCandles} setup={reviewSetup} onReviewSetup={() => handleReviewSetup(reviewSetup)} />
@@ -506,23 +505,8 @@ const TerminalContent: React.FC = () => {
       onReviewSetup={handleReviewSetup}
     />,
     liquidity: <LiquidityPanel key={selectedSymbol} symbol={selectedSymbol} price={currentPrice} precision={symbolSpec.pricePrecision} pipSize={symbolSpec.pipSize} candles={liveCandles} />,
-    orders: <ProviderCapabilityPanel descriptor={{
-      id: 'deriv',
-      name: 'Deriv',
-      kind: 'broker',
-      status: 'available',
-      executionMode: 'external',
-      authMethods: ['oauth2'],
-      description: activeProviderSelection?.environment === 'demo'
-        ? 'Connected Deriv demo account • demo order placement is enabled for testing.'
-        : 'Connected Deriv live account • live order placement is disabled during SHAFX release testing.',
-      capabilities: {
-        accountRead: true, marketData: true, historicalCandles: true, realtimeMarketData: true, realtimeAccountData: true,
-        positionsRead: false, ordersRead: false, orderPlacement: true, orderCancellation: false, orderModification: false,
-        orderLookupByClientOrderId: false, positionClose: true, multipleAccounts: true, demoAccounts: true, symbolMetadata: false,
-        funding: { deposit: 'redirect', withdrawal: 'redirect' },
-      },
-    }} environment={activeProviderSelection?.environment ?? 'demo'} />,
+    orders: <OrderPanel symbol={selectedSymbol} currentPrice={currentPrice} bidPrice={currentPrice} askPrice={currentPrice} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} timeframe={timeframe} connection={derivOrderConnection} onTradeOpened={(order) => { setOpenPositions((current) => [...current, order]); setTradeHistory((current) => current.filter((item) => item.id !== order.id)); setReviewSetup(null); pushToast('Deriv ' + order.type + ' trade opened on ' + (order.chartTimeframe ?? timeframe) + '.') }} aiSetup={reviewSetup} />,
+
   }
 
   return <div className={'shafx-terminal-root min-h-[100svh] w-full min-w-0 overflow-x-hidden bg-shafx-bg text-shafx-text lg:flex lg:h-[calc(100vh-28px)] lg:flex-col lg:overflow-hidden' + (isLandscapeCompactViewport ? ' shafx-landscape-mode' : '')}>
