@@ -463,3 +463,30 @@ When a new action is completed, append it to the action tree and change its chec
 - CI run `37031094292` SUCCESS: install, build, static smoke, lint, tests, audit, and Render rebuild verification all passed.
 - Render deployment `dep-davtaodckfvc73c6m3jg` LIVE for commit `73c33658800090ba6f986e5309e18158b040b3cd`.
 - Main/production/Cloudflare untouched. The final broker-proof gate remains an authenticated user demo contract that is opened, visibly reprices in SHAFX, survives browser refresh/restart, and then closes with recorded P/L.
+
+
+## 2026-10-03 — Chart interaction, timeframe separation, and trade-context correction
+
+- User-reported chart issues addressed on the experimental rebuild branch:
+  - Mouse/crosshair interaction was using Lightweight Charts Magnet mode (mode: 1), which could snap/bounce the inspection point onto live candle data. Changed to Normal crosshair mode (mode: 0) so the pointer stays where the user places it.
+  - The chart timeframe selector was sharing the same top zone as the current-timeframe/status labels. The selector is now on its own dedicated rail below the status row.
+  - Removed the duplicate TopNav timeframe strip so SHAFX has one primary interactive timeframe rail on the chart.
+  - Removed overlapping duplicate chart timeframe badges from the chart header.
+  - Manual TradeDock no longer hard-codes M5; it receives the active SHAFX chart timeframe and shows/records the timeframe that was active when the trade was opened.
+  - Trade records now expose the captured chart timeframe as an explicit TF field when available.
+  - Changing the chart timeframe no longer resets an already-open manual trade state.
+  - Zoom spacing was tightened for more granular close-up candle inspection while preserving the existing viewport/zoom state logic.
+- Important broker-context note: a Deriv Multiplier contract is not itself an M5/M15/M30 candle contract. The SHAFX timeframe is the chart/trade-analysis context captured at order time; Deriv still executes the Multiplier contract independently.
+- Intermediate Render builds correctly caught and blocked two implementation mistakes before the final patch was accepted: an unsupported Lightweight Charts maxBarSpacing option and missing timeframe props on the TradeDock instances. Both were removed/corrected.
+- Final application commit: a32c118216b2db55539939f10de01b562e265fb3
+- Final Render deployment: dep-db0cbb8jo6nc739gcnq0 — LIVE
+- Final SHAFX CI: 37111954262 — SUCCESS
+  - install PASS
+  - build PASS
+  - Node Render static smoke PASS
+  - lint PASS
+  - 271 tests PASS
+  - production dependency audit PASS
+  - Render rebuild/public verification PASS
+- Production/main and Cloudflare were not modified by this work.
+- Broker-proof status remains unchanged: no authenticated demo contract purchase/monitor/close is claimed by this UI correction alone.
