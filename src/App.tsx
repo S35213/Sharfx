@@ -526,28 +526,15 @@ const TerminalContent: React.FC = () => {
             <div className="rounded-xl border border-shafx-border bg-shafx-bg/80 px-3 py-2"><div className="text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted">Free margin</div><div className="mt-1 font-mono text-sm font-bold tabular-nums">{resolvedAccountData.currency} {resolvedAccountData.freeMargin.toFixed(2)}</div></div>
           </div>
         </div>
-        <div className="hidden lg:grid grid-cols-[minmax(0,1fr)_auto_auto_auto_auto] items-center gap-2 border-b border-shafx-border bg-[#0A0E14] px-3 py-2 xl:px-4">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="truncate text-sm font-semibold">{selectedSymbol}</span>
-              <span className={"rounded-full border px-2 py-0.5 text-[8px] font-semibold " + (liveMarketActive ? 'border-shafx-success/25 bg-shafx-success/5 text-shafx-success' : 'border-shafx-warning/25 bg-shafx-warning/5 text-shafx-warning')}>{liveMarketActive ? 'LIVE' : 'CONNECTING'}</span>
-            </div>
-            <div className="mt-0.5 font-mono text-sm font-bold tabular-nums">{Number.isFinite(currentPrice) && currentPrice > 0 ? currentPrice.toFixed(symbolSpec.pricePrecision) : '—'} <span className="ml-1 text-[8px] font-normal text-shafx-textMuted">DERIV</span></div>
-          </div>
-          <div className="border-l border-shafx-border pl-3"><div className="text-[7px] uppercase tracking-[0.14em] text-shafx-textMuted">Balance</div><div className="mt-1 font-mono text-xs font-semibold tabular-nums">{resolvedAccountData.currency} {resolvedAccountData.balance.toFixed(2)}</div></div>
-          <div className="border-l border-shafx-border pl-3"><div className="text-[7px] uppercase tracking-[0.14em] text-shafx-textMuted">Equity</div><div className="mt-1 font-mono text-xs font-semibold tabular-nums">{resolvedAccountData.currency} {resolvedAccountData.equity.toFixed(2)}</div></div>
-          <div className="border-l border-shafx-border pl-3"><div className="text-[7px] uppercase tracking-[0.14em] text-shafx-textMuted">Free margin</div><div className="mt-1 font-mono text-xs font-semibold tabular-nums">{resolvedAccountData.currency} {resolvedAccountData.freeMargin.toFixed(2)}</div></div>
-          <div className="border-l border-shafx-border pl-3 text-right"><div className="text-[7px] uppercase tracking-[0.14em] text-shafx-textMuted">Mode</div><div className={"mt-1 font-mono text-[9px] font-bold " + accountModeTone}>{accountModeLabel}</div></div>
-        </div>
         <div className="flex min-h-0 flex-1 flex-col overflow-visible">
-          <div className="flex min-h-10 flex-shrink-0 items-center justify-between gap-2 border-b border-shafx-border bg-shafx-surface/45 px-3 sm:px-4">
+          <div className="flex min-h-9 flex-shrink-0 items-center justify-between gap-2 border-b border-shafx-border bg-[#0A0E14] px-3 sm:px-4 lg:min-h-10">
             <div className="flex min-w-0 items-center gap-2"><span className="truncate text-xs font-semibold">{selectedSymbol}</span><span className={'rounded-md border px-2 py-1 text-[9px] ' + (liveMarketActive ? 'border-shafx-success/25 bg-shafx-success/5 text-shafx-success' : 'border-shafx-warning/25 bg-shafx-warning/5 text-shafx-warning')}>{liveMarketActive ? 'LIVE • DERIV' : 'CONNECTING • DERIV'}</span></div>
             <div className="flex items-center gap-1.5"><span className="hidden text-[9px] uppercase tracking-[0.15em] text-shafx-textMuted sm:block">Feed</span>{liveControl}<button type="button" onClick={() => setDock(dock === 'orders' ? 'insights' : 'orders')} className="flex min-h-10 items-center gap-1.5 rounded-xl border border-shafx-border bg-shafx-bg px-2.5 text-[9px] font-semibold hover:border-shafx-accent/40"><SlidersHorizontal className="h-3.5 w-3.5 text-shafx-accent" />Account</button></div>
           </div>
-           <div className="flex min-h-12 flex-shrink-0 items-center gap-1 overflow-x-auto border-b border-shafx-border bg-shafx-surface/80 px-3 py-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:px-4">
+           <div className="flex min-h-10 flex-shrink-0 items-center gap-1 overflow-x-auto border-b border-shafx-border bg-[#0C1118] px-3 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:px-4">
              <span className="mr-1 hidden text-[8px] font-bold uppercase tracking-[0.16em] text-shafx-textMuted sm:inline">TIMEFRAME</span>
              {TIMEFRAMES.map((tf) => (
-               <button key={tf} type="button" onClick={() => setTimeframe(tf)} aria-pressed={timeframe === tf} className={'min-h-9 flex-shrink-0 rounded-lg px-3 text-[9px] font-bold tracking-wide transition ' + (timeframe === tf ? 'bg-shafx-accent text-white shadow-md' : 'text-shafx-textMuted hover:bg-shafx-bg hover:text-shafx-text')}>
+               <button key={tf} type="button" onClick={() => setTimeframe(tf)} aria-pressed={timeframe === tf} className={'min-h-8 flex-shrink-0 rounded-md px-2.5 text-[8px] font-bold tracking-wide transition ' + (timeframe === tf ? 'bg-shafx-accent text-white shadow-md' : 'text-shafx-textMuted hover:bg-shafx-bg hover:text-shafx-text')}>
                  {tf}
                </button>
              ))}
@@ -563,7 +550,7 @@ const TerminalContent: React.FC = () => {
             <button type="button" onClick={() => openMobileDock('orders')} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Account</span><div className="mt-1 text-xs font-semibold">{accountModeLabel}</div></button>
             <button type="button" onClick={() => { setMobileTab('account'); setMobileDockOpen(false) }} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Funding</span><div className="mt-1 text-xs font-semibold">Deposit • Withdraw</div></button>
           </div>
-          <div className="hidden h-44 flex-shrink-0 xl:h-48 border-t border-shafx-border bg-shafx-surface/25 p-2 lg:block"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={currentPrice} selectedSymbol={selectedSymbol} onClosePosition={(id) => { void handleClosePosition(id) }} /></div>
+          <div className="hidden h-36 flex-shrink-0 xl:h-40 border-t border-shafx-border bg-[#090D13] p-1.5 lg:block"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={currentPrice} selectedSymbol={selectedSymbol} onClosePosition={(id) => { void handleClosePosition(id) }} /></div>
           {mobileDockOpen && <div id="mobile-market-workspace" className="border-t border-shafx-border bg-shafx-surface p-3 lg:hidden">
             <div className="mb-3 flex items-center justify-between gap-3"><div><div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Market workspace</div><div className="text-sm font-semibold">{dock === 'insights' ? 'Structure & AI' : dock === 'liquidity' ? 'Liquidity' : 'Deriv account'}</div></div><button type="button" onClick={() => setMobileDockOpen(false)} className="min-h-10 rounded-xl border border-shafx-border px-3 text-[10px] font-semibold text-shafx-textMuted">Close</button></div>
             {dockContent[dock === 'agent' || dock === 'research' ? 'insights' : dock]}
