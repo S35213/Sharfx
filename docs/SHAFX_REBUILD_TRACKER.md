@@ -534,3 +534,30 @@ When a new action is completed, append it to the action tree and change its chec
 - Final Render deployment: dep-db0ctnajtthc73f381q0 — LIVE
 - Final SHAFX CI: 37114159616 — SUCCESS
 - Main/production and Cloudflare were not modified.
+
+
+## 2026-10-03 — Desktop trading workstation hierarchy
+
+- Screenshot-driven desktop correction completed for the experimental Render workstation.
+- The desktop layout now follows a clearer professional terminal hierarchy:
+  - left: compact Market Watch/watchlist
+  - center: dominant chart workspace
+  - right: Trade Ticket/order panel
+  - bottom: compact Positions/Pending/History blotter
+- Removed the large desktop account/equity/free-margin card stack that competed with the chart. Those metrics remain available in the account/trade context rather than occupying the primary chart workspace.
+- Reduced duplicate desktop header controls and tightened the timeframe rail so the chart receives substantially more usable space before fullscreen.
+- The default desktop right-side workspace is now the Trade Ticket; analysis/AI/liquidity panels remain available from the workspace rail rather than competing with the chart by default.
+- Reduced desktop navigation rail width and tightened the right workspace header.
+- The trade blotter TF column now matches its header and shows the captured chart timeframe.
+- Design intent is consistent with established desktop trading-platform separation between Market Watch, chart, trading controls, and trade/history tools. MetaTrader 5 documents Market Watch, chart/toolbars, and Toolbox as distinct workspace elements, while TradingView describes a layout as the chart workspace and keeps watchlists as a separate widget. 
+- Final desktop code commit: `8c5dcde243c6676e0b0bd0c8c395f7e75e6fbb62`
+- Final Render deployment: `dep-db0d5cqvc2jc7396ad7g` — **LIVE**
+- Final SHAFX CI: `37115067910` — **SUCCESS**
+  - build PASS
+  - static server PASS
+  - lint PASS
+  - 271 tests PASS
+  - production dependency audit PASS
+  - Render rebuild verification PASS
+- An intermediate desktop commit failed its build because an obsolete `PanelRight` import remained after the header simplification. That was corrected before the final live deployment; the final CI/build is green.
+- Main/production and Cloudflare were not modified.
