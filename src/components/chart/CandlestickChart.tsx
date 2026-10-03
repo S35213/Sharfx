@@ -162,7 +162,6 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         rightOffset: 3,
         barSpacing: 5,
         minBarSpacing: 1,
-        rightPriceScale: undefined,
         tickMarkFormatter: () => '',
       },
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
@@ -226,7 +225,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         seriesRef.current = null
       }
     }
-  }, [chartMode, candleTheme, pipSize])
+  }, [chartMode, pipSize])
 
   useEffect(() => {
     const series = seriesRef.current
@@ -522,7 +521,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       let closest: OHLCV | undefined
       let closestDistance = Number.POSITIVE_INFINITY
       for (const candle of data) {
-        const distance = Math.abs(Number(candle.time) / 1000 - targetTime)
+        const distance = Math.abs(Number(candle.time) - targetTime)
         if (distance < closestDistance) {
           closest = candle
           closestDistance = distance
@@ -823,7 +822,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     {hoverCandle && (
       <div className="pointer-events-none absolute left-3 top-12 z-30 rounded-xl border border-shafx-border/80 bg-shafx-surface/92 px-2.5 py-1.5 font-mono text-[8px] shadow-md backdrop-blur sm:text-[9px]">
         <span className="mr-2 text-shafx-textMuted">{new Date(hoverCandle.time * 1000).toLocaleString('en-GB', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short', hour12: false })}</span>
-        {hoverCandle.open !== undefined && <><span className="text-shafx-textMuted">O</span> <b>{hoverCandle.open.toFixed(5)}</b> <span className="ml-1 text-shafx-textMuted">H</span> <b>{Number(hoverCandle.high).toFixed(5)}</b> <span className="ml-1 text-shafx-textMuted">L</span> <b>{Number(hoverCandle.low).toFixed(5)}</b> <span className="ml-1 text-shafx-textMuted">C</span> <b>{hoverCandle.close.toFixed(5)}</b></>}
+        {hoverCandle.open !== undefined && <><span className="text-shafx-textMuted">O</span> <b>{hoverCandle.open .toFixed(quotePrecision)}</b> <span className="ml-1 text-shafx-textMuted">H</span> <b>{Number(hoverCandle.high) .toFixed(quotePrecision)}</b> <span className="ml-1 text-shafx-textMuted">L</span> <b>{Number(hoverCandle.low) .toFixed(quotePrecision)}</b> <span className="ml-1 text-shafx-textMuted">C</span> <b>{hoverCandle.close .toFixed(quotePrecision)}</b></>}
         {hoverCandle.open === undefined && <><span className="text-shafx-textMuted">PRICE</span> <b>{hoverCandle.close.toFixed(5)}</b></>}
       </div>
     )}
