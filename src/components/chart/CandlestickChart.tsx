@@ -39,17 +39,6 @@ const prepareData = (data: OHLCV[]): CandlestickData[] => {
     .map((c) => ({ time: c.time as UTCTimestamp, open: c.open, high: c.high, low: c.low, close: c.close }))
 }
 
-const timeframeMeta = (timeframe?: Timeframe, data: CandlestickData[] = []): { label: string; interval: string } => {
-  if (timeframe) {
-    const labels: Record<Timeframe, string> = { M1: '1m', M5: '5m', M15: '15m', M30: '30m', H1: '1h', H4: '4h', D1: '1d', W1: '1w' }
-    return { label: timeframe, interval: labels[timeframe] }
-  }
-  if (data.length < 2) return { label: '—', interval: 'candle' }
-  const seconds = Number(data[1].time) - Number(data[0].time)
-  const known: Record<number, { label: string; interval: string }> = { 60: { label: 'M1', interval: '1m' }, 300: { label: 'M5', interval: '5m' }, 900: { label: 'M15', interval: '15m' }, 1800: { label: 'M30', interval: '30m' }, 3600: { label: 'H1', interval: '1h' }, 14400: { label: 'H4', interval: '4h' }, 86400: { label: 'D1', interval: '1d' }, 604800: { label: 'W1', interval: '1w' } }
-  return known[seconds] ?? { label: 'Custom', interval: `${Math.round(seconds / 60)}m` }
-}
-
 const VISIBLE_BARS_BY_TIMEFRAME: Record<Timeframe, number> = {
   M1: 120,
   M5: 100,
@@ -88,7 +77,6 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     return chartData.map((candle) => ({ time: candle.time, value: candle.close }))
   }, [chartData, chartMode])
   const lastClose = chartData.length ? Number(chartData[chartData.length - 1]?.close) : Number.NaN
-  const meta = timeframeMeta(timeframe, chartData)
   const [userLevels, setUserLevels] = useState<UserLevel[]>([])
   const [measureStart, setMeasureStart] = useState<number | null>(null)
   const [measureEnd, setMeasureEnd] = useState<number | null>(null)
@@ -767,7 +755,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const chartFullscreen = isFullscreen;
 
   return <div ref={containerRef} onPointerDownCapture={handleChartPointerDown} onPointerMoveCapture={handleChartPointerMove} onPointerUpCapture={handleChartPointerUp} onPointerCancel={handleChartPointerCancel} onPointerDown={placeTool} className={`shafx-chart-shell relative w-full overflow-hidden border border-shafx-border bg-shafx-bg touch-pan-y ${['level', 'alert', 'measure'].includes(toolMode) ? 'cursor-crosshair' : ''} ${chartFullscreen ? 'fixed inset-0 z-[200] h-[100svh] w-screen' : ''}`} style={{ height: chartFullscreen ? '100svh' : height, minHeight: 280 }}>
-    <div className="absolute left-1/2 top-11 z-40 flex max-w-[calc(100%-24px)] -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-2xl border border-shafx-border/80 bg-shafx-surface/90 p-1 shadow-lg backdrop-blur-xl [scrollbar-width:none] [&::-webkit-scrollbar]:hidden] sm:top-12 sm:max-w-[calc(100%-32px)]">
+    <div className="absolute left-1/2 top-11 z-40 flex max-w-[calc(100%-24px)] -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-2xl border border-shafx-border/80 bg-shafx-surface/90 p-1 shadow-lg backdrop-blur-xl [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:top-12 sm:max-w-[calc(100%-32px)]">
       <span className="hidden px-2 text-[8px] font-bold uppercase tracking-[0.16em] text-shafx-textMuted md:inline">SHAFX CHART</span>
       {TIMEFRAMES.map((tf) => (
         <button
