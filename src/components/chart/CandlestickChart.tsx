@@ -71,6 +71,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ShafxSeries | null>(null)
+  const seriesConfigRef = useRef<{ chartMode: ChartMode; pipSize: number } | null>(null)
   const chartData = useMemo(() => prepareData(data), [data])
   const visualData = useMemo(() => {
     if (chartMode === 'candles' || chartMode === 'bars') return chartData
@@ -191,65 +192,11 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       chart.remove()
       chartRef.current = null
       seriesRef.current = null
+      seriesConfigRef.current = null
       marketBidLineRef.current = null
       marketAskLineRef.current = null
     }
   }, [])
-  useEffect(() => {
-    const chart = chartRef.current
-    if (!chart) return
-
-    const colors = candleColors[candleTheme]
-    const precision = Math.max(2, Math.round(Math.log10(1 / Math.max(pipSize, 0.00001))) + 1)
-
-    if (seriesRef.current) {
-      try { chart.removeSeries(seriesRef.current) } catch { /* chart may already be tearing down */ }
-      seriesRef.current = null
-    }
-
-    let series: ShafxSeries
-    if (chartMode === 'bars') {
-      series = chart.addBarSeries({ priceFormat: { type: 'price', precision, minMove: Math.max(pipSize, 0.00001) }, upColor: colors.up, downColor: colors.down, openVisible: true, thinBars: false, priceLineVisible: false, lastValueVisible: false })
-    } else if (chartMode === 'wave') {
-      series = chart.addLineSeries({ color: colors.up, lineWidth: 2, crosshairMarkerVisible: true, priceLineVisible: false, lastValueVisible: false })
-    } else if (chartMode === 'area') {
-      series = chart.addAreaSeries({ lineColor: colors.up, topColor: colors.up + '66', bottomColor: colors.up + '05', lineWidth: 2, priceLineVisible: false, lastValueVisible: false })
-    } else {
-      series = chart.addCandlestickSeries({ priceFormat: { type: 'price', precision, minMove: Math.max(pipSize, 0.00001) }, upColor: colors.up, downColor: colors.down, borderUpColor: colors.up, borderDownColor: colors.down, wickUpColor: colors.up, wickDownColor: colors.down, priceLineVisible: false, lastValueVisible: false })
-    }
-
-    seriesRef.current = series
-    return () => {
-      if (seriesRef.current === series && chartRef.current === chart) {
-        try { chart.removeSeries(series) } catch { /* chart is being replaced/unmounted */ }
-        seriesRef.current = null
-      }
-    }
-  }, [chartMode, pipSize])
-
-  useEffect(() => {
-    const series = seriesRef.current
-    if (!series) return
-    const colors = candleColors[candleTheme]
-
-    if (chartMode === 'wave') {
-      series.applyOptions({ color: colors.up, lineColor: colors.up })
-    } else if (chartMode === 'area') {
-      series.applyOptions({ lineColor: colors.up, topColor: colors.up + '66', bottomColor: colors.up + '05' })
-    } else if (chartMode === 'bars') {
-      series.applyOptions({ upColor: colors.up, downColor: colors.down })
-    } else {
-      series.applyOptions({
-        upColor: colors.up,
-        downColor: colors.down,
-        borderUpColor: colors.up,
-        borderDownColor: colors.down,
-        wickUpColor: colors.up,
-        wickDownColor: colors.down,
-      })
-    }
-  }, [candleTheme, chartMode])
-
   useEffect(() => {
     const chart = chartRef.current
     if (!chart) return
@@ -261,29 +208,107 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   }, [showGrid])
 
   useEffect(() => {
-    const series = seriesRef.current
     const chart = chartRef.current
-    if (!series || !chart || !visualData.length) return
+    if (!chart || !visualData.length) return
 
+    const colors = candleColors[candleTheme]
+    const precision = Math.max(2, Math.round(Math.log10(1 / Math.max(pipSize, 0.00001))) + 1)
+    const currentConfig = seriesConfigRef.current
+    const needsNewSeries =
+      !seriesRef.current ||
+      !currentConfig ||
+      currentConfig.chartMode !== chartMode ||
+      currentConfig.pipSize !== pipSize
+
+    if (needsNewSeries) {
+      if (seriesRef.current) {
+        try { chart.removeSeries(seriesRef.current) } catch { /* stale series during a live mode switch */ }
+        seriesRef.current = null
+      }
+
+      let nextSeries: ShafxSeries
+      if (chartMode === 'bars') {
+        nextSeries = chart.addBarSeries({
+          priceFormat: { type: 'price', precision, minMove: Math.max(pipSize, 0.00001) },
+          upColor: colors.up,
+          downColor: colors.down,
+          openVisible: true,
+          thinBars: false,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        })
+      } else if (chartMode === 'wave') {
+        nextSeries = chart.addLineSeries({
+          color: colors.up,
+          lineWidth: 2,
+          crosshairMarkerVisible: true,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        })
+      } else if (chartMode === 'area') {
+        nextSeries = chart.addAreaSeries({
+          lineColor: colors.up,
+          topColor: colors.up + '66',
+          bottomColor: colors.up + '05',
+          lineWidth: 2,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        })
+      } else {
+        nextSeries = chart.addCandlestickSeries({
+          priceFormat: { type: 'price', precision, minMove: Math.max(pipSize, 0.00001) },
+          upColor: colors.up,
+          downColor: colors.down,
+          borderUpColor: colors.up,
+          borderDownColor: colors.down,
+          wickUpColor: colors.up,
+          wickDownColor: colors.down,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        })
+      }
+
+      seriesRef.current = nextSeries
+      seriesConfigRef.current = { chartMode, pipSize }
+    }
+
+    const series = seriesRef.current
+    if (!series) return
+
+    // This is deliberately in the same effect as series creation. A mode switch
+    // therefore receives the current candles immediately instead of waiting for
+    // the next timeframe/data update.
+    series.setData(visualData)
+
+    if (chartMode === 'wave') {
+      series.applyOptions({ color: colors.up, lineColor: colors.up })
+    } else if (chartMode === 'area') {
+      series.applyOptions({ lineColor: colors.up, topColor: colors.up + '66', bottomColor: colors.up + '05' })
+    } else if (chartMode === 'bars') {
+      series.applyOptions({
+        upColor: colors.up,
+        downColor: colors.down,
+        priceFormat: { type: 'price', precision, minMove: Math.max(pipSize, 0.00001) },
+      })
+    } else {
+      series.applyOptions({
+        upColor: colors.up,
+        downColor: colors.down,
+        borderUpColor: colors.up,
+        borderDownColor: colors.down,
+        wickUpColor: colors.up,
+        wickDownColor: colors.down,
+        priceFormat: { type: 'price', precision, minMove: Math.max(pipSize, 0.00001) },
+      })
+    }
+
+    const lastIndex = visualData.length - 1
+    const lastTime = Number(visualData[lastIndex].time)
     const firstTime = Number(visualData[0].time)
-    const lastTime = Number(visualData[visualData.length - 1].time)
     const symbolChanged = previousSymbolRef.current !== symbol
     const timeframeChanged = previousTimeframeRef.current !== timeframe
-    // Replay can jump backwards when the user presses Start. In that case the
-    // previous visible range can be beyond the new dataset, so reset to the
-    // live edge instead of leaving the chart looking unchanged.
     const replayWindowReset = renderedLastTimeRef.current !== null && lastTime < renderedLastTimeRef.current
     const rangeNeedsReset = !viewInitializedRef.current || symbolChanged || timeframeChanged || replayWindowReset
-
-    // Realtime ticks update only the latest bar. Replacing the whole series and
-    // calling scrollToRealTime on every tick was resetting the user's pinch zoom
-    // and horizontal position after their finger was released.
-    const canUpdateLatestBar =
-      !symbolChanged &&
-      !timeframeChanged &&
-      renderedFirstTimeRef.current === firstTime &&
-      renderedLastTimeRef.current !== null &&
-      lastTime >= renderedLastTimeRef.current
 
     const previousLastTime = renderedLastTimeRef.current
     const previousLastIndex = latestIndexRef.current
@@ -294,18 +319,13 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         !visibleRange ||
         (previousLastIndex >= 0 && visibleRange.to >= previousLastIndex - 1))
     const isNewBar = previousLastTime !== null && lastTime > previousLastTime
+    const isModeSwitch = currentConfig?.chartMode !== chartMode || currentConfig?.pipSize !== pipSize
 
-    if (canUpdateLatestBar) {
+    if (!rangeNeedsReset && !isModeSwitch && previousLastTime !== null && lastTime === previousLastTime) {
       series.update(visualData[visualData.length - 1])
-    } else {
-      series.setData(visualData)
     }
 
-    const lastIndex = visualData.length - 1
     if (rangeNeedsReset) {
-      // Every timeframe gets the same normal, zoomed-out starting view.
-      // Never carry the previous timeframe's pinch/bar-spacing zoom into the
-      // new timeframe. The user can zoom in manually after switching.
       chart.timeScale().resetTimeScale()
       const containerWidth = containerRef.current?.clientWidth ?? 640
       const plotWidth = Math.max(280, containerWidth - (containerWidth < 640 ? 82 : 96))
@@ -322,9 +342,6 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       series.priceScale().applyOptions({ autoScale: true, scaleMargins: { top: 0.08, bottom: 0.08 } })
       followRealtimeRef.current = true
     } else if (isNewBar && wasFollowingRealtime) {
-      // Only follow the newest bar when the user is already at the live edge.
-      // When the user has panned back into history, never pull them back to
-      // the front just because a new simulator/provider tick arrived.
       chart.timeScale().scrollToRealTime()
       followRealtimeRef.current = true
     }
@@ -335,8 +352,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     previousTimeframeRef.current = timeframe
     renderedFirstTimeRef.current = firstTime
     renderedLastTimeRef.current = lastTime
-  }, [visualData, symbol, timeframe])
-
+  }, [visualData, symbol, timeframe, chartMode, pipSize, candleTheme])
   useEffect(() => {
     const chart = chartRef.current
     if (!chart || !chartData.length || !timeframe) {
