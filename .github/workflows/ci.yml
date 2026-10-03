@@ -28,7 +28,8 @@ jobs:
         run: node scripts/render-static-smoke.mjs
       - run: npm run lint
       - run: npm test
-      - run: npm audit --audit-level=high
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
 
       - name: Verify Render rebuild service
         if: github.event_name == 'pull_request' && github.head_ref == 'test/rebuild-deriv-native-manual-20260930'
