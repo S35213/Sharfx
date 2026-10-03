@@ -28,7 +28,7 @@ export const TradesPanel: React.FC<Props> = ({ openPositions, pendingOrders, tra
         {data.length === 0 ? empty : (
           <table className="w-full min-w-[920px] text-left text-xs">
             <thead className="bg-shafx-bg/50 uppercase text-shafx-textMuted">
-              <tr>{['Ticket','Time','Type','Symbol','Stake','Multiplier','Entry','Protection','Profit','Action'].map((h) => <th key={h} className="px-4 py-2">{h}</th>)}</tr>
+              <tr>{['Ticket','Time','Type','Symbol','TF','Stake','Multiplier','Entry','Protection','Profit','Action'].map((h) => <th key={h} className="px-4 py-2">{h}</th>)}</tr>
             </thead>
             <tbody className="divide-y divide-shafx-border">
               {data.map((trade) => {
