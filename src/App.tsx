@@ -550,7 +550,6 @@ const TerminalContent: React.FC = () => {
             <div className="flex min-w-0 items-center gap-2"><span className="truncate text-xs font-semibold">{selectedSymbol}</span><span className={'rounded-md border px-2 py-1 text-[9px] ' + (liveMarketActive ? 'border-shafx-success/25 bg-shafx-success/5 text-shafx-success' : 'border-shafx-warning/25 bg-shafx-warning/5 text-shafx-warning')}>{liveMarketActive ? 'LIVE • DERIV' : 'CONNECTING • DERIV'}</span></div>
             <div className="flex items-center gap-1.5"><span className="hidden text-[9px] uppercase tracking-[0.15em] text-shafx-textMuted sm:block">Feed</span>{liveControl}<button type="button" onClick={() => setDock(dock === 'orders' ? 'insights' : 'orders')} className="flex min-h-10 items-center gap-1.5 rounded-xl border border-shafx-border bg-shafx-bg px-2.5 text-[9px] font-semibold hover:border-shafx-accent/40"><SlidersHorizontal className="h-3.5 w-3.5 text-shafx-accent" />Account</button></div>
           </div>
-           <MobileChartTools tool={chartTool} onToolChange={setChartTool} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} />
            <div className="flex min-h-12 flex-shrink-0 items-center gap-1 overflow-x-auto border-b border-shafx-border bg-shafx-surface/80 px-3 py-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:px-4">
              <span className="mr-1 hidden text-[8px] font-bold uppercase tracking-[0.16em] text-shafx-textMuted sm:inline">TIMEFRAME</span>
              {TIMEFRAMES.map((tf) => (
@@ -560,6 +559,7 @@ const TerminalContent: React.FC = () => {
              ))}
              <span className="ml-auto hidden rounded-lg border border-shafx-border bg-shafx-bg px-2 py-1 font-mono text-[8px] text-shafx-textMuted md:inline">{timeframe}</span>
            </div>
+           <MobileChartTools tool={chartTool} onToolChange={setChartTool} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} />
            <div className="shafx-chart-stage relative min-h-0 p-1 sm:p-2 lg:flex-1">
              {liveCandles.length > 0 ? <CandlestickChart data={liveCandles} symbol={selectedSymbol} timeframe={timeframe} annotations={chartAnnotations} tradeLines={tradeLines} bidPrice={currentPrice} askPrice={currentPrice} toolMode={chartToolMode} pipSize={symbolSpec.pipSize} onToolNotice={pushToast} showGrid={chartSettings.showGrid} showPriceLabels={chartSettings.showPriceLabels} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} marketTimestamp={marketTimestamp} onTimeframeChange={setTimeframe} replayMode={false} /> : <div className="flex h-full min-h-[320px] items-center justify-center text-sm text-shafx-textMuted">Waiting for the live Deriv market stream…</div>}
            </div>
