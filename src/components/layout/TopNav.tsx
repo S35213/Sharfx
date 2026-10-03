@@ -13,13 +13,12 @@ interface TopNavProps {
   price: number
   pricePrecision: number
   timeframe: Timeframe
-  onTimeframeChange: (tf: Timeframe) => void
   pairs: MarketPair[]
   onSelectPair: (symbol: string) => void
   view?: TerminalView
 }
 
-export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, timeframe, onTimeframeChange, pairs, onSelectPair, view = 'market' }) => {
+export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, timeframe, pairs, onSelectPair, view = 'market' }) => {
   const [marketOpen, setMarketOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
