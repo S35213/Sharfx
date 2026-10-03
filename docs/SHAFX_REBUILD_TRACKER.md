@@ -490,3 +490,28 @@ When a new action is completed, append it to the action tree and change its chec
   - Render rebuild/public verification PASS
 - Production/main and Cloudflare were not modified by this work.
 - Broker-proof status remains unchanged: no authenticated demo contract purchase/monitor/close is claimed by this UI correction alone.
+
+
+## 2026-10-03 — Dedicated timeframe rail, immediate chart-design switching, and zoom detail
+
+- Screenshot-driven correction applied to the experimental chart workspace:
+  - The timeframe selector is now completely outside the chart canvas in its own dedicated workspace rail, positioned above Chart Tools.
+  - The in-chart M1/M5/M15/M30/H1/H4/D1/W1 rail was removed from normal chart view.
+  - The in-chart current-timeframe label was removed; the active timeframe is now shown by the dedicated rail.
+  - Chart design switching was refactored so the Lightweight Charts instance remains alive while the data series is swapped only when changing Candles/Bars/Wave/Area. Candle theme changes now update the existing series immediately instead of recreating a blank series without data.
+  - Wave/Area/Bars/Candles now repopulate from the current candles immediately; changing timeframe is no longer required to make the new design appear.
+  - FX chart price precision now uses one extra decimal beyond the pip size (for example, 5 decimal places for standard EUR/USD), making close-up zoom materially more detailed.
+  - Zoom-adaptive timeline density now reveals more exact candle-boundary time marks as the user zooms in rather than limiting the axis to a fixed fourteen labels.
+  - Added a professional hover OHLC/time readout so the hovered candle exposes exact O/H/L/C values and time.
+  - Preserved Normal crosshair behavior so pointer inspection does not magnet-snap to a candle.
+- Final application commit: 4c27ed33338fe59d69cca20af0c9c18a9370ab11
+- Final Render deployment: dep-db0cjafr12us7398dg10 — LIVE
+- Final SHAFX CI: 37112910992 — SUCCESS
+  - build PASS
+  - Node Render static smoke PASS
+  - lint PASS
+  - 271 tests PASS
+  - production dependency audit PASS
+  - Render rebuild/public verification PASS
+- Main/production and Cloudflare were not modified.
+- Interactive visual behavior is implemented and the deployed build is healthy, but this environment still does not have the user's authenticated browser session for a direct mouse/touch visual replay of the terminal itself.
