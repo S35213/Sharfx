@@ -66,7 +66,7 @@ export const OrderPanel: React.FC<Props> = ({
     setState('idle')
     setError('')
     setOpenedContractId('')
-  }, [symbol, timeframe, aiSetup?.direction])
+  }, [symbol, aiSetup?.direction])
 
   const stakeValue = toPositiveNumber(stake)
   const multiplierValue = toPositiveNumber(multiplier)
