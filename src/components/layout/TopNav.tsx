@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, Command, MoreVertical, Search, Settings2, ShieldCheck, Wifi } from 'lucide-react'
 import type { MarketPair, Timeframe } from '../../types'
-import { TIMEFRAMES } from '../../types'
 import { formatPrice } from '../../lib/format'
 import { ProviderConnectionControl } from '../market/ProviderConnectionControl'
 import { ChartSettingsSheet } from './ChartSettingsSheet'
