@@ -93,6 +93,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const renderedFirstTimeRef = useRef<number | null>(null)
   const renderedLastTimeRef = useRef<number | null>(null)
   const [crosshairInfo, setCrosshairInfo] = useState<{ price: number; time: string } | null>(null)
+  const [hoverCandle, setHoverCandle] = useState<{ time: number; open?: number; high?: number; low?: number; close: number } | null>(null)
   const [timelineMarks, setTimelineMarks] = useState<Array<{ x: number; label: string }>>([])
   // Fullscreen is an explicit user action only. Device rotation must never pin the chart.
 
@@ -141,6 +142,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
+
     const chart = createChart(el, {
       layout: { background: { type: ColorType.Solid, color: '#070A0F' }, textColor: '#8A96A8', attributionLogo: false },
       grid: showGrid ? { vertLines: { color: '#131A23' }, horzLines: { color: '#131A23' } } : { vertLines: { color: 'transparent' }, horzLines: { color: 'transparent' } },
@@ -159,28 +161,16 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         uniformDistribution: true,
         rightOffset: 3,
         barSpacing: 5,
-        minBarSpacing: 0.5,
+        minBarSpacing: 1,
+        rightPriceScale: undefined,
         tickMarkFormatter: () => '',
       },
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
       handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true },
       kineticScroll: { touch: true, mouse: false },
     })
-    const colors = candleColors[candleTheme]
-    const precision = Math.max(2, Math.round(Math.log10(1 / Math.max(pipSize, 0.00001))))
-    let series: ShafxSeries
-    if (chartMode === 'bars') {
-      series = chart.addBarSeries({ priceFormat: { type: 'price', precision, minMove: Math.max(pipSize, 0.00001) }, upColor: colors.up, downColor: colors.down, openVisible: true, thinBars: false, priceLineVisible: false, lastValueVisible: false })
-    } else if (chartMode === 'wave') {
-      series = chart.addLineSeries({ color: colors.up, lineWidth: 2, crosshairMarkerVisible: true, priceLineVisible: false, lastValueVisible: false })
-    } else if (chartMode === 'area') {
-      series = chart.addAreaSeries({ lineColor: colors.up, topColor: colors.up + '66', bottomColor: colors.up + '05', lineWidth: 2, priceLineVisible: false, lastValueVisible: false })
-    } else {
-      series = chart.addCandlestickSeries({ priceFormat: { type: 'price', precision, minMove: Math.max(pipSize, 0.00001) }, upColor: colors.up, downColor: colors.down, borderUpColor: colors.up, borderDownColor: colors.down, wickUpColor: colors.up, wickDownColor: colors.down, priceLineVisible: false, lastValueVisible: false })
-    }
 
     chartRef.current = chart
-    seriesRef.current = series
     const ro = new ResizeObserver(([entry]) => {
       if (!entry) return
       const { width, height: h } = entry.contentRect
@@ -205,7 +195,38 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       marketBidLineRef.current = null
       marketAskLineRef.current = null
     }
-  }, [chartMode])
+  }, [])
+  useEffect(() => {
+    const chart = chartRef.current
+    if (!chart) return
+
+    const colors = candleColors[candleTheme]
+    const precision = Math.max(2, Math.round(Math.log10(1 / Math.max(pipSize, 0.00001))) + 1)
+
+    if (seriesRef.current) {
+      try { chart.removeSeries(seriesRef.current) } catch { /* chart may already be tearing down */ }
+      seriesRef.current = null
+    }
+
+    let series: ShafxSeries
+    if (chartMode === 'bars') {
+      series = chart.addBarSeries({ priceFormat: { type: 'price', precision, minMove: Math.max(pipSize, 0.00001) }, upColor: colors.up, downColor: colors.down, openVisible: true, thinBars: false, priceLineVisible: false, lastValueVisible: false })
+    } else if (chartMode === 'wave') {
+      series = chart.addLineSeries({ color: colors.up, lineWidth: 2, crosshairMarkerVisible: true, priceLineVisible: false, lastValueVisible: false })
+    } else if (chartMode === 'area') {
+      series = chart.addAreaSeries({ lineColor: colors.up, topColor: colors.up + '66', bottomColor: colors.up + '05', lineWidth: 2, priceLineVisible: false, lastValueVisible: false })
+    } else {
+      series = chart.addCandlestickSeries({ priceFormat: { type: 'price', precision, minMove: Math.max(pipSize, 0.00001) }, upColor: colors.up, downColor: colors.down, borderUpColor: colors.up, borderDownColor: colors.down, wickUpColor: colors.up, wickDownColor: colors.down, priceLineVisible: false, lastValueVisible: false })
+    }
+
+    seriesRef.current = series
+    return () => {
+      if (seriesRef.current === series && chartRef.current === chart) {
+        try { chart.removeSeries(series) } catch { /* chart is being replaced/unmounted */ }
+        seriesRef.current = null
+      }
+    }
+  }, [chartMode, candleTheme, pipSize])
 
   useEffect(() => {
     const series = seriesRef.current
@@ -368,8 +389,12 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         marks.push({ x: Number(x), label })
       }
 
-      // Always keep the axis readable on very dense views.
-      setTimelineMarks(marks.slice(-14))
+      const selected: Array<{ x: number; label: string }> = []
+      for (const mark of marks.sort((a, b) => a.x - b.x)) {
+        const previous = selected[selected.length - 1]
+        if (!previous || mark.x - previous.x >= minimumLabelSpacing) selected.push(mark)
+      }
+      setTimelineMarks(selected)
     }
 
     updateTimeline()
@@ -483,6 +508,42 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     )
   }, [askPrice, bidPrice, lastClose, showPriceLabels])
 
+
+  useEffect(() => {
+    const chart = chartRef.current
+    if (!chart) return
+
+    const handler = (param: Parameters<NonNullable<Parameters<IChartApi['subscribeCrosshairMove']>[0]>>[0]) => {
+      if (!param.time) {
+        setHoverCandle(null)
+        return
+      }
+      const targetTime = Number(param.time)
+      let closest: OHLCV | undefined
+      let closestDistance = Number.POSITIVE_INFINITY
+      for (const candle of data) {
+        const distance = Math.abs(Number(candle.time) / 1000 - targetTime)
+        if (distance < closestDistance) {
+          closest = candle
+          closestDistance = distance
+        }
+      }
+      if (!closest || closestDistance > Math.max(1, timeframe ? TIMEFRAME_SECONDS[timeframe] : 3600)) {
+        setHoverCandle(null)
+        return
+      }
+      setHoverCandle({
+        time: Math.floor(Number(closest.time) / 1000),
+        open: closest.open,
+        high: closest.high,
+        low: closest.low,
+        close: closest.close,
+      })
+    }
+
+    chart.subscribeCrosshairMove(handler)
+    return () => chart.unsubscribeCrosshairMove(handler)
+  }, [data, timeframe])
 
   useEffect(() => {
     const chart = chartRef.current
@@ -754,36 +815,18 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const chartFullscreen = isFullscreen;
 
   return <div ref={containerRef} onPointerDownCapture={handleChartPointerDown} onPointerMoveCapture={handleChartPointerMove} onPointerUpCapture={handleChartPointerUp} onPointerCancel={handleChartPointerCancel} onPointerDown={placeTool} className={`shafx-chart-shell relative w-full overflow-hidden border border-shafx-border bg-shafx-bg touch-pan-y ${['level', 'alert', 'measure'].includes(toolMode) ? 'cursor-crosshair' : ''} ${chartFullscreen ? 'fixed inset-0 z-[200] h-[100svh] w-screen' : ''}`} style={{ height: chartFullscreen ? '100svh' : height, minHeight: 280 }}>
-    <div className="absolute left-1/2 top-11 z-40 flex max-w-[calc(100%-24px)] -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-2xl border border-shafx-border/80 bg-shafx-surface/90 p-1 shadow-lg backdrop-blur-xl [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:top-12 sm:max-w-[calc(100%-32px)]">
-      <span className="hidden px-2 text-[8px] font-bold uppercase tracking-[0.16em] text-shafx-textMuted md:inline">SHAFX CHART</span>
-      {TIMEFRAMES.map((tf) => (
-        <button
-          key={tf}
-          type="button"
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={() => onTimeframeChange?.(tf)}
-          aria-label={`Switch chart to ${tf}`}
-          aria-pressed={timeframe === tf}
-          className={`min-h-7 rounded-xl px-2.5 text-[8px] font-bold tracking-wide transition sm:min-h-8 sm:px-3 sm:text-[9px] ${timeframe === tf ? 'bg-shafx-accent text-white shadow-md' : 'text-shafx-textMuted hover:bg-shafx-bg/80 hover:text-shafx-text'}`}
-        >
-          {tf}
-        </button>
-      ))}
-      <span className="mx-0.5 h-5 w-px bg-shafx-border" />
-      <button
-        type="button"
-        onPointerDown={(event) => event.stopPropagation()}
-        onClick={goToCurrentCandle}
-        className="min-h-7 rounded-xl border border-shafx-success/25 bg-shafx-success/10 px-2.5 text-[8px] font-bold text-shafx-success transition hover:bg-shafx-success/15 sm:min-h-8 sm:px-3 sm:text-[9px]"
-      >
-        NOW
-      </button>
-    </div>
     <div className="pointer-events-none absolute left-3 top-3 z-30 flex items-center gap-2 rounded-xl border border-shafx-border/70 bg-shafx-surface/88 px-2.5 py-1.5 shadow-md backdrop-blur">
       <span className="font-mono text-[8px] font-bold uppercase tracking-[0.12em] text-shafx-textMuted">{replayMode ? 'REPLAY' : timeframe ?? 'PRICE'}</span>
       {!replayMode && countdown !== null && <span className="font-mono text-[8px] font-semibold tabular text-shafx-accent">CLOSE {formatCountdown(countdown)}</span>}
       {replayMode && <span className="font-mono text-[8px] font-semibold tabular text-shafx-accent">HISTORICAL</span>}
     </div>
+    {hoverCandle && (
+      <div className="pointer-events-none absolute left-3 top-12 z-30 rounded-xl border border-shafx-border/80 bg-shafx-surface/92 px-2.5 py-1.5 font-mono text-[8px] shadow-md backdrop-blur sm:text-[9px]">
+        <span className="mr-2 text-shafx-textMuted">{new Date(hoverCandle.time * 1000).toLocaleString('en-GB', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short', hour12: false })}</span>
+        {hoverCandle.open !== undefined && <><span className="text-shafx-textMuted">O</span> <b>{hoverCandle.open.toFixed(5)}</b> <span className="ml-1 text-shafx-textMuted">H</span> <b>{Number(hoverCandle.high).toFixed(5)}</b> <span className="ml-1 text-shafx-textMuted">L</span> <b>{Number(hoverCandle.low).toFixed(5)}</b> <span className="ml-1 text-shafx-textMuted">C</span> <b>{hoverCandle.close.toFixed(5)}</b></>}
+        {hoverCandle.open === undefined && <><span className="text-shafx-textMuted">PRICE</span> <b>{hoverCandle.close.toFixed(5)}</b></>}
+      </div>
+    )}
     <div className="absolute right-3 top-3 z-20 flex items-center gap-1">
       <div className="pointer-events-none hidden items-center gap-1 rounded-xl border border-shafx-border/70 bg-shafx-surface/85 px-1 py-0.5 shadow-md backdrop-blur sm:flex">
         <span className="rounded-lg px-1.5 py-0.5 text-[8px] font-bold tabular text-shafx-success"><span className="mr-1 text-[8px] uppercase tracking-[0.12em]">SELL</span>{Number.isFinite(displayBid) ? displayBid.toFixed(quotePrecision) : '—'}</span>
