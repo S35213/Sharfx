@@ -8,7 +8,7 @@ import {
   LoaderCircle,
   ShieldCheck,
 } from 'lucide-react'
-import type { SymbolSpec, TradeSide, TradeOrder } from '../../types'
+import type { SymbolSpec, Timeframe, TradeSide, TradeOrder } from '../../types'
 import type { SetupCandidate } from '../../engine/setup/types'
 import { buyDerivProposal, getDerivQuote, type DerivOrderConnection, type DerivProposalQuote } from '../../data/deriv/derivTrading'
 
@@ -20,6 +20,7 @@ interface Props {
   accountBalance: number
   accountCurrency: string
   symbolSpec: SymbolSpec
+  timeframe: Timeframe
   connection: DerivOrderConnection | null
   onTradeOpened: (order: TradeOrder) => void
   aiSetup?: SetupCandidate | null
@@ -43,6 +44,7 @@ export const OrderPanel: React.FC<Props> = ({
   accountBalance,
   accountCurrency,
   symbolSpec,
+  timeframe,
   connection,
   onTradeOpened,
   aiSetup,
@@ -64,7 +66,7 @@ export const OrderPanel: React.FC<Props> = ({
     setState('idle')
     setError('')
     setOpenedContractId('')
-  }, [symbol, aiSetup?.direction])
+  }, [symbol, timeframe, aiSetup?.direction])
 
   const stakeValue = toPositiveNumber(stake)
   const multiplierValue = toPositiveNumber(multiplier)
@@ -145,7 +147,7 @@ export const OrderPanel: React.FC<Props> = ({
     setError('')
     try {
       const order = await buyDerivProposal({ connection, quote })
-      onTradeOpened(order)
+      onTradeOpened({ ...order, chartTimeframe: timeframe })
       setOpenedContractId(String(order.providerOrderId || order.id))
       setState('opened')
     } catch (err) {
@@ -169,7 +171,7 @@ export const OrderPanel: React.FC<Props> = ({
               <span className="text-[10px] font-bold tracking-wide">TRADE</span>
               <span className="rounded border border-shafx-border px-1 py-0.5 font-mono text-[7px] font-bold text-shafx-textMuted">DERIV</span>
             </div>
-            <div className="truncate font-mono text-[8px] text-shafx-textMuted">{symbol} · M5 · Multiplier</div>
+            <div className="truncate font-mono text-[8px] text-shafx-textMuted">{symbol} · {timeframe} · Multiplier</div>
           </div>
         </div>
         <div className="text-right">
@@ -313,7 +315,7 @@ export const OrderPanel: React.FC<Props> = ({
           </div>
         )}
 
-        <div className="mt-2 text-center font-mono text-[6px] uppercase tracking-[.12em] text-shafx-textMuted">M5 is chart context · Deriv Multiplier controls the contract</div>
+        <div className="mt-2 text-center font-mono text-[6px] uppercase tracking-[.12em] text-shafx-textMuted">{timeframe} is chart context · Deriv Multiplier controls the contract</div>
       </div>
     </section>
   )
