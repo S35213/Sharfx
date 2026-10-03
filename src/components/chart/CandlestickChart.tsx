@@ -78,7 +78,7 @@ const TIMEFRAME_SECONDS: Record<Timeframe, number> = {
 }
 const timeframeSecondsFor = (nextTimeframe: Timeframe): number => TIMEFRAME_SECONDS[nextTimeframe]
 
-export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, symbol, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [], candleTheme = 'mt5', chartMode = 'candles', marketTimestamp, onTimeframeChange, replayMode = false }) => {
+export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, symbol, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [], candleTheme = 'shafx', chartMode = 'candles', marketTimestamp, onTimeframeChange, replayMode = false }) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ShafxSeries | null>(null)
@@ -766,6 +766,31 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const chartFullscreen = isFullscreen;
 
   return <div ref={containerRef} onPointerDownCapture={handleChartPointerDown} onPointerMoveCapture={handleChartPointerMove} onPointerUpCapture={handleChartPointerUp} onPointerCancel={handleChartPointerCancel} onPointerDown={placeTool} className={`shafx-chart-shell relative w-full overflow-hidden border border-shafx-border bg-shafx-bg touch-pan-y ${['level', 'alert', 'measure'].includes(toolMode) ? 'cursor-crosshair' : ''} ${chartFullscreen ? 'fixed inset-0 z-[200] h-[100svh] w-screen' : ''}`} style={{ height: chartFullscreen ? '100svh' : height, minHeight: 280 }}>
+    <div className="absolute left-1/2 top-2 z-40 flex max-w-[calc(100%-120px)] -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-2xl border border-shafx-border/80 bg-shafx-surface/90 p-1 shadow-lg backdrop-blur-xl [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <span className="hidden px-2 text-[8px] font-bold uppercase tracking-[0.16em] text-shafx-textMuted md:inline">SHAFX CHART</span>
+      {TIMEFRAMES.map((tf) => (
+        <button
+          key={tf}
+          type="button"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={() => onTimeframeChange?.(tf)}
+          aria-label={`Switch chart to ${tf}`}
+          aria-pressed={timeframe === tf}
+          className={`min-h-7 rounded-xl px-2.5 text-[8px] font-bold tracking-wide transition sm:min-h-8 sm:px-3 sm:text-[9px] ${timeframe === tf ? 'bg-shafx-accent text-white shadow-md' : 'text-shafx-textMuted hover:bg-shafx-bg/80 hover:text-shafx-text'}`}
+        >
+          {tf}
+        </button>
+      ))}
+      <span className="mx-0.5 h-5 w-px bg-shafx-border" />
+      <button
+        type="button"
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={goToCurrentCandle}
+        className="min-h-7 rounded-xl border border-shafx-success/25 bg-shafx-success/10 px-2.5 text-[8px] font-bold text-shafx-success transition hover:bg-shafx-success/15 sm:min-h-8 sm:px-3 sm:text-[9px]"
+      >
+        NOW
+      </button>
+    </div>
     <div className="pointer-events-none absolute left-3 top-3 z-10 hidden items-center gap-2 rounded-xl border border-shafx-border bg-shafx-bg/90 px-2.5 py-1.5 text-[9px] font-semibold backdrop-blur sm:flex"><span className="text-shafx-accent">SHAFX</span><span className="text-shafx-textMuted">•</span><span className="text-shafx-textMuted">{timeframe ?? 'PRICE'} workspace</span></div>
     <div className="pointer-events-none absolute right-3 top-3 z-10 hidden rounded-xl border border-shafx-border bg-shafx-bg/90 px-2.5 py-1.5 text-[9px] font-semibold text-shafx-text backdrop-blur sm:block">{meta.label} <span className="font-normal text-shafx-textMuted">• {meta.interval}</span></div>
     <div className="pointer-events-none absolute left-3 top-3 z-10 flex items-center gap-2 rounded-xl border border-shafx-border/70 bg-shafx-surface/88 px-2.5 py-1.5 shadow-md backdrop-blur">
