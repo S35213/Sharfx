@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, Command, MoreVertical, Search, Settings2, ShieldCheck, Wifi } from 'lucide-react'
-import type { MarketPair, Timeframe } from '../../types'
+import type { MarketPair } from '../../types'
 import { formatPrice } from '../../lib/format'
 import { ProviderConnectionControl } from '../market/ProviderConnectionControl'
 import { ChartSettingsSheet } from './ChartSettingsSheet'
@@ -11,13 +11,12 @@ interface TopNavProps {
   symbol: string
   price: number
   pricePrecision: number
-  timeframe: Timeframe
   pairs: MarketPair[]
   onSelectPair: (symbol: string) => void
   view?: TerminalView
 }
 
-export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, timeframe, pairs, onSelectPair, view = 'market' }) => {
+export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, pairs, onSelectPair, view = 'market' }) => {
   const [marketOpen, setMarketOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
