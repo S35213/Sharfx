@@ -45,21 +45,26 @@ const normalizeProviderSymbol = (value: string): string => {
 
 const providerPositionToTrade = (position: ProviderPosition): TradeOrder => {
   const metadata = position.metadata || {}
+  const raw = (metadata.raw && typeof metadata.raw === 'object') ? metadata.raw as Record<string, unknown> : {}
   const stake = Number(metadata.stake ?? position.quantity ?? 0)
   const multiplierValue = Number(metadata.multiplier ?? 0)
   const entryPrice = Number(position.entryPrice ?? 0)
+  const currentPrice = Number(position.currentPrice ?? 0)
+  const stopLossAmount = Number(position.stopLoss ?? raw.stop_loss ?? 0)
+  const takeProfitAmount = Number(position.takeProfit ?? raw.take_profit ?? 0)
   return {
     id: String(position.id),
     symbol: normalizeProviderSymbol(position.symbol),
     type: position.side,
     lotSize: Number.isFinite(stake) ? stake : 0,
     entryPrice: Number.isFinite(entryPrice) ? entryPrice : 0,
-    stopLoss: position.stopLoss ?? null,
-    takeProfit: position.takeProfit ?? null,
+    currentPrice: Number.isFinite(currentPrice) && currentPrice > 0 ? currentPrice : undefined,
+    stopLoss: null,
+    takeProfit: null,
     riskPercent: 0,
-    riskAmount: Number.isFinite(stake) ? stake : 0,
-    rewardAmount: 0,
-    riskRewardRatio: 0,
+    riskAmount: Number.isFinite(stopLossAmount) && stopLossAmount > 0 ? stopLossAmount : (Number.isFinite(stake) ? stake : 0),
+    rewardAmount: Number.isFinite(takeProfitAmount) && takeProfitAmount > 0 ? takeProfitAmount : 0,
+    riskRewardRatio: Number.isFinite(stopLossAmount) && stopLossAmount > 0 && Number.isFinite(takeProfitAmount) && takeProfitAmount > 0 ? takeProfitAmount / stopLossAmount : 0,
     status: 'open',
     openTime: typeof metadata.purchaseTime === 'number'
       ? new Date(metadata.purchaseTime * 1000).toISOString()
@@ -69,6 +74,8 @@ const providerPositionToTrade = (position: ProviderPosition): TradeOrder => {
     brokerProduct: 'DERIV_MULTIPLIER',
     stake: Number.isFinite(stake) ? stake : 0,
     multiplier: Number.isFinite(multiplierValue) && multiplierValue > 0 ? multiplierValue : undefined,
+    stopLossAmount: Number.isFinite(stopLossAmount) && stopLossAmount > 0 ? stopLossAmount : undefined,
+    takeProfitAmount: Number.isFinite(takeProfitAmount) && takeProfitAmount > 0 ? takeProfitAmount : undefined,
   }
 }
 
@@ -120,6 +127,7 @@ const TerminalContent: React.FC = () => {
   const [liveMarketActive, setLiveMarketActive] = useState(false)
   const [chartSettings, setChartSettings] = useState<ChartWorkspaceSettings>(() => readChartWorkspaceSettings())
   const [toast, setToast] = useState<ToastMessage | null>(null)
+  const [tradeLines, setTradeLines] = useState<ChartAnnotation[]>([])
   const [chartTool, setChartTool] = useState<WorkspaceTool>('cursor')
   const [dock, setDock] = useState<WorkspaceDock>('orders')
   const [mobileTab, setMobileTab] = useState<MobileNavTab>('market')
@@ -323,8 +331,17 @@ const TerminalContent: React.FC = () => {
             if (event.type === 'position') {
               const trade = providerPositionToTrade(event.position)
               setOpenPositions((current) => {
+                const previous = current.find((item) => item.id === trade.id)
+                const nextTrade: TradeOrder = {
+                  ...trade,
+                  chartTimeframe: previous?.chartTimeframe ?? timeframe,
+                  plannedStopLossPrice: previous?.plannedStopLossPrice ?? null,
+                  plannedTakeProfitPrice: previous?.plannedTakeProfitPrice ?? null,
+                  commission: previous?.commission,
+                  payout: previous?.payout,
+                }
                 const next = current.filter((item) => item.id !== trade.id)
-                return [...next, trade].sort((a, b) => b.openTime.localeCompare(a.openTime))
+                return [...next, nextTrade].sort((a, b) => b.openTime.localeCompare(a.openTime))
               })
               setTradeHistory((current) => current.filter((item) => item.id !== trade.id))
               return
@@ -402,7 +419,10 @@ const TerminalContent: React.FC = () => {
   const chartAnnotations = useMemo(() => buildStructuralChartAnnotations(selectedSymbol, liveCandles, timeframe)
     .map((annotation) => ({ ...annotation, id: 'live-' + timeframe + '-' + annotation.id })), [liveCandles, selectedSymbol, timeframe])
 
-  const tradeLines = useMemo<ChartAnnotation[]>(() => [], [])
+  const selectedOpenPosition = useMemo(
+    () => openPositions.find((position) => position.symbol === selectedSymbol) ?? null,
+    [openPositions, selectedSymbol],
+  )
   // Deriv public market data requires no authenticated account. Keep chart startup
   // independent from the slower OAuth/account synchronization path.
   const activeMarketConnection = useMemo(() => ({
@@ -437,12 +457,13 @@ const TerminalContent: React.FC = () => {
       if (!closed) return null
       setOpenPositions((current) => current.filter((order) => order.id !== id))
       setTradeHistory((current) => [closed, ...current.filter((order) => order.id !== id)])
+      if (selectedOpenPosition?.id === id) setTradeLines([])
       return closed
     } catch (error) {
       pushToast(error instanceof Error ? error.message : 'Unable to close the Deriv trade.')
       return null
     }
-  }, [derivOrderConnection, openPositions, pushToast, tradeHistory])
+  }, [derivOrderConnection, openPositions, pushToast, selectedOpenPosition?.id, tradeHistory])
 
   const resolvedAccountData = accountData ?? {
     balance: 0,
@@ -490,7 +511,13 @@ const TerminalContent: React.FC = () => {
     </div>,
     chat: <div className="space-y-3">
       <AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={liveCandles} setup={reviewSetup} onReviewSetup={() => handleReviewSetup(reviewSetup)} />
-      <OrderPanel symbol={selectedSymbol} currentPrice={currentPrice} bidPrice={currentPrice} askPrice={currentPrice} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} timeframe={timeframe} connection={derivOrderConnection} onTradeOpened={(order) => { setOpenPositions((current) => [...current, order]); setTradeHistory((current) => current.filter((item) => item.id !== order.id)); setReviewSetup(null); pushToast('Deriv ' + order.type + ' trade opened on ' + (order.chartTimeframe ?? timeframe) + '.') }} aiSetup={reviewSetup} />
+      <OrderPanel symbol={selectedSymbol} currentPrice={currentPrice} bidPrice={currentPrice} askPrice={currentPrice} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} timeframe={timeframe} connection={derivOrderConnection} activePosition={selectedOpenPosition} onTradeClosed={(id) => { void handleClosePosition(id) }} onTradeLinesChange={setTradeLines} onTradeOpened={(order) => {
+      setOpenPositions((current) => [order, ...current.filter((item) => item.id !== order.id)])
+      setTradeHistory((current) => current.filter((item) => item.id !== order.id))
+      setTradeLines([])
+      setReviewSetup(null)
+      pushToast('Deriv ' + order.type + ' trade opened on ' + (order.chartTimeframe ?? timeframe) + '.')
+    }} aiSetup={reviewSetup} />
     </div>,
     bot: <SignalDeskPanel
       symbol={selectedSymbol}
@@ -504,7 +531,13 @@ const TerminalContent: React.FC = () => {
       onReviewSetup={handleReviewSetup}
     />,
     liquidity: <LiquidityPanel key={selectedSymbol} symbol={selectedSymbol} price={currentPrice} precision={symbolSpec.pricePrecision} pipSize={symbolSpec.pipSize} candles={liveCandles} />,
-    orders: <OrderPanel symbol={selectedSymbol} currentPrice={currentPrice} bidPrice={currentPrice} askPrice={currentPrice} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} timeframe={timeframe} connection={derivOrderConnection} onTradeOpened={(order) => { setOpenPositions((current) => [...current, order]); setTradeHistory((current) => current.filter((item) => item.id !== order.id)); setReviewSetup(null); pushToast('Deriv ' + order.type + ' trade opened on ' + (order.chartTimeframe ?? timeframe) + '.') }} aiSetup={reviewSetup} />,
+    orders: <OrderPanel symbol={selectedSymbol} currentPrice={currentPrice} bidPrice={currentPrice} askPrice={currentPrice} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} timeframe={timeframe} connection={derivOrderConnection} onTradeOpened={(order) => {
+      setOpenPositions((current) => [order, ...current.filter((item) => item.id !== order.id)])
+      setTradeHistory((current) => current.filter((item) => item.id !== order.id))
+      setTradeLines([])
+      setReviewSetup(null)
+      pushToast('Deriv ' + order.type + ' trade opened on ' + (order.chartTimeframe ?? timeframe) + '.')
+    }} aiSetup={reviewSetup} />,
 
   }
 
@@ -558,7 +591,13 @@ const TerminalContent: React.FC = () => {
         </div>
       </section>
 
-      <aside className={showChat ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={liveCandles} setup={reviewSetup} onReviewSetup={() => handleReviewSetup(reviewSetup)} /><OrderPanel symbol={selectedSymbol} currentPrice={currentPrice} bidPrice={currentPrice} askPrice={currentPrice} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} timeframe={timeframe} connection={derivOrderConnection} onTradeOpened={(order) => { setOpenPositions((current) => [...current, order]); setTradeHistory((current) => current.filter((item) => item.id !== order.id)); setReviewSetup(null); pushToast('Deriv ' + order.type + ' trade opened on ' + (order.chartTimeframe ?? timeframe) + '.') }} aiSetup={reviewSetup} /></div></aside>
+      <aside className={showChat ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={liveCandles} setup={reviewSetup} onReviewSetup={() => handleReviewSetup(reviewSetup)} /><OrderPanel symbol={selectedSymbol} currentPrice={currentPrice} bidPrice={currentPrice} askPrice={currentPrice} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} timeframe={timeframe} connection={derivOrderConnection} onTradeOpened={(order) => {
+      setOpenPositions((current) => [order, ...current.filter((item) => item.id !== order.id)])
+      setTradeHistory((current) => current.filter((item) => item.id !== order.id))
+      setTradeLines([])
+      setReviewSetup(null)
+      pushToast('Deriv ' + order.type + ' trade opened on ' + (order.chartTimeframe ?? timeframe) + '.')
+    }} aiSetup={reviewSetup} /></div></aside>
       <aside className={showBot ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><SignalDeskPanel symbol={selectedSymbol} timeframe={timeframe} currentPrice={currentPrice} analysis={marketAnalysis} setup={reviewSetup} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} connected={Boolean(derivOrderConnection)} onReviewSetup={handleReviewSetup} /></aside>
       <aside className={showHistory ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><TradesPanel positionsOnly openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={currentPrice} selectedSymbol={selectedSymbol} onClosePosition={(id) => { void handleClosePosition(id) }} /></div></aside>
       <aside className={showFunds ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><DerivCashierLinks /></div></aside>
