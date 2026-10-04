@@ -457,13 +457,13 @@ const TerminalContent: React.FC = () => {
       if (!closed) return null
       setOpenPositions((current) => current.filter((order) => order.id !== id))
       setTradeHistory((current) => [closed, ...current.filter((order) => order.id !== id)])
-      if (selectedOpenPosition?.id === id) setTradeLines([])
+      setTradeLines((current) => current.filter((line) => !line.id.startsWith(id + '-')))
       return closed
     } catch (error) {
       pushToast(error instanceof Error ? error.message : 'Unable to close the Deriv trade.')
       return null
     }
-  }, [derivOrderConnection, openPositions, pushToast, selectedOpenPosition?.id, tradeHistory])
+  }, [derivOrderConnection, openPositions, pushToast, tradeHistory])
 
   const resolvedAccountData = accountData ?? {
     balance: 0,
