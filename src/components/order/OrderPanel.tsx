@@ -457,7 +457,7 @@ export const OrderPanel: React.FC<Props> = ({
 
               <div className="mt-2 flex gap-2">
                 <button type="button" onClick={() => void confirmBuy()} disabled={busy} className="flex min-h-10 flex-1 items-center justify-center gap-2 bg-shafx-primary px-3 text-[8px] font-semibold text-white disabled:opacity-60">
-                  {state === 'buying' ? <><LoaderCircle className="h-3.5 w-3.5 animate-spin" /> RE-PRICING…</> : <><CheckCircle2 className="h-3.5 w-3.5" /> CONFIRM {side === 'BUY' ? 'BUY UP' : 'SELL DOWN'}</>}
+                  <CheckCircle2 className="h-3.5 w-3.5" /> CONFIRM {side === 'BUY' ? 'BUY UP' : 'SELL DOWN'}
                 </button>
                 <button type="button" onClick={resetQuote} disabled={busy} className="min-h-10 border border-shafx-border px-3 text-[8px] font-semibold text-shafx-textMuted disabled:opacity-50">Cancel</button>
               </div>
