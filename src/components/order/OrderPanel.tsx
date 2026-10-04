@@ -82,7 +82,7 @@ export const OrderPanel: React.FC<Props> = ({
   const [quote, setQuote] = useState<DerivProposalQuote | null>(null)
   const [state, setState] = useState<TicketState>('planning')
   const [error, setError] = useState('')
-  const [now, setNow] = useState(Date.now())
+  const [now, setNow] = useState(0)
 
   useEffect(() => {
     setSide(aiSetup?.direction ?? 'BUY')
