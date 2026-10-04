@@ -38,7 +38,7 @@ export const TradesPanel: React.FC<Props> = ({
   positionsOnly = false,
 }) => {
   const [activeTab, setActiveTab] = useState<Tab>('positions')
-  const [now, setNow] = useState(Date.now())
+  const [now, setNow] = useState(0)
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000)
