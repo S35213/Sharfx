@@ -138,6 +138,8 @@ const normalizeTradeOrder = (providerOrder: ProviderOrderPayload, quote: DerivPr
     multiplier: Number.isFinite(multiplier) ? multiplier : quote.multiplier,
     stopLossAmount: stopLossAmount > 0 ? stopLossAmount : undefined,
     takeProfitAmount: takeProfitAmount > 0 ? takeProfitAmount : undefined,
+    commission: Number.isFinite(Number(quote.commission)) ? Number(quote.commission) : undefined,
+    payout: Number.isFinite(Number(quote.payout)) ? Number(quote.payout) : undefined,
   }
 }
 
