@@ -531,7 +531,7 @@ const TerminalContent: React.FC = () => {
       onReviewSetup={handleReviewSetup}
     />,
     liquidity: <LiquidityPanel key={selectedSymbol} symbol={selectedSymbol} price={currentPrice} precision={symbolSpec.pricePrecision} pipSize={symbolSpec.pipSize} candles={liveCandles} />,
-    orders: <OrderPanel symbol={selectedSymbol} currentPrice={currentPrice} bidPrice={currentPrice} askPrice={currentPrice} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} timeframe={timeframe} connection={derivOrderConnection} onTradeOpened={(order) => {
+    orders: <OrderPanel symbol={selectedSymbol} currentPrice={currentPrice} bidPrice={currentPrice} askPrice={currentPrice} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} timeframe={timeframe} connection={derivOrderConnection} activePosition={selectedOpenPosition} onTradeClosed={(id) => { void handleClosePosition(id) }} onTradeLinesChange={setTradeLines} onTradeOpened={(order) => {
       setOpenPositions((current) => [order, ...current.filter((item) => item.id !== order.id)])
       setTradeHistory((current) => current.filter((item) => item.id !== order.id))
       setTradeLines([])
@@ -591,7 +591,7 @@ const TerminalContent: React.FC = () => {
         </div>
       </section>
 
-      <aside className={showChat ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={liveCandles} setup={reviewSetup} onReviewSetup={() => handleReviewSetup(reviewSetup)} /><OrderPanel symbol={selectedSymbol} currentPrice={currentPrice} bidPrice={currentPrice} askPrice={currentPrice} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} timeframe={timeframe} connection={derivOrderConnection} onTradeOpened={(order) => {
+      <aside className={showChat ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={liveCandles} setup={reviewSetup} onReviewSetup={() => handleReviewSetup(reviewSetup)} /><OrderPanel symbol={selectedSymbol} currentPrice={currentPrice} bidPrice={currentPrice} askPrice={currentPrice} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} timeframe={timeframe} connection={derivOrderConnection} activePosition={selectedOpenPosition} onTradeClosed={(id) => { void handleClosePosition(id) }} onTradeLinesChange={setTradeLines} onTradeOpened={(order) => {
       setOpenPositions((current) => [order, ...current.filter((item) => item.id !== order.id)])
       setTradeHistory((current) => current.filter((item) => item.id !== order.id))
       setTradeLines([])
