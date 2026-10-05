@@ -1,6 +1,7 @@
 import { analyzeLiquidity } from '../liquidity'
 import { analyzeMarketStructure, findSwingPoints } from '../marketStructure'
 import { analyzeSetup } from '../setup'
+import { analyzeSupportResistance } from '../supportResistance'
 import { analyzeMultiTimeframeBias } from '../agent/multiTimeframe'
 import type { OHLCV, Timeframe } from '../../types'
 import type { SetupCandidate } from '../setup/types'
@@ -41,12 +42,12 @@ export const buildSignalRadar = (
     const swings = findSwingPoints(candles, 2)
     const structure = analyzeMarketStructure(candles, 2)
     const tolerance = symbol.includes('JPY') ? 0.1 : symbol.includes('XAU') ? 0.01 : 0.001
-    const supportResistance = undefined
+    const supportResistance = analyzeSupportResistance(candles, tolerance, swings)
     const liquidity = analyzeLiquidity(candles, swings, tolerance)
     const setupResult = analyzeSetup({
       currentPrice: Number(candles[candles.length - 1]?.close ?? currentPrice),
       structure,
-      supportResistance: supportResistance as never,
+      supportResistance,
       liquidity,
     })
     const setup = setupResult.preferredSetup
