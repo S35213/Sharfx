@@ -9,6 +9,7 @@ import {
 
 const DERIV_API = 'https://api.derivws.com/trading/v1/options'
 const MIN_STAKE = 10
+const MAX_STAKE = 2000
 const MAX_MULTIPLIER = 10000
 
 const toDerivSymbol = (symbol) => {
@@ -127,6 +128,7 @@ const buildQuoteRequest = (order, account) => {
   if (!symbol) throw new StageError('MARKET', 'Select a Deriv market before requesting a quote.')
   if (!currency) throw new StageError('ACCOUNT', 'The selected Deriv account has no currency.')
   if (!Number.isFinite(stake) || stake < MIN_STAKE) throw new StageError('ACCOUNT', 'SHAFX minimum multiplier stake is 10 ' + currency + '.')
+  if (stake > MAX_STAKE) throw new StageError('ACCOUNT', 'SHAFX maximum multiplier stake is 2000 ' + currency + '.')
   if (!Number.isFinite(multiplier) || multiplier <= 0 || multiplier > MAX_MULTIPLIER) throw new StageError('PROPOSAL', 'Enter a valid multiplier between 1 and ' + MAX_MULTIPLIER + '.')
   if (Number.isFinite(stopLossAmount) && stopLossAmount < 0) throw new StageError('PROPOSAL', 'Stop-loss amount cannot be negative.')
   if (Number.isFinite(takeProfitAmount) && takeProfitAmount < 0) throw new StageError('PROPOSAL', 'Take-profit amount cannot be negative.')
