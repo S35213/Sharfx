@@ -417,11 +417,12 @@ const TerminalContent: React.FC = () => {
   }, [liveCandles, selectedSymbol])
 
   // Deriv's public FX stream gives SHAFX one live market price rather than a broker-side
-  // bid/ask pair. Keep the terminal in a distinct MT5-like two-rail layout by applying a
-  // small SHAFX display spread that is always visible at the symbol's native precision.
+  // bid/ask pair. Keep the terminal MT5-like at the fractional-pip level without rounding
+  // away the final price digit on each tick. The spread remains a display estimate until
+  // a broker-side bid/ask feed is available.
   const chartBidRaw = Number.isFinite(currentPrice) && currentPrice > 0 ? currentPrice : (liveCandles[liveCandles.length - 1]?.close ?? 0)
   const chartBidPrice = Number(chartBidRaw.toFixed(symbolSpec.pricePrecision))
-  const chartSpread = symbolSpec.pipSize * 1.2
+  const chartSpread = Math.max(symbolSpec.pipSize * 0.2, symbolSpec.pipSize / 10)
   const chartAskCandidate = Number((chartBidPrice + chartSpread).toFixed(symbolSpec.pricePrecision))
   const chartAskPrice = chartAskCandidate > chartBidPrice
     ? chartAskCandidate
