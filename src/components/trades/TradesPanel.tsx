@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
-import { Clock3, History, ListChecks, XCircle } from 'lucide-react'
-import type { TradeOrder } from '../../types'
+import { Bot, Clock3, History, ListChecks, XCircle } from 'lucide-react'
+import type { BotPaperTrade, TradeOrder } from '../../types'
 import { formatCurrency, formatPrice, formatTimestamp } from '../../lib/format'
 import { TradeHistoryPerformance } from './TradeHistoryPerformance'
 
@@ -15,9 +15,10 @@ interface Props {
   positionsOnly?: boolean
   defaultTab?: Tab
   currency?: string
+  botPaperHistory?: BotPaperTrade[]
 }
 
-type Tab = 'positions' | 'pending' | 'history'
+type Tab = 'positions' | 'pending' | 'history' | 'bot'
 
 const formatLivePnl = (value: number, currency: string): string => {
   const absolute = Math.abs(value)
@@ -52,6 +53,7 @@ export const TradesPanel: React.FC<Props> = ({
   positionsOnly = false,
   defaultTab = 'positions',
   currency = 'USD',
+  botPaperHistory = [],
 }) => {
   const [activeTab, setActiveTab] = useState<Tab>(positionsOnly ? 'positions' : defaultTab)
   const [now, setNow] = useState(0)
@@ -78,6 +80,7 @@ export const TradesPanel: React.FC<Props> = ({
             ['positions', 'Open', openPositions.length, ListChecks],
             ['pending', 'Pending', pendingOrders.length, Clock3],
             ['history', 'History', tradeHistory.length, History],
+            ['bot', 'Bot', botPaperHistory.length, Bot],
           ] as const).map(([key, label, count, Icon]) => (
             <button
               key={key}
@@ -92,7 +95,49 @@ export const TradesPanel: React.FC<Props> = ({
         </div>
       )}
 
-      {activeTab === 'history' ? (
+      {activeTab === 'bot' ? (
+        <div className="min-h-0 flex-1 overflow-auto bg-[#070B10] p-3 sm:p-4">
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em]"><Bot className="h-3.5 w-3.5 text-shafx-accent" /> Paper bot journal</div>
+              <p className="mt-1 text-[8px] text-shafx-textMuted">Separate from Deriv account history. These are SHAFX five-round test results.</p>
+            </div>
+            <span className="font-mono text-[8px] text-shafx-textMuted">{botPaperHistory.length} rounds</span>
+          </div>
+          {botPaperHistory.length === 0 ? (
+            <div className="border border-shafx-border bg-shafx-surface px-3 py-10 text-center text-[9px] text-shafx-textMuted">No bot paper rounds yet.</div>
+          ) : (
+            <>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="border border-shafx-success/25 bg-shafx-success/[0.06] p-2.5"><span className="block text-[7px] uppercase tracking-[0.14em] text-shafx-textMuted">Net</span><div className={'mt-1 font-mono text-sm font-semibold tabular-nums ' + (botPaperHistory.reduce((sum, trade) => sum + trade.pnl, 0) >= 0 ? 'text-shafx-success' : 'text-shafx-danger')}>{botPaperHistory.reduce((sum, trade) => sum + trade.pnl, 0) >= 0 ? '+' : ''}{botPaperHistory.reduce((sum, trade) => sum + trade.pnl, 0).toFixed(4)}</div></div>
+                <div className="border border-shafx-border bg-shafx-surface p-2.5"><span className="block text-[7px] uppercase tracking-[0.14em] text-shafx-textMuted">Wins</span><div className="mt-1 font-mono text-sm font-semibold">{botPaperHistory.filter((trade) => trade.status === 'win').length}</div></div>
+                <div className="border border-shafx-border bg-shafx-surface p-2.5"><span className="block text-[7px] uppercase tracking-[0.14em] text-shafx-textMuted">Losses</span><div className="mt-1 font-mono text-sm font-semibold">{botPaperHistory.filter((trade) => trade.status === 'loss').length}</div></div>
+              </div>
+              <div className="mt-3 divide-y divide-shafx-border border border-shafx-border bg-shafx-surface">
+                {botPaperHistory.slice(0, 30).map((trade) => (
+                  <div key={trade.id} className="grid grid-cols-[1fr_auto] gap-3 px-3 py-2.5">
+                    <div>
+                      <div className="flex items-center gap-2 text-[9px] font-semibold">
+                        <span>{trade.symbol}</span>
+                        <span className={trade.direction === 'BUY' ? 'text-shafx-success' : trade.direction === 'SELL' ? 'text-shafx-danger' : 'text-shafx-textMuted'}>{trade.direction ?? 'WAIT'}</span>
+                        <span className="font-mono text-shafx-accent">{trade.signalTimeframe ?? '—'} → {trade.entryTimeframe ?? '—'}</span>
+                      </div>
+                      <div className="mt-0.5 flex flex-wrap gap-2 font-mono text-[7px] text-shafx-textMuted">
+                        <span>R{trade.round}</span><span>Stake {trade.stake.toFixed(2)}</span><span>{trade.multiplier}×</span>
+                        <span>{trade.entry !== null ? trade.entry.toFixed(5) : '—'} → {trade.exit !== null ? trade.exit.toFixed(5) : '—'}</span>
+                      </div>
+                    </div>
+                    <div className={'text-right font-mono text-[10px] font-semibold ' + (trade.pnl >= 0 ? 'text-shafx-success' : 'text-shafx-danger')}>
+                      <div>{trade.pnl >= 0 ? '+' : ''}{trade.pnl.toFixed(4)}</div>
+                      <div className="text-[7px] uppercase text-shafx-textMuted">{trade.status}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      ) : activeTab === 'history' ? (
         <div className="min-h-0 flex-1 overflow-hidden">
           <TradeHistoryPerformance history={tradeHistory} currency={currency} />
         </div>
