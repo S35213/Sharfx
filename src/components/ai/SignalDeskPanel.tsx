@@ -85,7 +85,7 @@ export const SignalDeskPanel: React.FC<Props> = ({
       </div>
     </div>
 
-    <BotUnitPanel symbol={symbol} radar={radar} currentPrice={currentPrice} onPaperRoundClosed={onPaperRoundClosed} />
+    <BotUnitPanel symbol={symbol} currency={accountCurrency} radar={radar} currentPrice={currentPrice} onPaperRoundClosed={onPaperRoundClosed} />
 
     {setup ? (
       <div className="rounded-xl border border-shafx-accent/25 bg-shafx-accent/[0.05] p-3">
