@@ -671,3 +671,14 @@ When a new action is completed, append it to the action tree and change its chec
   2. SHAFX Autopilot Unit — server-owned five-round execution run using the working Deriv proposal/buy/contract-monitor/close path.
 - The browser should become the presentation/control surface, not the source of truth for an autonomous run. A run must survive refresh/disconnects and continue from persisted server state.
 - The next engineering gate is architecture/schema/API design for those two independent bot services before restoring autonomous execution.
+
+### 2026-10-05 — Account metrics forwarding root cause corrected + Signal Radar integrated
+
+- A second account-state diagnosis was required after the first derived-metrics patch: src/integrations/deriv/accountStream.ts correctly calculated Equity, Used Margin, Free Margin, and Floating P/L, but src/integrations/deriv/adapter.ts was dropping those fields when converting the snapshot into the provider account event.
+- Fixed: the Deriv adapter now forwards equity, usedMargin, freeMargin, and floatingPL to the app account state.
+- Latest functional account-state chain is therefore: Deriv balance + open-contract profit/stake -> DerivAccountStreamTransport -> Deriv provider adapter -> ProviderAccountStream -> App.tsx -> Account/terminal UI.
+- The remaining human proof is the user's active authenticated demo trade after a hard refresh: the displayed Equity/Free Margin/Floating P/L must move with the open contract.
+- Added src/engine/bot/signalRadar.ts and tests. Radar scans the existing SHAFX timeframe set (M1/M5/M15/M30/H1/H4/D1/W1), ranks up to three strongest opportunities, exposes a SHAFX strength score, and hands the selected setup to the existing manual ticket.
+- Integrated Signal Radar into SignalDeskPanel.tsx; no automatic broker execution was enabled.
+- The durable Supabase bot-run schema remains prepared for future run-state orchestration, but there is currently no unattended broker execution worker/API on this branch.
+- Latest verified Render deployment for the integrated Signal Radar: dep-db1vakvavr4c73a2eh1g — LIVE.
