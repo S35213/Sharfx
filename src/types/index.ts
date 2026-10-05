@@ -82,6 +82,23 @@ export interface TradePlanDraft {
   validationError: string | null
 }
 
+export interface BotPaperTrade {
+  id: string
+  symbol: string
+  round: number
+  direction: TradeSide | null
+  signalTimeframe: Timeframe | null
+  entryTimeframe: Timeframe | null
+  entry: number | null
+  exit: number | null
+  stake: number
+  multiplier: number
+  pnl: number
+  status: 'win' | 'loss' | 'wait'
+  openTime: string
+  closeTime: string
+}
+
 export interface TradeOrder {
   id: string
   symbol: string
