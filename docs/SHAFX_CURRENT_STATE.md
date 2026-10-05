@@ -224,3 +224,34 @@ Autopilot Unit
 - continues after browser refresh/disconnect because run state is server-owned.
 
 The browser should not run the autonomous bot with browser timers as the authoritative scheduler. Shared market analysis should be computed once per market/timeframe and fanned out to users; account-specific execution should be isolated per user/account.
+
+## 14. Latest verified continuation point — 2026-10-05
+
+### Account metrics
+
+The initial derived-metrics implementation was not enough because the provider adapter was discarding those fields before the UI saw them. The corrected chain now forwards all four dynamic fields:
+
+- equity
+- usedMargin
+- freeMargin
+- floatingPL
+
+from the Deriv account stream into the provider account event and then App.tsx.
+
+This is the exact correction required for the current open demo trade to affect the SHAFX MT5-style account display. The user still needs to hard-refresh the live Render app and observe the authenticated demo trade for final human confirmation.
+
+### Bot status
+
+Signal Radar is implemented and integrated.
+
+It uses the existing SHAFX analysis engine rather than a replacement AI model:
+
+market structure + support/resistance + liquidity + setup detection + multi-timeframe bias
+
+and produces the top three current opportunities with a SHAFX signal-strength score.
+
+The score is deliberately labeled as a SHAFX strength score, not a guaranteed win probability.
+
+Autopilot execution remains disabled in this rebuild.
+
+The durable five-round database state has been created in staging so the architecture is ready, but no unattended broker-execution worker has been left in the branch. Manual Deriv execution remains the controlled execution path during this rebuild.
