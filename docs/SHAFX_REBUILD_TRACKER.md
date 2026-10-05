@@ -682,3 +682,4 @@ When a new action is completed, append it to the action tree and change its chec
 - Integrated Signal Radar into SignalDeskPanel.tsx; no automatic broker execution was enabled.
 - The durable Supabase bot-run schema remains prepared for future run-state orchestration, but there is currently no unattended broker execution worker/API on this branch.
 - Latest verified Render deployment for the integrated Signal Radar: dep-db1vakvavr4c73a2eh1g — LIVE.
+undefined
