@@ -1,7 +1,7 @@
 import React from 'react'
 import { BrainCircuit, LockKeyhole, ShieldCheck, Sparkles } from 'lucide-react'
 import { BotUnitPanel } from './BotUnitPanel'
-import type { MarketAnalysis, Timeframe, OHLCV } from '../../types'
+import type { BotPaperTrade, MarketAnalysis, Timeframe, OHLCV } from '../../types'
 import { useMemo } from 'react'
 import { useMultiTimeframeCandles } from '../../engine/agent/loadMultiTimeframe'
 import { buildSignalRadar } from '../../engine/bot/signalRadar'
@@ -18,6 +18,7 @@ interface Props {
   accountCurrency: string
   connected: boolean
   onReviewSetup?: (setup?: SetupCandidate | null) => void
+  onPaperRoundClosed?: (trade: BotPaperTrade) => void
 }
 
 export const SignalDeskPanel: React.FC<Props> = ({
@@ -31,6 +32,7 @@ export const SignalDeskPanel: React.FC<Props> = ({
   accountCurrency,
   connected,
   onReviewSetup,
+  onPaperRoundClosed,
 }) => {
   const radarFrames = useMultiTimeframeCandles(symbol, timeframe, candles, [], 0)
   const radar = useMemo(() => buildSignalRadar(radarFrames, symbol, currentPrice), [currentPrice, radarFrames, symbol])
@@ -83,7 +85,7 @@ export const SignalDeskPanel: React.FC<Props> = ({
       </div>
     </div>
 
-    <BotUnitPanel radar={radar} currentPrice={currentPrice} />
+    <BotUnitPanel symbol={symbol} radar={radar} currentPrice={currentPrice} onPaperRoundClosed={onPaperRoundClosed} />
 
     {setup ? (
       <div className="rounded-xl border border-shafx-accent/25 bg-shafx-accent/[0.05] p-3">
