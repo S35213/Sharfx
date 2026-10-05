@@ -643,3 +643,31 @@ When a new action is completed, append it to the action tree and change its chec
   - Render smoke: PASS
   - Render deployment: LIVE (`dep-db1tpnsv8u7c73e1rha0`)
 - Not claimed complete: handset-level visual confirmation of live fractional-price movement is still open, and authenticated Deriv demo contract proof-of-life remains open.
+
+### 2026-10-05 — Live account equity/free-margin state repaired
+
+- User reported that the connected account did not behave like an MT5-style account view after an open trade: Equity, Free Margin, Used Margin, and Floating P/L were not changing with the open position.
+- Root cause: the Deriv account stream only emitted the subscribed account balance snapshot. The same stream was already receiving the open-contract profit and stake values, but those values were not being folded into the account snapshot consumed by App.tsx.
+- Fixed src/integrations/deriv/accountStream.ts to track currently open multiplier contracts and derive:
+  - Equity = balance + aggregate floating P/L
+  - Used Margin (SHAFX-derived) = aggregate stake committed to open multiplier contracts
+  - Free Margin (SHAFX-derived) = max(0, equity - used margin)
+  - Floating P/L = aggregate open-contract profit
+- Added src/integrations/deriv/accountStream.test.ts covering the derived account-metric calculations.
+- Important semantic boundary: these are MT5-style SHAFX account metrics for a Deriv Multiplier account. Deriv's current balance endpoint supplies the account balance, while open-contract status supplies live contract fields; this is not a claim that Deriv Multipliers expose MT5 CFD margin fields directly.
+- Verification:
+  - GitHub SHAFX CI run 37352851712 — SUCCESS.
+  - Render deployment dep-db1uc0blthtc73a43kc0 for commit f946d16a95c7184c329caeb5e227738e1fd46841 — LIVE.
+  - Render build completed successfully and the replacement Node server started cleanly.
+- Remaining human verification: open a real controlled demo Multiplier in the authenticated browser session and confirm the visible Equity/Free Margin/Floating P/L values move with the contract.
+
+### 2026-10-05 — Bot rebuild diagnostic checkpoint
+
+- Existing bot UI/engine contains substantial reusable analysis logic: multi-timeframe candle loading, market structure, liquidity, support/resistance, setup detection, multi-timeframe bias, learning/research, 5-round unit state, progress-ring UI, and authenticated daily usage accounting.
+- The current test branch deliberately disables autonomous broker execution in src/engine/agent/executeDerivTrade.ts; it now returns no order while the Deriv-native manual bridge is being proven.
+- The old live-bot implementation on fix/deriv-live-bot-scanner was lot/Forex-oriented and hard-coded a multiplier, so it should not be restored wholesale.
+- The recommended rebuild is two separate products sharing one analysis/data core:
+  1. SHAFX Signal Radar — read-only multi-timeframe scanner that returns the strongest three timeframe opportunities and hands the selected setup to the existing manual ticket.
+  2. SHAFX Autopilot Unit — server-owned five-round execution run using the working Deriv proposal/buy/contract-monitor/close path.
+- The browser should become the presentation/control surface, not the source of truth for an autonomous run. A run must survive refresh/disconnects and continue from persisted server state.
+- The next engineering gate is architecture/schema/API design for those two independent bot services before restoring autonomous execution.
