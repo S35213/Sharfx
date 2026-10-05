@@ -1,5 +1,6 @@
 import React from 'react'
 import { BrainCircuit, LockKeyhole, ShieldCheck, Sparkles } from 'lucide-react'
+import { BotUnitPanel } from './BotUnitPanel'
 import type { MarketAnalysis, Timeframe, OHLCV } from '../../types'
 import { useMemo } from 'react'
 import { useMultiTimeframeCandles } from '../../engine/agent/loadMultiTimeframe'
@@ -81,6 +82,8 @@ export const SignalDeskPanel: React.FC<Props> = ({
         {!radar.opportunities.length && <div className="rounded-lg border border-shafx-border bg-shafx-bg px-2.5 py-2 text-[8px] text-shafx-textMuted">WAIT — no clean executable setup across the scanned timeframes.</div>}
       </div>
     </div>
+
+    <BotUnitPanel radar={radar} currentPrice={currentPrice} />
 
     {setup ? (
       <div className="rounded-xl border border-shafx-accent/25 bg-shafx-accent/[0.05] p-3">
