@@ -69,6 +69,14 @@ const lineFor = (
 
 const moneyLabel = (amount: number, currency: string): string => formatCurrency(roundMoney(amount), currency)
 
+const protectionPrice = (entryPrice: number, amount: number, stake: number, multiplier: number, side: TradeSide, kind: 'sl' | 'tp'): number | null => {
+  if (![entryPrice, amount, stake, multiplier].every(Number.isFinite) || entryPrice <= 0 || amount <= 0 || stake <= 0 || multiplier <= 0) return null
+  const distance = (amount * entryPrice) / (multiplier * stake)
+  if (!Number.isFinite(distance) || distance <= 0) return null
+  if (kind === 'sl') return side === 'BUY' ? entryPrice - distance : entryPrice + distance
+  return side === 'BUY' ? entryPrice + distance : entryPrice - distance
+}
+
 export const OrderPanel: React.FC<Props> = ({
   symbol,
   currentPrice,
@@ -126,16 +134,25 @@ export const OrderPanel: React.FC<Props> = ({
     ? (askPrice > 0 ? askPrice : currentPrice)
     : (bidPrice > 0 ? bidPrice : currentPrice)
 
+  const stopLossPrice = useMemo(
+    () => stopLossEnabled ? protectionPrice(entryPrice, stopLossAmount, stakeValue, multiplierValue, side, 'sl') : null,
+    [entryPrice, multiplierValue, side, stakeValue, stopLossAmount, stopLossEnabled],
+  )
+  const takeProfitPrice = useMemo(
+    () => takeProfitEnabled ? protectionPrice(entryPrice, takeProfitAmount, stakeValue, multiplierValue, side, 'tp') : null,
+    [entryPrice, multiplierValue, side, stakeValue, takeProfitAmount, takeProfitEnabled],
+  )
+
   const plan = useMemo<TradePlanDraft>(() => calculateTradePlan({
     accountBalance,
     entryPrice,
-    stopLossAmount: Number.isFinite(stopLossAmount) && stopLossAmount > 0 ? stopLossAmount : null,
-    takeProfitAmount: Number.isFinite(takeProfitAmount) && takeProfitAmount > 0 ? takeProfitAmount : null,
+    slPrice: stopLossPrice,
+    tpPrice: takeProfitPrice,
     stake: Number.isFinite(stakeValue) ? stakeValue : 0,
     multiplier: Number.isFinite(multiplierValue) ? multiplierValue : 0,
     symbolSpec,
     side,
-  }), [accountBalance, entryPrice, stopLossAmount, takeProfitAmount, stakeValue, multiplierValue, symbolSpec, side])
+  }), [accountBalance, entryPrice, multiplierValue, side, stakeValue, symbolSpec, takeProfitPrice, stopLossPrice])
 
   const draftLines = useMemo<ChartAnnotation[]>(() => {
     if (activePosition) {
@@ -215,7 +232,7 @@ export const OrderPanel: React.FC<Props> = ({
       return
     }
     if (!Number.isFinite(stakeValue) || stakeValue < MIN_STAKE || stakeValue > MAX_STAKE) {
-      setError(`SHAFX stake must be between ${formatCurrency(MIN_STAKE, accountCurrency)} and ${formatCurrency(MAX_STAKE, accountCurrency)}.`)
+      setError('SHAFX stake must be between ' + formatCurrency(MIN_STAKE, accountCurrency) + ' and ' + formatCurrency(MAX_STAKE, accountCurrency) + '.')
       setState('error')
       return
     }
@@ -231,8 +248,8 @@ export const OrderPanel: React.FC<Props> = ({
         stake: stakeValue,
         currency: accountCurrency,
         multiplier: multiplierValue,
-        stopLossAmount: plan.stopLossAmount ?? undefined,
-        takeProfitAmount: plan.takeProfitAmount ?? undefined,
+        stopLossAmount: stopLossAmount > 0 ? stopLossAmount : undefined,
+        takeProfitAmount: takeProfitAmount > 0 ? takeProfitAmount : undefined,
       })
       setQuote(nextQuote)
       setState('quoted')
@@ -279,8 +296,7 @@ export const OrderPanel: React.FC<Props> = ({
     const tpAmount = Number(activePosition.takeProfitAmount ?? 0)
 
     return (
-      <div className="overflow-hidden border border-shafx-border bg-shafx-surface">
-        <section className="overflow-hidden">
+      <section className="overflow-hidden border border-shafx-border bg-shafx-surface">
         <header className="flex items-center justify-between gap-3 border-b border-shafx-border px-3 py-2.5 sm:px-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
@@ -359,11 +375,11 @@ export const OrderPanel: React.FC<Props> = ({
             <span className="font-mono text-[8px] text-shafx-textMuted">{symbol} • {timeframe}</span>
           </div>
           <div className="mt-2 grid grid-cols-2 gap-1.5">
-            <button type="button" onClick={() => chooseSide('BUY')} disabled={state === 'quoting' || state === 'buying'} aria-pressed={side === 'BUY'} className={'min-h-11 border px-2.5 text-left ' + (side === 'BUY' ? 'border-shafx-success bg-shafx-success/[0.12]' : 'border-shafx-border bg-shafx-surface')}>
+            <button type="button" onClick={() => chooseSide('BUY')} disabled={busy} aria-pressed={side === 'BUY'} className={'min-h-11 border px-2.5 text-left ' + (side === 'BUY' ? 'border-shafx-success bg-shafx-success/[0.12]' : 'border-shafx-border bg-shafx-surface')}>
               <span className={'text-[9px] font-bold ' + (side === 'BUY' ? 'text-shafx-success' : 'text-shafx-textMuted')}>BUY</span>
               <span className="ml-1.5 text-[7px] text-shafx-textMuted">ASK {marketMetrics.ask ? formatPrice(marketMetrics.ask, symbolSpec.pricePrecision) : '—'}</span>
             </button>
-            <button type="button" onClick={() => chooseSide('SELL')} disabled={state === 'quoting' || state === 'buying'} aria-pressed={side === 'SELL'} className={'min-h-11 border px-2.5 text-left ' + (side === 'SELL' ? 'border-shafx-danger bg-shafx-danger/[0.12]' : 'border-shafx-border bg-shafx-surface')}>
+            <button type="button" onClick={() => chooseSide('SELL')} disabled={busy} aria-pressed={side === 'SELL'} className={'min-h-11 border px-2.5 text-left ' + (side === 'SELL' ? 'border-shafx-danger bg-shafx-danger/[0.12]' : 'border-shafx-border bg-shafx-surface')}>
               <span className={'text-[9px] font-bold ' + (side === 'SELL' ? 'text-shafx-danger' : 'text-shafx-textMuted')}>SELL</span>
               <span className="ml-1.5 text-[7px] text-shafx-textMuted">BID {marketMetrics.bid ? formatPrice(marketMetrics.bid, symbolSpec.pricePrecision) : '—'}</span>
             </button>
@@ -393,26 +409,25 @@ export const OrderPanel: React.FC<Props> = ({
               <div className="text-right"><span className="text-shafx-textMuted">Protection TP</span><div className="mt-0.5 font-mono text-shafx-success">{quote.takeProfitAmount ? formatCurrency(quote.takeProfitAmount, accountCurrency) : 'None'}</div></div>
             </div>
             <div className="mt-2 flex gap-2">
-              <button type="button" onClick={() => void confirmBuy()} disabled={state === 'quoting' || state === 'buying'} className={'flex min-h-10 flex-1 items-center justify-center text-[9px] font-bold ' + (side === 'BUY' ? 'bg-shafx-success text-[#07110E]' : 'bg-shafx-danger text-white')}>{side}</button>
-              <button type="button" onClick={resetQuote} disabled={false} className="min-h-10 border border-shafx-border px-3 text-[8px] text-shafx-textMuted">Cancel</button>
+              <button type="button" onClick={() => void confirmBuy()} disabled={busy} className={'flex min-h-10 flex-1 items-center justify-center text-[9px] font-bold ' + (side === 'BUY' ? 'bg-shafx-success text-[#07110E]' : 'bg-shafx-danger text-white')}>{side}</button>
+              <button type="button" onClick={resetQuote} disabled={busy} className="min-h-10 border border-shafx-border px-3 text-[8px] text-shafx-textMuted">Cancel</button>
             </div>
           </div>
         ) : (
           <div className="px-3 py-2.5">
-            <button type="button" onClick={() => void requestQuote()} disabled={state === 'quoting' || state === 'buying' || !connection || Boolean(plan.validationError)} className={'flex min-h-11 w-full items-center justify-center gap-2 text-[9px] font-bold ' + (side === 'BUY' ? 'bg-shafx-success text-[#07110E]' : 'bg-shafx-danger text-white')}>
+            <button type="button" onClick={() => void requestQuote()} disabled={busy || !connection || Boolean(plan.validationError)} className={'flex min-h-11 w-full items-center justify-center gap-2 text-[9px] font-bold ' + (side === 'BUY' ? 'bg-shafx-success text-[#07110E]' : 'bg-shafx-danger text-white')}>
               {state === 'buying' ? 'PLACING ' + side + '…' : 'GET LIVE ' + side + ' QUOTE'} <ArrowUpRight className="h-3.5 w-3.5" />
             </button>
           </div>
         )}
-        </div>
       </div>
     )
   }
 
   const quotePotentialProfit = quote?.potentialProfit
   const quoteCommission = Number(quote?.commission ?? 0)
-  const quoteProtectionSL = Number(quote?.stopLossAmount ?? plan.stopLossAmount ?? 0)
-  const quoteProtectionTP = Number(quote?.takeProfitAmount ?? plan.takeProfitAmount ?? 0)
+  const quoteProtectionSL = Number(quote?.stopLossAmount ?? (stopLossEnabled ? stopLossAmount : 0))
+  const quoteProtectionTP = Number(quote?.takeProfitAmount ?? (takeProfitEnabled ? takeProfitAmount : 0))
   const busy = state === 'quoting' || state === 'buying'
 
   return (
@@ -491,7 +506,7 @@ export const OrderPanel: React.FC<Props> = ({
                 className="min-w-0 flex-1 bg-transparent font-mono text-sm outline-none"
               />
             </div>
-            <div className="mt-1 text-[7px] text-shafx-textMuted">Minimum {formatCurrency(MIN_STAKE, accountCurrency)}</div>
+            <div className="mt-1 text-[7px] text-shafx-textMuted">Range 10 – 2,000 {accountCurrency}</div>
             <div className="mt-1 flex gap-1 overflow-x-auto">
               {QUICK_STAKES.map((value) => (
                 <button key={value} type="button" onClick={() => chooseStake(value)} disabled={Number(value) > accountBalance} className={'flex-1 border px-1.5 py-1 font-mono text-[7px] ' + (stake === value ? 'border-shafx-primary/40 bg-shafx-primary/10 text-shafx-primary' : 'border-shafx-border text-shafx-textMuted disabled:opacity-40')}>
@@ -640,7 +655,7 @@ export const OrderPanel: React.FC<Props> = ({
               </div>
 
               <div className="mt-2 flex gap-2">
-                <button type="button" onClick={() => void confirmBuy()} disabled={false} className={'flex min-h-11 flex-1 items-center justify-center gap-2 px-3 text-[9px] font-semibold disabled:opacity-60 ' + (side === 'BUY' ? 'bg-shafx-success text-[#07110E] hover:bg-shafx-success/90' : 'bg-shafx-danger text-white hover:bg-shafx-danger/90')}>
+                <button type="button" onClick={() => void confirmBuy()} disabled={busy} className={'flex min-h-11 flex-1 items-center justify-center gap-2 px-3 text-[9px] font-semibold disabled:opacity-60 ' + (side === 'BUY' ? 'bg-shafx-success text-[#07110E] hover:bg-shafx-success/90' : 'bg-shafx-danger text-white hover:bg-shafx-danger/90')}>
                   <CheckCircle2 className="h-3.5 w-3.5" /> {side === 'BUY' ? 'BUY' : 'SELL'}
                 </button>
                 <button type="button" onClick={resetQuote} disabled={busy} className="min-h-10 border border-shafx-border px-3 text-[8px] font-semibold text-shafx-textMuted disabled:opacity-50">Cancel</button>
@@ -651,7 +666,7 @@ export const OrderPanel: React.FC<Props> = ({
 
         {state !== 'quoted' && (
           <div className="px-3 py-2.5">
-            <button type="button" onClick={() => void requestQuote()} disabled={state === 'quoting' || state === 'buying' || !connection || Boolean(plan.validationError)} className={'flex min-h-11 w-full items-center justify-center gap-2 text-[9px] font-bold disabled:opacity-50 ' + (side === 'BUY' ? 'bg-shafx-success text-[#07110E] hover:bg-shafx-success/90' : 'bg-shafx-danger text-white hover:bg-shafx-danger/90')}>
+            <button type="button" onClick={() => void requestQuote()} disabled={busy || !connection || Boolean(plan.validationError)} className={'flex min-h-11 w-full items-center justify-center gap-2 text-[9px] font-bold disabled:opacity-50 ' + (side === 'BUY' ? 'bg-shafx-success text-[#07110E] hover:bg-shafx-success/90' : 'bg-shafx-danger text-white hover:bg-shafx-danger/90')}>
               {state === 'buying' ? <><LoaderCircle className="h-3.5 w-3.5 animate-spin" /> PLACING {side}…</> : <>GET LIVE {side} QUOTE <ArrowUpRight className="h-3.5 w-3.5" /></>}
             </button>
           </div>
