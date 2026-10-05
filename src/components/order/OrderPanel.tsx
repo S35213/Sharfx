@@ -296,7 +296,8 @@ export const OrderPanel: React.FC<Props> = ({
     const tpAmount = Number(activePosition.takeProfitAmount ?? 0)
 
     return (
-      <section className="overflow-hidden border border-shafx-border bg-shafx-surface">
+      <div className="overflow-hidden border border-shafx-border bg-shafx-surface">
+        <section className="overflow-hidden">
         <header className="flex items-center justify-between gap-3 border-b border-shafx-border px-3 py-2.5 sm:px-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
@@ -375,11 +376,11 @@ export const OrderPanel: React.FC<Props> = ({
             <span className="font-mono text-[8px] text-shafx-textMuted">{symbol} • {timeframe}</span>
           </div>
           <div className="mt-2 grid grid-cols-2 gap-1.5">
-            <button type="button" onClick={() => chooseSide('BUY')} disabled={busy} aria-pressed={side === 'BUY'} className={'min-h-11 border px-2.5 text-left ' + (side === 'BUY' ? 'border-shafx-success bg-shafx-success/[0.12]' : 'border-shafx-border bg-shafx-surface')}>
+            <button type="button" onClick={() => chooseSide('BUY')} disabled={state === 'quoting' || state === 'buying'} aria-pressed={side === 'BUY'} className={'min-h-11 border px-2.5 text-left ' + (side === 'BUY' ? 'border-shafx-success bg-shafx-success/[0.12]' : 'border-shafx-border bg-shafx-surface')}>
               <span className={'text-[9px] font-bold ' + (side === 'BUY' ? 'text-shafx-success' : 'text-shafx-textMuted')}>BUY</span>
               <span className="ml-1.5 text-[7px] text-shafx-textMuted">ASK {marketMetrics.ask ? formatPrice(marketMetrics.ask, symbolSpec.pricePrecision) : '—'}</span>
             </button>
-            <button type="button" onClick={() => chooseSide('SELL')} disabled={busy} aria-pressed={side === 'SELL'} className={'min-h-11 border px-2.5 text-left ' + (side === 'SELL' ? 'border-shafx-danger bg-shafx-danger/[0.12]' : 'border-shafx-border bg-shafx-surface')}>
+            <button type="button" onClick={() => chooseSide('SELL')} disabled={state === 'quoting' || state === 'buying'} aria-pressed={side === 'SELL'} className={'min-h-11 border px-2.5 text-left ' + (side === 'SELL' ? 'border-shafx-danger bg-shafx-danger/[0.12]' : 'border-shafx-border bg-shafx-surface')}>
               <span className={'text-[9px] font-bold ' + (side === 'SELL' ? 'text-shafx-danger' : 'text-shafx-textMuted')}>SELL</span>
               <span className="ml-1.5 text-[7px] text-shafx-textMuted">BID {marketMetrics.bid ? formatPrice(marketMetrics.bid, symbolSpec.pricePrecision) : '—'}</span>
             </button>
@@ -409,17 +410,18 @@ export const OrderPanel: React.FC<Props> = ({
               <div className="text-right"><span className="text-shafx-textMuted">Protection TP</span><div className="mt-0.5 font-mono text-shafx-success">{quote.takeProfitAmount ? formatCurrency(quote.takeProfitAmount, accountCurrency) : 'None'}</div></div>
             </div>
             <div className="mt-2 flex gap-2">
-              <button type="button" onClick={() => void confirmBuy()} disabled={busy} className={'flex min-h-10 flex-1 items-center justify-center text-[9px] font-bold ' + (side === 'BUY' ? 'bg-shafx-success text-[#07110E]' : 'bg-shafx-danger text-white')}>{side}</button>
-              <button type="button" onClick={resetQuote} disabled={busy} className="min-h-10 border border-shafx-border px-3 text-[8px] text-shafx-textMuted">Cancel</button>
+              <button type="button" onClick={() => void confirmBuy()} disabled={state === 'quoting' || state === 'buying'} className={'flex min-h-10 flex-1 items-center justify-center text-[9px] font-bold ' + (side === 'BUY' ? 'bg-shafx-success text-[#07110E]' : 'bg-shafx-danger text-white')}>{side}</button>
+              <button type="button" onClick={resetQuote} disabled={false} className="min-h-10 border border-shafx-border px-3 text-[8px] text-shafx-textMuted">Cancel</button>
             </div>
           </div>
         ) : (
           <div className="px-3 py-2.5">
-            <button type="button" onClick={() => void requestQuote()} disabled={busy || !connection || Boolean(plan.validationError)} className={'flex min-h-11 w-full items-center justify-center gap-2 text-[9px] font-bold ' + (side === 'BUY' ? 'bg-shafx-success text-[#07110E]' : 'bg-shafx-danger text-white')}>
+            <button type="button" onClick={() => void requestQuote()} disabled={state === 'quoting' || state === 'buying' || !connection || Boolean(plan.validationError)} className={'flex min-h-11 w-full items-center justify-center gap-2 text-[9px] font-bold ' + (side === 'BUY' ? 'bg-shafx-success text-[#07110E]' : 'bg-shafx-danger text-white')}>
               {state === 'buying' ? 'PLACING ' + side + '…' : 'GET LIVE ' + side + ' QUOTE'} <ArrowUpRight className="h-3.5 w-3.5" />
             </button>
           </div>
         )}
+        </div>
       </div>
     )
   }
@@ -655,7 +657,7 @@ export const OrderPanel: React.FC<Props> = ({
               </div>
 
               <div className="mt-2 flex gap-2">
-                <button type="button" onClick={() => void confirmBuy()} disabled={busy} className={'flex min-h-11 flex-1 items-center justify-center gap-2 px-3 text-[9px] font-semibold disabled:opacity-60 ' + (side === 'BUY' ? 'bg-shafx-success text-[#07110E] hover:bg-shafx-success/90' : 'bg-shafx-danger text-white hover:bg-shafx-danger/90')}>
+                <button type="button" onClick={() => void confirmBuy()} disabled={false} className={'flex min-h-11 flex-1 items-center justify-center gap-2 px-3 text-[9px] font-semibold disabled:opacity-60 ' + (side === 'BUY' ? 'bg-shafx-success text-[#07110E] hover:bg-shafx-success/90' : 'bg-shafx-danger text-white hover:bg-shafx-danger/90')}>
                   <CheckCircle2 className="h-3.5 w-3.5" /> {side === 'BUY' ? 'BUY' : 'SELL'}
                 </button>
                 <button type="button" onClick={resetQuote} disabled={busy} className="min-h-10 border border-shafx-border px-3 text-[8px] font-semibold text-shafx-textMuted disabled:opacity-50">Cancel</button>
@@ -666,7 +668,7 @@ export const OrderPanel: React.FC<Props> = ({
 
         {state !== 'quoted' && (
           <div className="px-3 py-2.5">
-            <button type="button" onClick={() => void requestQuote()} disabled={busy || !connection || Boolean(plan.validationError)} className={'flex min-h-11 w-full items-center justify-center gap-2 text-[9px] font-bold disabled:opacity-50 ' + (side === 'BUY' ? 'bg-shafx-success text-[#07110E] hover:bg-shafx-success/90' : 'bg-shafx-danger text-white hover:bg-shafx-danger/90')}>
+            <button type="button" onClick={() => void requestQuote()} disabled={state === 'quoting' || state === 'buying' || !connection || Boolean(plan.validationError)} className={'flex min-h-11 w-full items-center justify-center gap-2 text-[9px] font-bold disabled:opacity-50 ' + (side === 'BUY' ? 'bg-shafx-success text-[#07110E] hover:bg-shafx-success/90' : 'bg-shafx-danger text-white hover:bg-shafx-danger/90')}>
               {state === 'buying' ? <><LoaderCircle className="h-3.5 w-3.5 animate-spin" /> PLACING {side}…</> : <>GET LIVE {side} QUOTE <ArrowUpRight className="h-3.5 w-3.5" /></>}
             </button>
           </div>
