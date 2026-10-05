@@ -786,7 +786,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   }
 
   const measureDelta = measureStart !== null && measureEnd !== null ? Math.abs(measureEnd - measureStart) / Math.max(pipSize, Number.EPSILON) : null
-  const quotePrecision = Math.max(2, Math.round(Math.log10(1 / Math.max(pipSize, 0.00001))) + 1)
+  const quotePrecision = pricePrecision
   const displayBid = Number.isFinite(bidPrice) && Number(bidPrice) > 0 ? Number(bidPrice) : lastClose
   const displayAsk = Number.isFinite(askPrice) && Number(askPrice) > 0 ? Number(askPrice) : displayBid
   const spreadPips = Number.isFinite(displayBid) && Number.isFinite(displayAsk) && pipSize > 0 ? (displayAsk - displayBid) / pipSize : 0
