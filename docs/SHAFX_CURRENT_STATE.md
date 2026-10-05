@@ -255,3 +255,17 @@ The score is deliberately labeled as a SHAFX strength score, not a guaranteed wi
 Autopilot execution remains disabled in this rebuild.
 
 The durable five-round database state has been created in staging so the architecture is ready, but no unattended broker-execution worker has been left in the branch. Manual Deriv execution remains the controlled execution path during this rebuild.
+
+
+## 2026-10-05 — Multiplier P/L sensitivity + five-round bot preview
+
+- User confirmed SHAFX Equity and Free Margin now move correctly with an open Deriv Multiplier.
+- Live Multiplier P/L is broker-authoritative: the Deriv account stream consumes `proposal_open_contract.profit` and SHAFX aggregates that value into Floating P/L and Equity.
+- Important product math: Deriv Multipliers use percentage price movement, not raw price-point movement. The working relationship is **P/L = stake × multiplier × percentage price move − commission**. Therefore a $10 stake at 100× needs roughly a 0.1% favourable move to produce about $1 before commission. A tiny FX move such as 1158.140 → 1158.150 is only about 0.000863% and therefore produces roughly $0.0086, not $1. Deriv confirms that multiplier outcomes are scaled from the percentage movement and capped at the initial stake on the loss side.
+- UX issue found: SHAFX displayed live P/L at only two decimals, so valid sub-cent movement appeared as 0.00. Fixed both the active Position ticket and the Open/History blotter to show 3–4 decimals for small live P/L.
+- Added `src/components/ai/BotUnitPanel.tsx`: a five-round SHAFX paper-test unit using the Signal Radar decision, a 10-second round clock, round progress/status, win/loss and paper net. It never sends a broker order.
+- Integrated the paper unit into `SignalDeskPanel.tsx`.
+- Latest live Render code commit: `c3f66262733cb932330b6aedc8aab02ee78e0213`.
+- Latest Render deployment: `dep-db1vj167bikc73ddd1c0` — LIVE.
+- GitHub CI run #1573 for this commit is externally queued; Render's production build and start verification already passed.
+- Autonomous unattended broker execution remains disabled. The five-round UI is currently a safe paper-test/rebuild phase, while broker-native manual trading remains the execution path.
