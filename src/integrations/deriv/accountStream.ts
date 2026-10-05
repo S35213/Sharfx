@@ -43,7 +43,7 @@ interface DerivMessage {
   balance?: { balance?: number; currency?: string }
   portfolio?: { contract_list?: DerivContract[]; contracts?: DerivContract[] }
   proposal_open_contract?: DerivContract
-  profit_table?: { transactions?: Array<Record<string, unknown>> }
+  profit_table?: { count?: number | string; transactions?: Array<Record<string, unknown>> }
   transaction?: Record<string, unknown>
 }
 

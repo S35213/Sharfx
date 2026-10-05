@@ -614,3 +614,9 @@ When a new action is completed, append it to the action tree and change its chec
 - Fixed: History keeps the recovered SHAFX performance design while showing account-currency stake traded and stake per closed trade.
 - Fixed: BUY/ASK and SELL/BID rails now have a minimum visible SHAFX display spread at the pair's native precision, so they cannot collapse to the same displayed value.
 - Verification required before marking this regression passed: SHAFX CI, Render smoke, Render LIVE deploy, and a re-check that main remains untouched.
+
+### Verification failure — CI type check on history pagination (2026-10-05)
+
+- SHAFX CI run `37311585216` for commit `784e488403b5aa1513a0e181abf72d1d54520d2c` failed at `npm run build` because the new `profit_table.count` field was not yet declared in the local Deriv message type.
+- Fixed in the next test commit by declaring `profit_table.count` as `number | string` so the full-history pagination code remains type-safe.
+- Reverification is required after this compile fix; no production/main changes are permitted.
