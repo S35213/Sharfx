@@ -571,3 +571,12 @@ When a new action is completed, append it to the action tree and change its chec
 - History: restored the earlier compact account-scoped History presentation under the mobile History workspace: open-position blotter plus Net P/L, Wins, Losses, Gross Profit, Gross Loss, Win Rate, account label/type, and completed-trade count. Removed the extra older simulator/history panels from that workspace.
 - Chart: removed the separate blue current-price treatment from the active flow. Bid/Sell is anchored to the latest candle close, Ask/Buy is displayed at a small SHAFX spread above it, and both are rendered as native chart price lines/labels rather than floating DOM overlays. The same Bid/Ask values are passed into the Trade Ticket so BUY uses Ask and SELL uses Bid.
 - Verification work required before this entry is considered PASS: install, build, lint, tests, Render static smoke, Render rebuild/public verification, and branch deployment health must all pass.
+
+
+### Verification — targeted restore
+
+- Code state verified on commit `0317db91693303f37093b9ad30ab3548f19aa5bb` before this documentation update.
+- Render deployment for the code state: `dep-db1p3ifiij0c73agh770` — **LIVE**.
+- Render public smoke run `37306858410` — **SUCCESS** (Render test smoke).
+- SHAFX CI run `37306866856` — **SUCCESS** (install/build/lint/tests/audit and configured PR checks).
+- Result: targeted trade ticket + history + chart restore is verified; no claim is made for an authenticated real/demo contract purchase in this entry.
