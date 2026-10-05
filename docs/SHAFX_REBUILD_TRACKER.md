@@ -591,3 +591,15 @@ When a new action is completed, append it to the action tree and change its chec
 - Mobile History now opens directly on the full SHAFX History tab rather than the temporary compact-history replacement.
 - Chart BUY/ASK is green and SELL/BID is red. The chart rails now follow the live `currentPrice` on every market snapshot instead of the last candle close, with a small visible Ask spread above Bid so they move together but do not stack.
 - Main/production remains untouched.
+
+
+### Final verification — exact ticket/history/chart restore
+
+- Final code commit: `79453b81038cb81e93c577c6b048b046275c3419`.
+- SHAFX CI run `37308854911` — **SUCCESS**.
+- Render smoke run `37308848030` — **SUCCESS**.
+- Render deployment `dep-db1pc25ckfvc73e0jbfg` — **LIVE**.
+- The verified ticket uses the earlier SHAFX green/red BUY/SELL action design, the Auto Exits SL/TP checkpoints, and the new-trade/active-position layout; stake is capped at 2,000 on both UI and server.
+- The verified History uses the earlier `TradeHistoryPerformance` design and renders the complete closed-trade history rather than the temporary compact summary.
+- The verified chart uses moving live-price rails with BUY/ASK green and SELL/BID red, with Ask separated from Bid so the two lines do not stack at one price.
+- Main/production was not modified.
