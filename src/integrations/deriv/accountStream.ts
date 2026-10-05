@@ -3,6 +3,10 @@ export interface DerivAccountSnapshot {
   currency: string
   accountId: string
   accountType: string
+  equity?: number
+  usedMargin?: number
+  freeMargin?: number
+  floatingPL?: number
 }
 
 interface StreamOptions {
@@ -50,6 +54,34 @@ interface DerivMessage {
 const toNumber = (value: unknown): number | undefined => {
   const numeric = Number(value)
   return Number.isFinite(numeric) ? numeric : undefined
+}
+
+export interface DerivedMultiplierAccountMetrics {
+  balance: number
+  equity: number
+  usedMargin: number
+  freeMargin: number
+  floatingPL: number
+}
+
+/**
+ * Deriv Multipliers do not expose MT5 CFD margin fields through the account
+ * balance API. SHAFX therefore derives an MT5-style account view from the
+ * authoritative balance plus the current open-contract profit and stake.
+ *
+ * The "used margin" figure is the stake currently committed to open
+ * multiplier contracts; it is not a broker-reported MT5 margin requirement.
+ */
+export const deriveMultiplierAccountMetrics = (
+  balance: number,
+  openContracts: DerivContract[],
+): DerivedMultiplierAccountMetrics => {
+  const safeBalance = Number.isFinite(balance) ? balance : 0
+  const floatingPL = Number(openContracts.reduce((sum, contract) => sum + (toNumber(contract.profit) ?? 0), 0).toFixed(2))
+  const usedMargin = Number(openContracts.reduce((sum, contract) => sum + (toNumber(contract.stake ?? contract.buy_price) ?? 0), 0).toFixed(2))
+  const equity = Number((safeBalance + floatingPL).toFixed(2))
+  const freeMargin = Number(Math.max(0, equity - usedMargin).toFixed(2))
+  return { balance: safeBalance, equity, usedMargin, freeMargin, floatingPL }
 }
 
 export const normalizeDerivSymbol = (value: unknown): string => {
@@ -170,7 +202,12 @@ export class DerivAccountStreamTransport {
   private stopped = false
   private reconnectAttempt = 0
   private subscribedContracts = new Set<string>()
+  private openContracts = new Map<string, DerivContract>()
   private profitHistoryOffset = 0
+  private lastBalance: number | null = null
+  private lastCurrency = 'USD'
+  private lastAccountId = ''
+  private lastAccountType = 'real'
 
   constructor(private readonly options: StreamOptions) {}
 
@@ -186,7 +223,9 @@ export class DerivAccountStreamTransport {
     this.socket?.close()
     this.socket = null
     this.subscribedContracts.clear()
+    this.openContracts.clear()
     this.profitHistoryOffset = 0
+    this.lastBalance = null
     this.options.onStatus?.('disconnected')
   }
 
@@ -225,6 +264,21 @@ export class DerivAccountStreamTransport {
     this.options.onEvent?.(event)
   }
 
+  private emitAccountMetrics(): void {
+    if (this.lastBalance === null) return
+    const metrics = deriveMultiplierAccountMetrics(this.lastBalance, [...this.openContracts.values()])
+    this.options.onSnapshot({
+      balance: metrics.balance,
+      currency: this.lastCurrency,
+      accountId: this.lastAccountId,
+      accountType: this.lastAccountType,
+      equity: metrics.equity,
+      usedMargin: metrics.usedMargin,
+      freeMargin: metrics.freeMargin,
+      floatingPL: metrics.floatingPL,
+    })
+  }
+
   private async connect(): Promise<void> {
     if (this.stopped) return
     this.options.onStatus?.('connecting')
@@ -248,6 +302,11 @@ export class DerivAccountStreamTransport {
       }
 
       this.subscribedContracts.clear()
+      this.openContracts.clear()
+      this.lastBalance = null
+      this.lastCurrency = 'USD'
+      this.lastAccountId = typeof data.account?.id === 'string' ? data.account.id : ''
+      this.lastAccountType = typeof data.account?.type === 'string' ? data.account.type : accountType
       const socket = new WebSocket(data.wsUrl)
       this.socket = socket
 
@@ -266,27 +325,39 @@ export class DerivAccountStreamTransport {
           const currency = message.balance?.currency
 
           if (message.msg_type === 'balance' && typeof balance === 'number' && Number.isFinite(balance) && typeof currency === 'string' && currency.length > 0) {
-            this.options.onSnapshot({
-              balance,
-              currency,
-              accountId: typeof data.account?.id === 'string' ? data.account.id : '',
-              accountType: typeof data.account?.type === 'string' ? data.account.type : accountType,
-            })
+            this.lastBalance = balance
+            this.lastCurrency = currency
+            this.emitAccountMetrics()
           }
 
           if (message.msg_type === 'portfolio') {
             const contracts = message.portfolio?.contract_list || message.portfolio?.contracts || []
+            this.openContracts.clear()
             this.requestOpenContracts(socket, contracts)
             contracts.forEach((contract) => {
-              if (contractIsClosed(contract)) emitClosedContract(contract, (event) => this.emitEvent(event))
-              else emitOpenContract(contract, (event) => this.emitEvent(event))
+              const id = String(contract.contract_id ?? '')
+              if (contractIsClosed(contract)) {
+                if (id) this.openContracts.delete(id)
+                emitClosedContract(contract, (event) => this.emitEvent(event))
+              } else {
+                if (id) this.openContracts.set(id, contract)
+                emitOpenContract(contract, (event) => this.emitEvent(event))
+              }
             })
+            this.emitAccountMetrics()
           }
 
           if (message.msg_type === 'proposal_open_contract' && message.proposal_open_contract) {
             const contract = message.proposal_open_contract
-            if (contractIsClosed(contract)) emitClosedContract(contract, (event) => this.emitEvent(event))
-            else emitOpenContract(contract, (event) => this.emitEvent(event))
+            const id = String(contract.contract_id ?? '')
+            if (contractIsClosed(contract)) {
+              if (id) this.openContracts.delete(id)
+              emitClosedContract(contract, (event) => this.emitEvent(event))
+            } else {
+              if (id) this.openContracts.set(id, contract)
+              emitOpenContract(contract, (event) => this.emitEvent(event))
+            }
+            this.emitAccountMetrics()
           }
 
           if (message.msg_type === 'profit_table') {
