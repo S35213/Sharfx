@@ -418,7 +418,7 @@ const TerminalContent: React.FC = () => {
 
   // Keep the market price rails on the latest candle. Deriv's public FX stream exposes
   // one price here, so Ask is displayed as a small SHAFX spread above that candle price.
-  const chartBidPrice = liveCandles[liveCandles.length - 1]?.close ?? currentPrice
+  const chartBidPrice = Number.isFinite(currentPrice) && currentPrice > 0 ? currentPrice : (liveCandles[liveCandles.length - 1]?.close ?? 0)
   const chartSpread = symbolSpec.pipSize * 0.8
   const chartAskPrice = Number((chartBidPrice + chartSpread).toFixed(symbolSpec.pricePrecision))
 
