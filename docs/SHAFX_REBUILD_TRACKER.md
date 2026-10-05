@@ -629,3 +629,17 @@ When a new action is completed, append it to the action tree and change its chec
 - Render deployment `dep-db1po2ff3r2c73ca33dg` — **LIVE** for the fix commit.
 - Main integrity rechecked: `4d5ff9010f96dcf3a430527b49d1156e2e3f02d5` — unchanged.
 - The remaining verification target is the final tracker-only commit below; authenticated Deriv behavior still requires a real browser trade/restart check because CI/smoke do not have the user's connected account session.
+
+
+### 2026-10-05 — Fractional-pip BUY/SELL price sensitivity + durable handoff update
+
+- User reported that live BUY/SELL prices were jumping in coarse steps (for example 1158.130 → 1158.140 → 1158.150) instead of showing finer movement such as 1158.140 → 1158.141.
+- Root cause: chart display precision and `minMove` were derived from the full pip size, so a 0.01-pip instrument was effectively displayed at 0.01 increments. The chart price tag formatter also used the older coarse precision calculation.
+- Changed `src/components/chart/CandlestickChart.tsx` so chart `priceStep` is one fractional pip (`pipSize / 10`) and the price precision retains that final digit. This gives the intended MT5-like 5-digit FX / 3-digit JPY-XAU-style display behavior without inventing additional market ticks.
+- Changed `src/App.tsx` so the SHAFX display BUY/SELL values preserve the symbol's native precision and use a smaller display spread. The underlying live quote still comes from the Deriv tick stream; the displayed two-sided spread is explicitly a SHAFX estimate because the current public market stream supplies one quote rather than an authoritative broker bid/ask pair.
+- Created/maintained `docs/SHAFX_CURRENT_STATE.md` as the persistent handoff document. It records the rebuild mission, active branch, account/funding model, current UI architecture, known root causes, verification rules, completed changes, and next steps so a future chat can continue without asking the user to reconstruct the history.
+- Verification for the latest precision commit `1bd793ea48b976df833978875386497b6c1a138b`:
+  - GitHub SHAFX CI: PASS
+  - Render smoke: PASS
+  - Render deployment: LIVE (`dep-db1tpnsv8u7c73e1rha0`)
+- Not claimed complete: handset-level visual confirmation of live fractional-price movement is still open, and authenticated Deriv demo contract proof-of-life remains open.
