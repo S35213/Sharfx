@@ -96,4 +96,5 @@ export const SignalDeskPanel: React.FC<Props> = ({
       <div className="rounded-xl border border-shafx-border bg-shafx-bg p-3 text-[9px] text-shafx-textMuted">No active SHAFX setup is being promoted to execution. Use Market Analysis / AI to review a setup, then the Manual Trade panel handles the Deriv proposal.</div>
     )}
   </section>
-)
+  )
+}
