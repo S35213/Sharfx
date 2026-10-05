@@ -50,6 +50,7 @@ const displayPnl = (value: number): string => {
 
 interface Props {
   symbol: string
+  currency: string
   radar: SignalRadarResult
   currentPrice: number
   onPaperRoundClosed?: (trade: BotPaperTrade) => void
@@ -62,7 +63,7 @@ const roundRoute = (round: RoundState): string => {
   return signal === entry ? signal + ' ' + round.direction : signal + ' → ' + entry + ' ' + round.direction
 }
 
-export const BotUnitPanel: React.FC<Props> = ({ symbol, radar, currentPrice, onPaperRoundClosed }) => {
+export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, currentPrice, onPaperRoundClosed }) => {
   const [rounds, setRounds] = useState<RoundState[]>(createRounds)
   const [running, setRunning] = useState(false)
   const [activeRound, setActiveRound] = useState(0)
@@ -231,7 +232,7 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, radar, currentPrice, onP
       <div className="mt-4 rounded-xl border border-shafx-border bg-shafx-bg/70 p-3">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <div>
-            <span className="block text-[7px] uppercase tracking-[0.12em] text-shafx-textMuted">Paper stake</span>
+            <span className="block text-[7px] uppercase tracking-[0.12em] text-shafx-textMuted">Paper stake • {currency}</span>
             <input
               aria-label="Bot paper stake"
               type="number"
@@ -258,7 +259,7 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, radar, currentPrice, onP
           </div>
           <div>
             <span className="block text-[7px] uppercase tracking-[0.12em] text-shafx-textMuted">Max paper loss</span>
-            <div className="mt-1 rounded-lg border border-shafx-border bg-shafx-surface px-2 py-2 font-mono text-xs">{safeStake.toFixed(2)}</div>
+            <div className="mt-1 rounded-lg border border-shafx-border bg-shafx-surface px-2 py-2 font-mono text-xs">{currency} {safeStake.toFixed(2)}</div>
             <div className="mt-1 text-[7px] text-shafx-textMuted">Loss is capped at the selected paper stake.</div>
           </div>
           <div>
