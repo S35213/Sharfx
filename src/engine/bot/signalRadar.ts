@@ -19,12 +19,21 @@ export interface SignalRadarOpportunity {
   higherTimeframeAligned: boolean
 }
 
+export interface SignalRadarBotPlan {
+  mode: 'FAST_ADAPTIVE'
+  opportunity: SignalRadarOpportunity | null
+  analysisTimeframe: Timeframe | null
+  entryTimeframe: Timeframe | null
+  reason: string
+}
+
 export interface SignalRadarResult {
   opportunities: SignalRadarOpportunity[]
   dominantBias: 'Bullish' | 'Bearish' | null
   alignment: number
   scanned: Timeframe[]
   missing: Timeframe[]
+  botPlan: SignalRadarBotPlan
 }
 
 const clamp = (value: number): number => Math.max(0, Math.min(100, Math.round(value)))
@@ -56,8 +65,13 @@ export const buildSignalRadar = (
     const htfAligned = multi.higherTimeframeBias === (bullish ? 'Bullish' : 'Bearish')
     const directionAgreement = multi.dominantBias === (bullish ? 'Bullish' : 'Bearish') ? 7 : 0
     const htfBonus = htfAligned ? 8 : 0
-    const freshnessBonus = timeframe === 'M1' ? 6 : timeframe === 'M5' ? 5 : timeframe === 'M15' ? 4 : 2
-    const signalStrength = clamp(setup.confidence + directionAgreement + htfBonus + freshnessBonus)
+    const fastContextBonus =
+      timeframe === 'M5' ? 4
+      : timeframe === 'M15' ? 3
+      : timeframe === 'M30' ? 2
+      : timeframe === 'H1' ? 1
+      : 0
+    const signalStrength = clamp(setup.confidence + directionAgreement + htfBonus + fastContextBonus)
     return [{
       timeframe,
       direction: setup.direction,
@@ -77,11 +91,45 @@ export const buildSignalRadar = (
     return true
   }).slice(0, 3)
 
+  const fastOpportunity =
+    opportunities.find((item) =>
+      ['M5', 'M15', 'M30', 'H1'].includes(item.timeframe) &&
+      item.higherTimeframeAligned &&
+      item.signalStrength >= 68,
+    ) ??
+    opportunities.find((item) => ['M5', 'M15', 'M30'].includes(item.timeframe) && item.signalStrength >= 68) ??
+    opportunities.find((item) => item.timeframe === 'M1' && item.signalStrength >= 68) ??
+    opportunities[0] ??
+    null
+
+  const entryTimeframe = fastOpportunity
+    ? fastOpportunity.timeframe === 'M1'
+      ? 'M1'
+      : ['M5', 'M15'].includes(fastOpportunity.timeframe)
+        ? 'M1'
+        : ['M30', 'H1'].includes(fastOpportunity.timeframe)
+          ? 'M5'
+          : 'M15'
+    : null
+
+  const botReason = fastOpportunity
+    ? fastOpportunity.timeframe === entryTimeframe
+      ? fastOpportunity.timeframe + ' signal selected directly.'
+      : fastOpportunity.timeframe + ' structure selected; ' + entryTimeframe + ' is used only for the fast entry trigger.'
+    : 'WAIT — no qualified fast setup is available.'
+
   return {
     opportunities: top,
     dominantBias: multi.dominantBias === 'Bullish' || multi.dominantBias === 'Bearish' ? multi.dominantBias : null,
     alignment: multi.confidence,
     scanned: RADAR_TIMEFRAMES.filter((timeframe) => (frames[timeframe]?.length ?? 0) >= 8),
     missing: RADAR_TIMEFRAMES.filter((timeframe) => (frames[timeframe]?.length ?? 0) < 8),
+    botPlan: {
+      mode: 'FAST_ADAPTIVE',
+      opportunity: fastOpportunity,
+      analysisTimeframe: fastOpportunity?.timeframe ?? null,
+      entryTimeframe,
+      reason: botReason,
+    },
   }
 }
