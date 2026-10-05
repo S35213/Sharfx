@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { CircleStop, Play, RotateCcw, ShieldCheck } from 'lucide-react'
-import type { Timeframe } from '../../types'
+import type { BotPaperTrade, Timeframe } from '../../types'
 import type { SignalRadarResult } from '../../engine/bot/signalRadar'
 
 type RoundStatus = 'idle' | 'monitoring' | 'win' | 'loss' | 'wait'
@@ -9,43 +9,77 @@ interface RoundState {
   number: number
   status: RoundStatus
   direction?: 'BUY' | 'SELL'
-  timeframe?: Timeframe
+  signalTimeframe?: Timeframe
+  entryTimeframe?: Timeframe
   entry?: number
   exit?: number
   pnl?: number
+  openedAt?: string
 }
 
 const UNIT_ROUNDS = 5
 const ROUND_SECONDS = 10
-const PAPER_STAKE = 10
-const PAPER_MULTIPLIER = 100
+const DEFAULT_STAKE = 10
+const DEFAULT_MULTIPLIER = 100
+const QUICK_STAKES = [10, 20, 50, 100, 250, 500]
+const QUICK_MULTIPLIERS = [100, 200, 300, 500, 800]
 
 const createRounds = (): RoundState[] =>
   Array.from({ length: UNIT_ROUNDS }, (_, index) => ({ number: index + 1, status: 'idle' }))
 
-const clampLoss = (value: number): number => Math.max(-PAPER_STAKE, value)
+const clampLoss = (value: number, stake: number): number => Math.max(-stake, value)
 
-const paperPnl = (direction: 'BUY' | 'SELL', entry: number, exit: number): number => {
-  if (!Number.isFinite(entry) || entry <= 0 || !Number.isFinite(exit) || exit <= 0) return 0
+const paperPnl = (
+  direction: 'BUY' | 'SELL',
+  entry: number,
+  exit: number,
+  stake: number,
+  multiplier: number,
+): number => {
+  if (![entry, exit, stake, multiplier].every(Number.isFinite) || entry <= 0 || exit <= 0 || stake <= 0 || multiplier <= 0) return 0
   const move = (exit - entry) / entry
   const signedMove = direction === 'BUY' ? move : -move
-  return Number(clampLoss(PAPER_STAKE * PAPER_MULTIPLIER * signedMove).toFixed(4))
+  return Number(clampLoss(stake * multiplier * signedMove, stake).toFixed(4))
+}
+
+const displayPnl = (value: number): string => {
+  const absolute = Math.abs(value)
+  const digits = absolute > 0 && absolute < 0.01 ? 4 : absolute > 0 && absolute < 0.1 ? 3 : 2
+  return (value >= 0 ? '+' : '') + value.toFixed(digits)
 }
 
 interface Props {
+  symbol: string
   radar: SignalRadarResult
   currentPrice: number
+  onPaperRoundClosed?: (trade: BotPaperTrade) => void
 }
 
-export const BotUnitPanel: React.FC<Props> = ({ radar, currentPrice }) => {
+const roundRoute = (round: RoundState): string => {
+  if (!round.direction) return 'WAIT'
+  const signal = round.signalTimeframe ?? '—'
+  const entry = round.entryTimeframe ?? signal
+  return signal === entry ? signal + ' ' + round.direction : signal + ' → ' + entry + ' ' + round.direction
+}
+
+export const BotUnitPanel: React.FC<Props> = ({ symbol, radar, currentPrice, onPaperRoundClosed }) => {
   const [rounds, setRounds] = useState<RoundState[]>(createRounds)
   const [running, setRunning] = useState(false)
   const [activeRound, setActiveRound] = useState(0)
   const [secondsLeft, setSecondsLeft] = useState(ROUND_SECONDS)
   const [entry, setEntry] = useState<number | null>(null)
   const [direction, setDirection] = useState<'BUY' | 'SELL' | null>(null)
-  const [timeframe, setTimeframe] = useState<Timeframe | null>(null)
+  const [signalTimeframe, setSignalTimeframe] = useState<Timeframe | null>(null)
+  const [entryTimeframe, setEntryTimeframe] = useState<Timeframe | null>(null)
+  const [paperStake, setPaperStake] = useState(String(DEFAULT_STAKE))
+  const [paperMultiplier, setPaperMultiplier] = useState(String(DEFAULT_MULTIPLIER))
   const timerRef = useRef<number | null>(null)
+  const settledRoundRef = useRef(0)
+
+  const stakeValue = Number(paperStake)
+  const multiplierValue = Number(paperMultiplier)
+  const safeStake = Number.isFinite(stakeValue) && stakeValue > 0 ? stakeValue : DEFAULT_STAKE
+  const safeMultiplier = Number.isFinite(multiplierValue) && multiplierValue > 0 ? multiplierValue : DEFAULT_MULTIPLIER
 
   const totalPnl = useMemo(
     () => Number(rounds.reduce((sum, round) => sum + (round.pnl ?? 0), 0).toFixed(4)),
@@ -55,6 +89,7 @@ export const BotUnitPanel: React.FC<Props> = ({ radar, currentPrice }) => {
   const completed = rounds.filter((round) => ['win', 'loss', 'wait'].includes(round.status)).length
   const wins = rounds.filter((round) => round.status === 'win').length
   const losses = rounds.filter((round) => round.status === 'loss').length
+  const botPlan = radar.botPlan
 
   const clearTimer = (): void => {
     if (timerRef.current !== null) window.clearInterval(timerRef.current)
@@ -62,31 +97,38 @@ export const BotUnitPanel: React.FC<Props> = ({ radar, currentPrice }) => {
   }
 
   const beginRound = (roundNumber: number): void => {
-    const opportunity = radar.opportunities[0] ?? null
+    const opportunity = radar.botPlan.opportunity
     const nextDirection = opportunity?.direction ?? null
-    const nextTimeframe = opportunity?.timeframe ?? null
+    const nextSignalTimeframe = radar.botPlan.analysisTimeframe
+    const nextEntryTimeframe = radar.botPlan.entryTimeframe
     const nextEntry = Number.isFinite(currentPrice) && currentPrice > 0 ? currentPrice : null
+    const openedAt = new Date().toISOString()
 
     setActiveRound(roundNumber)
     setSecondsLeft(ROUND_SECONDS)
     setEntry(nextEntry)
     setDirection(nextDirection)
-    setTimeframe(nextTimeframe)
+    setSignalTimeframe(nextSignalTimeframe)
+    setEntryTimeframe(nextEntryTimeframe)
     setRounds((current) => current.map((round) => round.number === roundNumber
       ? {
           ...round,
           status: nextDirection && nextEntry ? 'monitoring' : 'wait',
           direction: nextDirection ?? undefined,
-          timeframe: nextTimeframe ?? undefined,
+          signalTimeframe: nextSignalTimeframe ?? undefined,
+          entryTimeframe: nextEntryTimeframe ?? undefined,
           entry: nextEntry ?? undefined,
           pnl: undefined,
           exit: undefined,
+          openedAt,
         }
       : round))
   }
 
   const startUnit = (): void => {
+    if (!Number.isFinite(stakeValue) || stakeValue < 1 || !Number.isFinite(multiplierValue) || multiplierValue < 1) return
     clearTimer()
+    settledRoundRef.current = 0
     setRounds(createRounds())
     setRunning(true)
     beginRound(1)
@@ -100,11 +142,13 @@ export const BotUnitPanel: React.FC<Props> = ({ radar, currentPrice }) => {
 
   const resetUnit = (): void => {
     stopUnit()
+    settledRoundRef.current = 0
     setRounds(createRounds())
     setActiveRound(0)
     setEntry(null)
     setDirection(null)
-    setTimeframe(null)
+    setSignalTimeframe(null)
+    setEntryTimeframe(null)
   }
 
   useEffect(() => {
@@ -117,22 +161,39 @@ export const BotUnitPanel: React.FC<Props> = ({ radar, currentPrice }) => {
   }, [activeRound, running])
 
   useEffect(() => {
-    if (!running || activeRound <= 0 || secondsLeft > 0) return
+    if (!running || activeRound <= 0 || secondsLeft > 0 || settledRoundRef.current === activeRound) return
 
+    settledRoundRef.current = activeRound
     const currentEntry = entry
     const currentDirection = direction
+    const pnl = currentEntry && currentDirection
+      ? paperPnl(currentDirection, currentEntry, currentPrice, safeStake, safeMultiplier)
+      : 0
+    const nextStatus: RoundStatus = currentDirection
+      ? pnl > 0 ? 'win' : pnl < 0 ? 'loss' : 'wait'
+      : 'wait'
+    const closedAt = new Date().toISOString()
 
-    if (currentEntry && currentDirection) {
-      const pnl = paperPnl(currentDirection, currentEntry, currentPrice)
-      setRounds((current) => current.map((round) => round.number === activeRound
-        ? {
-            ...round,
-            status: pnl > 0 ? 'win' : pnl < 0 ? 'loss' : 'wait',
-            exit: currentPrice,
-            pnl,
-          }
-        : round))
-    }
+    setRounds((current) => current.map((round) => round.number === activeRound
+      ? { ...round, status: nextStatus, exit: currentPrice, pnl }
+      : round))
+
+    onPaperRoundClosed?.({
+      id: 'bot-paper-' + Date.now() + '-' + activeRound,
+      symbol,
+      round: activeRound,
+      direction: currentDirection,
+      signalTimeframe,
+      entryTimeframe,
+      entry: currentEntry,
+      exit: Number.isFinite(currentPrice) && currentPrice > 0 ? currentPrice : null,
+      stake: safeStake,
+      multiplier: safeMultiplier,
+      pnl,
+      status: nextStatus === 'monitoring' ? 'wait' : nextStatus,
+      openTime: rounds.find((round) => round.number === activeRound)?.openedAt ?? closedAt,
+      closeTime: closedAt,
+    })
 
     if (activeRound >= UNIT_ROUNDS) {
       clearTimer()
@@ -143,7 +204,7 @@ export const BotUnitPanel: React.FC<Props> = ({ radar, currentPrice }) => {
     const nextRound = activeRound + 1
     const timeout = window.setTimeout(() => beginRound(nextRound), 150)
     return () => window.clearTimeout(timeout)
-  }, [activeRound, currentPrice, direction, entry, running, secondsLeft])
+  }, [activeRound, currentPrice, direction, entry, entryTimeframe, onPaperRoundClosed, radar.botPlan, rounds, safeMultiplier, safeStake, secondsLeft, signalTimeframe, symbol, running])
 
   useEffect(() => () => clearTimer(), [])
 
@@ -155,15 +216,66 @@ export const BotUnitPanel: React.FC<Props> = ({ radar, currentPrice }) => {
             <ShieldCheck className="h-4 w-4 text-shafx-accent" />
             <h4 className="text-sm font-semibold">SHAFX 5-Round Unit</h4>
             <span className="rounded-md border border-shafx-success/25 bg-shafx-success/10 px-2 py-0.5 font-mono text-[7px] font-bold tracking-[0.12em] text-shafx-success">PAPER TEST</span>
+            <span className="rounded-md border border-shafx-accent/25 bg-shafx-accent/10 px-2 py-0.5 font-mono text-[7px] font-bold tracking-[0.12em] text-shafx-accent">FAST ADAPTIVE</span>
           </div>
-          <p className="mt-1 max-w-[520px] text-[9px] leading-4 text-shafx-textMuted">
-            Same scan → decision → monitor → result rhythm as the rebuilt bot, but this preview never sends a broker order.
+          <p className="mt-1 max-w-[600px] text-[9px] leading-4 text-shafx-textMuted">
+            Scans all available timeframes. It does not blindly trade M1: higher-timeframe structure selects the setup, then a faster timeframe is used only for the entry trigger.
           </p>
         </div>
         <div className="text-right">
           <div className="font-mono text-[8px] text-shafx-textMuted">ROUND</div>
           <div className="mt-0.5 font-mono text-lg font-bold">{activeRound || '—'} / {UNIT_ROUNDS}</div>
         </div>
+      </div>
+
+      <div className="mt-4 rounded-xl border border-shafx-border bg-shafx-bg/70 p-3">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div>
+            <span className="block text-[7px] uppercase tracking-[0.12em] text-shafx-textMuted">Paper stake</span>
+            <input
+              aria-label="Bot paper stake"
+              type="number"
+              min="1"
+              max="2000"
+              step="1"
+              value={paperStake}
+              onChange={(event) => setPaperStake(event.target.value)}
+              className="mt-1 w-full rounded-lg border border-shafx-border bg-shafx-surface px-2 py-2 font-mono text-xs outline-none focus:border-shafx-accent"
+            />
+            <div className="mt-1 flex gap-1 overflow-x-auto">
+              {QUICK_STAKES.map((value) => (
+                <button key={value} type="button" onClick={() => setPaperStake(String(value))} className={'border px-1.5 py-1 font-mono text-[7px] ' + (Number(paperStake) === value ? 'border-shafx-accent/40 bg-shafx-accent/10 text-shafx-accent' : 'border-shafx-border text-shafx-textMuted')}>
+                  {value}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <span className="block text-[7px] uppercase tracking-[0.12em] text-shafx-textMuted">Multiplier</span>
+            <select aria-label="Bot paper multiplier" value={paperMultiplier} onChange={(event) => setPaperMultiplier(event.target.value)} className="mt-1 w-full rounded-lg border border-shafx-border bg-shafx-surface px-2 py-2 font-mono text-xs outline-none focus:border-shafx-accent">
+              {QUICK_MULTIPLIERS.map((value) => <option key={value} value={value}>{value}×</option>)}
+            </select>
+          </div>
+          <div>
+            <span className="block text-[7px] uppercase tracking-[0.12em] text-shafx-textMuted">Max paper loss</span>
+            <div className="mt-1 rounded-lg border border-shafx-border bg-shafx-surface px-2 py-2 font-mono text-xs">{safeStake.toFixed(2)}</div>
+            <div className="mt-1 text-[7px] text-shafx-textMuted">Loss is capped at the selected paper stake.</div>
+          </div>
+          <div>
+            <span className="block text-[7px] uppercase tracking-[0.12em] text-shafx-textMuted">Exposure</span>
+            <div className="mt-1 rounded-lg border border-shafx-border bg-shafx-surface px-2 py-2 font-mono text-xs">{(safeStake * safeMultiplier).toFixed(0)}×</div>
+            <div className="mt-1 text-[7px] text-shafx-textMuted">Paper calculation is before any live Deriv commission.</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-3 rounded-xl border border-shafx-border bg-shafx-bg/70 p-3">
+        <div className="grid grid-cols-3 gap-2 text-[8px]">
+          <div><span className="block text-shafx-textMuted">Signal TF</span><b className="mt-1 block font-mono text-[10px]">{botPlan.analysisTimeframe ?? '—'}</b></div>
+          <div><span className="block text-shafx-textMuted">Entry TF</span><b className="mt-1 block font-mono text-[10px] text-shafx-accent">{botPlan.entryTimeframe ?? '—'}</b></div>
+          <div><span className="block text-shafx-textMuted">Direction</span><b className={'mt-1 block text-[10px] ' + (botPlan.opportunity?.direction === 'BUY' ? 'text-shafx-success' : botPlan.opportunity?.direction === 'SELL' ? 'text-shafx-danger' : 'text-shafx-textMuted')}>{botPlan.opportunity?.direction ?? 'WAIT'}</b></div>
+        </div>
+        <div className="mt-2 text-[8px] leading-4 text-shafx-textMuted">{botPlan.reason}</div>
       </div>
 
       <div className="mt-4 grid grid-cols-5 gap-1.5">
@@ -184,12 +296,8 @@ export const BotUnitPanel: React.FC<Props> = ({ radar, currentPrice }) => {
                 <span className="font-mono text-[8px] font-bold">R{round.number}</span>
                 <span className="text-[7px] uppercase">{round.status === 'monitoring' ? 'LIVE' : round.status}</span>
               </div>
-              <div className="mt-2 min-h-8 font-mono text-[8px] font-semibold">
-                {round.direction ? round.direction + ' ' + (round.timeframe ?? '') : 'WAIT'}
-              </div>
-              <div className="mt-1 font-mono text-[8px] tabular-nums">
-                {round.pnl !== undefined ? (round.pnl >= 0 ? '+' : '') + round.pnl.toFixed(4) : '—'}
-              </div>
+              <div className="mt-2 min-h-8 font-mono text-[8px] font-semibold">{roundRoute(round)}</div>
+              <div className="mt-1 font-mono text-[8px] tabular-nums">{round.pnl !== undefined ? displayPnl(round.pnl) : '—'}</div>
             </div>
           )
         })}
@@ -206,7 +314,7 @@ export const BotUnitPanel: React.FC<Props> = ({ radar, currentPrice }) => {
         </div>
         <div className="rounded-xl border border-shafx-border bg-shafx-bg p-2.5">
           <span className="block text-[7px] uppercase tracking-[0.12em] text-shafx-textMuted">Paper Net</span>
-          <strong className={'mt-1 block font-mono text-[10px] ' + (totalPnl >= 0 ? 'text-shafx-success' : 'text-shafx-danger')}>{totalPnl >= 0 ? '+' : ''}{totalPnl.toFixed(4)}</strong>
+          <strong className={'mt-1 block font-mono text-[10px] ' + (totalPnl >= 0 ? 'text-shafx-success' : 'text-shafx-danger')}>{displayPnl(totalPnl)}</strong>
         </div>
         <div className="rounded-xl border border-shafx-border bg-shafx-bg p-2.5">
           <span className="block text-[7px] uppercase tracking-[0.12em] text-shafx-textMuted">Round clock</span>
@@ -218,14 +326,12 @@ export const BotUnitPanel: React.FC<Props> = ({ radar, currentPrice }) => {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <div className="text-[8px] font-semibold uppercase tracking-[0.13em] text-shafx-textMuted">Current paper decision</div>
-            <div className="mt-1 font-mono text-[10px] font-semibold">
-              {direction ? direction + ' • ' + (timeframe ?? '—') : 'WAIT — scanning the strongest SHAFX setup'}
-            </div>
+            <div className="mt-1 font-mono text-[10px] font-semibold">{direction ? roundRoute({ number: activeRound, status: 'monitoring', direction, signalTimeframe: signalTimeframe ?? undefined, entryTimeframe: entryTimeframe ?? undefined }) : 'WAIT — scanning the strongest SHAFX setup'}</div>
           </div>
           {entry && <div className="font-mono text-[8px] text-shafx-textMuted">Entry {entry.toFixed(5)}</div>}
         </div>
         <div className="mt-2 text-[8px] leading-4 text-shafx-textMuted">
-          Paper calculation uses the same multiplier relationship for demonstration: stake × multiplier × percentage move. The live Deriv contract P/L remains broker-authoritative.
+          The five-round unit is a paper test. It never sends a broker order. Its live Deriv counterpart will still be governed by the manual proposal/confirmation path.
         </div>
       </div>
 
