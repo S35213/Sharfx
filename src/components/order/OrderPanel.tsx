@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertCircle,
   ArrowDownRight,
@@ -115,6 +115,7 @@ export const OrderPanel: React.FC<Props> = ({
   const [state, setState] = useState<TicketState>('planning')
   const [error, setError] = useState('')
   const [now, setNow] = useState(0)
+  const newTradeRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     setSide(aiSetup?.direction ?? 'BUY')
@@ -289,6 +290,13 @@ export const OrderPanel: React.FC<Props> = ({
     }
   }
 
+  const startOppositeTrade = (): void => {
+    if (!activePosition) return
+    const opposite: TradeSide = activePosition.type === 'BUY' ? 'SELL' : 'BUY'
+    chooseSide(opposite)
+    window.setTimeout(() => newTradeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 0)
+  }
+
   const handleClose = async (): Promise<void> => {
     if (!activePosition?.id || !onTradeClosed) return
     try {
@@ -373,19 +381,29 @@ export const OrderPanel: React.FC<Props> = ({
               Broker-managed protection stays active if you close SHAFX.
               <span className="ml-1 font-mono text-shafx-text">#{activePosition.providerOrderId || activePosition.id}</span>
             </div>
-            <button type="button" onClick={() => void handleClose()} className="inline-flex min-h-9 items-center gap-1.5 border border-shafx-danger/40 bg-shafx-danger/10 px-3 text-[9px] font-semibold text-shafx-danger transition hover:bg-shafx-danger/20">
-              <XCircle className="h-3.5 w-3.5" /> CLOSE
-            </button>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={startOppositeTrade} className="min-h-9 border border-shafx-accent/35 bg-shafx-accent/[0.06] px-2.5 text-[8px] font-semibold text-shafx-accent transition hover:bg-shafx-accent/[0.1]">
+                TRADE AGAINST • {activePosition.type === 'BUY' ? 'SELL DOWN' : 'BUY UP'}
+              </button>
+              <button type="button" onClick={() => void handleClose()} className="inline-flex min-h-9 items-center gap-1.5 border border-shafx-danger/40 bg-shafx-danger/10 px-3 text-[8px] font-semibold text-shafx-danger transition hover:bg-shafx-danger/20">
+                <XCircle className="h-3.5 w-3.5" /> CLOSE
+              </button>
+            </div>
           </div>
         </div>
       </section>
 
-      <div className="border-t border-shafx-border bg-[#080D13]">
+      <div ref={newTradeRef} className="border-t border-shafx-border bg-[#080D13]">
         <div className="border-b border-shafx-border px-3 py-2.5">
           <div className="flex items-center justify-between gap-2">
             <span className="text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted">New trade</span>
             <span className="font-mono text-[8px] text-shafx-textMuted">{symbol} • {timeframe}</span>
           </div>
+          {activePosition && side !== activePosition.type && (
+            <div className="mt-2 border border-shafx-accent/25 bg-shafx-accent/[0.05] px-2.5 py-2 text-[8px] text-shafx-accent">
+              <strong className="font-semibold">TRADE AGAINST READY.</strong> Current {activePosition.type} remains open; this ticket is set to {side === 'BUY' ? 'BUY UP' : 'SELL DOWN'}.
+            </div>
+          )}
           <div className="mt-2 grid grid-cols-2 gap-1.5">
             <button type="button" onClick={() => chooseSide('BUY')} disabled={state === 'quoting' || state === 'buying'} aria-pressed={side === 'BUY'} className={'min-h-11 border px-2.5 text-left ' + (side === 'BUY' ? 'border-shafx-success bg-shafx-success/[0.12]' : 'border-shafx-border bg-shafx-surface')}>
               <span className={'text-[9px] font-bold ' + (side === 'BUY' ? 'text-shafx-success' : 'text-shafx-textMuted')}>BUY</span>
