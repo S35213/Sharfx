@@ -561,3 +561,13 @@ When a new action is completed, append it to the action tree and change its chec
   - Render rebuild verification PASS
 - An intermediate desktop commit failed its build because an obsolete `PanelRight` import remained after the header simplification. That was corrected before the final live deployment; the final CI/build is green.
 - Main/production and Cloudflare were not modified.
+
+
+## 2026-10-05 — Restore the earlier trade ticket, account history, and MT5-style Bid/Ask chart rails
+
+- Corrected the over-restore on the isolated test branch only; production/main remains untouched.
+- Trade Ticket: preserved the earlier Deriv-native custom ticket rather than reverting to the old Forex-lot ticket. It keeps BUY UP / SELL DOWN, stake + multiplier, Entry, Stop Loss, Take Profit, pip-distance/risk calculations, proposal review/confirmation, active-position details, and close flow.
+- Trade Ticket risk floor: restored the requested SHAFX minimum multiplier stake to **10** account-currency units. The UI defaults to 10 and blocks quote requests below 10; the Deriv order API now enforces the same floor server-side.
+- History: restored the earlier compact account-scoped History presentation under the mobile History workspace: open-position blotter plus Net P/L, Wins, Losses, Gross Profit, Gross Loss, Win Rate, account label/type, and completed-trade count. Removed the extra older simulator/history panels from that workspace.
+- Chart: removed the separate blue current-price treatment from the active flow. Bid/Sell is anchored to the latest candle close, Ask/Buy is displayed at a small SHAFX spread above it, and both are rendered as native chart price lines/labels rather than floating DOM overlays. The same Bid/Ask values are passed into the Trade Ticket so BUY uses Ask and SELL uses Bid.
+- Verification work required before this entry is considered PASS: install, build, lint, tests, Render static smoke, Render rebuild/public verification, and branch deployment health must all pass.
