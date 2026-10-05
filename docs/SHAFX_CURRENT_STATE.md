@@ -89,11 +89,14 @@ Changes made on the test branch:
 - Chart live-price tag precision now keeps **one fractional-pip digit beyond the pip size**, so a 0.01 pip-size instrument can display 0.001 increments (for example 1158.130, 1158.141, 1158.150) when Deriv supplies those tick values.
 - This change affects display precision; it does not manufacture market ticks. The actual sensitivity still comes from the Deriv tick stream.
 
-Latest code commits for this precision change:
-- `c087e846e4d9cf6ab831da519620c1338bc49811`
-- `48cb886530afe9f8875f7215b5f4fd2781891d3e`
+Latest verified precision implementation commit: `1bd793ea48b976df833978875386497b6c1a138b`.
 
-**Verification status at document creation: PENDING.**
+Verification for this precision change: **PASS**
+- GitHub SHAFX CI: PASS
+- Render smoke: PASS
+- Render deployment: LIVE
+- Render deploy: `dep-db1tpnsv8u7c73e1rha0`
+- The change is still awaiting the user's handset-level visual confirmation of tick-to-tick movement.
 
 ## 7. Trade chart/history problems already diagnosed
 
