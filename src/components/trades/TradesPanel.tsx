@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { Clock3, History, ListChecks, XCircle } from 'lucide-react'
 import type { TradeOrder } from '../../types'
 import { formatCurrency, formatPrice, formatTimestamp } from '../../lib/format'
+import { TradeHistoryPerformance } from './TradeHistoryPerformance'
 
 interface Props {
   openPositions: TradeOrder[]
@@ -12,6 +13,7 @@ interface Props {
   onClosePosition: (id: string) => void | Promise<void>
   onBulkClose?: (mode: 'winning' | 'losing' | 'all') => void | Promise<void>
   positionsOnly?: boolean
+  defaultTab?: Tab
 }
 
 type Tab = 'positions' | 'pending' | 'history'
@@ -36,8 +38,9 @@ export const TradesPanel: React.FC<Props> = ({
   onClosePosition,
   onBulkClose,
   positionsOnly = false,
+  defaultTab = 'positions',
 }) => {
-  const [activeTab, setActiveTab] = useState<Tab>('positions')
+  const [activeTab, setActiveTab] = useState<Tab>(positionsOnly ? 'positions' : defaultTab)
   const [now, setNow] = useState(0)
 
   useEffect(() => {
@@ -76,6 +79,11 @@ export const TradesPanel: React.FC<Props> = ({
         </div>
       )}
 
+      {activeTab === 'history' ? (
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <TradeHistoryPerformance history={tradeHistory} />
+        </div>
+      ) : (
       <div className="flex-1 overflow-auto">
         {activeTab === 'positions' && (
           <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b border-shafx-border bg-shafx-surface/95 px-3 py-1.5 backdrop-blur">
@@ -97,13 +105,14 @@ export const TradesPanel: React.FC<Props> = ({
                 const p = precision(trade.symbol)
                 const profit = Number(trade.profit ?? 0)
                 const isDeriv = trade.brokerProduct === 'DERIV_MULTIPLIER'
-                const selectedOpen = activeTab === 'positions' && trade.status === 'open' && trade.symbol === selectedSymbol
+                const openAction = activeTab === 'positions' && trade.status === 'open'
+                const isSelectedMarket = trade.symbol === selectedSymbol
                 const stake = Number(trade.stake ?? trade.lotSize)
                 const protection = isDeriv
                   ? [trade.stopLossAmount ? 'SL ' + formatCurrency(trade.stopLossAmount) : null, trade.takeProfitAmount ? 'TP ' + formatCurrency(trade.takeProfitAmount) : null].filter(Boolean).join(' • ') || '—'
                   : [trade.stopLoss !== null ? 'SL ' + formatPrice(trade.stopLoss, p) : null, trade.takeProfit !== null ? 'TP ' + formatPrice(trade.takeProfit, p) : null].filter(Boolean).join(' • ') || '—'
                 return (
-                  <tr key={trade.id} className="hover:bg-shafx-surfaceHover">
+                  <tr key={trade.id} className={'hover:bg-shafx-surfaceHover ' + (isSelectedMarket ? 'bg-shafx-primary/[0.025]' : '')}>
                     <td className="px-3 py-1.5 font-mono text-shafx-textMuted">{trade.id}</td>
                     <td className="px-3 py-1.5 text-shafx-textMuted">
                       <span className="block">Open {formatTimestamp(trade.openTime)}</span>
@@ -123,7 +132,7 @@ export const TradesPanel: React.FC<Props> = ({
                     <td className="px-3 py-1.5 font-mono text-[8px] tabular-nums">{protection}</td>
                     <td className={'px-3 py-1.5 font-mono font-semibold tabular-nums ' + (profit >= 0 ? 'text-shafx-success' : 'text-shafx-danger')}>{profit >= 0 ? '+' : ''}{formatCurrency(profit)}</td>
                     <td className="px-3 py-1.5">
-                      {selectedOpen ? (
+                      {openAction ? (
                         <button type="button" onClick={() => void onClosePosition(trade.id)} className="inline-flex min-h-7 items-center gap-1 border border-shafx-danger/35 bg-shafx-danger/10 px-2 text-[8px] font-semibold text-shafx-danger hover:bg-shafx-danger/20" aria-label={'Close ' + trade.id}>
                           <XCircle className="h-3 w-3" />Close @ {formatPrice(Number(trade.currentPrice ?? currentPrice), p)}
                         </button>
@@ -136,6 +145,7 @@ export const TradesPanel: React.FC<Props> = ({
           </table>
         )}
       </div>
+      )}
     </div>
   )
 }
