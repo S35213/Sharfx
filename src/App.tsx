@@ -21,7 +21,6 @@ import { OrderPanel } from './components/order/OrderPanel'
 import { closeDerivContract } from './data/deriv/derivTrading'
 import { AccountPanel } from './components/account/AccountPanel'
 import { TradesPanel } from './components/trades/TradesPanel'
-import { PerformancePanel } from './components/performance/PerformancePanel'
 import { Toast, type ToastMessage } from './components/common/Toast'
 import { CHART_SETTINGS_EVENT, readChartWorkspaceSettings, type ChartWorkspaceSettings } from './app/chartSettings'
 import { getSymbolSpec, SYMBOL_SPECS } from './data/mock/symbols'
@@ -443,7 +442,6 @@ const TerminalContent: React.FC = () => {
   const activeProviderName = 'Deriv'
   const accountModeLabel = activeProviderSelection?.environment === 'live' ? 'REAL ACCOUNT' : 'DEMO ACCOUNT'
   const accountModeTone = activeProviderSelection?.environment === 'live' ? 'text-shafx-accent' : 'text-shafx-success'
-  const accountHistoryLabel = `${activeProviderSelection?.providerId ?? activeProviderName} • ${activeProviderSelection?.environment === 'live' ? 'Real' : 'Demo'} • ${activeProviderSelection?.accountId ?? 'current account'}`
   const chartToolMode: ChartToolMode = chartTool
 
   const derivOrderConnection = activeProviderSelection?.connectionId && activeProviderSelection.accountId
@@ -607,7 +605,7 @@ const TerminalContent: React.FC = () => {
       pushToast('Deriv ' + order.type + ' trade opened on ' + (order.chartTimeframe ?? timeframe) + '.')
     }} aiSetup={reviewSetup} /></div></aside>
       <aside className={showBot ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><SignalDeskPanel symbol={selectedSymbol} timeframe={timeframe} currentPrice={currentPrice} analysis={marketAnalysis} setup={reviewSetup} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} connected={Boolean(derivOrderConnection)} onReviewSetup={handleReviewSetup} /></aside>
-      <aside className={showHistory ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><TradesPanel positionsOnly openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={currentPrice} selectedSymbol={selectedSymbol} onClosePosition={(id) => { void handleClosePosition(id) }} /><PerformancePanel compactHistory tradeHistory={tradeHistory} currency={resolvedAccountData.currency} accountLabel={accountHistoryLabel} accountType={activeProviderSelection?.environment === 'live' ? 'real' : 'demo'} /></div></aside>
+      <aside className={showHistory ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="h-[calc(100svh-92px)] min-h-[520px]"><TradesPanel defaultTab="history" openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={currentPrice} selectedSymbol={selectedSymbol} onClosePosition={(id) => { void handleClosePosition(id) }} /></div></aside>
       <aside className={showFunds ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><DerivCashierLinks /></div></aside>
       <aside className={showAccount ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><AccountPanel account={resolvedAccountData} activeProviderSelection={activeProviderSelection} /></div></aside>
 
