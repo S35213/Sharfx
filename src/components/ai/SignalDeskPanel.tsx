@@ -1,11 +1,15 @@
 import React from 'react'
 import { BrainCircuit, LockKeyhole, ShieldCheck, Sparkles } from 'lucide-react'
-import type { MarketAnalysis } from '../../types'
+import type { MarketAnalysis, Timeframe, OHLCV } from '../../types'
+import { useMemo } from 'react'
+import { useMultiTimeframeCandles } from '../../engine/agent/loadMultiTimeframe'
+import { buildSignalRadar } from '../../engine/bot/signalRadar'
 import type { SetupCandidate } from '../../engine/setup/types'
 
 interface Props {
   symbol: string
-  timeframe: string
+  timeframe: Timeframe
+  candles: OHLCV[]
   currentPrice: number
   analysis: MarketAnalysis
   setup?: SetupCandidate | null
@@ -18,6 +22,7 @@ interface Props {
 export const SignalDeskPanel: React.FC<Props> = ({
   symbol,
   timeframe,
+  candles,
   currentPrice,
   analysis,
   setup,
@@ -25,7 +30,10 @@ export const SignalDeskPanel: React.FC<Props> = ({
   accountCurrency,
   connected,
   onReviewSetup,
-}) => (
+}) => {
+  const radarFrames = useMultiTimeframeCandles(symbol, timeframe, candles, [], 0)
+  const radar = useMemo(() => buildSignalRadar(radarFrames, symbol, currentPrice), [currentPrice, radarFrames, symbol])
+  return (
   <section className="space-y-4 rounded-2xl border border-shafx-border bg-shafx-surface p-4 shadow-[0_14px_36px_rgba(0,0,0,.16)]">
     <div className="flex items-start justify-between gap-3">
       <div>
@@ -53,6 +61,25 @@ export const SignalDeskPanel: React.FC<Props> = ({
     <div className="rounded-xl border border-shafx-border bg-shafx-bg/70 p-3">
       <div className="flex items-center gap-2 text-[9px] font-semibold uppercase tracking-[0.13em] text-shafx-textMuted"><LockKeyhole className="h-3.5 w-3.5" />Execution boundary</div>
       <p className="mt-2 text-[9px] leading-4 text-shafx-textMuted">The old scanning bot is no longer allowed to open broker trades in this testing project. SHAFX intelligence is still available for review; the new Deriv bridge is tested separately so a broker error cannot be hidden behind a strategy gate.</p>
+    </div>
+
+    <div className="rounded-xl border border-shafx-border bg-shafx-bg/70 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <div className="text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted">Signal Radar</div>
+          <div className="mt-1 text-[8px] text-shafx-textMuted">{radar.scanned.length}/8 timeframes scanned • strength is a SHAFX score, not a guaranteed probability</div>
+        </div>
+        <span className="font-mono text-[8px] font-bold text-shafx-accent">{radar.alignment}% ALIGN</span>
+      </div>
+      <div className="mt-2 space-y-1.5">
+        {radar.opportunities.map((opportunity, index) => (
+          <button key={opportunity.timeframe} type="button" onClick={() => onReviewSetup?.(opportunity.setup)} className="flex w-full items-center justify-between gap-2 rounded-lg border border-shafx-border bg-shafx-bg px-2.5 py-2 text-left hover:border-shafx-accent/30">
+            <span className="font-mono text-[8px] font-bold">{index + 1}. {opportunity.timeframe}</span>
+            <span className={opportunity.direction === 'BUY' ? 'font-mono text-[8px] font-bold text-shafx-success' : 'font-mono text-[8px] font-bold text-shafx-danger'}>{opportunity.direction} {opportunity.signalStrength}</span>
+          </button>
+        ))}
+        {!radar.opportunities.length && <div className="rounded-lg border border-shafx-border bg-shafx-bg px-2.5 py-2 text-[8px] text-shafx-textMuted">WAIT — no clean executable setup across the scanned timeframes.</div>}
+      </div>
     </div>
 
     {setup ? (
