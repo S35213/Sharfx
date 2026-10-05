@@ -34,7 +34,8 @@ interface Props {
 
 type TicketState = 'planning' | 'quoting' | 'quoted' | 'buying' | 'error'
 
-const QUICK_STAKES = ['1.00', '5.00', '10.00', '25.00']
+const MIN_SHAFX_STAKE = 10
+const QUICK_STAKES = ['10.00', '25.00', '50.00', '100.00']
 const QUICK_MULTIPLIERS = ['100', '200', '300', '500', '800']
 
 const toNumberOrNull = (value: string): number | null => {
@@ -75,7 +76,7 @@ export const OrderPanel: React.FC<Props> = ({
   aiSetup,
 }) => {
   const [side, setSide] = useState<TradeSide>(aiSetup?.direction ?? 'BUY')
-  const [stake, setStake] = useState('1.00')
+  const [stake, setStake] = useState('10.00')
   const [multiplier, setMultiplier] = useState('100')
   const [slPrice, setSlPrice] = useState('')
   const [tpPrice, setTpPrice] = useState('')
@@ -352,7 +353,7 @@ export const OrderPanel: React.FC<Props> = ({
             <span className="block text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted">Stake</span>
             <div className="mt-1 flex items-center gap-1">
               <span className="font-mono text-[8px] text-shafx-textMuted">{accountCurrency}</span>
-              <input aria-label="Stake" type="number" min="1" step="0.01" value={stake} onChange={(e) => chooseStake(e.target.value)} className="min-w-0 flex-1 bg-transparent font-mono text-sm outline-none" />
+              <input aria-label="Stake" type="number" min={MIN_SHAFX_STAKE} step="0.01" value={stake} onChange={(e) => chooseStake(e.target.value)} className="min-w-0 flex-1 bg-transparent font-mono text-sm outline-none" />
             </div>
             <div className="mt-1 flex gap-1 overflow-x-auto">
               {QUICK_STAKES.map((value) => (
