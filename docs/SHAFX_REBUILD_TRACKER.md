@@ -580,3 +580,14 @@ When a new action is completed, append it to the action tree and change its chec
 - Render public smoke run `37306858410` — **SUCCESS** (Render test smoke).
 - SHAFX CI run `37306866856` — **SUCCESS** (install/build/lint/tests/audit and configured PR checks).
 - Result: targeted trade ticket + history + chart restore is verified; no claim is made for an authenticated real/demo contract purchase in this entry.
+
+
+## 2026-10-05 — Restore the verified SHAFX ticket + full history design and fix live Bid/Ask rails
+
+- Restored the verified Oct 5 Trade Ticket design from the last successful ticket pass: BUY/SELL side-selection changes the selected action to SHAFX green/red, with Deriv-native UP/DOWN wording.
+- Restored the compact selectable Auto Exits section: SL/TP ON/OFF plus small selectable checkpoints. Stop Loss choices are 10%, 20%, 40%, 80% of stake; Take Profit choices are 1×, 2×, 5×, 10× stake. Chart SL/TP estimates remain visible underneath.
+- Stake guard: minimum `10`, maximum `2,000` account-currency units. The cap is enforced both in the ticket input/quote flow and server-side in `api/deriv/order.js`.
+- Restored the unique SHAFX `TradeHistoryPerformance` design: Made/Lost/Net cards, markets traded summary, and the full closed-trade log.
+- Mobile History now opens directly on the full SHAFX History tab rather than the temporary compact-history replacement.
+- Chart BUY/ASK is green and SELL/BID is red. The chart rails now follow the live `currentPrice` on every market snapshot instead of the last candle close, with a small visible Ask spread above Bid so they move together but do not stack.
+- Main/production remains untouched.
