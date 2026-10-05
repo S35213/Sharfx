@@ -183,3 +183,44 @@ Whenever a significant change is made:
 - state what remains unverified.
 
 Never erase a failure just because a later commit passes. The history is intentional and is part of the project's continuity.
+
+## 13. Latest account-state repair and bot direction
+
+### Account metrics repair — 2026-10-05
+
+The connected Deriv account stream now derives an MT5-style SHAFX account view from the authoritative balance plus live open Multiplier contracts:
+
+- Equity = balance + floating P/L.
+- Used Margin = current open Multiplier stake committed by SHAFX.
+- Free Margin = equity - used margin, floored at zero.
+- Floating P/L = aggregate open-contract profit.
+
+These values are explicitly SHAFX-derived for the Deriv Multiplier product; they are not presented as native MT5 CFD margin fields.
+
+Latest account-state verification:
+- GitHub SHAFX CI 37352851712 — PASS.
+- Render deploy dep-db1uc0blthtc73a43kc0 — LIVE.
+- Human authenticated-demo-trade confirmation remains open.
+
+### Bot rebuild direction
+
+The current bot implementation already contains reusable market analysis and a five-round unit state state machine, but its autonomous execution path is intentionally disabled on this rebuild branch.
+
+The target architecture is now:
+
+Signal Radar
+- scans the selected market across the available timeframes;
+- ranks the strongest three distinct opportunities;
+- shows direction, signal strength, structure/liquidity context, and freshness;
+- opens the existing manual Trade Ticket when the user reviews a signal;
+- has no broker-execution responsibility.
+
+Autopilot Unit
+- receives user stake and multiplier mode;
+- creates a durable server-side five-round run;
+- performs a fresh analysis before each round;
+- requests the Deriv proposal, buys only after all execution guards pass, monitors the actual contract, and closes according to the configured round-exit policy;
+- records the real P/L and advances from Round 1/5 through Round 5/5;
+- continues after browser refresh/disconnect because run state is server-owned.
+
+The browser should not run the autonomous bot with browser timers as the authoritative scheduler. Shared market analysis should be computed once per market/timeframe and fanned out to users; account-specific execution should be isolated per user/account.
