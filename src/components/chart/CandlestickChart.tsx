@@ -139,6 +139,10 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     blue: { up: '#42A5F5', down: '#FF7043' },
     amber: { up: '#FFCA28', down: '#EF5350' },
   }
+  // Use fractional-pip precision like MT5: Forex displays 5 digits and JPY/XAU-style
+  // symbols display 3 digits when their native pip is 0.01.
+  const priceStep = Math.max(pipSize / 10, 0.000001)
+  const pricePrecision = Math.max(2, Math.round(Math.log10(1 / priceStep)))
 
   useEffect(() => {
     const el = containerRef.current
@@ -212,7 +216,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     if (!chart || !visualData.length) return
 
     const colors = candleColors[candleTheme]
-    const precision = Math.max(2, Math.round(Math.log10(1 / Math.max(pipSize, 0.00001))) + 1)
+    const precision = pricePrecision
     const currentConfig = seriesConfigRef.current
     const needsNewSeries =
       !seriesRef.current ||
@@ -229,7 +233,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       let nextSeries: ShafxSeries
       if (chartMode === 'bars') {
         nextSeries = chart.addBarSeries({
-          priceFormat: { type: 'price', precision, minMove: Math.max(pipSize, 0.00001) },
+          priceFormat: { type: 'price', precision, minMove: priceStep },
           upColor: colors.up,
           downColor: colors.down,
           openVisible: true,
@@ -256,7 +260,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         })
       } else {
         nextSeries = chart.addCandlestickSeries({
-          priceFormat: { type: 'price', precision, minMove: Math.max(pipSize, 0.00001) },
+          priceFormat: { type: 'price', precision, minMove: priceStep },
           upColor: colors.up,
           downColor: colors.down,
           borderUpColor: colors.up,
@@ -288,7 +292,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       series.applyOptions({
         upColor: colors.up,
         downColor: colors.down,
-        priceFormat: { type: 'price', precision, minMove: Math.max(pipSize, 0.00001) },
+        priceFormat: { type: 'price', precision, minMove: priceStep },
       })
     } else {
       series.applyOptions({
@@ -298,7 +302,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         borderDownColor: colors.down,
         wickUpColor: colors.up,
         wickDownColor: colors.down,
-        priceFormat: { type: 'price', precision, minMove: Math.max(pipSize, 0.00001) },
+        priceFormat: { type: 'price', precision, minMove: priceStep },
       })
     }
 
