@@ -19,6 +19,17 @@ interface Props {
 
 type Tab = 'positions' | 'pending' | 'history'
 
+const formatLivePnl = (value: number, currency: string): string => {
+  const absolute = Math.abs(value)
+  const digits = absolute > 0 && absolute < 0.01 ? 4 : absolute > 0 && absolute < 0.1 ? 3 : 2
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(value)
+}
+
 const getAge = (openTime?: string, now = Date.now()): string => {
   if (!openTime) return '—'
   const opened = new Date(openTime).getTime()
@@ -132,7 +143,7 @@ export const TradesPanel: React.FC<Props> = ({
                     <td className="px-3 py-1.5 font-mono tabular-nums">{isDeriv ? (trade.multiplier ?? '—') + '×' : '—'}</td>
                     <td className="px-3 py-1.5 font-mono tabular-nums">{trade.entryPrice > 0 ? formatPrice(trade.entryPrice, p) : '—'}</td>
                     <td className="px-3 py-1.5 font-mono text-[8px] tabular-nums">{protection}</td>
-                    <td className={'px-3 py-1.5 font-mono font-semibold tabular-nums ' + (profit >= 0 ? 'text-shafx-success' : 'text-shafx-danger')}>{profit >= 0 ? '+' : ''}{formatCurrency(profit, currency)}</td>
+                    <td className={'px-3 py-1.5 font-mono font-semibold tabular-nums ' + (profit >= 0 ? 'text-shafx-success' : 'text-shafx-danger')}>{formatLivePnl(profit, currency)}</td>
                     <td className="px-3 py-1.5">
                       {openAction ? (
                         <button type="button" onClick={() => void onClosePosition(trade.id)} className="inline-flex min-h-7 items-center gap-1 border border-shafx-danger/35 bg-shafx-danger/10 px-2 text-[8px] font-semibold text-shafx-danger hover:bg-shafx-danger/20" aria-label={'Close ' + trade.id}>
