@@ -620,3 +620,12 @@ When a new action is completed, append it to the action tree and change its chec
 - SHAFX CI run `37311585216` for commit `784e488403b5aa1513a0e181abf72d1d54520d2c` failed at `npm run build` because the new `profit_table.count` field was not yet declared in the local Deriv message type.
 - Fixed in the next test commit by declaring `profit_table.count` as `number | string` so the full-history pagination code remains type-safe.
 - Reverification is required after this compile fix; no production/main changes are permitted.
+
+### Verification pass — live trade state/history/close regression (2026-10-05)
+
+- Fix commit under test: `423833c105cd55c638b103f6f39ecf58b2e4b2ce`.
+- SHAFX CI run `37311827447` — **SUCCESS**.
+- Render test smoke run `37311817414` — **SUCCESS**.
+- Render deployment `dep-db1po2ff3r2c73ca33dg` — **LIVE** for the fix commit.
+- Main integrity rechecked: `4d5ff9010f96dcf3a430527b49d1156e2e3f02d5` — unchanged.
+- The remaining verification target is the final tracker-only commit below; authenticated Deriv behavior still requires a real browser trade/restart check because CI/smoke do not have the user's connected account session.
