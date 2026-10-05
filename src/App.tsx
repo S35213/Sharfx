@@ -552,6 +552,7 @@ const TerminalContent: React.FC = () => {
     bot: <SignalDeskPanel
       symbol={selectedSymbol}
       timeframe={timeframe}
+      candles={liveCandles}
       currentPrice={currentPrice}
       analysis={marketAnalysis}
       setup={reviewSetup}
@@ -628,7 +629,7 @@ const TerminalContent: React.FC = () => {
       setReviewSetup(null)
       pushToast('Deriv ' + order.type + ' trade opened on ' + (order.chartTimeframe ?? timeframe) + '.')
     }} aiSetup={reviewSetup} /></div></aside>
-      <aside className={showBot ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><SignalDeskPanel symbol={selectedSymbol} timeframe={timeframe} currentPrice={currentPrice} analysis={marketAnalysis} setup={reviewSetup} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} connected={Boolean(derivOrderConnection)} onReviewSetup={handleReviewSetup} /></aside>
+      <aside className={showBot ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><SignalDeskPanel symbol={selectedSymbol} timeframe={timeframe} candles={liveCandles} currentPrice={currentPrice} analysis={marketAnalysis} setup={reviewSetup} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} connected={Boolean(derivOrderConnection)} onReviewSetup={handleReviewSetup} /></aside>
       <aside className={showHistory ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="h-[calc(100svh-92px)] min-h-[520px]"><TradesPanel defaultTab="history" openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={currentPrice} selectedSymbol={selectedSymbol} onClosePosition={(id) => { void handleClosePosition(id) }} onBulkClose={handleBulkClose} currency={resolvedAccountData.currency} /></div></aside>
       <aside className={showFunds ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><DerivCashierLinks /></div></aside>
       <aside className={showAccount ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><AccountPanel account={resolvedAccountData} activeProviderSelection={activeProviderSelection} /></div></aside>
