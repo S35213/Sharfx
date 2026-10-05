@@ -186,6 +186,11 @@ export const OrderPanel: React.FC<Props> = ({
       setState('error')
       return
     }
+    if (!Number.isFinite(stakeValue) || stakeValue < MIN_SHAFX_STAKE) {
+      setError('SHAFX minimum multiplier stake is 10 ' + accountCurrency + '.')
+      setState('error')
+      return
+    }
 
     setState('quoting')
     setQuote(null)
