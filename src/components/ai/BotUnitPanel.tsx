@@ -190,7 +190,7 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, radar, currentPrice, onP
       stake: safeStake,
       multiplier: safeMultiplier,
       pnl,
-      status: nextStatus === 'monitoring' ? 'wait' : nextStatus,
+      status: nextStatus,
       openTime: rounds.find((round) => round.number === activeRound)?.openedAt ?? closedAt,
       closeTime: closedAt,
     })
