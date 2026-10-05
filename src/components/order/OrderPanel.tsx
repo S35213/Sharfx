@@ -45,6 +45,17 @@ const DEFAULT_TAKE_PROFIT_MULTIPLE = 5
 
 const roundMoney = (value: number): number => Number(value.toFixed(2))
 
+const formatLivePnl = (value: number, currency: string): string => {
+  const absolute = Math.abs(value)
+  const digits = absolute > 0 && absolute < 0.01 ? 4 : absolute > 0 && absolute < 0.1 ? 3 : 2
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(value)
+}
+
 const getTradeAge = (openTime?: string, now = Date.now()): string => {
   if (!openTime) return '—'
   const opened = new Date(openTime).getTime()
@@ -313,7 +324,7 @@ export const OrderPanel: React.FC<Props> = ({
             </div>
           </div>
           <div className={'text-right font-mono text-lg font-semibold tabular-nums ' + (isProfit ? 'text-shafx-success' : 'text-shafx-danger')}>
-            {isProfit ? '+' : ''}{formatCurrency(profit, accountCurrency)}
+            {formatLivePnl(profit, accountCurrency)}
           </div>
         </header>
 
