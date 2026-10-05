@@ -62,7 +62,7 @@ export const buildSignalRadar = (
       timeframe,
       direction: setup.direction,
       signalStrength,
-      state: signalStrength >= 82 ? 'STRONG' : signalStrength >= 68 ? 'WATCH' : 'EARLY',
+      state: (signalStrength >= 82 ? 'STRONG' : signalStrength >= 68 ? 'WATCH' : 'EARLY') as 'STRONG' | 'WATCH' | 'EARLY',
       setup,
       structure: structure.structureType,
       liquidity: liquidity.pools.slice(0, 3).map((pool) => pool.association),
