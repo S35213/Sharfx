@@ -170,6 +170,7 @@ export class DerivAccountStreamTransport {
   private stopped = false
   private reconnectAttempt = 0
   private subscribedContracts = new Set<string>()
+  private profitHistoryOffset = 0
 
   constructor(private readonly options: StreamOptions) {}
 
@@ -185,6 +186,7 @@ export class DerivAccountStreamTransport {
     this.socket?.close()
     this.socket = null
     this.subscribedContracts.clear()
+    this.profitHistoryOffset = 0
     this.options.onStatus?.('disconnected')
   }
 
@@ -202,9 +204,21 @@ export class DerivAccountStreamTransport {
     }
   }
 
+  private requestProfitTable(socket: WebSocket, offset: number): void {
+    this.profitHistoryOffset = offset
+    socket.send(JSON.stringify({
+      profit_table: 1,
+      limit: 500,
+      offset,
+      sort: 'DESC',
+      req_id: 4000 + Math.floor(offset / 500),
+    }))
+  }
+
   private sendPortfolioAndHistory(socket: WebSocket): void {
+    this.profitHistoryOffset = 0
     socket.send(JSON.stringify({ portfolio: 1, req_id: 3 }))
-    socket.send(JSON.stringify({ profit_table: 1, limit: 50, sort: 'DESC', req_id: 4 }))
+    this.requestProfitTable(socket, 0)
   }
 
   private emitEvent(event: import('../core/types').ProviderStreamEvent): void {
@@ -278,6 +292,13 @@ export class DerivAccountStreamTransport {
           if (message.msg_type === 'profit_table') {
             const transactions = message.profit_table?.transactions || []
             transactions.forEach((transaction) => emitProfitTransaction(transaction, (event) => this.emitEvent(event)))
+            const total = Number(message.profit_table?.count)
+            const nextOffset = this.profitHistoryOffset + transactions.length
+            if (Number.isFinite(total) && total > nextOffset && transactions.length > 0) {
+              this.requestProfitTable(socket, nextOffset)
+            } else {
+              this.profitHistoryOffset = 0
+            }
           }
 
           if (message.msg_type === 'transaction') {

@@ -416,11 +416,16 @@ const TerminalContent: React.FC = () => {
     }
   }, [liveCandles, selectedSymbol])
 
-  // Keep the market price rails on the latest candle. Deriv's public FX stream exposes
-  // one price here, so Ask is displayed as a small SHAFX spread above that candle price.
-  const chartBidPrice = Number.isFinite(currentPrice) && currentPrice > 0 ? currentPrice : (liveCandles[liveCandles.length - 1]?.close ?? 0)
-  const chartSpread = symbolSpec.pipSize * 0.8
-  const chartAskPrice = Number((chartBidPrice + chartSpread).toFixed(symbolSpec.pricePrecision))
+  // Deriv's public FX stream gives SHAFX one live market price rather than a broker-side
+  // bid/ask pair. Keep the terminal in a distinct MT5-like two-rail layout by applying a
+  // small SHAFX display spread that is always visible at the symbol's native precision.
+  const chartBidRaw = Number.isFinite(currentPrice) && currentPrice > 0 ? currentPrice : (liveCandles[liveCandles.length - 1]?.close ?? 0)
+  const chartBidPrice = Number(chartBidRaw.toFixed(symbolSpec.pricePrecision))
+  const chartSpread = symbolSpec.pipSize * 1.2
+  const chartAskCandidate = Number((chartBidPrice + chartSpread).toFixed(symbolSpec.pricePrecision))
+  const chartAskPrice = chartAskCandidate > chartBidPrice
+    ? chartAskCandidate
+    : Number((chartBidPrice + symbolSpec.pipSize).toFixed(symbolSpec.pricePrecision))
 
   const chartAnnotations = useMemo(() => buildStructuralChartAnnotations(selectedSymbol, liveCandles, timeframe)
     .map((annotation) => ({ ...annotation, id: 'live-' + timeframe + '-' + annotation.id })), [liveCandles, selectedSymbol, timeframe])
@@ -470,6 +475,24 @@ const TerminalContent: React.FC = () => {
       return null
     }
   }, [derivOrderConnection, openPositions, pushToast, tradeHistory])
+
+  const handleBulkClose = useCallback(async (mode: 'winning' | 'losing' | 'all'): Promise<void> => {
+    const candidates = openPositions
+      .filter((trade) => mode === 'all' || (mode === 'winning' ? Number(trade.profit ?? 0) > 0 : Number(trade.profit ?? 0) < 0))
+      .map((trade) => trade.id)
+
+    if (!candidates.length) return
+
+    let closedCount = 0
+    for (const id of candidates) {
+      const closed = await handleClosePosition(id)
+      if (closed) closedCount += 1
+    }
+
+    if (closedCount > 0) {
+      pushToast('Closed ' + closedCount + ' ' + (closedCount === 1 ? 'trade' : 'trades') + '.')
+    }
+  }, [handleClosePosition, openPositions, pushToast])
 
   const resolvedAccountData = accountData ?? {
     balance: 0,
@@ -589,7 +612,7 @@ const TerminalContent: React.FC = () => {
             <button type="button" onClick={() => openMobileDock('orders')} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Account</span><div className="mt-1 text-xs font-semibold">{accountModeLabel}</div></button>
             <button type="button" onClick={() => { setMobileTab('account'); setMobileDockOpen(false) }} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Funding</span><div className="mt-1 text-xs font-semibold">Deposit • Withdraw</div></button>
           </div>
-          <div className="hidden h-36 flex-shrink-0 xl:h-40 border-t border-shafx-border bg-[#090D13] p-1.5 lg:block"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={currentPrice} selectedSymbol={selectedSymbol} onClosePosition={(id) => { void handleClosePosition(id) }} /></div>
+          <div className="hidden h-36 flex-shrink-0 xl:h-40 border-t border-shafx-border bg-[#090D13] p-1.5 lg:block"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={currentPrice} selectedSymbol={selectedSymbol} onClosePosition={(id) => { void handleClosePosition(id) }} onBulkClose={handleBulkClose} currency={resolvedAccountData.currency} /></div>
           {mobileDockOpen && <div id="mobile-market-workspace" className="border-t border-shafx-border bg-shafx-surface p-3 lg:hidden">
             <div className="mb-3 flex items-center justify-between gap-3"><div><div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Market workspace</div><div className="text-sm font-semibold">{dock === 'insights' ? 'Structure & AI' : dock === 'liquidity' ? 'Liquidity' : 'Deriv account'}</div></div><button type="button" onClick={() => setMobileDockOpen(false)} className="min-h-10 rounded-xl border border-shafx-border px-3 text-[10px] font-semibold text-shafx-textMuted">Close</button></div>
             {dockContent[dock === 'agent' || dock === 'research' ? 'insights' : dock]}
@@ -605,7 +628,7 @@ const TerminalContent: React.FC = () => {
       pushToast('Deriv ' + order.type + ' trade opened on ' + (order.chartTimeframe ?? timeframe) + '.')
     }} aiSetup={reviewSetup} /></div></aside>
       <aside className={showBot ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><SignalDeskPanel symbol={selectedSymbol} timeframe={timeframe} currentPrice={currentPrice} analysis={marketAnalysis} setup={reviewSetup} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} connected={Boolean(derivOrderConnection)} onReviewSetup={handleReviewSetup} /></aside>
-      <aside className={showHistory ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="h-[calc(100svh-92px)] min-h-[520px]"><TradesPanel defaultTab="history" openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={currentPrice} selectedSymbol={selectedSymbol} onClosePosition={(id) => { void handleClosePosition(id) }} /></div></aside>
+      <aside className={showHistory ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="h-[calc(100svh-92px)] min-h-[520px]"><TradesPanel defaultTab="history" openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={currentPrice} selectedSymbol={selectedSymbol} onClosePosition={(id) => { void handleClosePosition(id) }} onBulkClose={handleBulkClose} currency={resolvedAccountData.currency} /></div></aside>
       <aside className={showFunds ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><DerivCashierLinks /></div></aside>
       <aside className={showAccount ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><AccountPanel account={resolvedAccountData} activeProviderSelection={activeProviderSelection} /></div></aside>
 

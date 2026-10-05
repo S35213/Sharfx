@@ -603,3 +603,14 @@ When a new action is completed, append it to the action tree and change its chec
 - The verified History uses the earlier `TradeHistoryPerformance` design and renders the complete closed-trade history rather than the temporary compact summary.
 - The verified chart uses moving live-price rails with BUY/ASK green and SELL/BID red, with Ask separated from Bid so the two lines do not stack at one price.
 - Main/production was not modified.
+
+### Regression found and fixed — account trade state, history persistence, closes, and quote rails (2026-10-05)
+
+- User retest found that the restored ticket/history/chart looked correct visually but the live trade state was still broken: BUY/SELL display prices appeared stacked, active P/L/current price stayed at 0.00, trades disappeared after browser restart, History did not repopulate the full account history, and Winning/Losing/All close controls were not connected from the app shell.
+- Root cause: `src/integrations/deriv/adapter.ts` created `DerivAccountStreamTransport` without forwarding its `onEvent` callback. The transport was already receiving `portfolio`, `proposal_open_contract`, and `profit_table` messages, but the account stream events were being dropped before reaching `App.tsx`.
+- Fixed: Deriv adapter now forwards account stream position/order events; the account stream now requests up to 500 `profit_table` records per page and paginates using `count`/`offset`, so browser restart can rebuild Open and History state from the authenticated Deriv account.
+- Fixed: immediate purchased-trade state now carries the quote spot as `currentPrice`; live `proposal_open_contract` updates then replace it with the current spot and P/L.
+- Fixed: App now wires the existing SHAFX Winning/Losing/All bulk-close controls to the real Deriv close endpoint, and each open trade row remains individually closable regardless of the currently selected market.
+- Fixed: History keeps the recovered SHAFX performance design while showing account-currency stake traded and stake per closed trade.
+- Fixed: BUY/ASK and SELL/BID rails now have a minimum visible SHAFX display spread at the pair's native precision, so they cannot collapse to the same displayed value.
+- Verification required before marking this regression passed: SHAFX CI, Render smoke, Render LIVE deploy, and a re-check that main remains untouched.

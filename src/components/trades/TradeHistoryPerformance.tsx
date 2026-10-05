@@ -21,6 +21,7 @@ export const TradeHistoryPerformance: React.FC<Props> = ({ history, currency = '
     const closed = history.filter((trade) => trade.status === 'closed')
     const made = closed.reduce((sum, trade) => sum + Math.max(0, Number(trade.profit ?? 0)), 0)
     const lost = closed.reduce((sum, trade) => sum + Math.max(0, -Number(trade.profit ?? 0)), 0)
+    const totalStake = closed.reduce((sum, trade) => sum + Math.max(0, Number(trade.stake ?? trade.lotSize ?? 0)), 0)
     const net = made - lost
     const markets = new Map<string, MarketSummary>()
 
@@ -39,6 +40,7 @@ export const TradeHistoryPerformance: React.FC<Props> = ({ history, currency = '
       closed,
       made,
       lost,
+      totalStake,
       net,
       markets: [...markets.values()].sort((a, b) => Math.abs(b.net) - Math.abs(a.net) || a.symbol.localeCompare(b.symbol)),
     }
@@ -66,6 +68,17 @@ export const TradeHistoryPerformance: React.FC<Props> = ({ history, currency = '
         <div className={'border p-2.5 ' + (stats.net >= 0 ? 'border-shafx-success/20 bg-shafx-success/[0.04]' : 'border-shafx-danger/20 bg-shafx-danger/[0.04]')}>
           <span className="flex items-center gap-1 text-[7px] uppercase tracking-[0.14em] text-shafx-textMuted"><CircleDollarSign className="h-3 w-3" />Net</span>
           <div className={'mt-1 font-mono text-sm font-semibold tabular-nums ' + (stats.net >= 0 ? 'text-shafx-success' : 'text-shafx-danger')}>{stats.net >= 0 ? '+' : ''}{formatCurrency(stats.net, currency)}</div>
+        </div>
+      </div>
+
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <div className="border border-shafx-border bg-shafx-surface px-3 py-2">
+          <span className="text-[7px] uppercase tracking-[0.14em] text-shafx-textMuted">Stake traded</span>
+          <div className="mt-1 font-mono text-[10px] font-semibold tabular-nums">{formatCurrency(stats.totalStake, currency)}</div>
+        </div>
+        <div className="border border-shafx-border bg-shafx-surface px-3 py-2">
+          <span className="text-[7px] uppercase tracking-[0.14em] text-shafx-textMuted">Closed trades</span>
+          <div className="mt-1 font-mono text-[10px] font-semibold tabular-nums">{stats.closed.length}</div>
         </div>
       </div>
 
@@ -115,9 +128,14 @@ export const TradeHistoryPerformance: React.FC<Props> = ({ history, currency = '
                       <span>{trade.symbol}</span>
                       <span className={trade.type === 'BUY' ? 'text-shafx-success' : 'text-shafx-danger'}>{trade.type}</span>
                     </div>
-                    <div className="mt-0.5 font-mono text-[7px] text-shafx-textMuted">{formatTimestamp(trade.closeTime ?? trade.openTime)}</div>
+                    <div className="mt-0.5 flex items-center gap-2 font-mono text-[7px] text-shafx-textMuted">
+                      <span>{formatTimestamp(trade.closeTime ?? trade.openTime)}</span>
+                      <span>Stake {formatCurrency(Number(trade.stake ?? trade.lotSize ?? 0), currency)}</span>
+                    </div>
                   </div>
-                  <div className={'font-mono text-[10px] font-semibold ' + (profit >= 0 ? 'text-shafx-success' : 'text-shafx-danger')}>{profit >= 0 ? '+' : ''}{formatCurrency(profit, currency)}</div>
+                  <div className={'text-right font-mono text-[10px] font-semibold ' + (profit >= 0 ? 'text-shafx-success' : 'text-shafx-danger')}>
+                    <div>{profit >= 0 ? '+' : ''}{formatCurrency(profit, currency)}</div>
+                  </div>
                 </div>
               )
             })}

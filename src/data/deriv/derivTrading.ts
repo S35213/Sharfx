@@ -124,6 +124,7 @@ const normalizeTradeOrder = (providerOrder: ProviderOrderPayload, quote: DerivPr
     type: quote.side,
     lotSize: stake,
     entryPrice: Number.isFinite(entryPrice) ? entryPrice : 0,
+    currentPrice: Number.isFinite(entryPrice) && entryPrice > 0 ? entryPrice : undefined,
     stopLoss: null,
     takeProfit: null,
     riskPercent: 0,

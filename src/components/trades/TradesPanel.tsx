@@ -14,6 +14,7 @@ interface Props {
   onBulkClose?: (mode: 'winning' | 'losing' | 'all') => void | Promise<void>
   positionsOnly?: boolean
   defaultTab?: Tab
+  currency?: string
 }
 
 type Tab = 'positions' | 'pending' | 'history'
@@ -39,6 +40,7 @@ export const TradesPanel: React.FC<Props> = ({
   onBulkClose,
   positionsOnly = false,
   defaultTab = 'positions',
+  currency = 'USD',
 }) => {
   const [activeTab, setActiveTab] = useState<Tab>(positionsOnly ? 'positions' : defaultTab)
   const [now, setNow] = useState(0)
@@ -81,7 +83,7 @@ export const TradesPanel: React.FC<Props> = ({
 
       {activeTab === 'history' ? (
         <div className="min-h-0 flex-1 overflow-hidden">
-          <TradeHistoryPerformance history={tradeHistory} />
+          <TradeHistoryPerformance history={tradeHistory} currency={currency} />
         </div>
       ) : (
       <div className="flex-1 overflow-auto">
@@ -130,7 +132,7 @@ export const TradesPanel: React.FC<Props> = ({
                     <td className="px-3 py-1.5 font-mono tabular-nums">{isDeriv ? (trade.multiplier ?? '—') + '×' : '—'}</td>
                     <td className="px-3 py-1.5 font-mono tabular-nums">{trade.entryPrice > 0 ? formatPrice(trade.entryPrice, p) : '—'}</td>
                     <td className="px-3 py-1.5 font-mono text-[8px] tabular-nums">{protection}</td>
-                    <td className={'px-3 py-1.5 font-mono font-semibold tabular-nums ' + (profit >= 0 ? 'text-shafx-success' : 'text-shafx-danger')}>{profit >= 0 ? '+' : ''}{formatCurrency(profit)}</td>
+                    <td className={'px-3 py-1.5 font-mono font-semibold tabular-nums ' + (profit >= 0 ? 'text-shafx-success' : 'text-shafx-danger')}>{profit >= 0 ? '+' : ''}{formatCurrency(profit, currency)}</td>
                     <td className="px-3 py-1.5">
                       {openAction ? (
                         <button type="button" onClick={() => void onClosePosition(trade.id)} className="inline-flex min-h-7 items-center gap-1 border border-shafx-danger/35 bg-shafx-danger/10 px-2 text-[8px] font-semibold text-shafx-danger hover:bg-shafx-danger/20" aria-label={'Close ' + trade.id}>
