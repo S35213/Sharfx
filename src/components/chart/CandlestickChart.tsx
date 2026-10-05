@@ -496,12 +496,12 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       Number.isFinite(bid) && bid > 0
         ? {
             price: bid,
-            color: '#22D3A5',
+            color: '#FF5C75',
             lineWidth: 2,
             lineStyle: 0,
             axisLabelVisible: showPriceLabels,
-            axisLabelColor: '#22D3A5',
-            axisLabelTextColor: '#07110E',
+            axisLabelColor: '#FF5C75',
+            axisLabelTextColor: '#19070B',
             title: compact ? 'SELL' : 'SELL / BID',
           }
         : null,
@@ -511,12 +511,12 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       Number.isFinite(ask) && ask > 0
         ? {
             price: ask,
-            color: '#FF5C75',
-            lineWidth: 1,
-            lineStyle: 2,
+            color: '#22D3A5',
+            lineWidth: 2,
+            lineStyle: 0,
             axisLabelVisible: showPriceLabels,
-            axisLabelColor: '#FF5C75',
-            axisLabelTextColor: '#19070B',
+            axisLabelColor: '#22D3A5',
+            axisLabelTextColor: '#07110E',
             title: compact ? 'BUY' : 'BUY / ASK',
           }
         : null,
