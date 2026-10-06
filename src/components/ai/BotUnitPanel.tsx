@@ -348,7 +348,7 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
         </div>
       </div>
 
-      <div className="mt-3 rounded-xl border border-shafx-border bg-shafx-bg/70 p-3>
+      <div className="mt-3 rounded-xl border border-shafx-border bg-shafx-bg/70 p-3">
         <div className="grid grid-cols-3 gap-2 text-[8px]">
           <div><span className="block text-shafx-textMuted">Signal TF</span><b className="mt-1 block font-mono text-[10px]">{botPlan.analysisTimeframe ?? '—'}</b></div>
           <div><span className="block text-shafx-textMuted">Entry TF</span><b className="mt-1 block font-mono text-[10px] text-shafx-accent">{botPlan.entryTimeframe ?? '—'}</b></div>
