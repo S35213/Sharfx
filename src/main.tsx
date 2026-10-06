@@ -65,7 +65,7 @@ const EntryGate = () => {
       try {
         const connections = await getProviderConnections()
         const selected = chooseDefaultProviderSelection(connections)
-        if (!cancelled) setBrokerReady(Boolean(selected?.providerId === 'deriv' && selected.connectionId && selected.accountId))
+        if (!cancelled) setBrokerReady(Boolean((selected?.providerId === 'deriv' || selected?.providerId === 'ctrader') && selected.connectionId && selected.accountId))
       } catch {
         if (!cancelled) setBrokerReady(false)
       }
