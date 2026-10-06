@@ -11,7 +11,7 @@ import {
 import type { SymbolSpec, Timeframe, TradeOrder, TradePlanDraft, TradeSide } from '../../types'
 import type { SetupCandidate } from '../../engine/setup/types'
 import { calculateTradePlan } from '../../lib/tradePlanCalculator'
-import { calculateMultiplierPnl, calculateMultiplierPnlPerPip, calculateMultiplierProtectionPrice, multiplierNotional } from '../../lib/derivMultiplierAccounting'
+import { calculateMultiplierEquivalentLots, calculateMultiplierPnl, calculateMultiplierPnlPerPip, calculateMultiplierProtectionPrice, calculateMultiplierRequiredMovePercent, multiplierNotional } from '../../lib/derivMultiplierAccounting'
 import { formatCurrency, formatPrice } from '../../lib/format'
 import { buyDerivProposal, getDerivQuote, type DerivOrderConnection, type DerivProposalQuote } from '../../data/deriv/derivTrading'
 import type { ChartAnnotation } from '../chart/CandlestickChart'
@@ -538,8 +538,26 @@ export const OrderPanel: React.FC<Props> = ({
               <span className="mt-0.5 block text-shafx-accent">{(() => { const value = calculateMultiplierPnlPerPip(entryPrice, symbolSpec.pipSize, stakeValue, multiplierValue); return value === null ? '—' : '≈ ' + formatCurrency(value, accountCurrency) })()}</span>
             </div>
           </div>
+          <div className="mt-2 grid grid-cols-2 gap-2 font-mono text-[8px]">
+            <div>
+              <span className="block text-shafx-textMuted">FX lot reference</span>
+              <span className="mt-0.5 block text-shafx-text">{(() => {
+                const value = symbolSpec.quoteCurrency === accountCurrency
+                  ? calculateMultiplierEquivalentLots(entryPrice, stakeValue, multiplierValue, symbolSpec.contractSize)
+                  : null
+                return value === null ? '—' : '≈ ' + value.toFixed(2) + ' lots'
+              })()}</span>
+            </div>
+            <div>
+              <span className="block text-shafx-textMuted">+$25 target move</span>
+              <span className="mt-0.5 block text-shafx-text">{(() => {
+                const value = calculateMultiplierRequiredMovePercent(25, stakeValue, multiplierValue)
+                return value === null ? '—' : value.toFixed(4) + '%'
+              })()}</span>
+            </div>
+          </div>
           <div className="mt-1 text-[7px] leading-3.5 text-shafx-textMuted">
-            A $50 stake at 800× does not mean +$25 instantly. +$25 requires a 0.0625% favourable price move before commission. Higher stake and higher multiplier increase sensitivity linearly.
+            Sizing check: $50 × 800 is not automatically larger than 1 MT5 EUR/USD lot. Near 1.17 it is roughly 0.34 standard-lot equivalent for price sensitivity before commission. MT5's exact result still depends on the broker's contract specification.
           </div>
         </div>
       </header>
