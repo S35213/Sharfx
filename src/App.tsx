@@ -27,7 +27,6 @@ import { getSymbolSpec, SYMBOL_SPECS } from './data/mock/symbols'
 import { getProviderConnections, chooseDefaultProviderSelection, getStoredProviderSelection, subscribeToProviderSelection, type ActiveProviderSelection } from './data/provider/providerConnections'
 import { ProviderAccountStreamManager, providerAccountStreamKey } from './data/provider/ProviderAccountStreamManager'
 import type { ProviderOrderResult, ProviderPosition, ProviderStreamEvent } from './integrations/core/types'
-import { providerRegistry } from './integrations/catalog'
 import { analyzeLiquidity } from './engine/liquidity'
 import { analyzeMarketStructure, findSwingPoints } from './engine/marketStructure'
 import { analyzeSupportResistance } from './engine/supportResistance'
@@ -556,16 +555,16 @@ const TerminalContent: React.FC = () => {
     try {
       let closed: TradeOrder | null = null
       if (activeProviderSelection?.providerId === 'ctrader') {
-        const adapter = providerRegistry.get('ctrader')
-        const connection = {
-          providerId: 'ctrader',
-          connectionId: derivOrderConnection.connectionId,
-          accountId: derivOrderConnection.accountId,
-          environment: derivOrderConnection.environment,
-          state: 'connected' as const,
-          connectedAt: new Date().toISOString(),
-        }
-        const result = await adapter.closePosition?.(connection, derivOrderConnection.accountId, id)
+        const response = await fetch('/api/providers/connections', {
+          method: 'POST',
+          credentials: 'include',
+          cache: 'no-store',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ providerId: 'ctrader', connectionId: derivOrderConnection.connectionId, accountId: derivOrderConnection.accountId, environment: derivOrderConnection.environment, action: 'closePosition', positionId: id }),
+        })
+        const payload = await response.json().catch(() => ({})) as { ok?: boolean; error?: string; order?: { timestamp?: string } }
+        if (!response.ok || !payload.ok) throw new Error(payload.error || 'Unable to close the cTrader position.')
+        const result = payload.order
         closed = {
           ...(existing || {
             id,
