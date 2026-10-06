@@ -11,11 +11,19 @@ export const BotStore: React.FC = () => {
   const [busy, setBusy] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const load = async (): Promise<void> => {
-    const response = await fetch('/api/bot/store', { credentials: 'include' }); const data = await response.json().catch(() => ({}))
-    if (!response.ok) throw new Error(data.error || 'Unable to load the Bot Store.'); setStore(data)
+  const load = async (): Promise<StoreResponse> => {
+    const response = await fetch('/api/bot/store', { credentials: 'include' })
+    const data = await response.json().catch(() => ({})) as StoreResponse & { error?: string }
+    if (!response.ok) throw new Error(data.error || 'Unable to load the Bot Store.')
+    return data
   }
-  useEffect(() => { void load().catch((err) => setError(err instanceof Error ? err.message : 'Unable to load the Bot Store.')) }, [])
+  useEffect(() => {
+    let cancelled = false
+    void load()
+      .then((data) => { if (!cancelled) setStore(data) })
+      .catch((err) => { if (!cancelled) setError(err instanceof Error ? err.message : 'Unable to load the Bot Store.') })
+    return () => { cancelled = true }
+  }, [])
   const purchase = async (bot: BotProduct): Promise<void> => {
     setBusy(bot.slug); setError(null); setMessage(null)
     try {
@@ -26,7 +34,7 @@ export const BotStore: React.FC = () => {
       if (reference) for (let attempt = 0; attempt < 20; attempt += 1) {
         await new Promise((resolve) => window.setTimeout(resolve, 3000))
         const statusResponse = await fetch(`/api/paystack?action=status&reference=${encodeURIComponent(reference)}`, { credentials: 'include' }); const statusData = await statusResponse.json().catch(() => ({}))
-        if (statusResponse.ok && statusData.purchase?.status === 'success') { setMessage(`${bot.name} is now active on your SHAFX account.`); await load(); break }
+        if (statusResponse.ok && statusData.purchase?.status === 'success') { setMessage(`${bot.name} is now active on your SHAFX account.`); const next = await load(); setStore(next); break }
         if (statusResponse.ok && statusData.purchase?.status === 'failed') { setError('The payment failed. You can try again.'); break }
       }
     } catch (err) { setError(err instanceof Error ? err.message : 'Unable to start the payment.') } finally { setBusy(null) }
