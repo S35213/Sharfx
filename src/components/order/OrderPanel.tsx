@@ -103,7 +103,9 @@ export const OrderPanel: React.FC<Props> = ({
   onTradeLinesChange,
   aiSetup,
 }) => {
-  if (providerSelection?.providerId === 'ctrader') {
+  const useLegacyMultiplierTicket = activePosition?.brokerProduct === 'DERIV_MULTIPLIER'
+
+  if (!useLegacyMultiplierTicket) {
     return <CTraderManualTicket
       symbol={symbol}
       currentPrice={currentPrice}
