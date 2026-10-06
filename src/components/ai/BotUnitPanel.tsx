@@ -262,6 +262,52 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
     }
 
     if (secondsLeft <= 0) {
+      const refreshedPlan = latestRadarRef.current.botPlan
+      const stillAligned = Boolean(currentDirection && refreshedPlan.opportunity?.direction === currentDirection)
+
+      if (!currentDirection || !currentEntry || !stillAligned) {
+        if (settledRoundRef.current === activeRound) return
+        settledRoundRef.current = activeRound
+        const closedAt = new Date().toISOString()
+        const nextStatus: RoundStatus = currentDirection && pnl > 0 ? 'win' : currentDirection && pnl < 0 ? 'loss' : 'wait'
+
+        setRounds((current) => current.map((round) => round.number === activeRound
+          ? { ...round, status: nextStatus, exit: currentDirection ? livePrice : undefined, pnl: currentDirection ? pnl : 0 }
+          : round))
+
+        latestCallbackRef.current?.({
+          id: 'bot-paper-' + Date.now() + '-' + activeRound,
+          symbol,
+          round: activeRound,
+          direction: currentDirection,
+          signalTimeframe: signalTf,
+          entryTimeframe: entryTf,
+          entry: currentEntry,
+          exit: currentDirection && Number.isFinite(livePrice) && livePrice > 0 ? livePrice : null,
+          stake,
+          multiplier,
+          pnl: currentDirection ? pnl : 0,
+          status: nextStatus,
+          openTime: roundOpenedAtRef.current[activeRound] ?? closedAt,
+          closeTime: closedAt,
+        })
+
+        if (activeRound >= UNIT_ROUNDS) {
+          clearTimer()
+          setRunning(false)
+          return
+        }
+
+        const nextRound = activeRound + 1
+        window.setTimeout(() => {
+          if (!running) return
+          beginRound(nextRound)
+        }, 100)
+        return
+      }
+
+      // Still aligned: keep the position open and give the strategy another
+      // 15-second decision interval rather than forcing a tiny P/L close.
       setSecondsLeft(ROUND_SECONDS)
     }
   }, [activeRound, currentPrice, running, secondsLeft])
