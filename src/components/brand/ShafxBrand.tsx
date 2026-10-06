@@ -63,7 +63,6 @@ export const ShafxBrandTransition: React.FC<{ kind: ShafxBrandTransitionKind; on
   return (
     <div className={`shafx-brand-transition ${welcome ? 'shafx-brand-transition--welcome' : 'shafx-brand-transition--goodbye'}`} role="status" aria-live="polite">
       <div className="shafx-brand-transition__grid"/><div className="shafx-brand-transition__scan"/>
-      <div className="shafx-brand-transition__halo shafx-brand-transition__halo--one"/><div className="shafx-brand-transition__halo shafx-brand-transition__halo--two"/>
       <div className="shafx-brand-transition__mark"><ShafxIntroMark/></div>
       <div className="shafx-brand-transition__word"><ShafxWordmark/></div>
       <div className="shafx-brand-transition__headline">{welcome ? 'WELCOME TO SHARFX' : 'GOODBYE'}</div>
