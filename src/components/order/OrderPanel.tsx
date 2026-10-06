@@ -530,7 +530,7 @@ export const OrderPanel: React.FC<Props> = ({
         <div className="mt-2 rounded-lg border border-shafx-accent/20 bg-shafx-accent/[0.04] p-2">
           <div className="grid grid-cols-2 gap-2 font-mono text-[8px]">
             <div>
-              <span className="block text-shafx-textMuted">Notional exposure</span>
+              <span className="block text-shafx-textMuted">Multiplier × stake</span>
               <span className="mt-0.5 block text-shafx-text">{(() => { const value = multiplierNotional(stakeValue, multiplierValue); return value === null ? '—' : formatCurrency(value, accountCurrency) })()}</span>
             </div>
             <div>
