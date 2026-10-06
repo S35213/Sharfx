@@ -214,8 +214,6 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
     setDirection(null)
     setSignalTimeframe(null)
     setEntryTimeframe(null)
-    setTargetPrice(null)
-    setStopPrice(null)
   }
 
   useEffect(() => {
