@@ -591,7 +591,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     if (!Number.isFinite(price)) return
 
     if (toolMode === 'level') {
-      const level = { id: `level-${Date.now()}`, price: Number(price), label: 'Level', color: '#7C5CFC', dashed: true }
+      const level = { id: `level-${Date.now()}`, price: Number(price), label: 'Level', color: '#1683FF', dashed: true }
       setUserLevels((current) => [...current, level].slice(-6))
       onToolNotice?.(`Price level placed at ${Number(price).toFixed(5)}`)
       return
