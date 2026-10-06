@@ -60,6 +60,18 @@ export const calculateMultiplierPnlPerPip = (
   return (pipSize / entryPrice) * multiplier * stake
 }
 
+
+export const calculateMultiplierEquivalentLots = (
+  entryPrice: number,
+  stake: number,
+  multiplier: number,
+  contractSize: number,
+): number | null => {
+  if (![entryPrice, stake, multiplier, contractSize].every(Number.isFinite)) return null
+  if (!isValidPositive(entryPrice) || !isValidPositive(stake) || !isValidPositive(multiplier) || !isValidPositive(contractSize)) return null
+  return (stake * multiplier) / (entryPrice * contractSize)
+}
+
 export const calculateMultiplierRequiredMovePercent = (
   targetPnl: number,
   stake: number,
