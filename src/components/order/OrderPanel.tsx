@@ -34,10 +34,10 @@ interface Props {
 
 type TicketState = 'planning' | 'quoting' | 'quoted' | 'buying' | 'error'
 
-const MIN_STAKE = 10
+const MIN_STAKE = 1
 const MAX_STAKE = 2000
-const QUICK_STAKES = ['10.00', '50.00', '100.00', '500.00', '1000.00', '2000.00']
-const QUICK_MULTIPLIERS = ['100', '200', '300', '500', '800']
+const QUICK_STAKES = ['1.00', '5.00', '10.00', '20.00', '50.00', '100.00', '500.00', '2000.00']
+const QUICK_MULTIPLIERS = ['100', '200', '300', '500', '800', '1000', '1500', '2000', '3000', '4000']
 const STOP_LOSS_RATIOS = [0.1, 0.2, 0.4, 0.8]
 const TAKE_PROFIT_MULTIPLES = [1, 2, 5, 10]
 const DEFAULT_STOP_LOSS_RATIO = 0.2
@@ -47,7 +47,7 @@ const roundMoney = (value: number): number => Number(value.toFixed(2))
 
 const formatLivePnl = (value: number, currency: string): string => {
   const absolute = Math.abs(value)
-  const digits = absolute > 0 && absolute < 0.01 ? 4 : absolute > 0 && absolute < 0.1 ? 3 : 2
+  const digits = absolute >= 1 ? 2 : absolute >= 0.1 ? 3 : 4
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,
@@ -105,7 +105,7 @@ export const OrderPanel: React.FC<Props> = ({
   aiSetup,
 }) => {
   const [side, setSide] = useState<TradeSide>(aiSetup?.direction ?? 'BUY')
-  const [stake, setStake] = useState('10.00')
+  const [stake, setStake] = useState('1.00')
   const [multiplier, setMultiplier] = useState('100')
   const [stopLossEnabled, setStopLossEnabled] = useState(true)
   const [takeProfitEnabled, setTakeProfitEnabled] = useState(true)
@@ -537,7 +537,7 @@ export const OrderPanel: React.FC<Props> = ({
                 className="min-w-0 flex-1 bg-transparent font-mono text-sm outline-none"
               />
             </div>
-            <div className="mt-1 text-[7px] text-shafx-textMuted">Range 10 – 2,000 {accountCurrency}</div>
+            <div className="mt-1 text-[7px] text-shafx-textMuted">Range 1 – 2,000 {accountCurrency}</div>
             <div className="mt-1 flex gap-1 overflow-x-auto">
               {QUICK_STAKES.map((value) => (
                 <button key={value} type="button" onClick={() => chooseStake(value)} disabled={Number(value) > accountBalance} className={'flex-1 border px-1.5 py-1 font-mono text-[7px] ' + (stake === value ? 'border-shafx-primary/40 bg-shafx-primary/10 text-shafx-primary' : 'border-shafx-border text-shafx-textMuted disabled:opacity-40')}>
@@ -550,7 +550,7 @@ export const OrderPanel: React.FC<Props> = ({
           <label className="bg-shafx-surface px-3 py-2.5">
             <span className="block text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted">Multiplier</span>
             <div className="mt-1 flex items-center">
-              <input aria-label="Multiplier" type="number" min="1" max="10000" step="1" value={multiplier} onChange={(e) => chooseMultiplier(e.target.value)} className="min-w-0 flex-1 bg-transparent font-mono text-sm outline-none" />
+              <input aria-label="Multiplier" type="number" min="1" max="4000" step="1" value={multiplier} onChange={(e) => chooseMultiplier(e.target.value)} className="min-w-0 flex-1 bg-transparent font-mono text-sm outline-none" />
               <span className="font-mono text-[10px] text-shafx-textMuted">×</span>
             </div>
             <div className="mt-1 flex gap-1 overflow-x-auto">
