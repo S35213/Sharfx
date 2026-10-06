@@ -22,16 +22,6 @@ export const useMultiTimeframeCandles = (
   )
 
   useEffect(() => {
-    if (baseM1Candles.length > 0) {
-      setFrames((previous) => ({ ...previous, M1: baseM1Candles }))
-      return
-    }
-    if (fallbackCandles.length > 0) {
-      setFrames((previous) => ({ ...previous, [fallbackTimeframe]: fallbackCandles }))
-    }
-  }, [baseM1Candles.length, fallbackCandles.length, fallbackTimeframe])
-
-  useEffect(() => {
     let cancelled = false
     // Do not compete with the chart's first market connection. Wait until the
     // chart has real candles, or an explicit rescan requests fresh history.
@@ -40,24 +30,19 @@ export const useMultiTimeframeCandles = (
     const load = async (): Promise<void> => {
       const next = await loadDerivCandles(symbol, TIMEFRAMES)
       if (cancelled) return
-      if (baseM1Candles.length > 0) next.M1 = baseM1Candles
-      else if (fallbackCandles.length > 0) next[fallbackTimeframe] = fallbackCandles
-      // Do not wipe a working frame cache because one public-history request
-      // timed out or returned an empty result.
       setFrames((previous) => {
         const merged = { ...previous, ...next }
-        for (const timeframe of TIMEFRAMES) {
-          if ((next[timeframe] ?? []).length === 0 && (previous[timeframe] ?? []).length > 0) {
-            merged[timeframe] = previous[timeframe]
-          }
-        }
         return merged
       })
     }
 
     void load()
     return () => { cancelled = true }
-  }, [baseM1Candles.length, fallbackCandles.length, refreshKey, symbol])
+  }, [refreshKey, symbol])
 
-  return frames
+  return {
+    ...frames,
+    ...(baseM1Candles.length > 0 ? { M1: baseM1Candles } : {}),
+    ...(fallbackCandles.length > 0 ? { [fallbackTimeframe]: fallbackCandles } : {}),
+  }
 }
