@@ -534,7 +534,7 @@ const TerminalContent: React.FC = () => {
     state: 'connected' as const,
     connectedAt: new Date().toISOString(),
   }), [activeProviderSelection?.providerId, activeProviderSelection?.connectionId, activeProviderSelection?.accountId, activeProviderSelection?.environment])
-  const activeProviderName = 'Deriv'
+  const activeProviderName = activeProviderSelection?.providerId === 'ctrader' ? 'Deriv cTrader' : 'Deriv'
   const accountModeLabel = activeProviderSelection?.environment === 'live' ? 'REAL ACCOUNT' : 'DEMO ACCOUNT'
   const accountModeTone = activeProviderSelection?.environment === 'live' ? 'text-shafx-accent' : 'text-shafx-success'
   const chartToolMode: ChartToolMode = chartTool
@@ -550,21 +550,56 @@ const TerminalContent: React.FC = () => {
   const handleClosePosition = useCallback(async (id: string): Promise<TradeOrder | null> => {
     const existing = openPositions.find((order) => order.id === id) || tradeHistory.find((order) => order.id === id)
     if (!derivOrderConnection) {
-      pushToast('Connect Deriv before closing a trade.')
+      pushToast('Connect a trading account before closing a trade.')
       return null
     }
     try {
-      const closed = await closeDerivContract(derivOrderConnection, id, existing)
+      let closed: TradeOrder | null = null
+      if (activeProviderSelection?.providerId === 'ctrader') {
+        const adapter = providerRegistry.get('ctrader')
+        const connection = {
+          providerId: 'ctrader',
+          connectionId: derivOrderConnection.connectionId,
+          accountId: derivOrderConnection.accountId,
+          environment: derivOrderConnection.environment,
+          state: 'connected' as const,
+          connectedAt: new Date().toISOString(),
+        }
+        const result = await adapter.closePosition?.(connection, derivOrderConnection.accountId, id)
+        closed = {
+          ...(existing || {
+            id,
+            symbol: selectedSymbol,
+            type: 'BUY' as const,
+            lotSize: 0,
+            entryPrice: 0,
+            stopLoss: null,
+            takeProfit: null,
+            riskPercent: 0,
+            riskAmount: 0,
+            rewardAmount: 0,
+            riskRewardRatio: 0,
+            status: 'open' as const,
+            openTime: new Date().toISOString(),
+          }),
+          status: 'closed',
+          closeTime: result?.timestamp || new Date().toISOString(),
+          profit: existing?.profit ?? 0,
+        }
+      } else {
+        closed = await closeDerivContract(derivOrderConnection, id, existing)
+      }
+
       if (!closed) return null
       setOpenPositions((current) => current.filter((order) => order.id !== id))
-      setTradeHistory((current) => [closed, ...current.filter((order) => order.id !== id)])
+      setTradeHistory((current) => [closed as TradeOrder, ...current.filter((order) => order.id !== id)])
       setTradeLines((current) => current.filter((line) => !line.id.startsWith(id + '-')))
       return closed
     } catch (error) {
-      pushToast(error instanceof Error ? error.message : 'Unable to close the Deriv trade.')
+      pushToast(error instanceof Error ? error.message : 'Unable to close the selected trade.')
       return null
     }
-  }, [derivOrderConnection, openPositions, pushToast, tradeHistory])
+  }, [activeProviderSelection?.providerId, derivOrderConnection, openPositions, pushToast, selectedSymbol, tradeHistory])
 
   const handleBulkClose = useCallback(async (mode: 'winning' | 'losing' | 'all'): Promise<void> => {
     const candidates = openPositions
