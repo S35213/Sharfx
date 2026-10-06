@@ -138,7 +138,7 @@ export const CTraderManualTicket: React.FC<Props> = ({
   const [quoteLoading, setQuoteLoading] = useState(false)
   const [state, setState] = useState<TicketState>('ready')
   const [error, setError] = useState('')
-  const [now, setNow] = useState(Date.now())
+  const [now, setNow] = useState(0)
   const refreshTimer = useRef<ReturnType<typeof setInterval> | null>(null)
   const marginTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
