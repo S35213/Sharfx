@@ -81,7 +81,10 @@ const handleCallback = async (req, res, user, query) => {
     expiresAt: new Date(Date.now() + Number(token.expiresIn || 0) * 1000).toISOString(), metadata: { scope: 'trading', selectedAccountId: null },
   })
   const accounts = await syncCtraderAccountsForConnection({ userId: user.id, connectionId: connection.id, environment: 'demo', accessToken: token.accessToken })
-  if (!accounts.length) return json(res, 502, { ok: false, error: 'cTrader authorization succeeded, but no trading accounts were returned.' })
+  if (!accounts.length) {
+    setCookie(res, [oauthStateCookie + '=', 'Path=/', 'HttpOnly', 'Secure', 'SameSite=Lax', 'Max-Age=0'].join('; '))
+    return res.redirect(302, '/?ctrader=activate-required')
+  }
   setCookie(res, [oauthStateCookie + '=', 'Path=/', 'HttpOnly', 'Secure', 'SameSite=Lax', 'Max-Age=0'].join('; '))
   res.redirect(302, '/?ctrader=connected&account=' + encodeURIComponent(String(accounts[0].providerAccountId || accounts[0].accountId)))
 }
