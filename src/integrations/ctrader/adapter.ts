@@ -217,7 +217,6 @@ export const CTRADER_PROVIDER_ADAPTER: ProviderAdapter = {
     if (symbols.length !== 1) throw new Error('The cTrader SHAFX market stream currently accepts one symbol per stream.')
     const account = requireAccount(accountId)
     let closed = false
-    const timer: ReturnType<typeof setInterval> = globalThis.setInterval(() => { void poll() }, 1000)
 
     const poll = async (): Promise<void> => {
       if (closed) return
@@ -238,6 +237,7 @@ export const CTRADER_PROVIDER_ADAPTER: ProviderAdapter = {
     }
 
     await poll()
+    const timer: ReturnType<typeof setInterval> = globalThis.setInterval(() => { void poll() }, 1000)
     return {
       streamId: connection.connectionId + ':' + account + ':' + symbols[0] + ':' + Date.now(),
       close: async () => {
@@ -251,7 +251,6 @@ export const CTRADER_PROVIDER_ADAPTER: ProviderAdapter = {
     assertConnection(connection)
     const account = requireAccount(accountId)
     let closed = false
-    let timer: ReturnType<typeof setInterval> | undefined
 
     const poll = async (): Promise<void> => {
       if (closed) return
@@ -267,7 +266,7 @@ export const CTRADER_PROVIDER_ADAPTER: ProviderAdapter = {
     }
 
     await poll()
-    timer = globalThis.setInterval(() => { void poll() }, 5000)
+    const timer: ReturnType<typeof setInterval> = globalThis.setInterval(() => { void poll() }, 5000)
     return {
       streamId: connection.connectionId + ':' + account + ':' + Date.now(),
       close: async () => {
