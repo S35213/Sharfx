@@ -241,6 +241,19 @@ export const getCtraderTrader = async ({ environment, accountId, accessToken }) 
   return asObject(response.payload).trader || asObject(response.payload)
 }
 
+export const getCtraderAssets = async ({ environment, accountId, accessToken }) => {
+  const response = await authenticatedRequest({
+    environment,
+    accessToken,
+    accountId,
+    payloadType: 2112,
+    payload: { ctidTraderAccountId: Number(accountId) },
+    matcher: (message) => message.payloadType === 2113,
+  })
+  const body = asObject(response.payload)
+  return Array.isArray(body.asset) ? body.asset : []
+}
+
 export const getCtraderSymbols = async ({ environment, accountId, accessToken }) => {
   const response = await authenticatedRequest({
     environment,
