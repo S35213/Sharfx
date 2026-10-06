@@ -61,7 +61,6 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
   const [running, setRunning] = useState(false)
   const [activeRound, setActiveRound] = useState(0)
   const [secondsLeft, setSecondsLeft] = useState(ROUND_SECONDS)
-  const [scanCount, setScanCount] = useState(0)
   const [entry, setEntry] = useState<number | null>(null)
   const [direction, setDirection] = useState<'BUY' | 'SELL' | null>(null)
   const [signalTimeframe, setSignalTimeframe] = useState<Timeframe | null>(null)
@@ -129,6 +128,11 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
     const openedAt = new Date().toISOString()
     roundOpenedAtRef.current[roundNumber] = openedAt
 
+    latestEntryRef.current = nextEntry
+    latestDirectionRef.current = nextDirection
+    latestSignalTimeframeRef.current = nextSignalTimeframe
+    latestEntryTimeframeRef.current = nextEntryTimeframe
+
     setActiveRound(roundNumber)
     setSecondsLeft(ROUND_SECONDS)
     setEntry(nextEntry)
@@ -156,7 +160,6 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
     if (!Number.isFinite(stakeValue) || stakeValue < 1 || !Number.isFinite(multiplierValue) || multiplierValue < 1) return
     clearTimer()
     settledRoundRef.current = 0
-    setScanCount(0)
     setRounds(createRounds())
     setRunning(true)
     beginRound(1)
@@ -205,31 +208,28 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
       ? calculateMultiplierPnl({ direction: currentDirection, entryPrice: currentEntry, currentPrice: livePrice, stake, multiplier })
       : 0
 
-    // 15 seconds is the scan interval, not the forced close time. Keep the
-    // paper position alive until its dollar target/stop is reached.
-    if (currentDirection && currentEntry && targetReached(pnl, target, stop)) {
+    const settleRound = (status: RoundStatus, exitPrice: number | undefined, roundPnl: number): void => {
       if (settledRoundRef.current === activeRound) return
       settledRoundRef.current = activeRound
-      const nextStatus: RoundStatus = pnl > 0 ? 'win' : pnl < 0 ? 'loss' : 'wait'
       const closedAt = new Date().toISOString()
 
       setRounds((current) => current.map((round) => round.number === activeRound
-        ? { ...round, status: nextStatus, exit: livePrice, pnl }
+        ? { ...round, status, exit: exitPrice, pnl: roundPnl }
         : round))
 
       latestCallbackRef.current?.({
         id: 'bot-paper-' + Date.now() + '-' + activeRound,
         symbol,
         round: activeRound,
-        direction: currentDirection,
+        direction: currentDirection ?? undefined,
         signalTimeframe: signalTf,
         entryTimeframe: entryTf,
-        entry: currentEntry,
-        exit: Number.isFinite(livePrice) && livePrice > 0 ? livePrice : null,
+        entry: currentEntry ?? undefined,
+        exit: exitPrice ?? null,
         stake,
         multiplier,
-        pnl,
-        status: nextStatus,
+        pnl: roundPnl,
+        status,
         openTime: roundOpenedAtRef.current[activeRound] ?? closedAt,
         closeTime: closedAt,
       })
@@ -240,69 +240,23 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
         return
       }
 
-      const nextRound = activeRound + 1
-      window.setTimeout(() => {
-        if (!running) return
-        beginRound(nextRound)
-      }, 100)
+      beginRound(activeRound + 1)
+    }
+
+    if (currentDirection && currentEntry && targetReached(pnl, target, stop)) {
+      settleRound(pnl > 0 ? 'win' : pnl < 0 ? 'loss' : 'wait', livePrice, pnl)
       return
     }
 
     if (secondsLeft <= 0) {
-      const refreshedPlan = latestRadarRef.current.botPlan
-      const stillAligned = Boolean(currentDirection && refreshedPlan.opportunity?.direction === currentDirection)
-
-      if (!currentDirection || !currentEntry || !stillAligned) {
-        if (settledRoundRef.current === activeRound) return
-        settledRoundRef.current = activeRound
-        const closedAt = new Date().toISOString()
-        const nextStatus: RoundStatus = currentDirection && pnl > 0 ? 'win' : currentDirection && pnl < 0 ? 'loss' : 'wait'
-
-        setRounds((current) => current.map((round) => round.number === activeRound
-          ? { ...round, status: nextStatus, exit: currentDirection ? livePrice : undefined, pnl: currentDirection ? pnl : 0 }
-          : round))
-
-        latestCallbackRef.current?.({
-          id: 'bot-paper-' + Date.now() + '-' + activeRound,
-          symbol,
-          round: activeRound,
-          direction: currentDirection,
-          signalTimeframe: signalTf,
-          entryTimeframe: entryTf,
-          entry: currentEntry,
-          exit: currentDirection && Number.isFinite(livePrice) && livePrice > 0 ? livePrice : null,
-          stake,
-          multiplier,
-          pnl: currentDirection ? pnl : 0,
-          status: nextStatus,
-          openTime: roundOpenedAtRef.current[activeRound] ?? closedAt,
-          closeTime: closedAt,
-        })
-
-        if (activeRound >= UNIT_ROUNDS) {
-          clearTimer()
-          setRunning(false)
-          return
-        }
-
-        const nextRound = activeRound + 1
-        window.setTimeout(() => {
-          if (!running) return
-          beginRound(nextRound)
-        }, 100)
-        return
-      }
-
-      // Still aligned: keep the same paper position open. Every 15-second
-      // interval is a real re-scan, and we surface the live P/L so the bot
-      // visibly updates instead of looking frozen while the round remains open.
-      setScanCount((value) => value + 1)
-      setRounds((current) => current.map((round) => round.number === activeRound
-        ? { ...round, pnl }
-        : round))
-      setSecondsLeft(ROUND_SECONDS)
+      settleRound(
+        currentDirection ? (pnl > 0 ? 'win' : pnl < 0 ? 'loss' : 'wait') : 'wait',
+        currentDirection && Number.isFinite(livePrice) && livePrice > 0 ? livePrice : undefined,
+        currentDirection ? pnl : 0,
+      )
     }
   }, [activeRound, currentPrice, running, secondsLeft])
+
 
   useEffect(() => () => clearTimer(), [])
 
@@ -317,13 +271,12 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
             <span className="rounded-md border border-shafx-accent/25 bg-shafx-accent/10 px-2 py-0.5 font-mono text-[7px] font-bold tracking-[0.12em] text-shafx-accent">FAST ADAPTIVE</span>
           </div>
           <p className="mt-1 max-w-[600px] text-[9px] leading-4 text-shafx-textMuted">
-            Scans all available timeframes. It does not blindly trade M1: higher-timeframe structure selects the setup, then a faster timeframe is used only for the entry trigger. Each scan cycle runs for 15 seconds and is re-evaluated before the next round.
+            Scans all available timeframes. It does not blindly trade M1: higher-timeframe structure selects the setup, then a faster timeframe is used only for the entry trigger. Each round lasts up to 15 seconds, closes at the round boundary unless target/stop is hit first, then advances to the next round.
           </p>
         </div>
         <div className="text-right">
           <div className="font-mono text-[8px] text-shafx-textMuted">ROUND</div>
           <div className="mt-0.5 font-mono text-lg font-bold">{activeRound || '—'} / {UNIT_ROUNDS}</div>
-          <div className="mt-1 font-mono text-[7px] text-shafx-textMuted">RE-SCAN #{scanCount}</div>
         </div>
       </div>
 
@@ -435,9 +388,9 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
           <strong className={'mt-1 block font-mono text-[10px] ' + (totalPnl >= 0 ? 'text-shafx-success' : 'text-shafx-danger')}>{displayPnl(totalPnl)}</strong>
         </div>
         <div className="rounded-xl border border-shafx-border bg-shafx-bg p-2.5">
-          <span className="block text-[7px] uppercase tracking-[0.12em] text-shafx-textMuted">Re-scan clock</span>
+          <span className="block text-[7px] uppercase tracking-[0.12em] text-shafx-textMuted">Round clock</span>
           <strong className="mt-1 block font-mono text-[10px]">{running ? secondsLeft + 's' : '15s'}</strong>
-          <span className="mt-0.5 block text-[7px] text-shafx-textMuted">round stays open until target/stop</span>
+          <span className="mt-0.5 block text-[7px] text-shafx-textMuted">next round starts when this one settles</span>
         </div>
       </div>
 
@@ -450,7 +403,7 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
           {entry && <div className="font-mono text-[8px] text-shafx-textMuted">Entry {entry.toFixed(5)}</div>}
         </div>
         <div className="mt-2 text-[8px] leading-4 text-shafx-textMuted">
-          The five-round unit is a paper test. It never sends a broker order. It uses the same percentage-move × multiplier × stake formula as a Deriv Multiplier calculation. The 15-second clock is only a re-scan interval; the paper trade stays open until its fast dollar target/stop is reached.
+          The five-round unit is a paper test. It never sends a broker order. It uses the same percentage-move × multiplier × stake formula as a Deriv Multiplier calculation. A round can finish early at its dollar target/stop; otherwise the 15-second round boundary settles it and starts the next round.
         </div>
       </div>
 
