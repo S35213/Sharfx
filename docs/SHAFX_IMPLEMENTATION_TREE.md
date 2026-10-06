@@ -116,7 +116,7 @@
 - [x] OANDA — implemented account/market-data adapter with server-side personal-token storage and multi-account discovery.
 - [ ] Interactive Brokers — concrete adapter implementation; provider-specific session/Gateway requirements remain.
 - [~] Binance — read-only Spot account/market-data adapter implemented; provider sandbox credentials have not yet been exercised.
-- [ ] cTrader Open API — adapter implementation.
+- [~] cTrader Open API — server OAuth/Open API gateway, normalized adapter, account discovery, quotes, margin, demo order/modify/close routes and SHAFX CFD ticket are implemented; real practice-account execution is not yet exercised.
 - [ ] MT4/MT5 bridge/gateway adapter — architecture only; broker terminal bridge still required.
 - [ ] Additional broker-specific adapters as needed.
 
@@ -156,8 +156,8 @@
 - [x] Client-order correlation/idempotency field exists.
 - [x] Live execution remains fail-closed.
 - [x] Server-side execution gateway exists and is fail-closed for external providers.
-- [ ] Provider-specific order adapters.
-- [ ] End-to-end demo/paper execution validation.
+- [~] Provider-specific order adapters — cTrader demo adapter is implemented behind a live-execution release gate; end-to-end certification remains pending.
+- [~] End-to-end demo/paper execution validation — deterministic CFD risk tests and Render build pass; real cTrader practice execution still requires an approved cTrader app and account.
 - [ ] Live execution certification/release gate.
 
 ## 9. Funding
@@ -205,16 +205,19 @@
 - [ ] Multiple Deriv accounts pass simultaneously.
 - [ ] Second provider passes a full sandbox/paper connection flow (code + CI verified; real OANDA practice credentials have not yet been exercised in production).
 - [x] Provider-agnostic concurrent runtime manager is tested with isolated connection/account streams; real multi-provider external credentials remain untested.
-- [ ] Final security/runtime diagnostic passes.
+- [~] Final security/runtime diagnostic passes — secrets remain server-side and Render starts cleanly; browser/external HTTP probing is unavailable from this execution environment, so visual runtime QA remains outstanding.
 
-## Current checkpoint
+## Experimental branch checkpoint — 2026-10-06
 
-**Last verified:** 2026-09-22
+**Current branch:** `test/rebuild-deriv-native-manual-20260930`
 
-**Current main:** `326bcb0585bfdf6403df09bd097da4592882c299` (runtime-warning cleanup, dependency upgrade, WHATWG request-query changes, and simplified Vercel install step; latest production deployment is READY).
+**Destination:** **SHAFX Manual CFD via Deriv cTrader** first. Deriv Multiplier is legacy/secondary. Bot changes are frozen until manual CFD passes its gates.
 
-**Current branch for continuation:** `main`
+**Latest verified deployment:** Render service `sharfx-deriv-render` is live on commit `a5b7577f657799e910371a4d1fe4ffe1db717a39`. The Render build passed `tsc -b && vite build`.
 
-**Current state:** Provider foundation, Supabase registry, Deriv, OANDA, generic connector/onboarding primitives, Binance read-only pack, concurrent account streaming/cache/retry, health/telemetry primitives, funding dispatcher, FIX/custom gateway boundaries, synchronized simulator realtime chart feed, bot-instance stabilization, and the current dependency/runtime cleanup are present on `main`. Remaining hard gates are real external provider credentials/sandbox tests, concrete IBKR/cTrader/MT4/MT5 provider packs, production telemetry/alert delivery, and live provider execution certification.
+**Current blockers:** cTrader Open API client credentials/redirect URI and a real Deriv cTrader practice account have not yet been exercised through SHAFX. Live cTrader execution remains explicitly disabled. Direct browser-style HTTP probing was unavailable from this execution environment, so do not claim visual runtime QA is complete.
 
-**Handoff rule:** Never replace this tree with a new checklist. Update this file in the same branch/commit chain as work progresses. Only mark an item `[x]` after verification.
+**Do not merge to `main`.** Promotion requires every handoff gate in `docs/SHAFX_BRANCH_HANDOFF.md` and explicit user approval.
+
+**Persistence rule:** update this tree and `docs/SHAFX_BRANCH_HANDOFF.md` whenever the direction changes, a build fails, a blocker is found, or a gate passes. Future agents must continue from the latest checkpoint rather than restarting the project.
+
