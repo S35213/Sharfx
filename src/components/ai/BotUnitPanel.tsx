@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { CircleStop, Play, RotateCcw, ShieldCheck } from 'lucide-react'
 import type { BotPaperTrade, Timeframe } from '../../types'
 import type { SignalRadarResult } from '../../engine/bot/signalRadar'
+import { calculateMultiplierPnl } from '../../lib/derivMultiplierAccounting'
 
 type RoundStatus = 'idle' | 'monitoring' | 'win' | 'loss' | 'wait'
 
@@ -23,7 +24,7 @@ const UNIT_ROUNDS = 5
 const ROUND_SECONDS = 15
 const DEFAULT_STAKE = 10
 const DEFAULT_MULTIPLIER = 100
-const QUICK_STAKES = [10, 20, 50, 100, 250, 500]
+const QUICK_STAKES = [10, 20, 50, 100, 250, 500, 1000, 2000]
 const QUICK_MULTIPLIERS = [100, 200, 300, 500, 800]
 const DEFAULT_TAKE_PROFIT_RATIO = 0.5
 const DEFAULT_STOP_LOSS_RATIO = 0.4
@@ -32,19 +33,6 @@ const createRounds = (): RoundState[] =>
   Array.from({ length: UNIT_ROUNDS }, (_, index) => ({ number: index + 1, status: 'idle' }))
 
 const clampLoss = (value: number, stake: number): number => Math.max(-stake, value)
-
-const paperPnl = (
-  direction: 'BUY' | 'SELL',
-  entry: number,
-  exit: number,
-  stake: number,
-  multiplier: number,
-): number => {
-  if (![entry, exit, stake, multiplier].every(Number.isFinite) || entry <= 0 || exit <= 0 || stake <= 0 || multiplier <= 0) return 0
-  const move = (exit - entry) / entry
-  const signedMove = direction === 'BUY' ? move : -move
-  return Number(clampLoss(stake * multiplier * signedMove, stake).toFixed(4))
-}
 
 const targetReached = (pnl: number, targetAmount: number, stopAmount: number): boolean =>
   pnl >= targetAmount || pnl <= -Math.abs(stopAmount)
@@ -75,6 +63,7 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
   const [running, setRunning] = useState(false)
   const [activeRound, setActiveRound] = useState(0)
   const [secondsLeft, setSecondsLeft] = useState(ROUND_SECONDS)
+  const [scanCount, setScanCount] = useState(0)
   const [entry, setEntry] = useState<number | null>(null)
   const [direction, setDirection] = useState<'BUY' | 'SELL' | null>(null)
   const [signalTimeframe, setSignalTimeframe] = useState<Timeframe | null>(null)
@@ -169,6 +158,7 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
     if (!Number.isFinite(stakeValue) || stakeValue < 1 || !Number.isFinite(multiplierValue) || multiplierValue < 1) return
     clearTimer()
     settledRoundRef.current = 0
+    setScanCount(0)
     setRounds(createRounds())
     setRunning(true)
     beginRound(1)
@@ -185,6 +175,7 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
     settledRoundRef.current = 0
     setRounds(createRounds())
     setActiveRound(0)
+    setScanCount(0)
     setEntry(null)
     setDirection(null)
     setSignalTimeframe(null)
@@ -213,7 +204,7 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
     const signalTf = latestSignalTimeframeRef.current
     const entryTf = latestEntryTimeframeRef.current
     const pnl = currentEntry && currentDirection
-      ? paperPnl(currentDirection, currentEntry, livePrice, stake, multiplier)
+      ? calculateMultiplierPnl({ direction: currentDirection, entryPrice: currentEntry, currentPrice: livePrice, stake, multiplier })
       : 0
 
     // 15 seconds is the scan interval, not the forced close time. Keep the
@@ -304,8 +295,13 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
         return
       }
 
-      // Still aligned: keep the position open and give the strategy another
-      // 15-second decision interval rather than forcing a tiny P/L close.
+      // Still aligned: keep the same paper position open. Every 15-second
+      // interval is a real re-scan, and we surface the live P/L so the bot
+      // visibly updates instead of looking frozen while the round remains open.
+      setScanCount((value) => value + 1)
+      setRounds((current) => current.map((round) => round.number === activeRound
+        ? { ...round, pnl }
+        : round))
       setSecondsLeft(ROUND_SECONDS)
     }
   }, [activeRound, currentPrice, running, secondsLeft])
@@ -384,8 +380,8 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
           </div>
           <div className="rounded-lg border border-shafx-border bg-shafx-bg p-2">
             <span className="block text-[7px] uppercase tracking-[0.12em] text-shafx-textMuted">Live P/L</span>
-            <div className={'mt-1 font-mono text-[10px] font-semibold ' + (direction && entry ? (paperPnl(direction, entry, currentPrice, safeStake, safeMultiplier) >= 0 ? 'text-shafx-success' : 'text-shafx-danger') : 'text-shafx-textMuted')}>
-              {direction && entry ? displayPnl(paperPnl(direction, entry, currentPrice, safeStake, safeMultiplier)) : '—'}
+            <div className={'mt-1 font-mono text-[10px] font-semibold ' + (direction && entry ? (calculateMultiplierPnl({ direction, entryPrice: entry, currentPrice, stake: safeStake, multiplier: safeMultiplier }) >= 0 ? 'text-shafx-success' : 'text-shafx-danger') : 'text-shafx-textMuted')}>
+              {direction && entry ? displayPnl(calculateMultiplierPnl({ direction, entryPrice: entry, currentPrice, stake: safeStake, multiplier: safeMultiplier })) : '—'}
             </div>
             <div className="mt-0.5 text-[7px] text-shafx-textMuted">Updates with market ticks</div>
           </div>
@@ -450,7 +446,7 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <div className="text-[8px] font-semibold uppercase tracking-[0.13em] text-shafx-textMuted">Current paper decision</div>
-            <div className="mt-1 font-mono text-[10px] font-semibold">{direction ? roundRoute({ number: activeRound, status: 'monitoring', direction, signalTimeframe: signalTimeframe ?? undefined, entryTimeframe: entryTimeframe ?? undefined }) : 'WAIT — scanning the strongest SHAFX setup'}</div>
+            <div className="mt-1 font-mono text-[10px] font-semibold">{direction ? 'HOLDING • ' + roundRoute({ number: activeRound, status: 'monitoring', direction, signalTimeframe: signalTimeframe ?? undefined, entryTimeframe: entryTimeframe ?? undefined }) : 'WAIT — scanning the strongest SHAFX setup'}</div>
           </div>
           {entry && <div className="font-mono text-[8px] text-shafx-textMuted">Entry {entry.toFixed(5)}</div>}
         </div>
