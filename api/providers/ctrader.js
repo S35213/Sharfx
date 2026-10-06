@@ -89,7 +89,7 @@ const handleCallback = async (req, res, user, query) => {
 const readContext = async (user, connectionId, accountId) => {
   const account = await getProviderAccount(user.id, connectionId, String(accountId || ''))
   if (!account) throw new Error('Selected cTrader account is not available.')
-  return loadCtraderConnection({ userId: user.id, connectionId, environment: accountEnvironment(account) })
+  return loadCtraderConnection({ userId: user.id, connectionId, accountId: String(accountId), environment: accountEnvironment(account) })
 }
 
 const handleGet = async (req, res, user) => {
