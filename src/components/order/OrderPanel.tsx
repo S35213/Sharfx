@@ -775,7 +775,7 @@ export const OrderPanel: React.FC<Props> = (props) => {
     symbolSpec={props.symbolSpec}
     timeframe={props.timeframe}
     connection={props.providerSelection?.providerId === 'ctrader' ? props.connection : null}
-    providerSelection={props.providerSelection}
+    providerSelection={props.providerSelection ?? null}
     activePosition={props.activePosition}
     onTradeOpened={props.onTradeOpened}
     onTradeClosed={props.onTradeClosed}
