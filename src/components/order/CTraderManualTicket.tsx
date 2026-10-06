@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDownRight, ArrowUpRight, CheckCircle2, Clock3, LoaderCircle, RefreshCw, ShieldCheck, XCircle } from 'lucide-react'
+import { ArrowDownRight, ArrowUpRight, CheckCircle2, Clock3, LoaderCircle, ShieldCheck, XCircle } from 'lucide-react'
 import type { SymbolSpec, Timeframe, TradeOrder, TradeSide } from '../../types'
 import type { SetupCandidate } from '../../engine/setup/types'
 import type { ActiveProviderSelection } from '../../data/provider/providerConnections'
@@ -92,17 +92,20 @@ const getTradeAge = (openTime?: string, now = Date.now()): string => {
 const lineFor = (id: string, price: number | null | undefined, label: string, color: string, width: 1 | 2 = 1): ChartAnnotation | null =>
   Number.isFinite(price) && Number(price) > 0 ? { id, price: Number(price), label, color, lineWidth: width } : null
 
-const providerSymbolSpec = (base: SymbolSpec, instrument: ProviderInstrument | null): SymbolSpec => ({
+const providerSymbolSpec = (base: SymbolSpec, instrument: ProviderInstrument | null): SymbolSpec => {
+  const priceIncrement = Number(instrument?.priceIncrement)
+  return {
   ...base,
   contractSize: Number(instrument?.contractSize) > 0 ? Number(instrument?.contractSize) : base.contractSize,
   pipSize: Number(instrument?.pipSize) > 0 ? Number(instrument?.pipSize) : base.pipSize,
   minLotSize: Number(instrument?.quantityMin) > 0 ? Number(instrument?.quantityMin) : base.minLotSize,
   maxLotSize: Number(instrument?.quantityMax) > 0 ? Number(instrument?.quantityMax) : base.maxLotSize,
   lotStep: Number(instrument?.quantityStep) > 0 ? Number(instrument?.quantityStep) : base.lotStep,
-  pricePrecision: Number(instrument?.priceIncrement) > 0
-    ? Math.max(0, Math.ceil(-Math.log10(Number(instrument.priceIncrement))))
+  pricePrecision: priceIncrement > 0
+    ? Math.max(0, Math.ceil(-Math.log10(priceIncrement)))
     : base.pricePrecision,
-})
+  }
+}
 
 export const CTraderManualTicket: React.FC<Props> = ({
   symbol,
