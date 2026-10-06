@@ -23,10 +23,6 @@ export const useMultiTimeframeCandles = (
 
   useEffect(() => {
     let cancelled = false
-    // Do not compete with the chart's first market connection. Wait until the
-    // chart has real candles, or an explicit rescan requests fresh history.
-    if (fallbackCandles.length === 0 && baseM1Candles.length === 0 && refreshKey === 0) return
-
     const load = async (): Promise<void> => {
       const next = await loadDerivCandles(symbol, TIMEFRAMES)
       if (cancelled) return
