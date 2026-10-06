@@ -19,7 +19,7 @@ interface Props {
   symbolSpec: SymbolSpec
   timeframe: Timeframe
   connection: DerivOrderConnection | null
-  providerSelection: ActiveProviderSelection
+  providerSelection: ActiveProviderSelection | null
   activePosition?: TradeOrder | null
   onTradeOpened: (order: TradeOrder) => void
   onTradeClosed?: (id: string) => void | Promise<void>
@@ -187,7 +187,7 @@ export const CTraderManualTicket: React.FC<Props> = ({
   }, [activePosition?.openTime])
 
   useEffect(() => {
-    if (!connection?.accountId || providerSelection.providerId !== 'ctrader') return
+    if (!connection?.accountId || providerSelection?.providerId !== 'ctrader') return
     let cancelled = false
 
     const load = async (): Promise<void> => {
