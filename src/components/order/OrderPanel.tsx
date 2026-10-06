@@ -318,7 +318,17 @@ export const OrderPanel: React.FC<Props> = ({
   }
 
   if (activePosition) {
-    const profit = Number(activePosition.profit ?? 0)
+    const brokerProfit = Number(activePosition.profit ?? 0)
+    const liveSpot = Number.isFinite(currentPrice) && currentPrice > 0 ? currentPrice : Number(activePosition.currentPrice ?? 0)
+    const liveStake = Number(activePosition.stake ?? 0)
+    const liveMultiplier = Number(activePosition.multiplier ?? 0)
+    const liveEntry = Number(activePosition.entryPrice ?? 0)
+    const liveMove = liveEntry > 0 && liveSpot > 0 ? (liveSpot - liveEntry) / liveEntry : 0
+    const liveSignedMove = activePosition.type === 'BUY' ? liveMove : -liveMove
+    const derivedProfit = liveEntry > 0 && liveSpot > 0 && liveStake > 0 && liveMultiplier > 0
+      ? Math.max(-liveStake, liveSignedMove * liveMultiplier * liveStake - Number(activePosition.commission ?? 0))
+      : brokerProfit
+    const profit = Number.isFinite(derivedProfit) ? derivedProfit : brokerProfit
     const isProfit = profit >= 0
     const positionPrice = Number(activePosition.currentPrice ?? currentPrice)
     const slAmount = Number(activePosition.stopLossAmount ?? 0)
