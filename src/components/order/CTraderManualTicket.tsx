@@ -220,10 +220,10 @@ export const CTraderManualTicket: React.FC<Props> = ({
       if (refreshTimer.current) window.clearInterval(refreshTimer.current)
       refreshTimer.current = null
     }
-  }, [connection?.accountId, connection?.connectionId, connection?.environment, providerSelection.providerId, symbol])
+  }, [connection?.accountId, connection?.connectionId, connection?.environment, providerSelection?.providerId, symbol])
 
   useEffect(() => {
-    if (!connection?.accountId || providerSelection.providerId !== 'ctrader' || !plan.valid) {
+    if (!connection?.accountId || providerSelection?.providerId !== 'ctrader' || !plan.valid) {
       setMargin(null)
       return
     }
@@ -250,7 +250,7 @@ export const CTraderManualTicket: React.FC<Props> = ({
     return () => {
       if (marginTimer.current) window.clearTimeout(marginTimer.current)
     }
-  }, [connection?.accountId, connection?.connectionId, connection?.environment, plan.lotSize, plan.valid, providerSelection.providerId, symbol])
+  }, [connection?.accountId, connection?.connectionId, connection?.environment, plan.lotSize, plan.valid, providerSelection?.providerId, symbol])
 
   const lines = useMemo<ChartAnnotation[]>(() => {
     if (activePosition) {
@@ -285,7 +285,7 @@ export const CTraderManualTicket: React.FC<Props> = ({
   }
 
   const place = async (): Promise<void> => {
-    if (!connection || providerSelection.providerId !== 'ctrader' || !providerSelection.accountId) {
+    if (!connection || providerSelection?.providerId !== 'ctrader' || !providerSelection?.accountId) {
       setError('Connect a Deriv cTrader practice account before placing a CFD.')
       setState('error')
       return
@@ -406,7 +406,7 @@ export const CTraderManualTicket: React.FC<Props> = ({
   }
 
   function renderPlanningTicket(): React.ReactNode {
-    const cTraderReady = Boolean(connection?.accountId && providerSelection.providerId === 'ctrader' && connection.environment === 'demo')
+    const cTraderReady = Boolean(connection?.accountId && providerSelection?.providerId === 'ctrader' && connection.environment === 'demo')
     const canTrade = Boolean(cTraderReady && plan.valid && !marginLoading)
     return (
       <div className="bg-[#080D13] p-3 sm:p-4">
