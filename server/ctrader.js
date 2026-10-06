@@ -186,7 +186,7 @@ const parseTokenSecret = (value) => {
   }
 }
 
-export const loadCtraderConnection = async ({ userId, connectionId, environment }) => {
+export const loadCtraderConnection = async ({ userId, connectionId, accountId, environment }) => {
   const connection = await getProviderConnection(userId, connectionId, true)
   if (!connection || connection.provider_id !== 'ctrader') throw new Error('cTrader provider connection was not found.')
   if (connection.state !== 'connected') throw new Error('The cTrader connection is ' + connection.state + '.')
@@ -209,17 +209,17 @@ export const loadCtraderConnection = async ({ userId, connectionId, environment 
     tokens = parseTokenSecret(tokenSecret(refreshed))
   }
 
-  const account = await getProviderAccount(userId, connectionId, String(connection.metadata?.selectedAccountId || ''))
-  const selectedAccountId = account?.provider_account_id || connection.metadata?.selectedAccountId
+  const account = await getProviderAccount(userId, connectionId, String(accountId || connection.metadata?.selectedAccountId || ''))
+  const selectedAccountId = account?.provider_account_id || accountId || connection.metadata?.selectedAccountId
   if (!selectedAccountId) throw new Error('No cTrader account is selected for this connection.')
 
-  const selectedEnvironment = safeEnvironment(environment || account.environment || (connection.metadata?.selectedIsLive ? 'live' : 'demo'))
+  const selectedEnvironment = safeEnvironment(environment || account?.environment || (connection.metadata?.selectedIsLive ? 'live' : 'demo'))
   return { connection, tokens, accountId: String(selectedAccountId), environment: selectedEnvironment }
 }
 
-export const listCtraderAccounts = async (token) => {
+const listCtraderAccountsOnEnvironment = async (environment, token) => {
   const response = await authenticatedRequest({
-    environment: 'demo',
+    environment,
     accessToken: token,
     payloadType: 2149,
     payload: { accessToken: token },
@@ -227,6 +227,24 @@ export const listCtraderAccounts = async (token) => {
   })
   const body = asObject(response.payload)
   return Array.isArray(body.ctidTraderAccount) ? body.ctidTraderAccount : []
+}
+
+export const listCtraderAccounts = async (token) => {
+  const results = await Promise.allSettled([
+    listCtraderAccountsOnEnvironment('demo', token),
+    listCtraderAccountsOnEnvironment('live', token),
+  ])
+  const rows = []
+  for (const result of results) {
+    if (result.status === 'fulfilled') rows.push(...result.value)
+  }
+  const seen = new Set()
+  return rows.filter((account) => {
+    const id = String(account.ctidTraderAccountId || '')
+    if (!id || seen.has(id)) return false
+    seen.add(id)
+    return true
+  })
 }
 
 export const getCtraderTrader = async ({ environment, accountId, accessToken }) => {
@@ -511,6 +529,11 @@ export const normalizeCtraderOrder = (order) => {
 
 export const refreshAndStoreCtraderAccounts = async ({ userId, connectionId, environment, accessToken }) => {
   const accounts = await listCtraderAccounts(accessToken)
+  const assetRows = []
+  for (const env of ['demo', 'live']) {
+    try { assetRows.push(...await getCtraderAssets({ environment: env, accountId: String(accounts[0]?.ctidTraderAccountId || ''), accessToken })) } catch {}
+  }
+  const assetNames = Object.fromEntries(assetRows.map((asset) => [String(asset.assetId), String(asset.name || asset.displayName || asset.assetId)]))
   const rows = []
   for (const account of accounts) {
     const accountId = String(account.ctidTraderAccountId || '')
@@ -521,11 +544,17 @@ export const refreshAndStoreCtraderAccounts = async ({ userId, connectionId, env
       const trader = await getCtraderTrader({ environment: env, accountId, accessToken })
       const moneyDigits = asNumber(trader.moneyDigits, 8)
       const balance = decodeMoney(trader.balance, moneyDigits)
+      let accountCurrency = assetNames[String(trader.depositAssetId || '')] || 'USD'
+      try {
+        const accountAssets = await getCtraderAssets({ environment: env, accountId, accessToken })
+        const names = Object.fromEntries(accountAssets.map((asset) => [String(asset.assetId), String(asset.name || asset.displayName || asset.assetId)]))
+        accountCurrency = names[String(trader.depositAssetId || '')] || accountCurrency
+      } catch {}
       rows.push({
         accountId,
         accountLabel: [account.brokerTitleShort || 'cTrader', account.traderLogin ? '#' + account.traderLogin : '', env === 'live' ? 'Live' : 'Demo'].filter(Boolean).join(' • '),
         environment: env,
-        currency: String(trader.depositAssetId || 'USD'),
+        currency: accountCurrency,
         balance,
         equity: undefined,
         usedMargin: undefined,
