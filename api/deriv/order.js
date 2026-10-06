@@ -8,9 +8,9 @@ import {
 } from '../../server/providerConnections.js'
 
 const DERIV_API = 'https://api.derivws.com/trading/v1/options'
-const MIN_STAKE = 1
+const MIN_STAKE = 10
 const MAX_STAKE = 2000
-const MAX_MULTIPLIER = 10000
+const MAX_MULTIPLIER = 4000
 
 const toDerivSymbol = (symbol) => {
   const normalized = String(symbol || '').replace('/', '').toUpperCase()
@@ -127,7 +127,7 @@ const buildQuoteRequest = (order, account) => {
 
   if (!symbol) throw new StageError('MARKET', 'Select a Deriv market before requesting a quote.')
   if (!currency) throw new StageError('ACCOUNT', 'The selected Deriv account has no currency.')
-  if (!Number.isFinite(stake) || stake < MIN_STAKE) throw new StageError('ACCOUNT', 'SHAFX minimum multiplier stake is 1 ' + currency + '.')
+  if (!Number.isFinite(stake) || stake < MIN_STAKE) throw new StageError('ACCOUNT', 'SHAFX minimum multiplier stake is 10 ' + currency + '.')
   if (stake > MAX_STAKE) throw new StageError('ACCOUNT', 'SHAFX maximum multiplier stake is 2000 ' + currency + '.')
   if (!Number.isFinite(multiplier) || multiplier <= 0 || multiplier > MAX_MULTIPLIER) throw new StageError('PROPOSAL', 'Enter a valid multiplier between 1 and ' + MAX_MULTIPLIER + '.')
   if (Number.isFinite(stopLossAmount) && stopLossAmount < 0) throw new StageError('PROPOSAL', 'Stop-loss amount cannot be negative.')
@@ -146,7 +146,7 @@ const buildQuoteRequest = (order, account) => {
 }
 
 const acceptedMultipliersFromError = (message) => {
-  const match = String(message || '').match(/accepts?\\s+([0-9,\\s]+)/i)
+  const match = String(message || '').match(/accepts?\s+([0-9,\s]+)/i)
   if (!match) return []
   return [...match[1].matchAll(/\\d+(?:\\.\\d+)?/g)]
     .map((item) => Number(item[0]))
