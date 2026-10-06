@@ -39,9 +39,9 @@ const MAX_STAKE = 2000
 const QUICK_STAKES = ['10.00', '20.00', '50.00', '100.00', '250.00', '500.00', '1000.00', '2000.00']
 const QUICK_MULTIPLIERS = ['100', '200', '300', '500', '800']
 const STOP_LOSS_RATIOS = [0.1, 0.2, 0.4, 0.8]
-const TAKE_PROFIT_MULTIPLES = [1, 2, 5, 10]
-const DEFAULT_STOP_LOSS_RATIO = 0.2
-const DEFAULT_TAKE_PROFIT_MULTIPLE = 5
+const TAKE_PROFIT_MULTIPLES = [0.5, 1, 2, 5, 10]
+const DEFAULT_STOP_LOSS_RATIO = 0.4
+const DEFAULT_TAKE_PROFIT_MULTIPLE = 0.5
 
 const roundMoney = (value: number): number => Number(value.toFixed(2))
 
