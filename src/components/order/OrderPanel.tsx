@@ -11,6 +11,7 @@ import {
 import type { SymbolSpec, Timeframe, TradeOrder, TradePlanDraft, TradeSide } from '../../types'
 import type { SetupCandidate } from '../../engine/setup/types'
 import { calculateTradePlan } from '../../lib/tradePlanCalculator'
+import { calculateMultiplierPnl, calculateMultiplierPnlPerPip, calculateMultiplierProtectionPrice, multiplierNotional } from '../../lib/derivMultiplierAccounting'
 import { formatCurrency, formatPrice } from '../../lib/format'
 import { buyDerivProposal, getDerivQuote, type DerivOrderConnection, type DerivProposalQuote } from '../../data/deriv/derivTrading'
 import type { ChartAnnotation } from '../chart/CandlestickChart'
@@ -80,24 +81,6 @@ const lineFor = (
 
 const moneyLabel = (amount: number, currency: string): string => formatCurrency(roundMoney(amount), currency)
 
-const estimatePnlPerPip = (
-  entryPrice: number,
-  pipSize: number,
-  stake: number,
-  multiplier: number,
-): number | null => {
-  if (![entryPrice, pipSize, stake, multiplier].every(Number.isFinite) || entryPrice <= 0 || pipSize <= 0 || stake <= 0 || multiplier <= 0) return null
-  return (pipSize / entryPrice) * multiplier * stake
-}
-
-const protectionPrice = (entryPrice: number, amount: number, stake: number, multiplier: number, side: TradeSide, kind: 'sl' | 'tp'): number | null => {
-  if (![entryPrice, amount, stake, multiplier].every(Number.isFinite) || entryPrice <= 0 || amount <= 0 || stake <= 0 || multiplier <= 0) return null
-  const distance = (amount * entryPrice) / (multiplier * stake)
-  if (!Number.isFinite(distance) || distance <= 0) return null
-  if (kind === 'sl') return side === 'BUY' ? entryPrice - distance : entryPrice + distance
-  return side === 'BUY' ? entryPrice + distance : entryPrice - distance
-}
-
 export const OrderPanel: React.FC<Props> = ({
   symbol,
   currentPrice,
@@ -157,11 +140,11 @@ export const OrderPanel: React.FC<Props> = ({
     : (bidPrice > 0 ? bidPrice : currentPrice)
 
   const stopLossPrice = useMemo(
-    () => stopLossEnabled ? protectionPrice(entryPrice, stopLossAmount, stakeValue, multiplierValue, side, 'sl') : null,
+    () => stopLossEnabled ? calculateMultiplierProtectionPrice(entryPrice, stopLossAmount, stakeValue, multiplierValue, side, 'sl') : null,
     [entryPrice, multiplierValue, side, stakeValue, stopLossAmount, stopLossEnabled],
   )
   const takeProfitPrice = useMemo(
-    () => takeProfitEnabled ? protectionPrice(entryPrice, takeProfitAmount, stakeValue, multiplierValue, side, 'tp') : null,
+    () => takeProfitEnabled ? calculateMultiplierProtectionPrice(entryPrice, takeProfitAmount, stakeValue, multiplierValue, side, 'tp') : null,
     [entryPrice, multiplierValue, side, stakeValue, takeProfitAmount, takeProfitEnabled],
   )
 
@@ -318,17 +301,24 @@ export const OrderPanel: React.FC<Props> = ({
   }
 
   if (activePosition) {
-    const brokerProfit = Number(activePosition.profit ?? 0)
+    const brokerProfit = Number(activePosition.profit)
     const liveSpot = Number.isFinite(currentPrice) && currentPrice > 0 ? currentPrice : Number(activePosition.currentPrice ?? 0)
     const liveStake = Number(activePosition.stake ?? 0)
     const liveMultiplier = Number(activePosition.multiplier ?? 0)
     const liveEntry = Number(activePosition.entryPrice ?? 0)
-    const liveMove = liveEntry > 0 && liveSpot > 0 ? (liveSpot - liveEntry) / liveEntry : 0
-    const liveSignedMove = activePosition.type === 'BUY' ? liveMove : -liveMove
     const derivedProfit = liveEntry > 0 && liveSpot > 0 && liveStake > 0 && liveMultiplier > 0
-      ? Math.max(-liveStake, liveSignedMove * liveMultiplier * liveStake - Number(activePosition.commission ?? 0))
-      : brokerProfit
-    const profit = Number.isFinite(derivedProfit) ? derivedProfit : brokerProfit
+      ? calculateMultiplierPnl({
+          direction: activePosition.type,
+          entryPrice: liveEntry,
+          currentPrice: liveSpot,
+          stake: liveStake,
+          multiplier: liveMultiplier,
+          commission: Number(activePosition.commission ?? 0),
+        })
+      : Number.NaN
+    // Deriv's contract/account stream is authoritative. The local calculation is
+    // only a fallback while broker P/L has not arrived yet.
+    const profit = Number.isFinite(brokerProfit) ? brokerProfit : derivedProfit
     const isProfit = profit >= 0
     const positionPrice = Number(activePosition.currentPrice ?? currentPrice)
     const slAmount = Number(activePosition.stopLossAmount ?? 0)
@@ -537,9 +527,20 @@ export const OrderPanel: React.FC<Props> = ({
           <span>MARKET {formatPrice(currentPrice, symbolSpec.pricePrecision)}</span>
           {marketMetrics.hasSpread ? <span>{marketMetrics.spreadPips?.toFixed(1)} pips spread</span> : <span>Deriv market price</span>}
         </div>
-        <div className="mt-1 flex items-center justify-between gap-2 font-mono text-[8px]">
-          <span className="text-shafx-textMuted">P/L sensitivity</span>
-          <span className="text-shafx-accent">{(() => { const value = estimatePnlPerPip(entryPrice, symbolSpec.pipSize, stakeValue, multiplierValue); return value === null ? '—' : '≈ ' + formatCurrency(value, accountCurrency) + ' / pip' })()}</span>
+        <div className="mt-2 rounded-lg border border-shafx-accent/20 bg-shafx-accent/[0.04] p-2">
+          <div className="grid grid-cols-2 gap-2 font-mono text-[8px]">
+            <div>
+              <span className="block text-shafx-textMuted">Notional exposure</span>
+              <span className="mt-0.5 block text-shafx-text">{(() => { const value = multiplierNotional(stakeValue, multiplierValue); return value === null ? '—' : formatCurrency(value, accountCurrency) })()}</span>
+            </div>
+            <div>
+              <span className="block text-shafx-textMuted">P/L per pip</span>
+              <span className="mt-0.5 block text-shafx-accent">{(() => { const value = calculateMultiplierPnlPerPip(entryPrice, symbolSpec.pipSize, stakeValue, multiplierValue); return value === null ? '—' : '≈ ' + formatCurrency(value, accountCurrency) })()}</span>
+            </div>
+          </div>
+          <div className="mt-1 text-[7px] leading-3.5 text-shafx-textMuted">
+            A $50 stake at 800× does not mean +$25 instantly. +$25 requires a 0.0625% favourable price move before commission. Higher stake and higher multiplier increase sensitivity linearly.
+          </div>
         </div>
       </header>
 
