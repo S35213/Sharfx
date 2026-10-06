@@ -458,41 +458,6 @@ const TerminalContent: React.FC = () => {
     [openPositions, selectedSymbol],
   )
 
-  const responsiveAccountData = useMemo<AccountData>(() => {
-    const base = accountData ?? {
-      balance: 0,
-      equity: 0,
-      usedMargin: 0,
-      freeMargin: 0,
-      floatingPL: 0,
-      currency: 'USD',
-    }
-    const multiplierPositions = openPositions.filter((position) => position.brokerProduct === 'DERIV_MULTIPLIER' && Number(position.entryPrice) > 0 && Number(position.stake ?? 0) > 0 && Number(position.multiplier ?? 0) > 0)
-    if (!multiplierPositions.length) return base
-
-    const floatingPL = multiplierPositions.reduce((sum, position) => {
-      const entry = Number(position.entryPrice)
-      const stake = Number(position.stake ?? 0)
-      const multiplier = Number(position.multiplier ?? 0)
-      const spot = position.symbol === selectedSymbol && Number.isFinite(currentPrice) && currentPrice > 0
-        ? currentPrice
-        : Number(position.currentPrice ?? entry)
-      if (entry <= 0 || stake <= 0 || multiplier <= 0 || spot <= 0) return sum
-      const move = (spot - entry) / entry
-      const signedMove = position.type === 'BUY' ? move : -move
-      const pnl = Math.max(-stake, signedMove * multiplier * stake - Number(position.commission ?? 0))
-      return sum + pnl
-    }, 0)
-
-    const equity = base.balance + floatingPL
-    return {
-      ...base,
-      equity,
-      floatingPL,
-      freeMargin: Math.max(0, equity - base.usedMargin),
-    }
-  }, [accountData, currentPrice, openPositions, selectedSymbol])
-
   // Deriv public market data requires no authenticated account. Keep chart startup
   // independent from the slower OAuth/account synchronization path.
   const activeMarketConnection = useMemo(() => ({
@@ -553,7 +518,10 @@ const TerminalContent: React.FC = () => {
     }
   }, [handleClosePosition, openPositions, pushToast])
 
-  const resolvedAccountData = responsiveAccountData ?? {
+  // Deriv's authenticated account stream is the source of truth for
+  // balance, equity, free margin and floating P/L. Do not overwrite broker
+  // accounting with the public chart price.
+  const resolvedAccountData = accountData ?? {
     balance: 0,
     equity: 0,
     usedMargin: 0,
