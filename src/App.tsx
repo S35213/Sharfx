@@ -27,6 +27,7 @@ import { getSymbolSpec, SYMBOL_SPECS } from './data/mock/symbols'
 import { getProviderConnections, chooseDefaultProviderSelection, getStoredProviderSelection, subscribeToProviderSelection, type ActiveProviderSelection } from './data/provider/providerConnections'
 import { ProviderAccountStreamManager, providerAccountStreamKey } from './data/provider/ProviderAccountStreamManager'
 import type { ProviderOrderResult, ProviderPosition, ProviderStreamEvent } from './integrations/core/types'
+import { providerRegistry } from './integrations/catalog'
 import { analyzeLiquidity } from './engine/liquidity'
 import { analyzeMarketStructure, findSwingPoints } from './engine/marketStructure'
 import { analyzeSupportResistance } from './engine/supportResistance'
@@ -46,10 +47,51 @@ const normalizeProviderSymbol = (value: string): string => {
 const providerPositionToTrade = (position: ProviderPosition): TradeOrder => {
   const metadata = position.metadata || {}
   const raw = (metadata.raw && typeof metadata.raw === 'object') ? metadata.raw as Record<string, unknown> : {}
-  const stake = Number(metadata.stake ?? position.quantity ?? 0)
-  const multiplierValue = Number(metadata.multiplier ?? 0)
   const entryPrice = Number(position.entryPrice ?? 0)
   const currentPrice = Number(position.currentPrice ?? 0)
+
+  if (metadata.provider === 'ctrader') {
+    const lots = Number(position.quantity)
+    const stopLoss = Number(position.stopLoss)
+    const takeProfit = Number(position.takeProfit)
+    const usedMargin = Number(metadata.usedMargin)
+    const stopLossPips = Number(metadata.stopLossPips)
+    const takeProfitPips = Number(metadata.takeProfitPips)
+    return {
+      id: String(position.id),
+      symbol: normalizeProviderSymbol(position.symbol),
+      type: position.side,
+      lotSize: Number.isFinite(lots) ? lots : 0,
+      volumeLots: Number.isFinite(lots) ? lots : 0,
+      entryPrice: Number.isFinite(entryPrice) ? entryPrice : 0,
+      currentPrice: Number.isFinite(currentPrice) && currentPrice > 0 ? currentPrice : undefined,
+      stopLoss: Number.isFinite(stopLoss) && stopLoss > 0 ? stopLoss : null,
+      takeProfit: Number.isFinite(takeProfit) && takeProfit > 0 ? takeProfit : null,
+      plannedStopLossPrice: Number.isFinite(stopLoss) && stopLoss > 0 ? stopLoss : null,
+      plannedTakeProfitPrice: Number.isFinite(takeProfit) && takeProfit > 0 ? takeProfit : null,
+      riskPercent: 0,
+      riskAmount: 0,
+      rewardAmount: 0,
+      riskRewardRatio: 0,
+      status: 'open',
+      openTime: typeof metadata.openTimestamp === 'string' && metadata.openTimestamp
+        ? new Date(Number(metadata.openTimestamp)).toISOString()
+        : new Date().toISOString(),
+      profit: Number.isFinite(position.unrealizedPL) ? position.unrealizedPL : 0,
+      providerOrderId: String(position.id),
+      brokerProduct: 'SHAFX_CFD_CTRADER',
+      providerId: 'ctrader',
+      providerConnectionId: String(metadata.connectionId || ''),
+      providerAccountId: String(metadata.accountId || ''),
+      usedMargin: Number.isFinite(usedMargin) ? usedMargin : undefined,
+      stopLossPips: Number.isFinite(stopLossPips) && stopLossPips > 0 ? stopLossPips : undefined,
+      takeProfitPips: Number.isFinite(takeProfitPips) && takeProfitPips > 0 ? takeProfitPips : undefined,
+      commission: Number(metadata.commission),
+    }
+  }
+
+  const stake = Number(metadata.stake ?? position.quantity ?? 0)
+  const multiplierValue = Number(metadata.multiplier ?? 0)
   const stopLossAmount = Number(position.stopLoss ?? raw.stop_loss ?? 0)
   const takeProfitAmount = Number(position.takeProfit ?? raw.take_profit ?? 0)
   return {
@@ -66,9 +108,7 @@ const providerPositionToTrade = (position: ProviderPosition): TradeOrder => {
     rewardAmount: Number.isFinite(takeProfitAmount) && takeProfitAmount > 0 ? takeProfitAmount : 0,
     riskRewardRatio: Number.isFinite(stopLossAmount) && stopLossAmount > 0 && Number.isFinite(takeProfitAmount) && takeProfitAmount > 0 ? takeProfitAmount / stopLossAmount : 0,
     status: 'open',
-    openTime: typeof metadata.purchaseTime === 'number'
-      ? new Date(metadata.purchaseTime * 1000).toISOString()
-      : new Date().toISOString(),
+    openTime: typeof metadata.purchaseTime === 'number' ? new Date(metadata.purchaseTime * 1000).toISOString() : new Date().toISOString(),
     profit: Number.isFinite(position.unrealizedPL) ? position.unrealizedPL : 0,
     providerOrderId: String(position.id),
     brokerProduct: 'DERIV_MULTIPLIER',
@@ -80,6 +120,34 @@ const providerPositionToTrade = (position: ProviderPosition): TradeOrder => {
 }
 
 const providerOrderToTrade = (order: ProviderOrderResult): TradeOrder | null => {
+  if (order.raw && typeof order.raw === 'object') {
+    const raw = order.raw as Record<string, unknown>
+    if (String(raw.provider || '') === 'ctrader') {
+      const providerOrderId = String(order.providerOrderId || raw.orderId || '')
+      if (!providerOrderId) return null
+      return {
+        id: providerOrderId,
+        symbol: normalizeProviderSymbol(String(order.symbol || raw.symbol || '')),
+        type: order.side === 'SELL' ? 'SELL' : 'BUY',
+        lotSize: Number(order.quantity ?? raw.quantity ?? 0),
+        entryPrice: Number(raw.price ?? 0),
+        stopLoss: null,
+        takeProfit: null,
+        riskPercent: 0,
+        riskAmount: 0,
+        rewardAmount: 0,
+        riskRewardRatio: 0,
+        status: order.status === 'filled' ? 'closed' : 'pending',
+        openTime: order.timestamp || new Date().toISOString(),
+        closeTime: order.status === 'filled' ? order.timestamp : undefined,
+        profit: Number(raw.profit ?? 0),
+        providerOrderId,
+        brokerProduct: 'SHAFX_CFD_CTRADER',
+        providerId: 'ctrader',
+      }
+    }
+  }
+
   const raw = (order.raw && typeof order.raw === 'object') ? order.raw as Record<string, unknown> : {}
   const contractId = String(order.providerOrderId || raw.contractId || '')
   if (!contractId) return null
@@ -99,9 +167,7 @@ const providerOrderToTrade = (order: ProviderOrderResult): TradeOrder | null => 
     rewardAmount: 0,
     riskRewardRatio: 0,
     status: 'closed',
-    openTime: typeof raw.purchaseTime === 'number'
-      ? new Date(raw.purchaseTime * 1000).toISOString()
-      : order.timestamp || new Date().toISOString(),
+    openTime: typeof raw.purchaseTime === 'number' ? new Date(raw.purchaseTime * 1000).toISOString() : order.timestamp || new Date().toISOString(),
     closeTime: order.timestamp || new Date().toISOString(),
     profit: Number.isFinite(profit) ? profit : 0,
     providerOrderId: contractId,
@@ -199,7 +265,7 @@ const TerminalContent: React.FC = () => {
       try {
         const connections = await getProviderConnections()
         const selected = chooseDefaultProviderSelection(connections)
-        if (cancelled || !selected || selected.providerId !== 'deriv' || !selected.accountId) return
+        if (cancelled || !selected || !['deriv', 'ctrader'].includes(selected.providerId) || !selected.accountId) return
         setActiveProviderSelection(selected)
         const connection = connections.find((item) => item.id === selected.connectionId)
         const account = connection?.accounts.find((item) => item.providerAccountId === selected.accountId && item.active)
@@ -295,7 +361,7 @@ const TerminalContent: React.FC = () => {
 
   useEffect(() => {
     const manager = accountStreamManager.current
-    if (!activeProviderSelection?.providerId || activeProviderSelection.providerId !== 'deriv' || !activeProviderSelection.connectionId || !activeProviderSelection.accountId) {
+    if (!activeProviderSelection?.providerId || !['deriv', 'ctrader'].includes(activeProviderSelection.providerId) || !activeProviderSelection.connectionId || !activeProviderSelection.accountId) {
       void manager.stopAll()
       return
     }
@@ -303,7 +369,7 @@ const TerminalContent: React.FC = () => {
     let cancelled = false
     const accountType = activeProviderSelection.environment === 'demo' ? 'demo' as const : 'real' as const
     const spec = {
-      providerId: 'deriv',
+      providerId: activeProviderSelection.providerId,
       connectionId: activeProviderSelection.connectionId,
       accountId: activeProviderSelection.accountId,
       accountType,
@@ -340,7 +406,7 @@ const TerminalContent: React.FC = () => {
           },
           (status) => {
             if (cancelled) return
-            if (status === 'error') pushToast('Deriv account stream interrupted. SHAFX is reconnecting.')
+            if (status === 'error') pushToast((activeProviderSelection.providerId === 'ctrader' ? 'cTrader' : 'Deriv') + ' account stream interrupted. SHAFX is reconnecting.')
           },
           (event: ProviderStreamEvent) => {
             if (cancelled || key !== providerAccountStreamKey({
