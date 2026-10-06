@@ -15,6 +15,8 @@ import { calculateMultiplierEquivalentLots, calculateMultiplierPnl, calculateMul
 import { formatCurrency, formatPrice } from '../../lib/format'
 import { buyDerivProposal, getDerivQuote, type DerivOrderConnection, type DerivProposalQuote } from '../../data/deriv/derivTrading'
 import type { ChartAnnotation } from '../chart/CandlestickChart'
+import { CTraderManualTicket } from './CTraderManualTicket'
+import type { ActiveProviderSelection } from '../../data/provider/providerConnections'
 
 interface Props {
   symbol: string
@@ -22,10 +24,12 @@ interface Props {
   bidPrice?: number
   askPrice?: number
   accountBalance: number
+  accountFreeMargin?: number
   accountCurrency: string
   symbolSpec: SymbolSpec
   timeframe: Timeframe
   connection: DerivOrderConnection | null
+  providerSelection?: ActiveProviderSelection | null
   activePosition?: TradeOrder | null
   onTradeOpened: (order: TradeOrder) => void
   onTradeClosed?: (id: string) => void | Promise<void>
@@ -87,16 +91,38 @@ export const OrderPanel: React.FC<Props> = ({
   bidPrice = currentPrice,
   askPrice = currentPrice,
   accountBalance,
+  accountFreeMargin,
   accountCurrency,
   symbolSpec,
   timeframe,
   connection,
+  providerSelection = null,
   activePosition = null,
   onTradeOpened,
   onTradeClosed,
   onTradeLinesChange,
   aiSetup,
 }) => {
+  if (providerSelection?.providerId === 'ctrader') {
+    return <CTraderManualTicket
+      symbol={symbol}
+      currentPrice={currentPrice}
+      bidPrice={bidPrice}
+      askPrice={askPrice}
+      accountBalance={accountBalance}
+      accountFreeMargin={accountFreeMargin}
+      accountCurrency={accountCurrency}
+      symbolSpec={symbolSpec}
+      timeframe={timeframe}
+      connection={connection}
+      providerSelection={providerSelection}
+      activePosition={activePosition}
+      onTradeOpened={onTradeOpened}
+      onTradeClosed={onTradeClosed}
+      onTradeLinesChange={onTradeLinesChange}
+      aiSetup={aiSetup}
+    />
+  }
   const [side, setSide] = useState<TradeSide>(aiSetup?.direction ?? 'BUY')
   const [stake, setStake] = useState('10.00')
   const [multiplier, setMultiplier] = useState('100')
