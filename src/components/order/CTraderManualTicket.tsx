@@ -280,6 +280,10 @@ export const CTraderManualTicket: React.FC<Props> = ({
     resetError()
   }
 
+  const connectCTrader = (): void => {
+    window.location.assign('/api/providers/ctrader?op=login')
+  }
+
   const place = async (): Promise<void> => {
     if (!connection || providerSelection.providerId !== 'ctrader' || !providerSelection.accountId) {
       setError('Connect a Deriv cTrader practice account before placing a CFD.')
@@ -402,7 +406,8 @@ export const CTraderManualTicket: React.FC<Props> = ({
   }
 
   function renderPlanningTicket(): React.ReactNode {
-    const canTrade = Boolean(connection?.accountId && providerSelection.providerId === 'ctrader' && connection.environment === 'demo' && plan.valid && !marginLoading)
+    const cTraderReady = Boolean(connection?.accountId && providerSelection.providerId === 'ctrader' && connection.environment === 'demo')
+    const canTrade = Boolean(cTraderReady && plan.valid && !marginLoading)
     return (
       <div className="bg-[#080D13] p-3 sm:p-4">
         <div className="flex items-center justify-between gap-2">
@@ -438,16 +443,22 @@ export const CTraderManualTicket: React.FC<Props> = ({
           <div className="rounded-xl border border-shafx-border bg-shafx-surface p-2.5"><div className="text-[7px] uppercase tracking-[0.12em] text-shafx-textMuted">Price plan</div><div className="mt-1 font-mono text-[9px]">Entry {formatPrice(entryPrice, effectiveSymbol.pricePrecision)}</div><div className="mt-1 grid grid-cols-2 gap-2 text-[8px]"><span className="text-shafx-danger">SL {formatPrice(stopLossPrice, effectiveSymbol.pricePrecision)}</span><span className="text-right text-shafx-success">TP {formatPrice(takeProfitPrice, effectiveSymbol.pricePrecision)}</span></div></div>
         </div>
 
-        <div className="mt-3 rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2.5 text-[8px] leading-4 text-shafx-textMuted">
+        <div className="mt-3 rounded-xl border border-shafx-accent/20 bg-shafx-accent/[0.04] px-3 py-2.5 text-[8px] leading-4 text-shafx-textMuted">
           <span className="font-semibold text-shafx-text">Why this size?</span> {riskSizing
             ? 'SHAFX starts from your selected risk amount and stop distance, then rounds volume down to the broker step. A tighter stop can increase volume; a wider stop reduces it.'
             : 'You chose the lot size directly. SHAFX still shows the resulting dollar risk before you confirm.'}
         </div>
 
-        {(error || !plan.valid) && <div className="mt-3 rounded-xl border border-shafx-danger/25 bg-shafx-danger/10 px-3 py-2 text-[8px] leading-4 text-shafx-danger">{error || plan.error}</div>}
+        
+        {!cTraderReady && <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-shafx-warning/25 bg-shafx-warning/[0.05] px-3 py-2.5">
+          <div><div className="text-[8px] font-semibold text-shafx-warning">cTrader practice account not connected</div><div className="mt-1 text-[7px] leading-3.5 text-shafx-textMuted">The new SHAFX CFD ticket is ready, but broker execution requires Deriv cTrader authorization.</div></div>
+          <button type="button" onClick={connectCTrader} className="min-h-9 shrink-0 rounded-lg bg-shafx-accent px-3 text-[8px] font-bold text-white">CONNECT cTRADER</button>
+        </div>}
+
+{(error || !plan.valid) && <div className="mt-3 rounded-xl border border-shafx-danger/25 bg-shafx-danger/10 px-3 py-2 text-[8px] leading-4 text-shafx-danger">{error || plan.error}</div>}
 
         <button type="button" onClick={() => void place()} disabled={!canTrade || state === 'placing'} className={'mt-3 flex min-h-12 w-full items-center justify-center gap-2 text-[9px] font-bold ' + (side === 'BUY' ? 'bg-shafx-success text-[#07110E]' : 'bg-shafx-danger text-white') + ' disabled:opacity-45'}>
-          {state === 'placing' ? <><LoaderCircle className="h-3.5 w-3.5 animate-spin" /> PLACING {side}…</> : <><CheckCircle2 className="h-3.5 w-3.5" /> {connection?.environment === 'demo' ? 'CONFIRM PRACTICE ' : 'LIVE LOCKED '} {side}</>}
+          {state === 'placing' ? <><LoaderCircle className="h-3.5 w-3.5 animate-spin" /> PLACING {side}…</> : !cTraderReady ? <><ArrowUpRight className="h-3.5 w-3.5" /> CONNECT cTRADER TO TRADE</> : <><CheckCircle2 className="h-3.5 w-3.5" /> {connection?.environment === 'demo' ? 'CONFIRM PRACTICE ' : 'LIVE LOCKED '} {side}</>}
         </button>
 
         {connection?.environment !== 'demo' && <div className="mt-2 text-center text-[7px] uppercase tracking-[0.14em] text-shafx-warning">Live execution is deliberately locked until the SHAFX release gate passes.</div>}
