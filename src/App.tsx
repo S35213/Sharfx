@@ -598,7 +598,7 @@ const TerminalContent: React.FC = () => {
       pushToast(error instanceof Error ? error.message : 'Unable to close the selected trade.')
       return null
     }
-  }, [activeProviderSelection?.providerId, derivOrderConnection, openPositions, pushToast, selectedSymbol, tradeHistory])
+  }, [activeProviderSelection, derivOrderConnection, openPositions, pushToast, selectedSymbol, tradeHistory])
 
   const handleBulkClose = useCallback(async (mode: 'winning' | 'losing' | 'all'): Promise<void> => {
     const candidates = openPositions
