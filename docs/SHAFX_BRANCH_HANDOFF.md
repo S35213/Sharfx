@@ -241,6 +241,34 @@ SHAFX-specific concepts to use:
 - [ ] Live external execution explicitly approved by the user.
 - [ ] Only then may the live execution gate be changed.
 
+## Change log — manual-CFD pivot
+
+| Date | Change | Result / lesson |
+|---|---|---|
+| 2026-10-06 | Created this persistent handoff and changed the destination from Multiplier-first + bot-first to **SHAFX Manual CFD via Deriv cTrader**. | Bot is frozen until manual trading passes. No merge to `main`. |
+| 2026-10-06 | Added `src/lib/cfdRiskEngine.ts` and risk-engine tests. | SHAFX now owns deterministic lot/risk math instead of Multiplier stake math for the new manual route. |
+| 2026-10-06 | Added server-side cTrader OAuth/Open API gateway and provider adapter. | Client never receives cTrader client secret or OAuth token. Live execution remains disabled. |
+| 2026-10-06 | Added cTrader account discovery across demo/live endpoints and fixed selected-account routing. | The provider session now follows the account the user actually selected instead of an empty connection default. |
+| 2026-10-06 | Added SHAFX-native CFD manual ticket. | New UI uses BUY/SELL, risk-sized lots, SL/TP pips/prices, R:R and broker margin. It is not a Multiplier or cTrader clone. |
+| 2026-10-06 | First Render builds failed on strict TypeScript checks. | Fixed optional leverage, null instrument access, unused imports, and provider close routing. These failures are retained here so future agents know what already happened. |
+| 2026-10-06 | Latest Render build passed `tsc -b && vite build` and service reached **live**. | Live deployment commit: `a5b7577f657799e910371a4d1fe4ffe1db717a39`. |
+| 2026-10-06 | Runtime verification boundary reached. | Render startup reached “SHAFX Render server listening on 0.0.0.0:10000” and service reported live. Direct external HTTP probing from this execution environment is DNS-blocked, so browser-style visual/runtime verification is still outstanding. |
+| 2026-10-06 | External certification checkpoint. | **Not yet certified:** no confirmed SHAFX cTrader Open API client ID/secret/redirect URI has been exercised, and no real Deriv cTrader practice order has been opened/closed through SHAFX yet. |
+
+## cTrader setup required before Gate F
+
+The cTrader Open API application must be registered/approved outside SHAFX and configured on Render with:
+
+- `CTRADER_CLIENT_ID`
+- `CTRADER_CLIENT_SECRET`
+- `CTRADER_REDIRECT_URI` = the exact deployed SHAFX callback route ending in `/api/providers/ctrader?op=callback`
+
+Never commit these values to GitHub and never expose them as browser `VITE_*` variables.
+
+After those are available, the next verification target is **cTrader practice only**:
+connect → select demo account → quote/symbol metadata → margin → market order with SL/TP → broker P/L → close → restart/reconcile.
+
+
 ## Current checkpoint
 
 **Status:** Manual CFD pivot is authorized and under implementation.
