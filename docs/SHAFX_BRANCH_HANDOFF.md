@@ -269,6 +269,23 @@ After those are available, the next verification target is **cTrader practice on
 connect → select demo account → quote/symbol metadata → margin → market order with SL/TP → broker P/L → close → restart/reconcile.
 
 
+## Correction — why the old Multiplier UI was still visible
+
+On 2026-10-06 the first manual-CFD implementation was correctly present in the branch but was incorrectly gated behind `providerSelection.providerId === 'ctrader'`. An existing stored Deriv selection therefore continued rendering the old Multiplier ticket.
+
+This has now been corrected:
+
+- **New/manual ticket default:** always renders the SHAFX CFD ticket.
+- **cTrader connected:** the CFD ticket can quote, calculate margin, and place practice orders through cTrader.
+- **cTrader not connected:** the CFD ticket remains visible and clearly asks the user to connect cTrader; the old stake/multiplier controls are not shown.
+- **Existing open legacy Multiplier position:** its old Multiplier management panel remains intentionally available so SHAFX does not lose or misrepresent an already-open legacy product.
+- React hook ordering was corrected so switching between a legacy open position and the new manual ticket does not create conditional-hook errors.
+- Final corrective Render deployment: `3040dfc21b81474b2127e3e702ddf2501f3878e0` — **live** at 2026-10-06 11:01:12 UTC.
+- Render build for this corrective commit passed `tsc -b && vite build`.
+
+**User-facing result:** after a fresh page load, a normal manual-trading ticket should say **SHAFX CFD • manual** and use lots/risk/SL/TP/R:R—not Stake + Multiplier.
+
+
 ## Current checkpoint
 
 **Status:** Manual CFD pivot is authorized and under implementation.
