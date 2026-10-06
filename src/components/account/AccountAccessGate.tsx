@@ -100,7 +100,7 @@ export const AccountAccessGate: React.FC<Props> = ({ onConnected }) => {
             <div className="rounded-3xl border border-shafx-warning/25 bg-shafx-surface p-6 text-center shadow-[0_18px_60px_rgba(0,0,0,.2)]">
               <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-shafx-warning">One-time Deriv cTrader setup</div>
               <h1 className="mt-3 text-3xl font-semibold tracking-tight">Your broker login worked, but no cTrader trading account is active yet.</h1>
-              <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-shafx-textMuted">Deriv creates the cTrader trading account from your existing Deriv account. There is no separate cTrader password. Activate cTrader in Deriv’s CFD section, then return here and continue the same SHAFX onboarding.</p>
+              <p className="mx-auto mt-3 max-w-xl text-base leading-7 text-shafx-textMuted">Deriv creates the cTrader trading account from your existing Deriv account. There is no separate cTrader password. Activate cTrader in Deriv’s CFD section, then return here and continue the same SHAFX onboarding.</p>
               <div className="mt-6 grid gap-2 sm:grid-cols-2">
                 <a href="https://deriv.com/help-centre-question/how-do-i-activate-a-deriv-ctrader-account" target="_blank" rel="noreferrer" className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-shafx-accent px-4 text-xs font-semibold text-white">See cTrader activation steps <ArrowRight className="h-4 w-4" /></a>
                 <button type="button" onClick={() => window.location.assign('/api/providers/ctrader?op=login')} className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-shafx-border bg-shafx-bg px-4 text-xs font-semibold">Check cTrader again <RefreshCw className="h-4 w-4" /></button>
@@ -112,7 +112,7 @@ export const AccountAccessGate: React.FC<Props> = ({ onConnected }) => {
           <div className="text-center">
             <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-shafx-textMuted">Required before the workspace opens</div>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-5xl">Connect your broker once, then enter SHAFX.</h1>
-            <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-shafx-textMuted">Choose Deriv and SHAFX will open the secure cTrader authorization flow directly. After authorization, your Deriv cTrader demo account can be selected automatically.</p>
+            <p className="mx-auto mt-3 max-w-2xl text-base leading-7 text-shafx-textMuted">Choose Deriv and SHAFX will open the secure cTrader authorization flow directly. After authorization, your Deriv cTrader demo account can be selected automatically.</p>
           </div>
 
           <div className="mt-9 max-w-xl">
@@ -130,7 +130,7 @@ export const AccountAccessGate: React.FC<Props> = ({ onConnected }) => {
                 )}
               >
                 <div className="flex items-start justify-between gap-4">
-                  <div className="flex min-w-0 items-center gap-3"><BrokerLogo id={broker.id} name={broker.name} /><div className="min-w-0"><div className="flex items-center gap-2"><h2 className="truncate text-base font-semibold">{broker.name}</h2><span className={"rounded-full border px-2 py-1 text-[8px] font-bold uppercase tracking-wide " + (available ? "border-shafx-success/25 bg-shafx-success/10 text-shafx-success" : "border-shafx-border bg-shafx-bg text-shafx-textMuted")}>{available ? "Available" : "Coming soon"}</span></div><p className="mt-1 text-[10px] leading-4 text-shafx-textMuted">{available ? "One secure connection: sign in with your Deriv credentials through cTrader, authorize SHAFX, then continue." : broker.note}</p></div></div>
+                  <div className="flex min-w-0 items-center gap-3"><BrokerLogo id={broker.id} name={broker.name} /><div className="min-w-0"><div className="flex items-center gap-2"><h2 className="truncate text-base font-semibold">{broker.name}</h2><span className={"rounded-full border px-2 py-1 text-[8px] font-bold uppercase tracking-wide " + (available ? "border-shafx-success/25 bg-shafx-success/10 text-shafx-success" : "border-shafx-border bg-shafx-bg text-shafx-textMuted")}>{available ? "Available" : "Coming soon"}</span></div><p className="mt-1 text-sm leading-6 text-shafx-textMuted">{available ? "One secure connection: sign in with your Deriv credentials through cTrader, authorize SHAFX, then continue." : broker.note}</p></div></div>
                   <span className={"flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 " + (connecting && available ? "border-red-500 bg-red-500 text-white" : "border-shafx-textMuted/40 bg-transparent text-transparent")}>
                     <Check className="h-4 w-4" />
                   </span>
@@ -149,13 +149,13 @@ export const AccountAccessGate: React.FC<Props> = ({ onConnected }) => {
           <div className="text-center">
             <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-shafx-textMuted">{activeConnection?.providerId === 'ctrader' ? 'cTrader connected' : 'Deriv connected'}</div>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-5xl">Choose demo or real account.</h1>
-            <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-shafx-textMuted">The broker authorization is complete. SHAFX can now use the selected Deriv cTrader account without asking you to log in again.</p>
+            <p className="mx-auto mt-3 max-w-2xl text-base leading-7 text-shafx-textMuted">The broker authorization is complete. SHAFX can now use the selected Deriv cTrader account without asking you to log in again.</p>
           </div>
 
           <div className="mt-8 rounded-3xl border border-shafx-border bg-shafx-surface p-4 shadow-[0_18px_60px_rgba(0,0,0,.2)]">
             <div className="flex items-center justify-between gap-3 border-b border-shafx-border pb-3"><div><div className="flex items-center gap-2 text-sm font-semibold"><BrokerLogo id={activeConnection?.providerId === 'ctrader' ? 'ctrader' : 'deriv'} name={activeConnection?.providerId === 'ctrader' ? 'Deriv cTrader' : 'Deriv'} /><span>{activeConnection?.providerId === 'ctrader' ? 'Deriv cTrader accounts' : 'Deriv accounts'}</span></div><div className="mt-1 text-[9px] text-shafx-textMuted">{accounts.length} connected account{accounts.length === 1 ? '' : 's'}</div></div><button type="button" onClick={() => void refresh()} className="flex min-h-10 items-center gap-2 rounded-lg border border-shafx-border px-3 text-[9px] font-semibold text-shafx-textMuted"><RefreshCw className="h-3.5 w-3.5" />Refresh</button></div>
             {accounts.length === 0 ? (
-              <div className="py-12 text-center"><div className="text-sm font-semibold">No Deriv cTrader account is available yet.</div><p className="mt-2 text-[10px] leading-5 text-shafx-textMuted">Activate Deriv cTrader if needed, then use Check cTrader again.</p></div>
+              <div className="py-12 text-center"><div className="text-sm font-semibold">No Deriv cTrader account is available yet.</div><p className="mt-2 text-sm leading-6 text-shafx-textMuted">Activate Deriv cTrader if needed, then use Check cTrader again.</p></div>
             ) : (
               <div className="mt-4 grid gap-3 md:grid-cols-2">
                 {accounts.map((account) => (
@@ -170,8 +170,8 @@ export const AccountAccessGate: React.FC<Props> = ({ onConnected }) => {
           </div>
 
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            <div className="rounded-2xl border border-shafx-border bg-shafx-surface/70 p-4"><div className="flex items-center gap-2 text-xs font-semibold"><CheckCircle2 className="h-4 w-4 text-shafx-success" />Real account money stays with the broker.</div><p className="mt-1 text-[9px] leading-5 text-shafx-textMuted">SHAFX reads the connected account and, where broker execution is enabled, sends authorized trading instructions through the Deriv connection. SHAFX does not need a separate wallet for your trading funds.</p></div>
-            <div className="rounded-2xl border border-shafx-border bg-shafx-surface/70 p-4"><div className="flex items-center gap-2 text-xs font-semibold"><ShieldCheck className="h-4 w-4 text-shafx-accent" />Deposit / withdraw remains on Deriv.</div><p className="mt-1 text-[9px] leading-5 text-shafx-textMuted">Use the broker's official funding area. SHAFX can open that official area without taking custody of the money.</p></div>
+            <div className="rounded-2xl border border-shafx-border bg-shafx-surface/70 p-4"><div className="flex items-center gap-2 text-xs font-semibold"><CheckCircle2 className="h-4 w-4 text-shafx-success" />Real account money stays with the broker.</div><p className="mt-1 text-sm leading-6 text-shafx-textMuted">SHAFX reads the connected account and, where broker execution is enabled, sends authorized trading instructions through the Deriv connection. SHAFX does not need a separate wallet for your trading funds.</p></div>
+            <div className="rounded-2xl border border-shafx-border bg-shafx-surface/70 p-4"><div className="flex items-center gap-2 text-xs font-semibold"><ShieldCheck className="h-4 w-4 text-shafx-accent" />Deposit / withdraw remains on Deriv.</div><p className="mt-1 text-sm leading-6 text-shafx-textMuted">Use the broker's official funding area. SHAFX can open that official area without taking custody of the money.</p></div>
           </div>
         </section>
       )}
