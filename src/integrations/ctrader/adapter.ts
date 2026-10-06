@@ -9,7 +9,6 @@ import type {
   ProviderOrderResult,
   ProviderPosition,
   ProviderQuote,
-  ProviderStreamEvent,
   ProviderStreamHandle,
 } from '../core/types'
 import { validateProviderConnection } from '../core/providerConnectionGuard'
