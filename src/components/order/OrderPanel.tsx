@@ -85,7 +85,7 @@ const lineFor = (
 
 const moneyLabel = (amount: number, currency: string): string => formatCurrency(roundMoney(amount), currency)
 
-export const OrderPanel: React.FC<Props> = ({
+const LegacyMultiplierOrderPanel: React.FC<Props> = ({
   symbol,
   currentPrice,
   bidPrice = currentPrice,
@@ -103,28 +103,6 @@ export const OrderPanel: React.FC<Props> = ({
   onTradeLinesChange,
   aiSetup,
 }) => {
-  const useLegacyMultiplierTicket = activePosition?.brokerProduct === 'DERIV_MULTIPLIER'
-
-  if (!useLegacyMultiplierTicket) {
-    return <CTraderManualTicket
-      symbol={symbol}
-      currentPrice={currentPrice}
-      bidPrice={bidPrice}
-      askPrice={askPrice}
-      accountBalance={accountBalance}
-      accountFreeMargin={accountFreeMargin}
-      accountCurrency={accountCurrency}
-      symbolSpec={symbolSpec}
-      timeframe={timeframe}
-      connection={connection}
-      providerSelection={providerSelection}
-      activePosition={activePosition}
-      onTradeOpened={onTradeOpened}
-      onTradeClosed={onTradeClosed}
-      onTradeLinesChange={onTradeLinesChange}
-      aiSetup={aiSetup}
-    />
-  }
   const [side, setSide] = useState<TradeSide>(aiSetup?.direction ?? 'BUY')
   const [stake, setStake] = useState('10.00')
   const [multiplier, setMultiplier] = useState('100')
@@ -780,4 +758,30 @@ export const OrderPanel: React.FC<Props> = ({
       </div>
     </section>
   )
+}
+
+
+export const OrderPanel: React.FC<Props> = (props) => {
+  if (props.activePosition?.brokerProduct === 'DERIV_MULTIPLIER') {
+    return <LegacyMultiplierOrderPanel {...props} />
+  }
+
+  return <CTraderManualTicket
+    symbol={props.symbol}
+    currentPrice={props.currentPrice}
+    bidPrice={props.bidPrice ?? props.currentPrice}
+    askPrice={props.askPrice ?? props.currentPrice}
+    accountBalance={props.accountBalance}
+    accountFreeMargin={props.accountFreeMargin}
+    accountCurrency={props.accountCurrency}
+    symbolSpec={props.symbolSpec}
+    timeframe={props.timeframe}
+    connection={props.providerSelection?.providerId === 'ctrader' ? props.connection : null}
+    providerSelection={props.providerSelection}
+    activePosition={props.activePosition}
+    onTradeOpened={props.onTradeOpened}
+    onTradeClosed={props.onTradeClosed}
+    onTradeLinesChange={props.onTradeLinesChange}
+    aiSetup={props.aiSetup}
+  />
 }
