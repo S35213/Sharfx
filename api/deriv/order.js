@@ -148,7 +148,7 @@ const buildQuoteRequest = (order, account) => {
 const acceptedMultipliersFromError = (message) => {
   const match = String(message || '').match(/accepts?\s+([0-9,\s]+)/i)
   if (!match) return []
-  return [...match[1].matchAll(/\\d+(?:\\.\\d+)?/g)]
+  return [...match[1].matchAll(/\d+(?:\.\d+)?/g)]
     .map((item) => Number(item[0]))
     .filter((value) => Number.isFinite(value) && value > 0)
 }
