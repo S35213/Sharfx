@@ -3,6 +3,7 @@ import { providerRegistry } from './core/providerRegistry'
 import { DERIV_PROVIDER_ADAPTER } from './deriv/adapter'
 import { BINANCE_PROVIDER_ADAPTER } from './binance/adapter'
 import { OANDA_PROVIDER_ADAPTER } from './oanda/adapter'
+import { CTRADER_PROVIDER_ADAPTER } from './ctrader/adapter'
 import { IBKR_PROVIDER_DESCRIPTOR } from './planned/ibkrDescriptor'
 
 const descriptorAdapter = (descriptor: ProviderDescriptor): ProviderAdapter => ({ descriptor })
@@ -11,6 +12,7 @@ const adapters: ProviderAdapter[] = [
   DERIV_PROVIDER_ADAPTER,
   BINANCE_PROVIDER_ADAPTER,
   OANDA_PROVIDER_ADAPTER,
+  CTRADER_PROVIDER_ADAPTER,
   descriptorAdapter(IBKR_PROVIDER_DESCRIPTOR),
 ]
 
