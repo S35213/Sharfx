@@ -213,7 +213,7 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
       const closedAt = new Date().toISOString()
 
       setRounds((current) => current.map((round) => round.number === activeRound
-        ? { ...round, status, exit: exitPrice, pnl: roundPnl }
+        ? { ...round, status, exit: exitPrice ?? undefined, pnl: roundPnl }
         : round))
 
       latestCallbackRef.current?.({
@@ -250,7 +250,7 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
     if (secondsLeft <= 0) {
       settleRound(
         currentDirection ? (pnl > 0 ? 'win' : pnl < 0 ? 'loss' : 'wait') : 'wait',
-        currentDirection && Number.isFinite(livePrice) && livePrice > 0 ? livePrice : undefined,
+        currentDirection && Number.isFinite(livePrice) && livePrice > 0 ? livePrice : null,
         currentDirection ? pnl : 0,
       )
     }
