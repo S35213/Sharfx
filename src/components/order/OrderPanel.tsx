@@ -34,9 +34,9 @@ interface Props {
 
 type TicketState = 'planning' | 'quoting' | 'quoted' | 'buying' | 'error'
 
-const MIN_STAKE = 1
+const MIN_STAKE = 10
 const MAX_STAKE = 2000
-const QUICK_STAKES = ['1.00', '5.00', '10.00', '20.00', '50.00', '100.00', '500.00', '2000.00']
+const QUICK_STAKES = ['10.00', '20.00', '50.00', '100.00', '250.00', '500.00', '1000.00', '2000.00']
 const QUICK_MULTIPLIERS = ['100', '200', '300', '500', '800', '1000', '1500', '2000', '3000', '4000']
 const STOP_LOSS_RATIOS = [0.1, 0.2, 0.4, 0.8]
 const TAKE_PROFIT_MULTIPLES = [1, 2, 5, 10]
@@ -80,6 +80,16 @@ const lineFor = (
 
 const moneyLabel = (amount: number, currency: string): string => formatCurrency(roundMoney(amount), currency)
 
+const estimatePnlPerPip = (
+  entryPrice: number,
+  pipSize: number,
+  stake: number,
+  multiplier: number,
+): number | null => {
+  if (![entryPrice, pipSize, stake, multiplier].every(Number.isFinite) || entryPrice <= 0 || pipSize <= 0 || stake <= 0 || multiplier <= 0) return null
+  return (pipSize / entryPrice) * multiplier * stake
+}
+
 const protectionPrice = (entryPrice: number, amount: number, stake: number, multiplier: number, side: TradeSide, kind: 'sl' | 'tp'): number | null => {
   if (![entryPrice, amount, stake, multiplier].every(Number.isFinite) || entryPrice <= 0 || amount <= 0 || stake <= 0 || multiplier <= 0) return null
   const distance = (amount * entryPrice) / (multiplier * stake)
@@ -105,8 +115,8 @@ export const OrderPanel: React.FC<Props> = ({
   aiSetup,
 }) => {
   const [side, setSide] = useState<TradeSide>(aiSetup?.direction ?? 'BUY')
-  const [stake, setStake] = useState('1.00')
-  const [multiplier, setMultiplier] = useState('100')
+  const [stake, setStake] = useState('10.00')
+  const [multiplier, setMultiplier] = useState('1000')
   const [stopLossEnabled, setStopLossEnabled] = useState(true)
   const [takeProfitEnabled, setTakeProfitEnabled] = useState(true)
   const [stopLossRatio, setStopLossRatio] = useState(DEFAULT_STOP_LOSS_RATIO)
@@ -517,6 +527,10 @@ export const OrderPanel: React.FC<Props> = ({
           <span>MARKET {formatPrice(currentPrice, symbolSpec.pricePrecision)}</span>
           {marketMetrics.hasSpread ? <span>{marketMetrics.spreadPips?.toFixed(1)} pips spread</span> : <span>Deriv market price</span>}
         </div>
+        <div className="mt-1 flex items-center justify-between gap-2 font-mono text-[8px]">
+          <span className="text-shafx-textMuted">P/L sensitivity</span>
+          <span className="text-shafx-accent">{(() => { const value = estimatePnlPerPip(entryPrice, symbolSpec.pipSize, stakeValue, multiplierValue); return value === null ? '—' : '≈ ' + formatCurrency(value, accountCurrency) + ' / pip' })()}</span>
+        </div>
       </header>
 
       <div className="divide-y divide-shafx-border">
@@ -537,7 +551,7 @@ export const OrderPanel: React.FC<Props> = ({
                 className="min-w-0 flex-1 bg-transparent font-mono text-sm outline-none"
               />
             </div>
-            <div className="mt-1 text-[7px] text-shafx-textMuted">Range 1 – 2,000 {accountCurrency}</div>
+            <div className="mt-1 text-[7px] text-shafx-textMuted">Range 10 – 2,000 {accountCurrency}</div>
             <div className="mt-1 flex gap-1 overflow-x-auto">
               {QUICK_STAKES.map((value) => (
                 <button key={value} type="button" onClick={() => chooseStake(value)} disabled={Number(value) > accountBalance} className={'flex-1 border px-1.5 py-1 font-mono text-[7px] ' + (stake === value ? 'border-shafx-primary/40 bg-shafx-primary/10 text-shafx-primary' : 'border-shafx-border text-shafx-textMuted disabled:opacity-40')}>
