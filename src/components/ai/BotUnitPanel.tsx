@@ -323,6 +323,7 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
         <div className="text-right">
           <div className="font-mono text-[8px] text-shafx-textMuted">ROUND</div>
           <div className="mt-0.5 font-mono text-lg font-bold">{activeRound || '—'} / {UNIT_ROUNDS}</div>
+          <div className="mt-1 font-mono text-[7px] text-shafx-textMuted">RE-SCAN #{scanCount}</div>
         </div>
       </div>
 
