@@ -1,0 +1,253 @@
+# SHAFX Experimental Branch Handoff & Road Map
+
+> **Purpose:** This file is the persistent handoff for the experimental SHAFX manual-trading rebuild. A new chat, model, or engineer must read this before changing this branch.
+
+## Branch identity
+
+- Repository: `S35213/Sharfx`
+- Experimental branch: `test/rebuild-deriv-native-manual-20260930`
+- Deployment: Render service `sharfx-deriv-render`
+- Render URL: https://sharfx-deriv-render.onrender.com
+- Main branch: **protected from this experiment**
+- Last known-good deployed commit before the manual-CFD pivot: `8747186d5e5aaab35f32f42bcb7e04727a04ed45`
+- Last known-good message: **Remove unused bot reset setters**
+- Last verified Render state before this pivot: build/deploy succeeded and service was live.
+
+## HARD RULES
+
+1. **Do not merge this branch into `main` yet.**
+   - Merge is forbidden until every mandatory gate in this file is complete, the application is verified, the deployment is verified, and the user explicitly approves promotion.
+2. **Do not rewrite or discard the implementation tree.** Continue from the current branch state and update the existing roadmap as work progresses.
+3. **Do not commit credentials, tokens, passwords, API secrets, or provider access codes.**
+   - User/provider secrets must remain server-side.
+   - Never put cTrader client secret, access token, refresh token, or Deriv credentials in client `VITE_*` variables.
+4. **Do not enable live external execution just because the code compiles.**
+   - Demo/practice end-to-end validation must pass first.
+   - Live execution remains behind an explicit release gate.
+5. **Do not resume bot redesign until the manual CFD trading path is stable.**
+   - The bot must later reuse the same SHAFX risk/position-sizing engine instead of inventing a second P/L model.
+6. **Do not make the manual product a copy of MT5, cTrader, TradingView, or Deriv.**
+   - SHAFX should feel familiar to a trader but have its own hierarchy, wording, risk display, and interaction model.
+7. **Do not silently replace the Multiplier implementation.**
+   - Deriv Multiplier remains a secondary/legacy compatibility mode.
+   - The new default direction is lot-based CFD trading.
+8. **Do not claim a real broker flow is working unless it has actually been exercised against the provider.**
+9. **Every meaningful milestone must leave a note in this file and/or the implementation tree, including failures and why a direction changed.**
+
+## Destination change
+
+### Old destination — cancelled as the primary direction
+
+The experimental work originally focused on a Deriv-native manual ticket based on **Multipliers**, followed by a separate bot redesign.
+
+That path produced these problems:
+
+- The manual ticket was tied to `MULTUP` / `MULTDOWN`, stake, and multiplier semantics instead of normal lot-based position sizing.
+- The user reported that a `100` stake with an `800x` multiplier could produce only a small dollar result on a small market move, which did not match the desired manual-trading experience.
+- The bot redesign consumed time before the manual trading model was settled.
+- Bot rebuild attempts previously failed on unused state/setter cleanup in commits:
+  - `bbbd16e58d075dc2d02144ed5d583cb985755ee7`
+  - `13ea030b8a89463924d25cf822a4be4d9e6d0276`
+  - `e8d4058f79701dbc7e300a104af35fb49b3c7f4f`
+  - eventually corrected by `8747186d5e5aaab35f32f42bcb7e04727a04ed45`
+- The user later reported that the bot appeared to keep taking roughly five minutes / restarting without producing anything. This is intentionally **not being fixed now**.
+
+### New destination — current mission
+
+Build **SHAFX Manual CFD** first.
+
+The target model is:
+
+**SHAFX manual terminal → normalized CFD risk engine → Deriv cTrader adapter → Deriv cTrader practice account first**
+
+The Multiplier product remains available as:
+
+**Deriv Multiplier — Legacy**
+
+The eventual bot destination is:
+
+**Bot opportunity detection → the same SHAFX CFD risk/lot engine → same provider execution boundary**
+
+The bot must not create a second independent risk/P&L system.
+
+## Why cTrader
+
+Official cTrader Open API supports custom trading applications, real-time market data, trading operations, current/pending order and position data, demo and live accounts, OAuth-based account authorization, and account-level permissions. cTrader recommends demo accounts during development/testing. The JSON API is available over WebSocket, with separate demo/live endpoints.
+
+Relevant official references:
+- cTrader Open API overview: https://help.ctrader.com/open-api/
+- Account authentication: https://help.ctrader.com/open-api/account-authentication/
+- JSON messaging: https://help.ctrader.com/open-api/sending-receiving-json/
+- Endpoints: https://help.ctrader.com/open-api/proxies-endpoints/
+- Symbol data: https://help.ctrader.com/open-api/symbol-data/
+- Messages/model fields: https://help.ctrader.com/open-api/messages/
+- P/L calculation: https://help.ctrader.com/open-api/profit-loss-calculation/
+
+Current verified design constraints from that research:
+
+- OAuth authorization is required for account access.
+- cTrader app client ID/secret belong to the application and stay server-side.
+- Access/refresh tokens belong to the user connection and must stay server-side.
+- Demo and live use different Open API endpoints/connections.
+- cTrader volume is expressed by protocol in 0.01 of a unit; it is not the same thing as SHAFX lot notation.
+- Symbol metadata includes `lotSize`, `minVolume`, `maxVolume`, and `stepVolume`; SHAFX must use provider metadata instead of assuming every CFD has the same contract rules.
+- cTrader provides an expected-margin request and a backend P/L calculation path; SHAFX should use provider values for broker-authoritative margin/P&L whenever available.
+
+## Current architecture direction
+
+### Keep
+
+- `src/integrations/core/*` normalized provider contracts.
+- Secure server-side provider secret storage in Supabase.
+- Fail-closed execution guards.
+- Existing Deriv Multiplier code as a legacy compatibility path.
+- Existing simulator and analysis engines.
+- Existing responsive shell and SHAFX visual identity.
+
+### Build
+
+- `src/lib/cfdRiskEngine.ts`
+  - lot sizing from account risk and stop distance
+  - pip value
+  - reward/risk
+  - notional value
+  - margin-aware validation
+  - lot step/min/max enforcement
+- cTrader provider pack:
+  - descriptor
+  - adapter
+  - server-side connector/session
+  - OAuth login + callback
+  - account discovery
+  - account snapshot
+  - symbols/instruments
+  - quotes
+  - positions/orders
+  - demo order placement
+  - SL/TP amendment
+  - position close
+  - reconciliation
+- SHAFX manual CFD ticket:
+  - BUY / SELL
+  - lots
+  - risk amount / risk %
+  - SL pips + price
+  - TP pips + price
+  - R:R
+  - pip value
+  - estimated loss / reward
+  - notional exposure
+  - required margin
+  - free margin
+  - provider execution state
+  - a distinct SHAFX visual hierarchy
+- Provider-generic TradeOrder mapping in `App.tsx`.
+- Manual trading documentation and tests.
+
+### Do not build yet
+
+- Bot timing redesign.
+- Live-money release.
+- Payments/funding automation.
+- A new broker architecture that bypasses the existing normalized provider boundary.
+- MT5 cloning.
+
+## UI direction
+
+The manual ticket should not look like a cTrader/MT5 clone.
+
+SHAFX-specific concepts to use:
+
+- Header: **SHAFX CFD**
+- Secondary provider badge: **cTrader • Practice/Live**
+- A compact **Risk Window** strip showing risk dollars, stop distance, reward, and R:R.
+- Volume controls that feel like a sizing dial rather than a broker clone.
+- Clear BUY and SELL blocks with live Bid/Ask.
+- SL/TP displayed both as pips and absolute price.
+- A small **Why this size?** explanation when SHAFX calculates volume from risk.
+- Margin shown as a constraint, not as a generic balance number.
+- AI can mark a setup as **Reviewed** but must never silently execute it.
+- Legacy Multiplier is visually secondary and clearly labeled as legacy.
+
+## Mandatory gates
+
+### Gate A — documentation / branch safety
+- [ ] This handoff file exists and stays current.
+- [ ] Implementation tree updated for this pivot.
+- [ ] README points to this handoff.
+- [ ] No secrets committed.
+
+### Gate B — deterministic CFD risk engine
+- [ ] Pip-value calculation covered by tests.
+- [ ] Risk-based lot sizing covered by tests.
+- [ ] Min/max/step validation covered.
+- [ ] Invalid risk/SL/lot inputs fail closed.
+- [ ] Currency conversion path is explicit rather than silently assumed.
+
+### Gate C — cTrader provider pack
+- [ ] Descriptor registered.
+- [ ] OAuth login URL generation implemented.
+- [ ] OAuth callback exchanges code server-side.
+- [ ] Access/refresh tokens stored through provider-secret references.
+- [ ] Account discovery implemented.
+- [ ] Practice account snapshot implemented.
+- [ ] Instrument/symbol metadata implemented.
+- [ ] Quote path implemented.
+- [ ] Demo order path implemented.
+- [ ] Position/order reconciliation implemented.
+- [ ] SL/TP amendment implemented.
+- [ ] Position close implemented.
+- [ ] Provider errors normalized.
+- [ ] Adapter tests pass without network access.
+
+### Gate D — manual UI
+- [ ] CFD mode is the default manual product when cTrader is selected.
+- [ ] Multiplier is secondary/legacy.
+- [ ] Manual ticket uses lot/risk semantics, not multiplier semantics.
+- [ ] Entry uses provider Bid/Ask when cTrader is active.
+- [ ] SL/TP appear on the chart.
+- [ ] Open position maps to generic SHAFX TradeOrder.
+- [ ] Live broker P/L is authoritative when available.
+- [ ] Margin is shown.
+- [ ] UI is responsive and SHAFX-original.
+
+### Gate E — build/test/deploy
+- [ ] `npm run build` passes.
+- [ ] `npm run lint` passes.
+- [ ] `npm test` passes.
+- [ ] Render build passes.
+- [ ] Render service is live after the final commit.
+- [ ] Health endpoint responds.
+- [ ] No new runtime/server error introduced by the new provider path.
+
+### Gate F — real practice-account validation
+- [ ] cTrader Open API application approved.
+- [ ] Redirect URI configured.
+- [ ] Deriv cTrader practice account available.
+- [ ] SHAFX OAuth connect succeeds.
+- [ ] Practice balance/account snapshot succeeds.
+- [ ] Real cTrader symbol/volume metadata succeeds.
+- [ ] Practice market order opens.
+- [ ] SL/TP are attached or amended successfully.
+- [ ] Position appears in SHAFX.
+- [ ] P/L updates from broker data.
+- [ ] Position close reconciles correctly.
+- [ ] Restart/reconnect does not lose provider state.
+
+### Gate G — live release
+- [ ] All practice-account gates above are complete.
+- [ ] Security review complete.
+- [ ] Idempotency/reconciliation tested.
+- [ ] Live external execution explicitly approved by the user.
+- [ ] Only then may the live execution gate be changed.
+
+## Current checkpoint
+
+**Status:** Manual CFD pivot is authorized and under implementation.
+
+**Do next:** Complete Gate B and Gate C, then replace the manual ticket's default product path. Bot stays frozen during this phase.
+
+**Known good baseline:** `8747186d5e5aaab35f32f42bcb7e04727a04ed45`.
+
+**Do not merge to main.**
+
