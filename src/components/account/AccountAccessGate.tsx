@@ -9,13 +9,15 @@ interface Props { onConnected: () => void }
 type BrokerTile = { id: string; name: string; kind: 'available' | 'soon'; note: string }
 
 const BROKERS: BrokerTile[] = [
-  { id: 'deriv', name: 'Deriv', kind: 'available', note: 'Connected with SHAFX OAuth' },
+  { id: 'ctrader', name: 'Deriv cTrader', kind: 'available', note: 'Normal CFD trading with SHAFX lot/risk controls' },
+  { id: 'deriv', name: 'Deriv', kind: 'available', note: 'Legacy Multiplier connection' },
   { id: 'hfm', name: 'HFM', kind: 'soon', note: 'Coming soon' },
   { id: 'exness', name: 'Exness', kind: 'soon', note: 'Coming soon' },
   { id: 'oanda', name: 'OANDA', kind: 'soon', note: 'Coming soon' },
 ]
 
 function BrokerLogo({ id, name }: { id: string; name: string }) {
+  if (id === 'ctrader') return <div title={name} className="flex h-11 w-11 items-center justify-center rounded-xl border border-shafx-accent/30 bg-shafx-accent/10 text-shafx-accent"><span className="text-[10px] font-black tracking-tight">cT</span></div>
   if (id === 'deriv') return <div title={name} className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-slate-900 shadow-sm"><span className="text-[15px] font-black tracking-[-0.08em]">d</span></div>
   if (id === 'hfm') return <div title={name} className="flex h-11 w-11 items-center justify-center rounded-xl border border-red-500/25 bg-red-500/10 text-red-400"><span className="text-[12px] font-black">HFM</span></div>
   if (id === 'exness') return <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-shafx-border bg-shafx-bg text-shafx-textMuted"><span className="text-[10px] font-black tracking-tight">EX</span></div>
@@ -35,7 +37,9 @@ export const AccountAccessGate: React.FC<Props> = ({ onConnected }) => {
   const [connecting, setConnecting] = useState(false)
 
   const derivConnection = useMemo(() => connections.find((item) => item.providerId === 'deriv' && item.state === 'connected'), [connections])
-  const accounts = useMemo(() => derivConnection?.accounts.filter((item) => item.active) ?? [], [derivConnection])
+  const ctraderConnection = useMemo(() => connections.find((item) => item.providerId === 'ctrader' && item.state === 'connected'), [connections])
+  const activeConnection = ctraderConnection || derivConnection
+  const accounts = useMemo(() => activeConnection?.accounts.filter((item) => item.active) ?? [], [activeConnection])
 
   const refresh = useCallback(async (): Promise<void> => {
     if (!user) return
@@ -53,20 +57,15 @@ export const AccountAccessGate: React.FC<Props> = ({ onConnected }) => {
 
   useEffect(() => { void refresh() }, [refresh])
 
-  const connectDeriv = (): void => {
+  const connectBroker = (providerId: 'deriv' | 'ctrader'): void => {
     setConnecting(true)
     setError(null)
-    window.location.assign('/api/deriv/login')
+    window.location.assign(providerId === 'ctrader' ? '/api/providers/ctrader?op=login' : '/api/deriv/login')
   }
 
   const selectAccount = (providerAccountId: string, environment: 'demo' | 'live'): void => {
-    if (!derivConnection) return
-    setStoredProviderSelection({
-      providerId: 'deriv',
-      connectionId: derivConnection.id,
-      accountId: providerAccountId,
-      environment,
-    })
+    if (!activeConnection) return
+    setStoredProviderSelection({ providerId: activeConnection.providerId, connectionId: activeConnection.id, accountId: providerAccountId, environment })
     onConnected()
   }
 
@@ -82,7 +81,7 @@ export const AccountAccessGate: React.FC<Props> = ({ onConnected }) => {
         <div className="hidden items-center gap-2 rounded-full border border-shafx-border bg-shafx-surface px-3 py-2 text-[10px] text-shafx-textMuted sm:flex"><ShieldCheck className="h-3.5 w-3.5 text-shafx-success" />Signed in • {user.displayName || user.email.split('@')[0]}</div>
       </header>
 
-      {!derivConnection ? (
+      {!activeConnection ? (
         <section className="mx-auto mt-14 max-w-4xl">
           <div className="text-center">
             <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-shafx-textMuted">Required before the workspace opens</div>
@@ -97,7 +96,7 @@ export const AccountAccessGate: React.FC<Props> = ({ onConnected }) => {
                 key={broker.id}
                 type="button"
                 disabled={!available || connecting}
-                onClick={available ? connectDeriv : undefined}
+                onClick={available ? () => connectBroker(broker.id === 'ctrader' ? 'ctrader' : 'deriv') : undefined}
                 className={"group relative min-h-28 rounded-2xl border p-4 text-left transition " + (
                   available
                     ? "border-shafx-accent/30 bg-[linear-gradient(145deg,rgba(124,92,252,.12),rgba(13,18,26,.98)_55%)] hover:border-shafx-accent/60"
@@ -121,15 +120,15 @@ export const AccountAccessGate: React.FC<Props> = ({ onConnected }) => {
       ) : (
         <section className="mx-auto mt-12 max-w-4xl">
           <div className="text-center">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-shafx-textMuted">Deriv connected</div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-shafx-textMuted">{activeConnection?.providerId === 'ctrader' ? 'cTrader connected' : 'Deriv connected'}</div>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-5xl">Choose demo or real account.</h1>
-            <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-shafx-textMuted">The balance shown below is the balance SHAFX receives from the selected Deriv account. Nothing is created inside SHAFX.</p>
+            <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-shafx-textMuted">The balance shown below is the balance SHAFX receives from the selected broker account. Nothing is created inside SHAFX.</p>
           </div>
 
           <div className="mt-8 rounded-3xl border border-shafx-border bg-shafx-surface p-4 shadow-[0_18px_60px_rgba(0,0,0,.2)]">
-            <div className="flex items-center justify-between gap-3 border-b border-shafx-border pb-3"><div><div className="flex items-center gap-2 text-sm font-semibold"><BrokerLogo id="deriv" name="Deriv" /><span>Deriv accounts</span></div><div className="mt-1 text-[9px] text-shafx-textMuted">{accounts.length} connected account{accounts.length === 1 ? '' : 's'}</div></div><button type="button" onClick={() => void refresh()} className="flex min-h-10 items-center gap-2 rounded-lg border border-shafx-border px-3 text-[9px] font-semibold text-shafx-textMuted"><RefreshCw className="h-3.5 w-3.5" />Refresh</button></div>
+            <div className="flex items-center justify-between gap-3 border-b border-shafx-border pb-3"><div><div className="flex items-center gap-2 text-sm font-semibold"><BrokerLogo id={activeConnection?.providerId === 'ctrader' ? 'ctrader' : 'deriv'} name={activeConnection?.providerId === 'ctrader' ? 'Deriv cTrader' : 'Deriv'} /><span>{activeConnection?.providerId === 'ctrader' ? 'cTrader accounts' : 'Deriv accounts'}</span></div><div className="mt-1 text-[9px] text-shafx-textMuted">{accounts.length} connected account{accounts.length === 1 ? '' : 's'}</div></div><button type="button" onClick={() => void refresh()} className="flex min-h-10 items-center gap-2 rounded-lg border border-shafx-border px-3 text-[9px] font-semibold text-shafx-textMuted"><RefreshCw className="h-3.5 w-3.5" />Refresh</button></div>
             {accounts.length === 0 ? (
-              <div className="py-12 text-center"><div className="text-sm font-semibold">No Deriv account is available yet.</div><p className="mt-2 text-[10px] leading-5 text-shafx-textMuted">Return to Deriv, finish the account connection, then refresh this page.</p></div>
+              <div className="py-12 text-center"><div className="text-sm font-semibold">No Deriv account is available yet.</div><p className="mt-2 text-[10px] leading-5 text-shafx-textMuted">Finish the broker connection, then refresh this page.</p></div>
             ) : (
               <div className="mt-4 grid gap-3 md:grid-cols-2">
                 {accounts.map((account) => (
@@ -144,8 +143,8 @@ export const AccountAccessGate: React.FC<Props> = ({ onConnected }) => {
           </div>
 
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            <div className="rounded-2xl border border-shafx-border bg-shafx-surface/70 p-4"><div className="flex items-center gap-2 text-xs font-semibold"><CheckCircle2 className="h-4 w-4 text-shafx-success" />Real account money stays with Deriv.</div><p className="mt-1 text-[9px] leading-5 text-shafx-textMuted">SHAFX reads the connected account and, where broker execution is enabled, sends authorized trading instructions through the Deriv connection. SHAFX does not need a separate wallet for your trading funds.</p></div>
-            <div className="rounded-2xl border border-shafx-border bg-shafx-surface/70 p-4"><div className="flex items-center gap-2 text-xs font-semibold"><ShieldCheck className="h-4 w-4 text-shafx-accent" />Deposit / withdraw remains on Deriv.</div><p className="mt-1 text-[9px] leading-5 text-shafx-textMuted">Use Deriv's official Cashier for funding. SHAFX can open that official area without taking custody of the money.</p></div>
+            <div className="rounded-2xl border border-shafx-border bg-shafx-surface/70 p-4"><div className="flex items-center gap-2 text-xs font-semibold"><CheckCircle2 className="h-4 w-4 text-shafx-success" />Real account money stays with the broker.</div><p className="mt-1 text-[9px] leading-5 text-shafx-textMuted">SHAFX reads the connected account and, where broker execution is enabled, sends authorized trading instructions through the Deriv connection. SHAFX does not need a separate wallet for your trading funds.</p></div>
+            <div className="rounded-2xl border border-shafx-border bg-shafx-surface/70 p-4"><div className="flex items-center gap-2 text-xs font-semibold"><ShieldCheck className="h-4 w-4 text-shafx-accent" />Deposit / withdraw remains on Deriv.</div><p className="mt-1 text-[9px] leading-5 text-shafx-textMuted">Use the broker's official funding area. SHAFX can open that official area without taking custody of the money.</p></div>
           </div>
         </section>
       )}
