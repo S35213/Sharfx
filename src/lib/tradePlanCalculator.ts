@@ -60,8 +60,8 @@ export const calculateTradePlan = (inputs: TradePlanInputs): TradePlanDraft => {
   if (stake > accountBalance) {
     return { ...base, validationError: 'Stake exceeds available balance.' }
   }
-  if (!Number.isFinite(multiplier) || multiplier <= 0 || multiplier > 10000) {
-    return { ...base, validationError: 'Multiplier must be between 1 and 10,000.' }
+  if (!Number.isFinite(multiplier) || multiplier <= 0 || multiplier > 4000) {
+    return { ...base, validationError: 'Multiplier must be between 1 and 4,000.' }
   }
   if (!Number.isFinite(symbolSpec.pipSize) || symbolSpec.pipSize <= 0) {
     return { ...base, validationError: 'Symbol pip size is unavailable.' }
