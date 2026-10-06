@@ -39,7 +39,6 @@ const DEFAULT_MIN_EXPECTED_PROFIT = 5
 const DEFAULT_MIN_RISK_REWARD = 1.5
 const DEFAULT_MIN_SIGNAL_STRENGTH = 72
 const QUICK_LOTS = [0.01, 0.05, 0.1, 0.25, 0.5, 1]
-const QUICK_STAKES = [10, 20, 50, 100, 250, 500, 1000, 2000]
 const QUICK_MULTIPLIERS = [100, 200, 300, 500, 800]
 const QUICK_MIN_PROFITS = [2, 5, 10, 20, 50]
 
@@ -77,8 +76,6 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
   const [minExpectedProfit, setMinExpectedProfit] = useState(String(DEFAULT_MIN_EXPECTED_PROFIT))
   const [minRiskReward, setMinRiskReward] = useState(String(DEFAULT_MIN_RISK_REWARD))
   const [minSignalStrength, setMinSignalStrength] = useState(String(DEFAULT_MIN_SIGNAL_STRENGTH))
-  const [targetPrice, setTargetPrice] = useState<number | null>(null)
-  const [stopPrice, setStopPrice] = useState<number | null>(null)
   const timerRef = useRef<number | null>(null)
   const settledRoundRef = useRef(0)
   const roundOpenedAtRef = useRef<Record<number, string>>({})
@@ -162,8 +159,6 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
       setDirection(nextAssessment.direction)
       setSignalTimeframe(nextAssessment.opportunity?.timeframe ?? null)
       setEntryTimeframe(latestRadarRef.current.botPlan.entryTimeframe)
-      setTargetPrice(nextAssessment.targetPrice)
-      setStopPrice(nextAssessment.stopPrice)
     } else {
       activeSettingsRef.current = null
       activeTargetAmountRef.current = 0
@@ -173,8 +168,6 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
       setDirection(null)
       setSignalTimeframe(null)
       setEntryTimeframe(null)
-      setTargetPrice(null)
-      setStopPrice(null)
     }
 
     setActiveRound(roundNumber)
