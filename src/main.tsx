@@ -56,10 +56,7 @@ const EntryGate = () => {
   }, [loading, user])
 
   useEffect(() => {
-    if (!user) {
-      setBrokerReady(false)
-      return
-    }
+    if (!user) return
     let cancelled = false
     const checkConnection = async (): Promise<void> => {
       try {
