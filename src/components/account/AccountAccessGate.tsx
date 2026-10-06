@@ -152,7 +152,7 @@ export const AccountAccessGate: React.FC<Props> = ({ onConnected }) => {
             <p className="mx-auto mt-3 max-w-2xl text-base leading-7 text-shafx-textMuted">The broker authorization is complete. SHAFX can now use the selected Deriv cTrader account without asking you to log in again.</p>
           </div>
 
-          <div className="mt-8 rounded-3xl border border-shafx-border bg-shafx-surface p-4 shadow-[0_18px_60px_rgba(0,0,0,.2)]">
+          <div className="mt-8">
             <div className="flex items-center justify-between gap-3 border-b border-shafx-border pb-3"><div><div className="flex items-center gap-2 text-sm font-semibold"><BrokerLogo id={activeConnection?.providerId === 'ctrader' ? 'ctrader' : 'deriv'} name={activeConnection?.providerId === 'ctrader' ? 'Deriv cTrader' : 'Deriv'} /><span>{activeConnection?.providerId === 'ctrader' ? 'Deriv cTrader accounts' : 'Deriv accounts'}</span></div><div className="mt-1 text-[9px] text-shafx-textMuted">{accounts.length} connected account{accounts.length === 1 ? '' : 's'}</div></div><button type="button" onClick={() => void refresh()} className="flex min-h-10 items-center gap-2 rounded-lg border border-shafx-border px-3 text-[9px] font-semibold text-shafx-textMuted"><RefreshCw className="h-3.5 w-3.5" />Refresh</button></div>
             {accounts.length === 0 ? (
               <div className="py-12 text-center"><div className="text-sm font-semibold">No Deriv cTrader account is available yet.</div><p className="mt-2 text-sm leading-6 text-shafx-textMuted">Activate Deriv cTrader if needed, then use Check cTrader again.</p></div>
