@@ -435,9 +435,9 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
           <strong className={'mt-1 block font-mono text-[10px] ' + (totalPnl >= 0 ? 'text-shafx-success' : 'text-shafx-danger')}>{displayPnl(totalPnl)}</strong>
         </div>
         <div className="rounded-xl border border-shafx-border bg-shafx-bg p-2.5">
-          <span className="block text-[7px] uppercase tracking-[0.12em] text-shafx-textMuted">Round clock</span>
+          <span className="block text-[7px] uppercase tracking-[0.12em] text-shafx-textMuted">Re-scan clock</span>
           <strong className="mt-1 block font-mono text-[10px]">{running ? secondsLeft + 's' : '15s'}</strong>
-          <span className="mt-0.5 block text-[7px] text-shafx-textMuted">re-scan interval</span>
+          <span className="mt-0.5 block text-[7px] text-shafx-textMuted">round stays open until target/stop</span>
         </div>
       </div>
 
