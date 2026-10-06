@@ -18,10 +18,10 @@ interface RoundState {
 }
 
 const UNIT_ROUNDS = 5
-const ROUND_SECONDS = 60
+const ROUND_SECONDS = 15
 const DEFAULT_STAKE = 10
 const DEFAULT_MULTIPLIER = 100
-const QUICK_STAKES = [1, 5, 10, 20, 50, 100]
+const QUICK_STAKES = [10, 20, 50, 100, 250, 500]
 const QUICK_MULTIPLIERS = [100, 200, 300, 500, 800, 1000, 1500, 2000, 3000, 4000]
 
 const createRounds = (): RoundState[] =>
@@ -249,7 +249,7 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
             <span className="rounded-md border border-shafx-accent/25 bg-shafx-accent/10 px-2 py-0.5 font-mono text-[7px] font-bold tracking-[0.12em] text-shafx-accent">FAST ADAPTIVE</span>
           </div>
           <p className="mt-1 max-w-[600px] text-[9px] leading-4 text-shafx-textMuted">
-            Scans all available timeframes. It does not blindly trade M1: higher-timeframe structure selects the setup, then a faster timeframe is used only for the entry trigger. Each round stays open for 60 seconds and is re-evaluated before the next round.
+            Scans all available timeframes. It does not blindly trade M1: higher-timeframe structure selects the setup, then a faster timeframe is used only for the entry trigger. Each scan cycle runs for 15 seconds and is re-evaluated before the next round.
           </p>
         </div>
         <div className="text-right">
@@ -265,7 +265,7 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
             <input
               aria-label="Bot paper stake"
               type="number"
-              min="1"
+              min="10"
               max="2000"
               step="1"
               value={paperStake}
@@ -348,7 +348,7 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
         </div>
         <div className="rounded-xl border border-shafx-border bg-shafx-bg p-2.5">
           <span className="block text-[7px] uppercase tracking-[0.12em] text-shafx-textMuted">Round clock</span>
-          <strong className="mt-1 block font-mono text-[10px]">{running ? secondsLeft + 's' : '60s'}</strong>
+          <strong className="mt-1 block font-mono text-[10px]">{running ? secondsLeft + 's' : '15s'}</strong>
         </div>
       </div>
 
