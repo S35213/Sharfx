@@ -126,7 +126,16 @@ export interface TradeOrder {
   commission?: number
   payout?: number
   providerOrderId?: string
-  brokerProduct?: 'DERIV_MULTIPLIER'
+  brokerProduct?: 'SHAFX_CFD_CTRADER' | 'DERIV_MULTIPLIER'
+  providerId?: string
+  providerConnectionId?: string
+  providerAccountId?: string
+  volumeLots?: number
+  pipValuePerLot?: number
+  notionalValue?: number
+  usedMargin?: number
+  stopLossPips?: number
+  takeProfitPips?: number
   stake?: number
   multiplier?: number
   chartTimeframe?: Timeframe
