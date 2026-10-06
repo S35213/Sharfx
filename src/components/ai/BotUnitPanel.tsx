@@ -32,8 +32,6 @@ const DEFAULT_STOP_LOSS_RATIO = 0.4
 const createRounds = (): RoundState[] =>
   Array.from({ length: UNIT_ROUNDS }, (_, index) => ({ number: index + 1, status: 'idle' }))
 
-const clampLoss = (value: number, stake: number): number => Math.max(-stake, value)
-
 const targetReached = (pnl: number, targetAmount: number, stopAmount: number): boolean =>
   pnl >= targetAmount || pnl <= -Math.abs(stopAmount)
 
