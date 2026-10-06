@@ -13,6 +13,7 @@ import derivStream from './api/deriv/stream.js'
 import derivOrder from './api/deriv/order.js'
 import paystack from './api/paystack.js'
 import providerConnections from './api/providers/connections.js'
+import ctrader from './api/providers/ctrader.js'
 import adminAuth from './api/admin/auth.js'
 import adminLogout from './api/admin/logout.js'
 import adminOverview from './api/admin/overview.js'
@@ -31,6 +32,7 @@ const handlers = {
   '/api/deriv/order': derivOrder,
   '/api/paystack': paystack,
   '/api/providers/connections': providerConnections,
+  '/api/providers/ctrader': ctrader,
   '/api/admin/auth': adminAuth,
   '/api/admin/logout': adminLogout,
   '/api/admin/overview': adminOverview,
