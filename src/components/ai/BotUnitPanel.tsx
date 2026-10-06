@@ -176,7 +176,6 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
     settledRoundRef.current = 0
     setRounds(createRounds())
     setActiveRound(0)
-    setScanCount(0)
     setEntry(null)
     setDirection(null)
     setSignalTimeframe(null)
@@ -208,7 +207,7 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
       ? calculateMultiplierPnl({ direction: currentDirection, entryPrice: currentEntry, currentPrice: livePrice, stake, multiplier })
       : 0
 
-    const settleRound = (status: RoundStatus, exitPrice: number | undefined, roundPnl: number): void => {
+    const settleRound = (status: 'win' | 'loss' | 'wait', exitPrice: number | null, roundPnl: number): void => {
       if (settledRoundRef.current === activeRound) return
       settledRoundRef.current = activeRound
       const closedAt = new Date().toISOString()
@@ -221,11 +220,11 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
         id: 'bot-paper-' + Date.now() + '-' + activeRound,
         symbol,
         round: activeRound,
-        direction: currentDirection ?? undefined,
+        direction: currentDirection,
         signalTimeframe: signalTf,
         entryTimeframe: entryTf,
-        entry: currentEntry ?? undefined,
-        exit: exitPrice ?? null,
+        entry: currentEntry,
+        exit: exitPrice,
         stake,
         multiplier,
         pnl: roundPnl,
