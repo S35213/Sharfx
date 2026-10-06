@@ -1,0 +1,32 @@
+name: Impeccable Design Audit
+
+on:
+  push:
+    branches:
+      - test/rebuild-deriv-native-manual-20260930
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Detect source design issues
+        shell: bash
+        run: |
+          set +e
+          npx --yes impeccable detect --json . > impeccable-source.json 2> impeccable-source.txt
+          status=$?
+          cat impeccable-source.txt
+          cat impeccable-source.json
+          echo "SOURCE_DETECT_EXIT=$status" >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+      - name: Detect live Render site
+        shell: bash
+        run: |
+          set +e
+          npx --yes impeccable detect --json https://sharfx-deriv-render.onrender.com > impeccable-live.json 2> impeccable-live.txt
+          status=$?
+          cat impeccable-live.txt
+          cat impeccable-live.json
+          echo "LIVE_DETECT_EXIT=$status" >> "$GITHUB_STEP_SUMMARY"
+          exit 0
