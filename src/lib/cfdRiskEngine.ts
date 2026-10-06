@@ -133,8 +133,9 @@ export const calculateCfdRiskPlan = (input: CfdRiskInput): CfdRiskPlan => {
   const estimatedRewardAtTarget = calculatedLots * targetDistancePips * pipValuePerLot
   const riskRewardRatio = stopDistancePips > 0 ? targetDistancePips / stopDistancePips : 0
   const riskPct = accountBalance > 0 ? (estimatedLossAtStop / accountBalance) * 100 : 0
-  const estimatedMargin = isPositiveFinite(effectiveLeverage) && notionalValue > 0
-    ? notionalValue / effectiveLeverage
+  const leverage = Number(effectiveLeverage)
+  const estimatedMargin = isPositiveFinite(leverage) && notionalValue > 0
+    ? notionalValue / leverage
     : null
 
   if (!isPositiveFinite(accountBalance)) return { valid: false, error: 'Account balance must be greater than zero.', entryPrice, stopLossPrice, takeProfitPrice, stopDistancePips, targetDistancePips, riskRewardRatio, requestedRiskAmount, riskPercent: riskPct, pipValuePerLot, lotSize: calculatedLots, notionalValue, estimatedLossAtStop, estimatedRewardAtTarget, estimatedMargin }
