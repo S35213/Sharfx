@@ -9,7 +9,7 @@ interface Props { onConnected: () => void }
 type BrokerTile = { id: string; name: string; kind: 'available' | 'soon'; note: string }
 
 const BROKERS: BrokerTile[] = [
-  { id: 'deriv', name: 'Deriv', kind: 'available', note: 'CFD trading through Deriv cTrader — one secure broker connection' },
+  { id: 'deriv', name: 'Deriv', kind: 'available', note: 'CFD trading through Deriv cTrader • one secure broker connection' },
   { id: 'hfm', name: 'HFM', kind: 'soon', note: 'Coming soon' },
   { id: 'exness', name: 'Exness', kind: 'soon', note: 'Coming soon' },
   { id: 'oanda', name: 'OANDA', kind: 'soon', note: 'Coming soon' },
