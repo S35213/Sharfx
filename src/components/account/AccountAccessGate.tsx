@@ -115,7 +115,7 @@ export const AccountAccessGate: React.FC<Props> = ({ onConnected }) => {
             <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-shafx-textMuted">Choose Deriv and SHAFX will open the secure cTrader authorization flow directly. After authorization, your Deriv cTrader demo account can be selected automatically.</p>
           </div>
 
-          <div className="mt-9 grid gap-3 sm:grid-cols-2">
+          <div className="mt-9 max-w-xl">
             {BROKERS.map((broker) => {
               const available = broker.kind === 'available'
               return <button
@@ -125,7 +125,7 @@ export const AccountAccessGate: React.FC<Props> = ({ onConnected }) => {
                 onClick={available ? connectBroker : undefined}
                 className={"group relative min-h-28 rounded-2xl border p-4 text-left transition " + (
                   available
-                    ? "border-shafx-accent/30 bg-[linear-gradient(145deg,rgba(124,92,252,.12),rgba(13,18,26,.98)_55%)] hover:border-shafx-accent/60"
+                    ? "border-shafx-primary/40 bg-shafx-surface hover:border-shafx-primary/70"
                     : "border-shafx-border bg-shafx-surface/70 opacity-80"
                 )}
               >
