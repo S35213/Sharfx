@@ -271,3 +271,18 @@ export const recordProviderAudit = async ({ userId, connectionId, accountId, eve
     }),
   }).catch(() => undefined)
 }
+
+export const updateProviderCredentialRef = async ({ userId, connectionId, credentialRef, expiresAt }) => {
+  const response = await rest('/shafx_provider_connections?id=eq.' + encodeURIComponent(connectionId) + '&user_id=eq.' + encodeURIComponent(userId), {
+    method: 'PATCH',
+    headers: { Prefer: 'return=minimal' },
+    body: JSON.stringify({
+      credential_ref: credentialRef,
+      expires_at: expiresAt || null,
+      last_seen_at: new Date().toISOString(),
+      state: 'connected',
+    }),
+  })
+  if (!response.ok) throw new Error('Unable to update provider credential reference.')
+}
+
