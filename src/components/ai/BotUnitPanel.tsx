@@ -77,6 +77,12 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
   const timerRef = useRef<number | null>(null)
   const settledRoundRef = useRef(0)
   const roundOpenedAtRef = useRef<Record<number, string>>({})
+
+  const stakeValue = Number(paperStake)
+  const multiplierValue = Number(paperMultiplier)
+  const safeStake = Number.isFinite(stakeValue) && stakeValue > 0 ? stakeValue : DEFAULT_STAKE
+  const safeMultiplier = Number.isFinite(multiplierValue) && multiplierValue > 0 ? multiplierValue : DEFAULT_MULTIPLIER
+
   const latestRadarRef = useRef(radar)
   const latestPriceRef = useRef(currentPrice)
   const latestStakeRef = useRef(safeStake)
@@ -95,11 +101,6 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
   useEffect(() => { latestSignalTimeframeRef.current = signalTimeframe }, [signalTimeframe])
   useEffect(() => { latestEntryTimeframeRef.current = entryTimeframe }, [entryTimeframe])
   useEffect(() => { latestCallbackRef.current = onPaperRoundClosed }, [onPaperRoundClosed])
-
-  const stakeValue = Number(paperStake)
-  const multiplierValue = Number(paperMultiplier)
-  const safeStake = Number.isFinite(stakeValue) && stakeValue > 0 ? stakeValue : DEFAULT_STAKE
-  const safeMultiplier = Number.isFinite(multiplierValue) && multiplierValue > 0 ? multiplierValue : DEFAULT_MULTIPLIER
 
   const totalPnl = useMemo(
     () => Number(rounds.reduce((sum, round) => sum + (round.pnl ?? 0), 0).toFixed(4)),
@@ -230,7 +231,7 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
 
     const nextRound = activeRound + 1
     window.setTimeout(() => {
-      if (!latestCallbackRef.current || !running) return
+      if (!running) return
       beginRound(nextRound)
     }, 150)
   }, [activeRound, running, secondsLeft])
