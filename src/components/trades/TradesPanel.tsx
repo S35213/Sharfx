@@ -123,7 +123,10 @@ export const TradesPanel: React.FC<Props> = ({
                         <span className="font-mono text-shafx-accent">{trade.signalTimeframe ?? '—'} → {trade.entryTimeframe ?? '—'}</span>
                       </div>
                       <div className="mt-0.5 flex flex-wrap gap-2 font-mono text-[7px] text-shafx-textMuted">
-                        <span>R{trade.round}</span><span>Stake {trade.stake.toFixed(2)}</span><span>{trade.multiplier}×</span>
+                        <span>R{trade.round}</span>
+                        {trade.paperMode === 'SHAFX_STANDARD'
+                          ? <span>Lot {Number(trade.lotSize ?? 0).toFixed(2)}</span>
+                          : <span>Stake {trade.stake.toFixed(2)} • {trade.multiplier}×</span>}
                         <span>{trade.entry !== null ? trade.entry.toFixed(5) : '—'} → {trade.exit !== null ? trade.exit.toFixed(5) : '—'}</span>
                       </div>
                     </div>

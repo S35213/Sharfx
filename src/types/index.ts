@@ -93,8 +93,12 @@ export interface BotPaperTrade {
   exit: number | null
   stake: number
   multiplier: number
+  paperMode?: 'SHAFX_STANDARD' | 'DERIV_MULTIPLIER'
+  lotSize?: number
+  expectedProfit?: number
+  expectedLoss?: number
   pnl: number
-  status: 'win' | 'loss' | 'wait'
+  status: 'win' | 'loss' | 'timeout' | 'wait'
   openTime: string
   closeTime: string
 }
