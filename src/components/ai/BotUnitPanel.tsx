@@ -14,6 +14,8 @@ interface RoundState {
   entry?: number
   exit?: number
   pnl?: number
+  targetAmount?: number
+  stopAmount?: number
   openedAt?: string
 }
 
@@ -22,7 +24,9 @@ const ROUND_SECONDS = 15
 const DEFAULT_STAKE = 10
 const DEFAULT_MULTIPLIER = 100
 const QUICK_STAKES = [10, 20, 50, 100, 250, 500]
-const QUICK_MULTIPLIERS = [100, 200, 300, 500, 800, 1000, 1500, 2000, 3000, 4000]
+const QUICK_MULTIPLIERS = [100, 200, 300, 500, 800]
+const DEFAULT_TAKE_PROFIT_RATIO = 0.5
+const DEFAULT_STOP_LOSS_RATIO = 0.4
 
 const createRounds = (): RoundState[] =>
   Array.from({ length: UNIT_ROUNDS }, (_, index) => ({ number: index + 1, status: 'idle' }))
@@ -41,6 +45,9 @@ const paperPnl = (
   const signedMove = direction === 'BUY' ? move : -move
   return Number(clampLoss(stake * multiplier * signedMove, stake).toFixed(4))
 }
+
+const targetReached = (pnl: number, targetAmount: number, stopAmount: number): boolean =>
+  pnl >= targetAmount || pnl <= -Math.abs(stopAmount)
 
 const displayPnl = (value: number): string => {
   const absolute = Math.abs(value)
@@ -74,6 +81,8 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
   const [entryTimeframe, setEntryTimeframe] = useState<Timeframe | null>(null)
   const [paperStake, setPaperStake] = useState(String(DEFAULT_STAKE))
   const [paperMultiplier, setPaperMultiplier] = useState(String(DEFAULT_MULTIPLIER))
+  const [targetRatio, setTargetRatio] = useState(String(DEFAULT_TAKE_PROFIT_RATIO))
+  const [stopRatio, setStopRatio] = useState(String(DEFAULT_STOP_LOSS_RATIO))
   const timerRef = useRef<number | null>(null)
   const settledRoundRef = useRef(0)
   const roundOpenedAtRef = useRef<Record<number, string>>({})
@@ -82,6 +91,10 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
   const multiplierValue = Number(paperMultiplier)
   const safeStake = Number.isFinite(stakeValue) && stakeValue > 0 ? stakeValue : DEFAULT_STAKE
   const safeMultiplier = Number.isFinite(multiplierValue) && multiplierValue > 0 ? multiplierValue : DEFAULT_MULTIPLIER
+  const safeTargetRatio = Number.isFinite(Number(targetRatio)) && Number(targetRatio) > 0 ? Number(targetRatio) : DEFAULT_TAKE_PROFIT_RATIO
+  const safeStopRatio = Number.isFinite(Number(stopRatio)) && Number(stopRatio) > 0 ? Math.min(1, Number(stopRatio)) : DEFAULT_STOP_LOSS_RATIO
+  const targetAmount = Number((safeStake * safeTargetRatio).toFixed(2))
+  const stopAmount = Number((safeStake * safeStopRatio).toFixed(2))
 
   const latestRadarRef = useRef(radar)
   const latestPriceRef = useRef(currentPrice)
@@ -92,6 +105,8 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
   const latestSignalTimeframeRef = useRef(signalTimeframe)
   const latestEntryTimeframeRef = useRef(entryTimeframe)
   const latestCallbackRef = useRef(onPaperRoundClosed)
+  const latestTargetAmountRef = useRef(targetAmount)
+  const latestStopAmountRef = useRef(stopAmount)
   useEffect(() => { latestRadarRef.current = radar }, [radar])
   useEffect(() => { latestPriceRef.current = currentPrice }, [currentPrice])
   useEffect(() => { latestStakeRef.current = safeStake }, [safeStake])
@@ -101,6 +116,8 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
   useEffect(() => { latestSignalTimeframeRef.current = signalTimeframe }, [signalTimeframe])
   useEffect(() => { latestEntryTimeframeRef.current = entryTimeframe }, [entryTimeframe])
   useEffect(() => { latestCallbackRef.current = onPaperRoundClosed }, [onPaperRoundClosed])
+  useEffect(() => { latestTargetAmountRef.current = targetAmount }, [targetAmount])
+  useEffect(() => { latestStopAmountRef.current = stopAmount }, [stopAmount])
 
   const totalPnl = useMemo(
     () => Number(rounds.reduce((sum, round) => sum + (round.pnl ?? 0), 0).toFixed(4)),
@@ -143,6 +160,8 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
           entry: nextEntry ?? undefined,
           pnl: undefined,
           exit: undefined,
+          targetAmount,
+          stopAmount,
           openedAt,
         }
       : round))
@@ -184,57 +203,68 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
   }, [activeRound, running])
 
   useEffect(() => {
-    if (!running || activeRound <= 0 || secondsLeft > 0 || settledRoundRef.current === activeRound) return
+    if (!running || activeRound <= 0) return
 
-    settledRoundRef.current = activeRound
     const currentEntry = latestEntryRef.current
     const currentDirection = latestDirectionRef.current
-    const exitPrice = latestPriceRef.current
+    const livePrice = latestPriceRef.current
     const stake = latestStakeRef.current
     const multiplier = latestMultiplierRef.current
+    const target = latestTargetAmountRef.current
+    const stop = latestStopAmountRef.current
     const signalTf = latestSignalTimeframeRef.current
     const entryTf = latestEntryTimeframeRef.current
     const pnl = currentEntry && currentDirection
-      ? paperPnl(currentDirection, currentEntry, exitPrice, stake, multiplier)
+      ? paperPnl(currentDirection, currentEntry, livePrice, stake, multiplier)
       : 0
-    const nextStatus: RoundStatus = currentDirection
-      ? pnl > 0 ? 'win' : pnl < 0 ? 'loss' : 'wait'
-      : 'wait'
-    const closedAt = new Date().toISOString()
 
-    setRounds((current) => current.map((round) => round.number === activeRound
-      ? { ...round, status: nextStatus, exit: exitPrice, pnl }
-      : round))
+    // 15 seconds is the scan interval, not the forced close time. Keep the
+    // paper position alive until its dollar target/stop is reached.
+    if (currentDirection && currentEntry && targetReached(pnl, target, stop)) {
+      if (settledRoundRef.current === activeRound) return
+      settledRoundRef.current = activeRound
+      const nextStatus: RoundStatus = pnl > 0 ? 'win' : pnl < 0 ? 'loss' : 'wait'
+      const closedAt = new Date().toISOString()
 
-    latestCallbackRef.current?.({
-      id: 'bot-paper-' + Date.now() + '-' + activeRound,
-      symbol,
-      round: activeRound,
-      direction: currentDirection,
-      signalTimeframe: signalTf,
-      entryTimeframe: entryTf,
-      entry: currentEntry,
-      exit: Number.isFinite(exitPrice) && exitPrice > 0 ? exitPrice : null,
-      stake,
-      multiplier,
-      pnl,
-      status: nextStatus,
-      openTime: roundOpenedAtRef.current[activeRound] ?? closedAt,
-      closeTime: closedAt,
-    })
+      setRounds((current) => current.map((round) => round.number === activeRound
+        ? { ...round, status: nextStatus, exit: livePrice, pnl }
+        : round))
 
-    if (activeRound >= UNIT_ROUNDS) {
-      clearTimer()
-      setRunning(false)
+      latestCallbackRef.current?.({
+        id: 'bot-paper-' + Date.now() + '-' + activeRound,
+        symbol,
+        round: activeRound,
+        direction: currentDirection,
+        signalTimeframe: signalTf,
+        entryTimeframe: entryTf,
+        entry: currentEntry,
+        exit: Number.isFinite(livePrice) && livePrice > 0 ? livePrice : null,
+        stake,
+        multiplier,
+        pnl,
+        status: nextStatus,
+        openTime: roundOpenedAtRef.current[activeRound] ?? closedAt,
+        closeTime: closedAt,
+      })
+
+      if (activeRound >= UNIT_ROUNDS) {
+        clearTimer()
+        setRunning(false)
+        return
+      }
+
+      const nextRound = activeRound + 1
+      window.setTimeout(() => {
+        if (!running) return
+        beginRound(nextRound)
+      }, 100)
       return
     }
 
-    const nextRound = activeRound + 1
-    window.setTimeout(() => {
-      if (!running) return
-      beginRound(nextRound)
-    }, 150)
-  }, [activeRound, running, secondsLeft])
+    if (secondsLeft <= 0) {
+      setSecondsLeft(ROUND_SECONDS)
+    }
+  }, [activeRound, currentPrice, running, secondsLeft])
 
   useEffect(() => () => clearTimer(), [])
 
@@ -297,9 +327,28 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
             <div className="mt-1 text-[7px] text-shafx-textMuted">Paper calculation is before any live Deriv commission.</div>
           </div>
         </div>
+        <div className="mt-2 grid grid-cols-3 gap-2">
+          <div className="rounded-lg border border-shafx-success/20 bg-shafx-success/[0.04] p-2">
+            <span className="block text-[7px] uppercase tracking-[0.12em] text-shafx-textMuted">Fast target</span>
+            <div className="mt-1 font-mono text-[10px] font-semibold text-shafx-success">{currency} +{targetAmount.toFixed(2)}</div>
+            <div className="mt-0.5 text-[7px] text-shafx-textMuted">{Math.round(safeTargetRatio * 100)}% of stake</div>
+          </div>
+          <div className="rounded-lg border border-shafx-danger/20 bg-shafx-danger/[0.04] p-2">
+            <span className="block text-[7px] uppercase tracking-[0.12em] text-shafx-textMuted">Fast stop</span>
+            <div className="mt-1 font-mono text-[10px] font-semibold text-shafx-danger">−{currency} {stopAmount.toFixed(2)}</div>
+            <div className="mt-0.5 text-[7px] text-shafx-textMuted">{Math.round(safeStopRatio * 100)}% of stake</div>
+          </div>
+          <div className="rounded-lg border border-shafx-border bg-shafx-bg p-2">
+            <span className="block text-[7px] uppercase tracking-[0.12em] text-shafx-textMuted">Live P/L</span>
+            <div className={'mt-1 font-mono text-[10px] font-semibold ' + (direction && entry ? (paperPnl(direction, entry, currentPrice, safeStake, safeMultiplier) >= 0 ? 'text-shafx-success' : 'text-shafx-danger') : 'text-shafx-textMuted')}>
+              {direction && entry ? displayPnl(paperPnl(direction, entry, currentPrice, safeStake, safeMultiplier)) : '—'}
+            </div>
+            <div className="mt-0.5 text-[7px] text-shafx-textMuted">Updates with market ticks</div>
+          </div>
+        </div>
       </div>
 
-      <div className="mt-3 rounded-xl border border-shafx-border bg-shafx-bg/70 p-3">
+      <div className="mt-3 rounded-xl border border-shafx-border bg-shafx-bg/70 p-3>
         <div className="grid grid-cols-3 gap-2 text-[8px]">
           <div><span className="block text-shafx-textMuted">Signal TF</span><b className="mt-1 block font-mono text-[10px]">{botPlan.analysisTimeframe ?? '—'}</b></div>
           <div><span className="block text-shafx-textMuted">Entry TF</span><b className="mt-1 block font-mono text-[10px] text-shafx-accent">{botPlan.entryTimeframe ?? '—'}</b></div>
@@ -349,6 +398,7 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
         <div className="rounded-xl border border-shafx-border bg-shafx-bg p-2.5">
           <span className="block text-[7px] uppercase tracking-[0.12em] text-shafx-textMuted">Round clock</span>
           <strong className="mt-1 block font-mono text-[10px]">{running ? secondsLeft + 's' : '15s'}</strong>
+          <span className="mt-0.5 block text-[7px] text-shafx-textMuted">re-scan interval</span>
         </div>
       </div>
 
@@ -361,7 +411,7 @@ export const BotUnitPanel: React.FC<Props> = ({ symbol, currency, radar, current
           {entry && <div className="font-mono text-[8px] text-shafx-textMuted">Entry {entry.toFixed(5)}</div>}
         </div>
         <div className="mt-2 text-[8px] leading-4 text-shafx-textMuted">
-          The five-round unit is a paper test. It never sends a broker order. It uses the same percentage-move × multiplier × stake formula as a Deriv Multiplier calculation, with the paper loss capped at the selected stake. The round does not manufacture a payout: a large profit requires a large enough real price move.
+          The five-round unit is a paper test. It never sends a broker order. It uses the same percentage-move × multiplier × stake formula as a Deriv Multiplier calculation. The 15-second clock is only a re-scan interval; the paper trade stays open until its fast dollar target/stop is reached.
         </div>
       </div>
 
