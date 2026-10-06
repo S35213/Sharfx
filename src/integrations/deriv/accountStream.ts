@@ -77,10 +77,10 @@ export const deriveMultiplierAccountMetrics = (
   openContracts: DerivContract[],
 ): DerivedMultiplierAccountMetrics => {
   const safeBalance = Number.isFinite(balance) ? balance : 0
-  const floatingPL = Number(openContracts.reduce((sum, contract) => sum + (toNumber(contract.profit) ?? 0), 0).toFixed(2))
-  const usedMargin = Number(openContracts.reduce((sum, contract) => sum + (toNumber(contract.stake ?? contract.buy_price) ?? 0), 0).toFixed(2))
-  const equity = Number((safeBalance + floatingPL).toFixed(2))
-  const freeMargin = Number(Math.max(0, equity - usedMargin).toFixed(2))
+  const floatingPL = openContracts.reduce((sum, contract) => sum + (toNumber(contract.profit) ?? 0), 0)
+  const usedMargin = openContracts.reduce((sum, contract) => sum + (toNumber(contract.stake ?? contract.buy_price) ?? 0), 0)
+  const equity = safeBalance + floatingPL
+  const freeMargin = Math.max(0, equity - usedMargin)
   return { balance: safeBalance, equity, usedMargin, freeMargin, floatingPL }
 }
 
