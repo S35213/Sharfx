@@ -147,9 +147,6 @@ export const CTraderManualTicket: React.FC<Props> = ({
   const [state, setState] = useState<TicketState>('ready')
   const [error, setError] = useState('')
   const [now, setNow] = useState(0)
-  const refreshTimer = useRef<ReturnType<typeof setInterval> | null>(null)
-  const lastQuoteErrorAt = useRef(0)
-  const lastQuoteError = useRef('')
 
   const entryPrice = side === 'BUY'
     ? Number(quote?.ask ?? askPrice ?? currentPrice)
