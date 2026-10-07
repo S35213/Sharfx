@@ -13,6 +13,8 @@ import {
 const WS = globalThis.WebSocket
 const DEMO_ENDPOINT = 'wss://demo.ctraderapi.com:5036'
 const LIVE_ENDPOINT = 'wss://live.ctraderapi.com:5036'
+const ctraderQuoteCache = new Map()
+const CTRADER_QUOTE_CACHE_MS = 1200
 
 export const cTraderConfigured = () => Boolean(
   process.env.CTRADER_CLIENT_ID &&
@@ -362,6 +364,9 @@ export const ctraderProtocolVolumeToLots = (volume, fullSymbol) => {
 }
 
 export const getCtraderQuote = async ({ environment, accountId, accessToken, symbolId }) => {
+  const cacheKey = [safeEnvironment(environment), String(accountId), String(symbolId)].join(':')
+  const cached = ctraderQuoteCache.get(cacheKey)
+  if (cached && cached.expiresAt > Date.now()) return cached.quote
   const socket = await openSocket(endpointFor(environment))
   try {
     await authenticateApplication(socket)
@@ -373,12 +378,14 @@ export const getCtraderQuote = async ({ environment, accountId, accessToken, sym
     }, (message) => message.payloadType === 2128)
     const spot = await ctraderRequest(socket, 2131, {}, (message) => message.payloadType === 2131 && Number(message.payload?.symbolId) === Number(symbolId), 10000)
     const body = asObject(spot.payload)
-    return {
+    const quote = {
       symbolId: Number(body.symbolId),
       bid: body.bid == null ? undefined : decodePrice(body.bid),
       ask: body.ask == null ? undefined : decodePrice(body.ask),
       timestamp: body.timestamp ? new Date(Number(body.timestamp)).toISOString() : new Date().toISOString(),
     }
+    ctraderQuoteCache.set(cacheKey, { quote, expiresAt: Date.now() + CTRADER_QUOTE_CACHE_MS })
+    return quote
   } finally {
     await closeSocket(socket)
   }
@@ -480,17 +487,20 @@ export const reconcileCtrader = async ({ environment, accountId, accessToken }) 
   return asObject(response.payload)
 }
 
-export const normalizeCtraderPosition = (position, pnlById = {}) => {
+export const normalizeCtraderPosition = (position, pnlById = {}, instrument = {}) => {
   const item = asObject(position)
   const tradeData = asObject(item.tradeData)
   const moneyDigits = asNumber(item.moneyDigits, 8)
+  const volumeProtocol = asNumber(tradeData.volume)
+  const lotSizeProtocol = asNumber(instrument?.lotSize)
+  const lots = lotSizeProtocol > 0 ? volumeProtocol / lotSizeProtocol : 0
   const pnl = pnlById[String(item.positionId)]
   return {
     id: String(item.positionId || ''),
     symbolId: String(tradeData.symbolId || ''),
     side: Number(tradeData.tradeSide) === 2 ? 'SELL' : 'BUY',
-    volumeProtocol: asNumber(tradeData.volume),
-    lots: 0,
+    volumeProtocol,
+    lots,
     entryPrice: asNumber(item.price),
     currentPrice: undefined,
     stopLoss: item.stopLoss == null ? null : asNumber(item.stopLoss),
@@ -502,12 +512,71 @@ export const normalizeCtraderPosition = (position, pnlById = {}) => {
       provider: 'ctrader',
       positionStatus: String(item.positionStatus || ''),
       commission: item.commission == null ? undefined : decodeMoney(item.commission, moneyDigits),
-      volumeProtocol: String(tradeData.volume || ''),
+      volumeProtocol: String(volumeProtocol || ''),
+      lotSizeProtocol: String(lotSizeProtocol || ''),
       openTimestamp: tradeData.openTimestamp == null ? undefined : String(tradeData.openTimestamp),
       label: tradeData.label || '',
       comment: tradeData.comment || '',
       symbolId: String(tradeData.symbolId || ''),
+      positionId: String(item.positionId || ''),
     },
+  }
+}
+
+export const normalizeCtraderOrder = (event) => {
+  const payload = asObject(event)
+  const item = asObject(payload.order && typeof payload.order === 'object' ? payload.order : payload)
+  const position = asObject(payload.position)
+  const deal = asObject(payload.deal)
+  const tradeData = asObject(item.tradeData)
+  const positionTradeData = asObject(position.tradeData)
+  const statusMap = { 1: 'accepted', 2: 'accepted', 3: 'filled', 4: 'rejected', 5: 'cancelled', 6: 'cancelled', 7: 'rejected', 8: 'rejected', 11: 'accepted' }
+  const executionType = Number(payload.executionType)
+  const status = item.orderStatus != null
+    ? (statusMap[Number(item.orderStatus)] || 'pending')
+    : (statusMap[executionType] || 'pending')
+  const providerOrderId = String(item.orderId || deal.orderId || '')
+  const positionId = String(
+    position.positionId ??
+    item.positionId ??
+    deal.positionId ??
+    '',
+  )
+  const clientOrderId = item.clientOrderId == null ? undefined : String(item.clientOrderId)
+  const symbolId = String(
+    tradeData.symbolId ??
+    positionTradeData.symbolId ??
+    deal.symbolId ??
+    '',
+  )
+  const executionPrice = Number(
+    item.executionPrice ??
+    deal.executionPrice ??
+    position.price ??
+    0,
+  )
+  const protocolVolume = asNumber(
+    item.executedVolume ??
+    deal.filledVolume ??
+    tradeData.volume ??
+    positionTradeData.volume ??
+    deal.volume ??
+    0,
+  )
+  return {
+    providerOrderId,
+    positionId: positionId || undefined,
+    status,
+    clientOrderId,
+    symbol: symbolId,
+    side: Number(tradeData.tradeSide ?? positionTradeData.tradeSide ?? deal.tradeSide) === 2 ? 'SELL' : 'BUY',
+    quantity: protocolVolume,
+    executionPrice: executionPrice > 0 ? executionPrice : undefined,
+    timestamp: item.utcLastUpdateTimestamp || deal.utcLastUpdateTimestamp
+      ? new Date(Number(item.utcLastUpdateTimestamp || deal.utcLastUpdateTimestamp)).toISOString()
+      : new Date().toISOString(),
+    message: String(payload.errorCode || payload.description || ''),
+    raw: payload,
   }
 }
 
