@@ -14,6 +14,7 @@ const WS = globalThis.WebSocket
 const DEMO_ENDPOINT = 'wss://demo.ctraderapi.com:5036'
 const LIVE_ENDPOINT = 'wss://live.ctraderapi.com:5036'
 const ctraderQuoteCache = new Map()
+const ctraderQuoteInflight = new Map()
 const CTRADER_QUOTE_CACHE_MS = 1200
 
 export const cTraderConfigured = () => Boolean(
@@ -397,27 +398,43 @@ export const getCtraderQuote = async ({ environment, accountId, accessToken, sym
   const cacheKey = [safeEnvironment(environment), String(account), String(id)].join(':')
   const cached = ctraderQuoteCache.get(cacheKey)
   if (cached && cached.expiresAt > Date.now()) return cached.quote
-  const socket = await openSocket(endpointFor(environment))
-  try {
-    await authenticateApplication(socket)
-    await authenticateAccount(socket, account, accessToken)
-    await ctraderRequest(socket, 2127, {
-      ctidTraderAccountId: account,
-      symbolId: [id],
-      subscribeToSpotTimestamp: true,
-    }, (message) => message.payloadType === 2128)
-    const spot = await ctraderRequest(socket, 2131, {}, (message) => message.payloadType === 2131 && Number(message.payload?.symbolId) === id, 10000)
-    const body = asObject(spot.payload)
-    const quote = {
-      symbolId: Number(body.symbolId),
-      bid: body.bid == null ? undefined : decodePrice(body.bid),
-      ask: body.ask == null ? undefined : decodePrice(body.ask),
-      timestamp: body.timestamp ? new Date(Number(body.timestamp)).toISOString() : new Date().toISOString(),
+
+  // Desktop and mobile SHAFX views can request the same broker quote at the
+  // same time. Reuse one in-flight cTrader request for the same account/symbol
+  // instead of opening several concurrent WebSocket sessions.
+  const inflight = ctraderQuoteInflight.get(cacheKey)
+  if (inflight) return inflight
+
+  const request = (async () => {
+    const socket = await openSocket(endpointFor(environment))
+    try {
+      await authenticateApplication(socket)
+      await authenticateAccount(socket, account, accessToken)
+      await ctraderRequest(socket, 2127, {
+        ctidTraderAccountId: account,
+        symbolId: [id],
+        subscribeToSpotTimestamp: true,
+      }, (message) => message.payloadType === 2128)
+      const spot = await ctraderRequest(socket, 2131, {}, (message) => message.payloadType === 2131 && Number(message.payload?.symbolId) === id, 10000)
+      const body = asObject(spot.payload)
+      const quote = {
+        symbolId: Number(body.symbolId),
+        bid: body.bid == null ? undefined : decodePrice(body.bid),
+        ask: body.ask == null ? undefined : decodePrice(body.ask),
+        timestamp: body.timestamp ? new Date(Number(body.timestamp)).toISOString() : new Date().toISOString(),
+      }
+      ctraderQuoteCache.set(cacheKey, { quote, expiresAt: Date.now() + CTRADER_QUOTE_CACHE_MS })
+      return quote
+    } finally {
+      await closeSocket(socket)
     }
-    ctraderQuoteCache.set(cacheKey, { quote, expiresAt: Date.now() + CTRADER_QUOTE_CACHE_MS })
-    return quote
+  })()
+
+  ctraderQuoteInflight.set(cacheKey, request)
+  try {
+    return await request
   } finally {
-    await closeSocket(socket)
+    if (ctraderQuoteInflight.get(cacheKey) === request) ctraderQuoteInflight.delete(cacheKey)
   }
 }
 
