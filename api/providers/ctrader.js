@@ -42,11 +42,30 @@ const oauthStateCookie = 'shafx_ctrader_oauth_state'
 const accountEnvironment = (account) => account?.environment === 'live' ? 'live' : 'demo'
 const assetNamesById = (assets) => Object.fromEntries((Array.isArray(assets) ? assets : []).map((asset) => [String(asset.assetId), String(asset.name || asset.displayName || asset.assetId)]))
 const symbolNameById = (symbols) => Object.fromEntries((Array.isArray(symbols) ? symbols : []).map((symbol) => [String(symbol.symbolId), String(symbol.name || symbol.symbolName || symbol.symbolId)]))
+const cTraderSymbolCache = new Map()
+const CTraderSymbolCacheMs = 300000
 
-const normalizePositionForApi = (position, symbolNames, pnlMap) => {
-  const normalized = normalizeCtraderPosition(position, pnlMap)
-  const symbolId = String(normalized.metadata?.symbolId || normalized.symbolId || '')
-  return { ...normalized, symbol: symbolNames[symbolId] || symbolId }
+const loadCtraderFullSymbol = async ({ environment, accountId, accessToken, symbolId }) => {
+  const key = [environment, String(accountId), String(symbolId)].join(':')
+  const cached = cTraderSymbolCache.get(key)
+  if (cached && cached.expiresAt > Date.now()) return cached.symbol
+  const symbol = await getCtraderSymbol({ environment, accountId, accessToken, symbolId })
+  if (symbol) cTraderSymbolCache.set(key, { symbol, expiresAt: Date.now() + CTraderSymbolCacheMs })
+  return symbol
+}
+
+const normalizePositionForApi = (position, symbolNames, pnlMap, instrumentsById = {}, context = {}) => {
+  const symbolId = String(position?.tradeData?.symbolId || '')
+  const normalized = normalizeCtraderPosition(position, pnlMap, instrumentsById[symbolId] || {})
+  return {
+    ...normalized,
+    symbol: symbolNames[symbolId] || String(normalized.symbolId || symbolId),
+    metadata: {
+      ...(normalized.metadata || {}),
+      connectionId: String(context.connectionId || ''),
+      accountId: String(context.accountId || ''),
+    },
+  }
 }
 
 const authorizeUser = async (req, res) => {
@@ -130,29 +149,68 @@ const handlePost = async (req, res, user, body) => {
     const names = assetNamesById(assets)
     const moneyDigits = Number(trader.moneyDigits || 8)
     const accountCurrency = names[String(trader.depositAssetId || '')] || 'USD'
-    const [pnlMap, reconcile, symbols] = await Promise.all([
-      buildCtraderPositionPnlMap({ environment: context.environment, accountId, accessToken: tokens.accessToken }),
-      reconcileCtrader({ environment: context.environment, accountId, accessToken: tokens.accessToken }),
-      getCtraderSymbols({ environment: context.environment, accountId, accessToken: tokens.accessToken }),
-    ])
-    const symbolNames = symbolNameById(symbols)
-    const positions = (Array.isArray(reconcile.position) ? reconcile.position : []).map((position) => normalizePositionForApi(position, symbolNames, pnlMap))
-    const floatingPL = positions.reduce((sum, item) => sum + Number(item.unrealizedPL || 0), 0)
-    const usedMargin = positions.reduce((sum, item) => sum + Number(item.usedMargin || 0), 0)
     const balance = Number(trader.balance || 0) / (10 ** moneyDigits)
-    const account = { accountId, accountLabel: context.connection.label || 'Deriv cTrader', environment: context.environment, currency: accountCurrency, balance, equity: balance + floatingPL, usedMargin, freeMargin: balance + floatingPL - usedMargin, floatingPL }
+
+    // Keep the lightweight account snapshot alive even when a secondary
+    // positions/P&L query is temporarily unavailable.
+    let reconcile = { position: [] }
+    let pnlMap = {}
+    try {
+      reconcile = await reconcileCtrader({ environment: context.environment, accountId, accessToken: tokens.accessToken })
+    } catch {}
+    try {
+      pnlMap = await buildCtraderPositionPnlMap({ environment: context.environment, accountId, accessToken: tokens.accessToken })
+    } catch {}
+
+    const positions = Array.isArray(reconcile.position) ? reconcile.position : []
+    const floatingPL = positions.reduce((sum, item) => sum + Number(pnlMap[String(item.positionId)] || 0), 0)
+    const usedMargin = positions.reduce((sum, item) => sum + Number(item.usedMargin || 0) / (10 ** Number(item.moneyDigits || 8)), 0)
+    const equity = balance + floatingPL
+    const account = {
+      accountId,
+      accountLabel: context.connection.label || 'Deriv cTrader',
+      environment: context.environment,
+      currency: accountCurrency,
+      balance,
+      equity,
+      usedMargin,
+      freeMargin: equity - usedMargin,
+      floatingPL,
+    }
     await upsertProviderAccount({ connectionId, userId: user.id, providerId: 'ctrader', account })
     return json(res, 200, { ok: true, account })
   }
 
   if (action === 'reconcile') {
-    const [reconcile, pnlMap, symbols] = await Promise.all([
-      reconcileCtrader({ environment: context.environment, accountId, accessToken: tokens.accessToken }),
-      buildCtraderPositionPnlMap({ environment: context.environment, accountId, accessToken: tokens.accessToken }),
-      getCtraderSymbols({ environment: context.environment, accountId, accessToken: tokens.accessToken }),
-    ])
-    const symbolNames = symbolNameById(symbols)
-    const positions = (Array.isArray(reconcile.position) ? reconcile.position : []).map((position) => normalizePositionForApi(position, symbolNames, pnlMap))
+    const reconcile = await reconcileCtrader({ environment: context.environment, accountId, accessToken: tokens.accessToken })
+    let pnlMap = {}
+    try {
+      pnlMap = await buildCtraderPositionPnlMap({ environment: context.environment, accountId, accessToken: tokens.accessToken })
+    } catch {}
+
+    const positionsRaw = Array.isArray(reconcile.position) ? reconcile.position : []
+    const uniqueSymbolIds = [...new Set(positionsRaw.map((position) => String(position?.tradeData?.symbolId || '')).filter(Boolean))]
+    const fullSymbols = await Promise.all(uniqueSymbolIds.map(async (symbolId) => {
+      try {
+        return [symbolId, await loadCtraderFullSymbol({
+          environment: context.environment,
+          accountId,
+          accessToken: tokens.accessToken,
+          symbolId,
+        })]
+      } catch {
+        return [symbolId, null]
+      }
+    }))
+    const instrumentsById = Object.fromEntries(fullSymbols.filter(([, symbol]) => Boolean(symbol)))
+    const symbolNames = Object.fromEntries(fullSymbols.map(([symbolId, symbol]) => [symbolId, symbol?.name || symbol?.symbolName || symbolId]))
+    const positions = positionsRaw.map((position) => normalizePositionForApi(
+      position,
+      symbolNames,
+      pnlMap,
+      instrumentsById,
+      { connectionId, accountId },
+    ))
     const orders = (Array.isArray(reconcile.order) ? reconcile.order : []).map(normalizeCtraderOrder)
     return json(res, 200, { ok: true, positions, orders })
   }
@@ -189,15 +247,15 @@ const handlePost = async (req, res, user, body) => {
     const order = body.order && typeof body.order === 'object' ? body.order : {}
     const full = await resolveCtraderSymbol({ environment: context.environment, accountId, accessToken: tokens.accessToken, symbol: String(order.symbol || '') })
     const result = await placeCtraderOrder({ environment: context.environment, accountId, accessToken: tokens.accessToken, fullSymbol: full, order })
-    const normalized = normalizeCtraderOrder(result.order || result)
-    await recordProviderAudit({ userId: user.id, connectionId, accountId, eventType: 'demo_order_placed', metadata: { provider: 'ctrader', providerOrderId: normalized.providerOrderId, symbol: order.symbol, side: order.side, lots: order.quantity } })
+    const normalized = normalizeCtraderOrder(result)
+    await recordProviderAudit({ userId: user.id, connectionId, accountId, eventType: 'demo_order_placed', metadata: { provider: 'ctrader', providerOrderId: normalized.providerOrderId, positionId: normalized.positionId, symbol: order.symbol, side: order.side, lots: order.quantity } })
     return json(res, 200, { ok: true, order: { ...normalized, symbol: String(full.name || order.symbol || ''), raw: result } })
   }
 
   if (action === 'modifyPosition') {
     if (context.environment !== 'demo') return json(res, 403, { ok: false, error: 'SHAFX live cTrader modification is still disabled. Use a cTrader practice account.' })
     const result = await amendCtraderPosition({ environment: context.environment, accountId, accessToken: tokens.accessToken, positionId: String(body.positionId), stopLoss: body.stopLoss == null ? null : Number(body.stopLoss), takeProfit: body.takeProfit == null ? null : Number(body.takeProfit) })
-    return json(res, 200, { ok: true, order: normalizeCtraderOrder(result.order || result) })
+    return json(res, 200, { ok: true, order: normalizeCtraderOrder(result) })
   }
 
   if (action === 'closePosition') {
