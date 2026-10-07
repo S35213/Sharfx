@@ -48,6 +48,14 @@ const symbolAliases = (value) => {
   return new Set([normalized, normalized.replace('/', ''), normalized.replace('_', ''), normalized.replace('-', '')])
 }
 
+const requirePositiveInt = (name, value) => {
+  const parsed = Number(value)
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new Error(`cTrader ${name} is missing or invalid. SHAFX did not send a usable broker identifier.`)
+  }
+  return parsed
+}
+
 const openSocket = async (endpoint) => {
   requireConfigured()
   const socket = new WS(endpoint)
@@ -309,13 +317,33 @@ const findSymbol = (symbols, requested) => {
   }) || null
 }
 
-export const resolveCtraderSymbol = async ({ environment, accountId, accessToken, symbol }) => {
-  const symbols = await getCtraderSymbols({ environment, accountId, accessToken })
-  const match = findSymbol(symbols, symbol)
-  if (!match) throw new Error('cTrader does not expose the selected symbol: ' + symbol)
-  const full = await getCtraderSymbol({ environment, accountId, accessToken, symbolId: match.symbolId })
-  if (!full) throw new Error('cTrader returned no full specification for ' + (match.name || symbol))
+const ctraderFullSymbolCache = new Map()
+const CTRADER_FULL_SYMBOL_CACHE_MS = 300000
+
+export const getCtraderFullSymbolById = async ({ environment, accountId, accessToken, symbolId }) => {
+  const account = requirePositiveInt('account ID', accountId)
+  const id = requirePositiveInt('symbol ID', symbolId)
+  const key = [safeEnvironment(environment), String(account), String(id)].join(':')
+  const cached = ctraderFullSymbolCache.get(key)
+  if (cached && cached.expiresAt > Date.now()) return cached.symbol
+  const full = await getCtraderSymbol({ environment, accountId: String(account), accessToken, symbolId: id })
+  if (!full) throw new Error('cTrader returned no full specification for symbol ID ' + id + '.')
+  ctraderFullSymbolCache.set(key, { symbol: full, expiresAt: Date.now() + CTRADER_FULL_SYMBOL_CACHE_MS })
   return full
+}
+
+export const resolveCtraderSymbol = async ({ environment, accountId, accessToken, symbol, symbolId }) => {
+  const account = requirePositiveInt('account ID', accountId)
+  if (symbolId !== undefined && symbolId !== null && String(symbolId) !== '') {
+    return getCtraderFullSymbolById({ environment, accountId: String(account), accessToken, symbolId })
+  }
+  const requested = String(symbol || '').trim()
+  if (!requested) throw new Error('cTrader symbol is missing. SHAFX did not send a symbol.')
+  const symbols = await getCtraderSymbols({ environment, accountId: String(account), accessToken })
+  const match = findSymbol(symbols, requested)
+  if (!match) throw new Error('cTrader does not expose the selected symbol: ' + requested)
+  const matchedId = requirePositiveInt('symbol ID', match.symbolId)
+  return getCtraderFullSymbolById({ environment, accountId: String(account), accessToken, symbolId: matchedId })
 }
 
 export const normalizeCtraderInstrument = (symbol) => {
@@ -364,19 +392,21 @@ export const ctraderProtocolVolumeToLots = (volume, fullSymbol) => {
 }
 
 export const getCtraderQuote = async ({ environment, accountId, accessToken, symbolId }) => {
-  const cacheKey = [safeEnvironment(environment), String(accountId), String(symbolId)].join(':')
+  const account = requirePositiveInt('account ID', accountId)
+  const id = requirePositiveInt('symbol ID', symbolId)
+  const cacheKey = [safeEnvironment(environment), String(account), String(id)].join(':')
   const cached = ctraderQuoteCache.get(cacheKey)
   if (cached && cached.expiresAt > Date.now()) return cached.quote
   const socket = await openSocket(endpointFor(environment))
   try {
     await authenticateApplication(socket)
-    await authenticateAccount(socket, accountId, accessToken)
+    await authenticateAccount(socket, account, accessToken)
     await ctraderRequest(socket, 2127, {
-      ctidTraderAccountId: Number(accountId),
-      symbolId: [Number(symbolId)],
+      ctidTraderAccountId: account,
+      symbolId: [id],
       subscribeToSpotTimestamp: true,
     }, (message) => message.payloadType === 2128)
-    const spot = await ctraderRequest(socket, 2131, {}, (message) => message.payloadType === 2131 && Number(message.payload?.symbolId) === Number(symbolId), 10000)
+    const spot = await ctraderRequest(socket, 2131, {}, (message) => message.payloadType === 2131 && Number(message.payload?.symbolId) === id, 10000)
     const body = asObject(spot.payload)
     const quote = {
       symbolId: Number(body.symbolId),
@@ -392,12 +422,15 @@ export const getCtraderQuote = async ({ environment, accountId, accessToken, sym
 }
 
 export const getCtraderMargin = async ({ environment, accountId, accessToken, symbolId, volume }) => {
+  const account = requirePositiveInt('account ID', accountId)
+  const id = requirePositiveInt('symbol ID', symbolId)
+  const requestedVolume = requirePositiveInt('volume', volume)
   const response = await authenticatedRequest({
     environment,
     accessToken,
-    accountId,
+    accountId: String(account),
     payloadType: 2139,
-    payload: { ctidTraderAccountId: Number(accountId), symbolId: Number(symbolId), volume: [Number(volume)] },
+    payload: { ctidTraderAccountId: account, symbolId: id, volume: [requestedVolume] },
     matcher: (message) => message.payloadType === 2140,
   })
   const body = asObject(response.payload)
@@ -411,10 +444,12 @@ export const getCtraderMargin = async ({ environment, accountId, accessToken, sy
 }
 
 export const placeCtraderOrder = async ({ environment, accountId, accessToken, fullSymbol, order }) => {
+  const account = requirePositiveInt('account ID', accountId)
+  const symbolId = requirePositiveInt('symbol ID', fullSymbol?.symbolId)
   const volume = ctraderLotsToProtocolVolume(order.quantity, fullSymbol)
   const payload = {
-    ctidTraderAccountId: Number(accountId),
-    symbolId: Number(fullSymbol.symbolId),
+    ctidTraderAccountId: account,
+    symbolId,
     orderType: order.type === 'LIMIT' ? 2 : order.type === 'STOP' ? 3 : order.type === 'STOP_LIMIT' ? 6 : 1,
     tradeSide: order.side === 'SELL' ? 2 : 1,
     volume,
@@ -458,10 +493,13 @@ export const amendCtraderPosition = async ({ environment, accountId, accessToken
 }
 
 export const closeCtraderPosition = async ({ environment, accountId, accessToken, positionId, volume }) => {
+  const account = requirePositiveInt('account ID', accountId)
+  const position = requirePositiveInt('position ID', positionId)
+  const closeVolume = requirePositiveInt('volume', volume)
   const payload = {
-    ctidTraderAccountId: Number(accountId),
-    positionId: Number(positionId),
-    volume: Number(volume),
+    ctidTraderAccountId: account,
+    positionId: position,
+    volume: closeVolume,
   }
   const response = await authenticatedRequest({
     environment,
@@ -476,12 +514,13 @@ export const closeCtraderPosition = async ({ environment, accountId, accessToken
 }
 
 export const reconcileCtrader = async ({ environment, accountId, accessToken }) => {
+  const account = requirePositiveInt('account ID', accountId)
   const response = await authenticatedRequest({
     environment,
     accessToken,
-    accountId,
+    accountId: String(account),
     payloadType: 2124,
-    payload: { ctidTraderAccountId: Number(accountId), returnProtectionOrders: false },
+    payload: { ctidTraderAccountId: account, returnProtectionOrders: false },
     matcher: (message) => message.payloadType === 2125,
   })
   return asObject(response.payload)
