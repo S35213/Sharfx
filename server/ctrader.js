@@ -15,7 +15,9 @@ const DEMO_ENDPOINT = 'wss://demo.ctraderapi.com:5036'
 const LIVE_ENDPOINT = 'wss://live.ctraderapi.com:5036'
 const ctraderQuoteCache = new Map()
 const ctraderQuoteInflight = new Map()
-const CTRADER_QUOTE_CACHE_MS = 1200
+const ctraderQuoteStreams = new Map()
+const CTRADER_QUOTE_CACHE_MS = 5000
+const CTRADER_QUOTE_STREAM_STALE_MS = 15000
 
 export const cTraderConfigured = () => Boolean(
   process.env.CTRADER_CLIENT_ID &&
@@ -402,77 +404,91 @@ export const ctraderProtocolVolumeToLots = (volume, fullSymbol) => {
   return Number(volume) / lotSizeCents
 }
 
-export const getCtraderQuote = async ({ environment, accountId, accessToken, symbolId }) => {
-  const account = requirePositiveInt('account ID', accountId)
-  const id = requirePositiveInt('symbol ID', symbolId)
-  const cacheKey = [safeEnvironment(environment), String(account), String(id)].join(':')
-  const cached = ctraderQuoteCache.get(cacheKey)
-  if (cached && cached.expiresAt > Date.now()) return cached.quote
-  const inflight = ctraderQuoteInflight.get(cacheKey)
-  if (inflight) return inflight
+const closeCtraderQuoteStream = async (key, stream) => {
+  try { stream.socket.close() } catch {}
+  if (ctraderQuoteStreams.get(key) === stream) ctraderQuoteStreams.delete(key)
+}
 
-  const request = (async () => {
-    const socket = await openSocket(endpointFor(environment))
-    try {
-      await authenticateApplication(socket)
-      await authenticateAccount(socket, account, accessToken)
+const createCtraderQuoteStream = async ({ environment, account, accessToken, id, key }) => {
+  const socket = await openSocket(endpointFor(environment))
+  const stream = {
+    socket,
+    accessToken,
+    quote: null,
+    lastQuoteAt: 0,
+    ready: null,
+  }
+  const ready = new Promise((resolve, reject) => {
+    let settled = false
+    const finishResolve = (value) => {
+      if (settled) return
+      settled = true
+      resolve(value)
+    }
+    const finishReject = (error) => {
+      if (settled) return
+      settled = true
+      reject(error)
+    }
 
-      // Register the spot-event listener before sending the subscribe request.
-      // cTrader can deliver the first spot immediately after 2128; a
-      // sequential request/read pair can otherwise miss that event.
-      const quote = await new Promise((resolve, reject) => {
-        let settled = false
-        const timer = setTimeout(() => finishReject(new Error('cTrader spot price timed out after subscription.')), 10000)
-        const cleanup = () => {
-          clearTimeout(timer)
-          socket.removeEventListener('message', onMessage)
-          socket.removeEventListener('error', onError)
-          socket.removeEventListener('close', onClose)
-        }
-        const finishResolve = (value) => {
-          if (settled) return
-          settled = true
-          cleanup()
-          resolve(value)
-        }
-        const finishReject = (error) => {
-          if (settled) return
-          settled = true
-          cleanup()
-          reject(error)
-        }
-        const onError = (event) => finishReject(new Error(event?.message || 'cTrader Open API socket error.'))
-        const onClose = () => finishReject(new Error('cTrader Open API socket closed before the spot price arrived.'))
-        const onMessage = (event) => {
-          try {
-            const raw = typeof event.data === 'string' ? event.data : Buffer.from(event.data).toString('utf8')
-            const message = JSON.parse(raw)
-            if (message.payloadType === 2142) {
-              const body = asObject(message.payload)
-              finishReject(Object.assign(new Error(body.description || body.errorCode || 'cTrader rejected the quote request.'), {
-                code: body.errorCode || 'CTRADER_ERROR',
-                providerCode: body.errorCode,
-              }))
-              return
-            }
-            if (message.payloadType !== 2131) return
-            const body = asObject(message.payload)
-            if (Number(body.ctidTraderAccountId) !== account || Number(body.symbolId) !== id) return
-            if (body.bid == null && body.ask == null) return
-            finishResolve({
-              symbolId: Number(body.symbolId),
-              bid: body.bid == null ? undefined : decodePrice(body.bid),
-              ask: body.ask == null ? undefined : decodePrice(body.ask),
-              timestamp: body.timestamp ? new Date(Number(body.timestamp)).toISOString() : new Date().toISOString(),
-            })
-          } catch (error) {
-            finishReject(error instanceof Error ? error : new Error('Unable to parse cTrader spot data.'))
-          }
+    const onError = (event) => {
+      const error = new Error(event?.message || 'cTrader Open API quote stream error.')
+      finishReject(error)
+      void closeCtraderQuoteStream(key, stream)
+    }
+
+    const onClose = () => {
+      finishReject(new Error('cTrader quote stream closed.'))
+      if (ctraderQuoteStreams.get(key) === stream) ctraderQuoteStreams.delete(key)
+    }
+
+    const onMessage = (event) => {
+      try {
+        const raw = typeof event.data === 'string' ? event.data : Buffer.from(event.data).toString('utf8')
+        const message = JSON.parse(raw)
+
+        if (message.payloadType === 2142) {
+          const body = asObject(message.payload)
+          const error = Object.assign(new Error(body.description || body.errorCode || 'cTrader rejected the quote request.'), {
+            code: body.errorCode || 'CTRADER_ERROR',
+            providerCode: body.errorCode,
+          })
+          finishReject(error)
+          void closeCtraderQuoteStream(key, stream)
+          return
         }
 
-        socket.addEventListener('message', onMessage)
-        socket.addEventListener('error', onError)
-        socket.addEventListener('close', onClose)
+        if (message.payloadType !== 2131) return
+        const body = asObject(message.payload)
+        if (Number(body.ctidTraderAccountId) !== account || Number(body.symbolId) !== id) return
+        if (body.bid == null && body.ask == null) return
+
+        const quote = {
+          symbolId: Number(body.symbolId),
+          bid: body.bid == null ? undefined : decodePrice(body.bid),
+          ask: body.ask == null ? undefined : decodePrice(body.ask),
+          timestamp: body.timestamp ? new Date(Number(body.timestamp)).toISOString() : new Date().toISOString(),
+        }
+        stream.quote = quote
+        stream.lastQuoteAt = Date.now()
+        ctraderQuoteCache.set(key, { quote, expiresAt: Date.now() + CTRADER_QUOTE_CACHE_MS })
+        finishResolve(quote)
+      } catch (error) {
+        finishReject(error instanceof Error ? error : new Error('Unable to parse cTrader spot data.'))
+      }
+    }
+
+    socket.addEventListener('message', onMessage)
+    socket.addEventListener('error', onError)
+    socket.addEventListener('close', onClose)
+
+    // Authenticate first, then keep this socket open for continuous spot events.
+    // The message listeners are already attached so the first spot event cannot
+    // be lost when cTrader acknowledges the subscription.
+    void (async () => {
+      try {
+        await authenticateApplication(socket)
+        await authenticateAccount(socket, account, accessToken)
         socket.send(JSON.stringify({
           clientMsgId: randomUUID(),
           payloadType: 2127,
@@ -482,21 +498,64 @@ export const getCtraderQuote = async ({ environment, accountId, accessToken, sym
             subscribeToSpotTimestamp: true,
           },
         }))
-      })
+      } catch (error) {
+        finishReject(error instanceof Error ? error : new Error('Unable to start cTrader quote stream.'))
+        await closeCtraderQuoteStream(key, stream)
+      }
+    })()
+  })
 
-      ctraderQuoteCache.set(cacheKey, { quote, expiresAt: Date.now() + CTRADER_QUOTE_CACHE_MS })
-      return quote
-    } finally {
-      await closeSocket(socket)
-    }
-  })()
-
-  ctraderQuoteInflight.set(cacheKey, request)
+  stream.ready = ready
+  ctraderQuoteStreams.set(key, stream)
   try {
-    return await request
-  } finally {
-    if (ctraderQuoteInflight.get(cacheKey) === request) ctraderQuoteInflight.delete(cacheKey)
+    await ready
+    return stream
+  } catch (error) {
+    await closeCtraderQuoteStream(key, stream)
+    throw error
   }
+}
+
+const ensureCtraderQuoteStream = async ({ environment, account, accessToken, id, key }) => {
+  const existing = ctraderQuoteStreams.get(key)
+  if (existing && existing.accessToken === accessToken && Date.now() - existing.lastQuoteAt < CTRADER_QUOTE_STREAM_STALE_MS) {
+    if (existing.quote) return existing.quote
+    return existing.ready
+  }
+
+  if (existing) await closeCtraderQuoteStream(key, existing)
+
+  const inflight = ctraderQuoteInflight.get(key)
+  if (inflight) return inflight
+
+  const request = createCtraderQuoteStream({ environment, account, accessToken, id, key })
+    .then((stream) => stream.quote)
+    .finally(() => {
+      if (ctraderQuoteInflight.get(key) === request) ctraderQuoteInflight.delete(key)
+    })
+
+  ctraderQuoteInflight.set(key, request)
+  return request
+}
+
+export const getCtraderQuote = async ({ environment, accountId, accessToken, symbolId }) => {
+  const account = requirePositiveInt('account ID', accountId)
+  const id = requirePositiveInt('symbol ID', symbolId)
+  const key = [safeEnvironment(environment), String(account), String(id)].join(':')
+
+  const cached = ctraderQuoteCache.get(key)
+  if (cached && cached.expiresAt > Date.now()) return cached.quote
+
+  // Keep one authenticated cTrader spot subscription alive per
+  // account/symbol instead of opening/authenticating a new WebSocket for every
+  // HTTP quote poll from the SHAFX phone UI.
+  return ensureCtraderQuoteStream({
+    environment,
+    account,
+    accessToken,
+    id,
+    key,
+  })
 }
 export const getCtraderMargin = async ({ environment, accountId, accessToken, symbolId, volume }) => {
   const account = requirePositiveInt('account ID', accountId)
