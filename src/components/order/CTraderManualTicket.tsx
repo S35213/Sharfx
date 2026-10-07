@@ -332,7 +332,7 @@ export const CTraderManualTicket: React.FC<Props> = ({
     setState('placing')
     setError('')
     try {
-      let marginToUse = selectedMargin
+      let marginToUse = margin
       if (marginToUse === null && instrument?.providerSymbol) {
         const roundedLots = Number(Number(plan.lotSize).toFixed(2))
         const key = [
