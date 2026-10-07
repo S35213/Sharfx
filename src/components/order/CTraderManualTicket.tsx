@@ -180,13 +180,11 @@ export const CTraderManualTicket: React.FC<Props> = ({
   const [quote, setQuote] = useState<ProviderQuote | null>(null)
   const [instrument, setInstrument] = useState<ProviderInstrument | null>(null)
   const [margin, setMargin] = useState<MarginResult | null>(null)
-  const [marginLoading, setMarginLoading] = useState(false)
   const [quoteLoading, setQuoteLoading] = useState(false)
   const [state, setState] = useState<TicketState>('ready')
   const [error, setError] = useState('')
   const [now, setNow] = useState(0)
   const refreshTimer = useRef<ReturnType<typeof setInterval> | null>(null)
-  const marginTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastQuoteErrorAt = useRef(0)
   const lastQuoteError = useRef('')
 
@@ -286,13 +284,6 @@ export const CTraderManualTicket: React.FC<Props> = ({
       refreshTimer.current = null
     }
   }, [connection?.accountId, connection?.connectionId, connection?.environment, instrument?.providerSymbol, providerSelection?.providerId, symbol])
-
-  // Margin is deliberately NOT polled continuously. It is an order preflight
-  // check, not market data. This keeps cTrader request traffic low and prevents
-  // the ticket from disabling the trade button while margin is recalculating.
-  useEffect(() => {
-    setMarginLoading(false)
-  }, [instrument?.providerSymbol, plan.lotSize, symbol, connection?.accountId])
 
 
   const lines = useMemo<ChartAnnotation[]>(() => {
