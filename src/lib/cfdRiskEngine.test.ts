@@ -33,6 +33,25 @@ describe('SHAFX CFD risk engine', () => {
     expect(normalizeLotSize(0.057, eurUsd)).toBe(0.05)
   })
 
+  it('keeps the ticket tradable when the broker minimum lot exceeds the selected risk window', () => {
+    const minLotSymbol = { ...eurUsd, minLotSize: 1, maxLotSize: 100, lotStep: 1 }
+    const plan = calculateCfdRiskPlan({
+      accountBalance: 1000,
+      accountCurrency: 'USD',
+      symbol: minLotSymbol,
+      side: 'BUY',
+      entryPrice: 1.17,
+      stopLossPrice: 1.169,
+      takeProfitPrice: 1.172,
+      riskAmount: 2,
+    })
+
+    expect(plan.valid).toBe(true)
+    expect(plan.lotSize).toBe(1)
+    expect(plan.estimatedLossAtStop).toBeCloseTo(100, 8)
+    expect(plan.warning).toContain('broker minimum lot')
+  })
+
   it('builds a valid BUY plan and calculates reward/risk', () => {
     const plan = calculateCfdRiskPlan({
       accountBalance: 100,
