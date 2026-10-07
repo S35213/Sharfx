@@ -778,7 +778,7 @@ const TerminalContent: React.FC = () => {
        {!isCompactViewport && <aside className="hidden w-[340px] min-w-[320px] max-w-[360px] flex-shrink-0 flex-col overflow-hidden border-l border-shafx-border bg-[#090D13] lg:flex xl:w-[360px]">
         <div className="flex h-10 flex-shrink-0 items-center justify-between border-b border-shafx-border px-3"><div><div className="text-[8px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">{dock === 'orders' ? 'TRADE' : 'WORKSPACE'}</div><div className="text-xs font-semibold">{dock === 'insights' ? 'Market intelligence' : dock === 'chat' ? 'Chat & Order Ticket' : dock === 'bot' ? 'SHAFX Signal Desk' : dock === 'liquidity' ? 'Liquidity & depth' : 'Trade ticket'}</div></div></div>
         <div className="min-h-0 flex-1 overflow-y-auto p-3">{dockContent[dock === 'agent' || dock === 'research' ? 'insights' : dock]}</div>
-      </aside>
+      </aside>}
     </main>
     <MobileNav activeTab={mobileTab} onChange={setMobileTab} />
     <footer className="hidden h-7 items-center justify-between border-t border-shafx-border bg-[#080B10] px-4 text-[9px] text-shafx-textMuted lg:flex"><span>SHAFX • Deriv workspace • {accountModeLabel}</span><span>{liveMarketActive ? 'Deriv market stream active' : 'Connecting to Deriv'}</span></footer>
