@@ -210,6 +210,7 @@ const TerminalContent: React.FC = () => {
   const [dock, setDock] = useState<WorkspaceDock>('orders')
   const [mobileTab, setMobileTab] = useState<MobileNavTab>('market')
   const [mobileDockOpen, setMobileDockOpen] = useState(false)
+  const [isCompactViewport, setIsCompactViewport] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 999px)').matches)
   const [isLandscapeCompactViewport, setIsLandscapeCompactViewport] = useState(() => typeof window !== 'undefined' && window.matchMedia('(orientation: landscape) and (max-width: 999px)').matches)
   const accountStreamManager = useRef(new ProviderAccountStreamManager())
   const selectedSymbolRef = useRef(selectedSymbol)
@@ -247,7 +248,10 @@ const TerminalContent: React.FC = () => {
   useEffect(() => {
     const compactMedia = window.matchMedia('(max-width: 999px)')
     const landscapeMedia = window.matchMedia('(orientation: landscape) and (max-width: 999px)')
-    const sync = () => { setIsLandscapeCompactViewport(landscapeMedia.matches) }
+    const sync = () => {
+      setIsCompactViewport(compactMedia.matches)
+      setIsLandscapeCompactViewport(landscapeMedia.matches)
+    }
     sync()
     compactMedia.addEventListener('change', sync)
     landscapeMedia.addEventListener('change', sync)
@@ -771,7 +775,8 @@ const TerminalContent: React.FC = () => {
       <aside className={showFunds ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><DerivCashierLinks /></div></aside>
       <aside className={showAccount ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><AccountPanel account={resolvedAccountData} activeProviderSelection={activeProviderSelection} /></div></aside>
 
-      <aside className="hidden w-[340px] min-w-[320px] max-w-[360px] flex-shrink-0 flex-col overflow-hidden border-l border-shafx-border bg-[#090D13] lg:flex xl:w-[360px]">
+        </aside>}
+       {!isCompactViewport && <aside className="hidden w-[340px] min-w-[320px] max-w-[360px] flex-shrink-0 flex-col overflow-hidden border-l border-shafx-border bg-[#090D13] lg:flex xl:w-[360px]">
         <div className="flex h-10 flex-shrink-0 items-center justify-between border-b border-shafx-border px-3"><div><div className="text-[8px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">{dock === 'orders' ? 'TRADE' : 'WORKSPACE'}</div><div className="text-xs font-semibold">{dock === 'insights' ? 'Market intelligence' : dock === 'chat' ? 'Chat & Order Ticket' : dock === 'bot' ? 'SHAFX Signal Desk' : dock === 'liquidity' ? 'Liquidity & depth' : 'Trade ticket'}</div></div></div>
         <div className="min-h-0 flex-1 overflow-y-auto p-3">{dockContent[dock === 'agent' || dock === 'research' ? 'insights' : dock]}</div>
       </aside>
