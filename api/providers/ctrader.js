@@ -231,13 +231,25 @@ const handlePost = async (req, res, user, body) => {
   }
 
   if (action === 'quote') {
-    const full = await resolveCtraderSymbol({ environment: context.environment, accountId, accessToken: tokens.accessToken, symbol: String(body.symbol || '') })
+    const full = await resolveCtraderSymbol({
+      environment: context.environment,
+      accountId,
+      accessToken: tokens.accessToken,
+      symbol: String(body.symbol || ''),
+      symbolId: body.symbolId,
+    })
     const quote = await getCtraderQuote({ environment: context.environment, accountId, accessToken: tokens.accessToken, symbolId: full.symbolId })
     return json(res, 200, { ok: true, quote: { symbol: String(full.name || body.symbol || ''), bid: quote.bid, ask: quote.ask, last: quote.ask ?? quote.bid, timestamp: quote.timestamp }, instrument: normalizeCtraderInstrument(full) })
   }
 
   if (action === 'margin') {
-    const full = await resolveCtraderSymbol({ environment: context.environment, accountId, accessToken: tokens.accessToken, symbol: String(body.symbol || '') })
+    const full = await resolveCtraderSymbol({
+      environment: context.environment,
+      accountId,
+      accessToken: tokens.accessToken,
+      symbol: String(body.symbol || ''),
+      symbolId: body.symbolId,
+    })
     const volume = ctraderLotsToProtocolVolume(Number(body.lots), full)
     const margin = await getCtraderMargin({ environment: context.environment, accountId, accessToken: tokens.accessToken, symbolId: full.symbolId, volume })
     return json(res, 200, { ok: true, margin, volumeProtocol: volume, instrument: normalizeCtraderInstrument(full) })
@@ -246,7 +258,13 @@ const handlePost = async (req, res, user, body) => {
   if (action === 'placeOrder') {
     if (context.environment !== 'demo') return json(res, 403, { ok: false, error: 'SHAFX live cTrader execution is still disabled. Use a cTrader practice account.' })
     const order = body.order && typeof body.order === 'object' ? body.order : {}
-    const full = await resolveCtraderSymbol({ environment: context.environment, accountId, accessToken: tokens.accessToken, symbol: String(order.symbol || '') })
+    const full = await resolveCtraderSymbol({
+      environment: context.environment,
+      accountId,
+      accessToken: tokens.accessToken,
+      symbol: String(order.symbol || ''),
+      symbolId: body.symbolId ?? order.symbolId,
+    })
     const result = await placeCtraderOrder({ environment: context.environment, accountId, accessToken: tokens.accessToken, fullSymbol: full, order })
     const normalized = normalizeCtraderOrder(result)
     await recordProviderAudit({ userId: user.id, connectionId, accountId, eventType: 'demo_order_placed', metadata: { provider: 'ctrader', providerOrderId: normalized.providerOrderId, positionId: normalized.positionId, symbol: order.symbol, side: order.side, lots: order.quantity } })
@@ -265,7 +283,7 @@ const handlePost = async (req, res, user, body) => {
     const position = (Array.isArray(reconcile.position) ? reconcile.position : []).find((item) => String(item.positionId) === String(body.positionId))
     if (!position) return json(res, 404, { ok: false, error: 'cTrader position was not found.' })
     const result = await closeCtraderPosition({ environment: context.environment, accountId, accessToken: tokens.accessToken, positionId: String(body.positionId), volume: Number(position.tradeData?.volume || 0) })
-    const normalized = normalizeCtraderOrder(result.order || result)
+    const normalized = normalizeCtraderOrder(result)
     await recordProviderAudit({ userId: user.id, connectionId, accountId, eventType: 'demo_position_closed', metadata: { provider: 'ctrader', positionId: String(body.positionId) } })
     return json(res, 200, { ok: true, order: normalized })
   }
