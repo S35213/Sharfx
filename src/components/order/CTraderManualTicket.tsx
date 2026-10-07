@@ -62,7 +62,7 @@ interface SharedCTraderQuoteResult {
 
 const sharedCTraderQuoteCache = new Map<string, { value: SharedCTraderQuoteResult; expiresAt: number }>()
 const sharedCTraderQuoteInflight = new Map<string, Promise<SharedCTraderQuoteResult>>()
-const SHARED_CTRADER_QUOTE_CACHE_MS = 5000
+const SHARED_CTRADER_QUOTE_CACHE_MS = 250
 
 const getSharedCTraderQuote = async (body: Record<string, unknown>): Promise<SharedCTraderQuoteResult> => {
   const key = [
@@ -280,7 +280,7 @@ export const CTraderManualTicket: React.FC<Props> = ({
     }
 
     void load()
-    refreshTimer.current = window.setInterval(() => { void load() }, 3000)
+    refreshTimer.current = window.setInterval(() => { void load() }, 350)
     return () => {
       cancelled = true
       if (refreshTimer.current) window.clearInterval(refreshTimer.current)
