@@ -70,6 +70,7 @@ const postCTrader = async (body: Record<string, unknown>): Promise<Record<string
       ...(body.order ? { order: body.order } : {}),
       ...(body.positionId ? { positionId: body.positionId } : {}),
       ...(body.symbol ? { symbol: body.symbol } : {}),
+      ...(body.symbolId !== undefined ? { symbolId: body.symbolId } : {}),
       ...(body.lots !== undefined ? { lots: body.lots } : {}),
     }),
   })
@@ -141,6 +142,8 @@ export const CTraderManualTicket: React.FC<Props> = ({
   const [now, setNow] = useState(0)
   const refreshTimer = useRef<ReturnType<typeof setInterval> | null>(null)
   const marginTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastQuoteErrorAt = useRef(0)
+  const lastQuoteError = useRef('')
 
   const entryPrice = side === 'BUY'
     ? Number(quote?.ask ?? askPrice ?? currentPrice)
@@ -199,6 +202,7 @@ export const CTraderManualTicket: React.FC<Props> = ({
           environment: connection.environment,
           action: 'quote',
           symbol,
+          ...(instrument?.providerSymbol ? { symbolId: instrument.providerSymbol } : {}),
         })
         if (cancelled) return
         const nextQuote = payload.quote as ProviderQuote
@@ -207,7 +211,15 @@ export const CTraderManualTicket: React.FC<Props> = ({
         setInstrument(nextInstrument)
         setError('')
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Unable to read the cTrader quote.')
+        if (!cancelled) {
+          const message = err instanceof Error ? err.message : 'Unable to read the cTrader quote.'
+          const nowMs = Date.now()
+          if (message !== lastQuoteError.current || nowMs - lastQuoteErrorAt.current > 5000) {
+            lastQuoteError.current = message
+            lastQuoteErrorAt.current = nowMs
+            setError(message)
+          }
+        }
       } finally {
         if (!cancelled) setQuoteLoading(false)
       }
@@ -237,6 +249,7 @@ export const CTraderManualTicket: React.FC<Props> = ({
           environment: connection.environment,
           action: 'margin',
           symbol,
+          ...(instrument?.providerSymbol ? { symbolId: instrument.providerSymbol } : {}),
           lots: plan.lotSize,
         })
         const next = payload.margin as MarginResult
@@ -309,6 +322,7 @@ export const CTraderManualTicket: React.FC<Props> = ({
         accountId: connection.accountId,
         environment: connection.environment,
         action: 'placeOrder',
+        ...(instrument?.providerSymbol ? { symbolId: instrument.providerSymbol } : {}),
         order: {
           symbol,
           side,
@@ -417,12 +431,20 @@ export const CTraderManualTicket: React.FC<Props> = ({
 
   function renderPlanningTicket(): React.ReactNode {
     const cTraderReady = Boolean(connection?.accountId && providerSelection?.providerId === 'ctrader' && connection.environment === 'demo')
-    const canTrade = Boolean(cTraderReady && plan.valid && !marginLoading)
+    const brokerQuoteReady = Boolean(
+      instrument?.providerSymbol &&
+      quote &&
+      Number.isFinite(Number(quote.bid)) &&
+      Number.isFinite(Number(quote.ask)) &&
+      Number(quote.bid) > 0 &&
+      Number(quote.ask) > 0,
+    )
+    const canTrade = Boolean(cTraderReady && brokerQuoteReady && plan.valid && !marginLoading)
     return (
       <div className="bg-[#080D13] p-3 sm:p-4">
         <div className="flex items-center justify-between gap-2">
           <div><div className="text-[10px] font-semibold uppercase tracking-[0.16em]">SHAFX CFD • manual</div><div className="mt-0.5 font-mono text-[8px] text-shafx-textMuted">{symbol} • {timeframe} • Deriv cTrader</div></div>
-          <div className="rounded-full border border-shafx-accent/25 bg-shafx-accent/10 px-2 py-1 text-[7px] font-bold tracking-wide text-shafx-accent">{quoteLoading ? 'UPDATING' : 'PRACTICE'}</div>
+          <div className="rounded-full border border-shafx-accent/25 bg-shafx-accent/10 px-2 py-1 text-[7px] font-bold tracking-wide text-shafx-accent">{quoteLoading ? 'UPDATING' : brokerQuoteReady ? 'LIVE PRICE' : 'WAITING'}</div>
         </div>
 
         {aiSetup && <div className="mt-2 flex items-center gap-2 rounded-xl border border-shafx-accent/20 bg-shafx-accent/[0.05] px-2.5 py-2 text-[8px] text-shafx-accent"><CheckCircle2 className="h-3.5 w-3.5" />AI reviewed setup loaded — SHAFX still waits for your manual confirm.</div>}
@@ -468,7 +490,13 @@ export const CTraderManualTicket: React.FC<Props> = ({
 {(error || !plan.valid) && <div className="mt-3 rounded-xl border border-shafx-danger/25 bg-shafx-danger/10 px-3 py-2 text-[8px] leading-4 text-shafx-danger">{error || plan.error}</div>}
 
         <button type="button" onClick={() => void place()} disabled={!canTrade || state === 'placing'} className={'mt-3 flex min-h-12 w-full items-center justify-center gap-2 text-[9px] font-bold ' + (side === 'BUY' ? 'bg-shafx-success text-[#07110E]' : 'bg-shafx-danger text-white') + ' disabled:opacity-45'}>
-          {state === 'placing' ? <><LoaderCircle className="h-3.5 w-3.5 animate-spin" /> PLACING {side}…</> : !cTraderReady ? <><ArrowUpRight className="h-3.5 w-3.5" /> CONNECT cTRADER TO TRADE</> : <><CheckCircle2 className="h-3.5 w-3.5" /> {connection?.environment === 'demo' ? 'CONFIRM PRACTICE ' : 'LIVE LOCKED '} {side}</>}
+          {state === 'placing'
+            ? <><LoaderCircle className="h-3.5 w-3.5 animate-spin" /> PLACING {side}…</>
+            : !cTraderReady
+              ? <><ArrowUpRight className="h-3.5 w-3.5" /> CONNECT cTRADER TO TRADE</>
+              : !brokerQuoteReady
+                ? <><LoaderCircle className="h-3.5 w-3.5" /> WAITING FOR cTRADER PRICE…</>
+                : <><CheckCircle2 className="h-3.5 w-3.5" /> {connection?.environment === 'demo' ? 'CONFIRM PRACTICE ' : 'LIVE LOCKED '} {side}</>}
         </button>
 
         {connection?.environment !== 'demo' && <div className="mt-2 text-center text-[7px] uppercase tracking-[0.14em] text-shafx-warning">Live execution is deliberately locked until the SHAFX release gate passes.</div>}
