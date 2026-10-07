@@ -555,7 +555,7 @@ const TerminalContent: React.FC = () => {
     try {
       let closed: TradeOrder | null = null
       if (activeProviderSelection?.providerId === 'ctrader') {
-        const response = await fetch('/api/providers/connections', {
+        const response = await fetch('/api/providers/ctrader', {
           method: 'POST',
           credentials: 'include',
           cache: 'no-store',
