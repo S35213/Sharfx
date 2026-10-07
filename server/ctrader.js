@@ -374,9 +374,11 @@ export const normalizeCtraderInstrument = (symbol) => {
     contractSize: lotSizeCents > 0 ? lotSizeCents / 100 : undefined,
     pipSize: item.pipPosition != null ? 10 ** -Number(item.pipPosition) : 10 ** -(digits >= 4 ? 4 : digits),
     priceIncrement: 10 ** -digits,
-    quantityMin: minVolumeCents > 0 ? minVolumeCents / Math.max(1, lotSizeCents / 100) : undefined,
-    quantityMax: maxVolumeCents > 0 ? maxVolumeCents / Math.max(1, lotSizeCents / 100) : undefined,
-    quantityStep: stepVolumeCents > 0 ? stepVolumeCents / Math.max(1, lotSizeCents / 100) : undefined,
+    // cTrader min/max/stepVolume use the same protocol-volume units as lotSize.
+    // Convert those broker constraints back into SHAFX lots by dividing by lotSize.
+    quantityMin: minVolumeCents > 0 && lotSizeCents > 0 ? minVolumeCents / lotSizeCents : undefined,
+    quantityMax: maxVolumeCents > 0 && lotSizeCents > 0 ? maxVolumeCents / lotSizeCents : undefined,
+    quantityStep: stepVolumeCents > 0 && lotSizeCents > 0 ? stepVolumeCents / lotSizeCents : undefined,
     tradable: Number(item.tradingMode || 0) === 0,
     metadata: {
       symbolId: String(item.symbolId || ''),
