@@ -232,7 +232,7 @@ export const CTraderManualTicket: React.FC<Props> = ({
       if (refreshTimer.current) window.clearInterval(refreshTimer.current)
       refreshTimer.current = null
     }
-  }, [connection?.accountId, connection?.connectionId, connection?.environment, providerSelection?.providerId, symbol])
+  }, [connection?.accountId, connection?.connectionId, connection?.environment, instrument?.providerSymbol, providerSelection?.providerId, symbol])
 
   useEffect(() => {
     if (!connection?.accountId || providerSelection?.providerId !== 'ctrader' || !plan.valid) {
@@ -263,7 +263,7 @@ export const CTraderManualTicket: React.FC<Props> = ({
     return () => {
       if (marginTimer.current) window.clearTimeout(marginTimer.current)
     }
-  }, [connection?.accountId, connection?.connectionId, connection?.environment, plan.lotSize, plan.valid, providerSelection?.providerId, symbol])
+  }, [connection?.accountId, connection?.connectionId, connection?.environment, instrument?.providerSymbol, plan.lotSize, plan.valid, providerSelection?.providerId, symbol])
 
   const lines = useMemo<ChartAnnotation[]>(() => {
     if (activePosition) {
