@@ -14,6 +14,8 @@ import type {
 import { validateProviderConnection } from '../core/providerConnectionGuard'
 import { CTRADER_PROVIDER_DESCRIPTOR } from './descriptor'
 
+const ctraderResolvedSymbolIds = new Map<string, string>()
+
 const assertConnection = (connection: ProviderConnection): void => {
   const result = validateProviderConnection({ descriptor: CTRADER_PROVIDER_DESCRIPTOR }, connection)
   if (!result.allowed) throw new Error(result.reason || 'Invalid cTrader connection.')
@@ -173,8 +175,17 @@ export const CTRADER_PROVIDER_ADAPTER: ProviderAdapter = {
 
   async getQuote(connection, accountId, symbol): Promise<ProviderQuote> {
     assertConnection(connection)
-    const payload = await request(connection, requireAccount(accountId), 'quote', { symbol })
+    const account = requireAccount(accountId)
+    const cacheKey = [connection.environment, account, symbol].join(':')
+    const cachedSymbolId = ctraderResolvedSymbolIds.get(cacheKey)
+    const payload = await request(connection, account, 'quote', {
+      symbol,
+      ...(cachedSymbolId ? { symbolId: cachedSymbolId } : {}),
+    })
     const quote = toObject(payload.quote)
+    const instrument = toObject(payload.instrument)
+    const providerSymbol = String(instrument.providerSymbol ?? quote.symbolId ?? '')
+    if (providerSymbol) ctraderResolvedSymbolIds.set(cacheKey, providerSymbol)
     return {
       symbol: String(quote.symbol ?? symbol),
       bid: quote.bid == null ? undefined : Number(quote.bid),
