@@ -216,11 +216,21 @@ const TerminalContent: React.FC = () => {
   const watchlistReferencePricesRef = useRef<Record<string, number>>({})
   const candleCacheRef = useRef<Record<string, OHLCV[]>>({})
   const toastId = useRef(0)
+  const lastStreamToastAt = useRef(0)
+  const lastStreamToastText = useRef('')
 
   const pushToast = useCallback((text: string) => {
     toastId.current += 1
     setToast({ id: toastId.current, text })
   }, [])
+
+  const pushStreamToast = useCallback((text: string): void => {
+    const now = Date.now()
+    if (text === lastStreamToastText.current && now - lastStreamToastAt.current < 15000) return
+    lastStreamToastText.current = text
+    lastStreamToastAt.current = now
+    pushToast(text)
+  }, [pushToast])
 
   const handleBotPaperRoundClosed = useCallback((trade: BotPaperTrade): void => {
     setBotPaperHistory((current) => [trade, ...current.filter((item) => item.id !== trade.id)].slice(0, 200))
@@ -405,7 +415,7 @@ const TerminalContent: React.FC = () => {
           },
           (status) => {
             if (cancelled) return
-            if (status === 'error') pushToast((activeProviderSelection.providerId === 'ctrader' ? 'cTrader' : 'Deriv') + ' account stream interrupted. SHAFX is reconnecting.')
+            if (status === 'error') pushStreamToast((activeProviderSelection.providerId === 'ctrader' ? 'cTrader' : 'Deriv') + ' account stream interrupted. SHAFX is reconnecting.')
           },
           (event: ProviderStreamEvent) => {
             if (cancelled || key !== providerAccountStreamKey({
@@ -453,7 +463,7 @@ const TerminalContent: React.FC = () => {
     }
     void start()
     return () => { cancelled = true; void manager.stopAll() }
-  }, [activeProviderSelection?.providerId, activeProviderSelection?.connectionId, activeProviderSelection?.accountId, activeProviderSelection?.environment, pushToast])
+  }, [activeProviderSelection?.providerId, activeProviderSelection?.connectionId, activeProviderSelection?.accountId, activeProviderSelection?.environment, pushStreamToast])
 
   const handleLiveUpdate = useCallback((candles: OHLCV[], price: number, epoch: number): void => {
     const valid = candles.filter((candle, index) =>
