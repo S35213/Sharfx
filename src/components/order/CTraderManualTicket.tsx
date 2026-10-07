@@ -214,7 +214,7 @@ export const CTraderManualTicket: React.FC<Props> = ({
     }
 
     void load()
-    refreshTimer.current = window.setInterval(() => { void load() }, 1000)
+    refreshTimer.current = window.setInterval(() => { void load() }, 1200)
     return () => {
       cancelled = true
       if (refreshTimer.current) window.clearInterval(refreshTimer.current)
@@ -321,14 +321,19 @@ export const CTraderManualTicket: React.FC<Props> = ({
         },
       })
       const order = (payload.order || {}) as Record<string, unknown>
-      const providerOrderId = String(order.providerOrderId || crypto.randomUUID())
+      const rawOrder = (order.raw && typeof order.raw === 'object' && order.raw) ? order.raw as Record<string, unknown> : {}
+      const rawPosition = (rawOrder.position && typeof rawOrder.position === 'object' && rawOrder.position) ? rawOrder.position as Record<string, unknown> : {}
+      const providerOrderId = String(order.providerOrderId || rawOrder.orderId || crypto.randomUUID())
+      const positionId = String(order.positionId || rawPosition.positionId || '')
       const executionPrice = Number(
-        (order.raw && typeof order.raw === 'object' && order.raw)
-          ? ((order.raw as Record<string, unknown>).executedPrice ?? (order.raw as Record<string, unknown>).price ?? entryPrice)
-          : entryPrice,
+        order.executionPrice ??
+          ((order.raw && typeof order.raw === 'object' && order.raw)
+            ? ((rawOrder.executedPrice ?? rawOrder.executionPrice ?? rawOrder.price ?? rawPosition.price) as number | string | undefined)
+            : entryPrice),
       )
       const trade: TradeOrder = {
-        id: providerOrderId,
+        // cTrader close/amend operations require the broker positionId, not the orderId.
+        id: positionId || providerOrderId,
         symbol,
         type: side,
         lotSize: plan.lotSize,
@@ -370,7 +375,12 @@ export const CTraderManualTicket: React.FC<Props> = ({
     await onTradeClosed(activePosition.id)
   }
 
-  const priceNow = activePosition?.currentPrice && activePosition.currentPrice > 0 ? activePosition.currentPrice : entryPrice
+  const liveQuotePrice = activePosition?.type === 'SELL'
+    ? Number(quote?.ask ?? 0)
+    : Number(quote?.bid ?? 0)
+  const priceNow = activePosition?.currentPrice && activePosition.currentPrice > 0
+    ? activePosition.currentPrice
+    : liveQuotePrice > 0 ? liveQuotePrice : entryPrice
 
   if (activePosition) {
     const brokerProfit = Number(activePosition.profit)
