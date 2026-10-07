@@ -56,7 +56,7 @@ interface MarginResult {
 }
 
 const postCTrader = async (body: Record<string, unknown>): Promise<Record<string, unknown>> => {
-  const response = await fetch('/api/providers/connections', {
+  const response = await fetch('/api/providers/ctrader', {
     method: 'POST',
     credentials: 'include',
     cache: 'no-store',
