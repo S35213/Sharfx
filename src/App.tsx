@@ -34,6 +34,7 @@ import { TIMEFRAMES, type AccountData, type BotPaperTrade, type MarketAnalysis, 
 import type { SetupCandidate } from './engine/setup/types'
 import { mockWatchlist } from './data/mock/watchlist'
 import { fetchDerivActiveForexSymbols, subscribeDerivForexQuotes } from './data/deriv/DerivPublicMarketFeed'
+import { cTraderQuoteBucket, subscribeCTraderLiveQuote } from './data/ctrader/CTraderLiveQuote'
 
 const normalizeProviderSymbol = (value: string): string => {
   if (/^frx[A-Z0-9]{6}$/i.test(value)) {
@@ -192,6 +193,8 @@ const TerminalContent: React.FC = () => {
   const { selectedSymbol, setSelectedSymbol, timeframe, setTimeframe } = useTerminal()
   const [activeProviderSelection, setActiveProviderSelection] = useState<ActiveProviderSelection | null>(() => getStoredProviderSelection())
   const [currentPrice, setCurrentPrice] = useState(0)
+  const [liveBidPrice, setLiveBidPrice] = useState(0)
+  const [liveAskPrice, setLiveAskPrice] = useState(0)
   const [marketTimestamp, setMarketTimestamp] = useState(0)
   const [liveCandles, setLiveCandles] = useState<OHLCV[]>([])
   const [accountData, setAccountData] = useState<AccountData | null>(null)
@@ -216,6 +219,8 @@ const TerminalContent: React.FC = () => {
   const selectedSymbolRef = useRef(selectedSymbol)
   const watchlistReferencePricesRef = useRef<Record<string, number>>({})
   const candleCacheRef = useRef<Record<string, OHLCV[]>>({})
+  const latestCTraderPriceRef = useRef<number | null>(null)
+  const cTraderChartSeededRef = useRef(false)
   const toastId = useRef(0)
   const lastStreamToastAt = useRef(0)
   const lastStreamToastText = useRef('')
@@ -308,7 +313,11 @@ const TerminalContent: React.FC = () => {
     setLiveCandles(cached)
     const last = cached[cached.length - 1]
     setCurrentPrice(last?.close ?? 0)
+    setLiveBidPrice(0)
+    setLiveAskPrice(0)
     setMarketTimestamp(last ? Math.floor(last.time / 1000) : 0)
+    latestCTraderPriceRef.current = null
+    cTraderChartSeededRef.current = false
     setLiveMarketActive(false)
   }, [selectedSymbol, timeframe])
 
@@ -479,11 +488,68 @@ const TerminalContent: React.FC = () => {
       (index === 0 || candle.time > candles[index - 1].time)
     )
     const cacheKey = selectedSymbolRef.current + ':' + timeframe
+    const cTraderActive = activeProviderSelection?.providerId === 'ctrader'
+    const livePrice = cTraderActive && latestCTraderPriceRef.current && latestCTraderPriceRef.current > 0
+      ? latestCTraderPriceRef.current
+      : price
+    if (cTraderActive) {
+      if (!cTraderChartSeededRef.current && valid.length > 0) {
+        candleCacheRef.current[cacheKey] = valid
+        setLiveCandles(valid)
+        cTraderChartSeededRef.current = true
+      }
+      setCurrentPrice(livePrice)
+      setMarketTimestamp(Math.floor(epoch / 1000))
+      return
+    }
     candleCacheRef.current[cacheKey] = valid
     setLiveCandles(valid)
-    setCurrentPrice(price)
+    setCurrentPrice(livePrice)
     setMarketTimestamp(Math.floor(epoch / 1000))
-  }, [timeframe])
+  }, [activeProviderSelection?.providerId, timeframe])
+
+  useEffect(() => {
+    const selection = activeProviderSelection
+    if (selection?.providerId !== 'ctrader' || !selection.connectionId || !selection.accountId) return
+    const unsubscribe = subscribeCTraderLiveQuote({
+      connectionId: selection.connectionId,
+      accountId: selection.accountId,
+      environment: selection.environment === 'live' ? 'live' : 'demo',
+      symbol: selectedSymbol,
+    }, (nextQuote) => {
+      const bid = Number(nextQuote.bid)
+      const ask = Number(nextQuote.ask)
+      const price = Number.isFinite(bid) && bid > 0
+        ? bid
+        : Number.isFinite(ask) && ask > 0
+          ? ask
+          : 0
+      if (!price) return
+      const epochMs = Date.parse(nextQuote.timestamp)
+      const timestamp = Number.isFinite(epochMs) ? epochMs : Date.now()
+      latestCTraderPriceRef.current = price
+      setLiveBidPrice(Number.isFinite(bid) && bid > 0 ? bid : price)
+      setLiveAskPrice(Number.isFinite(ask) && ask > 0 ? ask : price)
+      setCurrentPrice(price)
+      setMarketTimestamp(Math.floor(timestamp / 1000))
+      setLiveMarketActive(true)
+      setLiveCandles((current) => {
+        if (!current.length) return current
+        const bucket = cTraderQuoteBucket(timestamp, timeframe)
+        const last = current[current.length - 1]
+        if (last.time === bucket) {
+          return [...current.slice(0, -1), {
+            ...last,
+            high: Math.max(last.high, price),
+            low: Math.min(last.low, price),
+            close: price,
+          }]
+        }
+        return [...current, { time: bucket, open: price, high: price, low: price, close: price }].slice(-300)
+      })
+    })
+    return unsubscribe
+  }, [activeProviderSelection?.accountId, activeProviderSelection?.connectionId, activeProviderSelection?.environment, activeProviderSelection?.providerId, selectedSymbol, timeframe])
 
   const handleLiveActiveChange = useCallback((active: boolean): void => {
     setLiveMarketActive(active)
@@ -521,13 +587,20 @@ const TerminalContent: React.FC = () => {
   // bid/ask pair. Keep the terminal MT5-like at the fractional-pip level without rounding
   // away the final price digit on each tick. The spread remains a display estimate until
   // a broker-side bid/ask feed is available.
-  const chartBidRaw = Number.isFinite(currentPrice) && currentPrice > 0 ? currentPrice : (liveCandles[liveCandles.length - 1]?.close ?? 0)
+  const usingCTrader = activeProviderSelection?.providerId === 'ctrader'
+  const chartBidRaw = usingCTrader && liveBidPrice > 0
+    ? liveBidPrice
+    : Number.isFinite(currentPrice) && currentPrice > 0 ? currentPrice : (liveCandles[liveCandles.length - 1]?.close ?? 0)
   const chartBidPrice = Number(chartBidRaw.toFixed(symbolSpec.pricePrecision))
   const chartSpread = Math.max(symbolSpec.pipSize * 0.2, symbolSpec.pipSize / 10)
-  const chartAskCandidate = Number((chartBidPrice + chartSpread).toFixed(symbolSpec.pricePrecision))
-  const chartAskPrice = chartAskCandidate > chartBidPrice
-    ? chartAskCandidate
-    : Number((chartBidPrice + symbolSpec.pipSize).toFixed(symbolSpec.pricePrecision))
+  const chartAskPrice = usingCTrader && liveAskPrice > 0
+    ? Number(liveAskPrice.toFixed(symbolSpec.pricePrecision))
+    : (() => {
+      const chartAskCandidate = Number((chartBidPrice + chartSpread).toFixed(symbolSpec.pricePrecision))
+      return chartAskCandidate > chartBidPrice
+        ? chartAskCandidate
+        : Number((chartBidPrice + symbolSpec.pipSize).toFixed(symbolSpec.pricePrecision))
+    })()
 
   const chartAnnotations = useMemo(() => buildStructuralChartAnnotations(selectedSymbol, liveCandles, timeframe)
     .map((annotation) => ({ ...annotation, id: 'live-' + timeframe + '-' + annotation.id })), [liveCandles, selectedSymbol, timeframe])
