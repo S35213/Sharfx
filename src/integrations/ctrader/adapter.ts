@@ -217,9 +217,11 @@ export const CTRADER_PROVIDER_ADAPTER: ProviderAdapter = {
     if (symbols.length !== 1) throw new Error('The cTrader SHAFX market stream currently accepts one symbol per stream.')
     const account = requireAccount(accountId)
     let closed = false
+    let pollInFlight = false
 
     const poll = async (): Promise<void> => {
-      if (closed) return
+      if (closed || pollInFlight) return
+      pollInFlight = true
       try {
         const quote = await CTRADER_PROVIDER_ADAPTER.getQuote!(connection, account, symbols[0])
         onEvent({
@@ -233,6 +235,8 @@ export const CTRADER_PROVIDER_ADAPTER: ProviderAdapter = {
         })
       } catch (error) {
         onEvent({ type: 'error', error: networkError(error instanceof Error ? error.message : 'cTrader quote stream failed.') })
+      } finally {
+        pollInFlight = false
       }
     }
 
@@ -251,9 +255,11 @@ export const CTRADER_PROVIDER_ADAPTER: ProviderAdapter = {
     assertConnection(connection)
     const account = requireAccount(accountId)
     let closed = false
+    let pollInFlight = false
 
     const poll = async (): Promise<void> => {
-      if (closed) return
+      if (closed || pollInFlight) return
+      pollInFlight = true
       try {
         const accountSnapshot = await CTRADER_PROVIDER_ADAPTER.getAccountSnapshot!(connection, account)
         onEvent({ type: 'account', account: accountSnapshot })
@@ -262,6 +268,8 @@ export const CTRADER_PROVIDER_ADAPTER: ProviderAdapter = {
         for (const order of toObjects(payload.orders)) onEvent({ type: 'order', order: normalizeOrder(order) })
       } catch (error) {
         onEvent({ type: 'error', error: networkError(error instanceof Error ? error.message : 'cTrader account stream failed.') })
+      } finally {
+        pollInFlight = false
       }
     }
 
