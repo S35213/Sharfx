@@ -62,7 +62,7 @@ interface SharedCTraderQuoteResult {
 
 const sharedCTraderQuoteCache = new Map<string, { value: SharedCTraderQuoteResult; expiresAt: number }>()
 const sharedCTraderQuoteInflight = new Map<string, Promise<SharedCTraderQuoteResult>>()
-const SHARED_CTRADER_QUOTE_CACHE_MS = 1500
+const SHARED_CTRADER_QUOTE_CACHE_MS = 5000
 
 const getSharedCTraderQuote = async (body: Record<string, unknown>): Promise<SharedCTraderQuoteResult> => {
   const key = [
@@ -98,7 +98,7 @@ const getSharedCTraderQuote = async (body: Record<string, unknown>): Promise<Sha
 
 const sharedCTraderMarginCache = new Map<string, { margin: MarginResult; expiresAt: number }>()
 const sharedCTraderMarginInflight = new Map<string, Promise<MarginResult>>()
-const SHARED_CTRADER_MARGIN_CACHE_MS = 5000
+const SHARED_CTRADER_MARGIN_CACHE_MS = 10000
 
 const postCTrader = async (body: Record<string, unknown>): Promise<Record<string, unknown>> => {
   const response = await fetch('/api/providers/ctrader', {
@@ -279,7 +279,7 @@ export const CTraderManualTicket: React.FC<Props> = ({
     }
 
     void load()
-    refreshTimer.current = window.setInterval(() => { void load() }, 1800)
+    refreshTimer.current = window.setInterval(() => { void load() }, 3000)
     return () => {
       cancelled = true
       if (refreshTimer.current) window.clearInterval(refreshTimer.current)
@@ -287,60 +287,13 @@ export const CTraderManualTicket: React.FC<Props> = ({
     }
   }, [connection?.accountId, connection?.connectionId, connection?.environment, instrument?.providerSymbol, providerSelection?.providerId, symbol])
 
+  // Margin is deliberately NOT polled continuously. It is an order preflight
+  // check, not market data. This keeps cTrader request traffic low and prevents
+  // the ticket from disabling the trade button while margin is recalculating.
   useEffect(() => {
-    if (!connection?.accountId || providerSelection?.providerId !== 'ctrader' || !plan.valid || !instrument?.providerSymbol) {
-      setMargin(null)
-      return
-    }
-    if (marginTimer.current) window.clearTimeout(marginTimer.current)
-    marginTimer.current = window.setTimeout(async () => {
-      setMarginLoading(true)
-      const roundedLots = Number(Number(plan.lotSize).toFixed(2))
-      const key = [
-        connection.environment,
-        connection.accountId,
-        instrument.providerSymbol,
-        roundedLots.toFixed(2),
-      ].join(':')
-      try {
-        const cached = sharedCTraderMarginCache.get(key)
-        if (cached && cached.expiresAt > Date.now()) {
-          setMargin(cached.margin)
-          return
-        }
-        let marginResult = sharedCTraderMarginInflight.get(key)
-        if (!marginResult) {
-          marginResult = (async () => {
-            const payload = await postCTrader({
-              connectionId: connection.connectionId,
-              accountId: connection.accountId,
-              environment: connection.environment,
-              action: 'margin',
-              symbol,
-              symbolId: instrument.providerSymbol,
-              lots: roundedLots,
-            })
-            const next = payload.margin as MarginResult
-            sharedCTraderMarginCache.set(key, { margin: next, expiresAt: Date.now() + SHARED_CTRADER_MARGIN_CACHE_MS })
-            return next
-          })()
-          sharedCTraderMarginInflight.set(key, marginResult)
-        }
-        try {
-          setMargin(await marginResult)
-        } finally {
-          if (sharedCTraderMarginInflight.get(key) === marginResult) sharedCTraderMarginInflight.delete(key)
-        }
-      } catch {
-        setMargin(null)
-      } finally {
-        setMarginLoading(false)
-      }
-    }, 800)
-    return () => {
-      if (marginTimer.current) window.clearTimeout(marginTimer.current)
-    }
-  }, [connection?.accountId, connection?.connectionId, connection?.environment, instrument?.providerSymbol, plan.lotSize, plan.valid, providerSelection?.providerId, symbol])
+    setMarginLoading(false)
+  }, [instrument?.providerSymbol, plan.lotSize, symbol, connection?.accountId])
+
 
   const lines = useMemo<ChartAnnotation[]>(() => {
     if (activePosition) {
@@ -385,15 +338,53 @@ export const CTraderManualTicket: React.FC<Props> = ({
       setState('error')
       return
     }
-    if (selectedMargin !== null && selectedMargin > accountFreeMargin) {
-      setError('Required broker margin is above the available free margin. Reduce volume or risk.')
-      setState('error')
-      return
-    }
-
     setState('placing')
     setError('')
     try {
+      let marginToUse = selectedMargin
+      if (marginToUse === null && instrument?.providerSymbol) {
+        const roundedLots = Number(Number(plan.lotSize).toFixed(2))
+        const key = [
+          connection.environment,
+          connection.accountId,
+          instrument.providerSymbol,
+          roundedLots.toFixed(2),
+        ].join(':')
+        const cached = sharedCTraderMarginCache.get(key)
+        if (cached && cached.expiresAt > Date.now()) {
+          marginToUse = cached.margin
+        } else {
+          let marginResult = sharedCTraderMarginInflight.get(key)
+          if (!marginResult) {
+            marginResult = (async () => {
+              const payload = await postCTrader({
+                connectionId: connection.connectionId,
+                accountId: connection.accountId,
+                environment: connection.environment,
+                action: 'margin',
+                symbol,
+                symbolId: instrument.providerSymbol,
+                lots: roundedLots,
+              })
+              const next = payload.margin as MarginResult
+              sharedCTraderMarginCache.set(key, { margin: next, expiresAt: Date.now() + SHARED_CTRADER_MARGIN_CACHE_MS })
+              return next
+            })()
+            sharedCTraderMarginInflight.set(key, marginResult)
+          }
+          try {
+            marginToUse = await marginResult
+          } finally {
+            if (sharedCTraderMarginInflight.get(key) === marginResult) sharedCTraderMarginInflight.delete(key)
+          }
+        }
+        setMargin(marginToUse)
+      }
+      const requiredMargin = side === 'BUY' ? marginToUse?.buyMargin ?? null : marginToUse?.sellMargin ?? null
+      if (requiredMargin !== null && requiredMargin > accountFreeMargin) {
+        throw new Error('Required broker margin is above the available free margin. Reduce volume or risk.')
+      }
+
       const payload = await postCTrader({
         connectionId: connection.connectionId,
         accountId: connection.accountId,
@@ -449,7 +440,7 @@ export const CTraderManualTicket: React.FC<Props> = ({
         providerAccountId: connection.accountId,
         pipValuePerLot: plan.pipValuePerLot,
         notionalValue: plan.notionalValue,
-        usedMargin: selectedMargin ?? undefined,
+        usedMargin: (side === 'BUY' ? marginToUse?.buyMargin ?? null : marginToUse?.sellMargin ?? null) ?? undefined,
         stopLossPips: plan.stopDistancePips,
         takeProfitPips: plan.targetDistancePips,
       }
@@ -516,7 +507,7 @@ export const CTraderManualTicket: React.FC<Props> = ({
       Number(quote.bid) > 0 &&
       Number(quote.ask) > 0,
     )
-    const canTrade = Boolean(cTraderReady && brokerQuoteReady && plan.valid && !marginLoading)
+    const canTrade = Boolean(cTraderReady && brokerQuoteReady && plan.valid)
     return (
       <div className="bg-[#080D13] p-3 sm:p-4">
         <div className="flex items-center justify-between gap-2">
@@ -548,7 +539,7 @@ export const CTraderManualTicket: React.FC<Props> = ({
         </div>
 
         <div className="mt-3 grid grid-cols-2 gap-2">
-          <div className="rounded-xl border border-shafx-border bg-shafx-surface p-2.5"><div className="text-[7px] uppercase tracking-[0.12em] text-shafx-textMuted">Broker margin</div><div className="mt-1 font-mono text-sm font-semibold">{marginLoading ? 'Checking…' : selectedMargin !== null ? formatCurrency(selectedMargin, accountCurrency) : '—'}</div><div className="mt-1 text-[7px] leading-3.5 text-shafx-textMuted">cTrader estimates this from the live symbol and volume.</div></div>
+          <div className="rounded-xl border border-shafx-border bg-shafx-surface p-2.5"><div className="text-[7px] uppercase tracking-[0.12em] text-shafx-textMuted">Broker margin</div><div className="mt-1 font-mono text-sm font-semibold">{selectedMargin !== null ? formatCurrency(selectedMargin, accountCurrency) : 'Checked on trade'}</div><div className="mt-1 text-[7px] leading-3.5 text-shafx-textMuted">SHAFX checks cTrader margin once when you confirm the trade.</div></div>
           <div className="rounded-xl border border-shafx-border bg-shafx-surface p-2.5"><div className="text-[7px] uppercase tracking-[0.12em] text-shafx-textMuted">Price plan</div><div className="mt-1 font-mono text-[9px]">Entry {formatPrice(entryPrice, effectiveSymbol.pricePrecision)}</div><div className="mt-1 grid grid-cols-2 gap-2 text-[8px]"><span className="text-shafx-danger">SL {formatPrice(stopLossPrice, effectiveSymbol.pricePrecision)}</span><span className="text-right text-shafx-success">TP {formatPrice(takeProfitPrice, effectiveSymbol.pricePrecision)}</span></div></div>
         </div>
 
