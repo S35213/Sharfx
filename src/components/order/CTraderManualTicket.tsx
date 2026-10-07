@@ -529,6 +529,10 @@ export const CTraderManualTicket: React.FC<Props> = ({
           </div>
         </div>
 
+        {plan.warning && <div className="mt-2 rounded-xl border border-shafx-warning/25 bg-shafx-warning/[0.06] px-3 py-2.5 text-[8px] leading-4 text-shafx-warning">
+          <span className="font-semibold">Broker minimum lot:</span> {plan.warning}
+        </div>}
+
         <div className="mt-3 grid grid-cols-2 gap-2">
           <div className="rounded-xl border border-shafx-border bg-shafx-surface p-2.5"><div className="text-[7px] uppercase tracking-[0.12em] text-shafx-textMuted">Broker margin</div><div className="mt-1 font-mono text-sm font-semibold">{selectedMargin !== null ? formatCurrency(selectedMargin, accountCurrency) : 'Checked on trade'}</div><div className="mt-1 text-[7px] leading-3.5 text-shafx-textMuted">SHAFX checks cTrader margin once when you confirm the trade.</div></div>
           <div className="rounded-xl border border-shafx-border bg-shafx-surface p-2.5"><div className="text-[7px] uppercase tracking-[0.12em] text-shafx-textMuted">Price plan</div><div className="mt-1 font-mono text-[9px]">Entry {formatPrice(entryPrice, effectiveSymbol.pricePrecision)}</div><div className="mt-1 grid grid-cols-2 gap-2 text-[8px]"><span className="text-shafx-danger">SL {formatPrice(stopLossPrice, effectiveSymbol.pricePrecision)}</span><span className="text-right text-shafx-success">TP {formatPrice(takeProfitPrice, effectiveSymbol.pricePrecision)}</span></div></div>
