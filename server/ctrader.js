@@ -580,22 +580,6 @@ export const normalizeCtraderOrder = (event) => {
   }
 }
 
-export const normalizeCtraderOrder = (order) => {
-  const item = asObject(order)
-  const tradeData = asObject(item.tradeData)
-  const statusMap = { 1: 'accepted', 2: 'filled', 3: 'rejected', 4: 'pending', 5: 'cancelled' }
-  return {
-    providerOrderId: String(item.orderId || ''),
-    status: statusMap[Number(item.orderStatus)] || 'pending',
-    symbol: String(tradeData.symbolId || ''),
-    side: Number(tradeData.tradeSide) === 2 ? 'SELL' : 'BUY',
-    quantity: asNumber(tradeData.volume),
-    timestamp: item.utcLastUpdateTimestamp ? new Date(Number(item.utcLastUpdateTimestamp)).toISOString() : new Date().toISOString(),
-    message: '',
-    raw: item,
-  }
-}
-
 export const refreshAndStoreCtraderAccounts = async ({ userId, connectionId, environment, accessToken }) => {
   const accounts = await listCtraderAccounts(accessToken)
   const assetRows = []
