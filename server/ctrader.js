@@ -319,7 +319,9 @@ const findSymbol = (symbols, requested) => {
 }
 
 const ctraderFullSymbolCache = new Map()
+const ctraderResolvedSymbolCache = new Map()
 const CTRADER_FULL_SYMBOL_CACHE_MS = 300000
+const CTRADER_RESOLVED_SYMBOL_CACHE_MS = 300000
 
 export const getCtraderFullSymbolById = async ({ environment, accountId, accessToken, symbolId }) => {
   const account = requirePositiveInt('account ID', accountId)
@@ -335,16 +337,24 @@ export const getCtraderFullSymbolById = async ({ environment, accountId, accessT
 
 export const resolveCtraderSymbol = async ({ environment, accountId, accessToken, symbol, symbolId }) => {
   const account = requirePositiveInt('account ID', accountId)
+  const accountKey = String(account)
   if (symbolId !== undefined && symbolId !== null && String(symbolId) !== '') {
-    return getCtraderFullSymbolById({ environment, accountId: String(account), accessToken, symbolId })
+    return getCtraderFullSymbolById({ environment, accountId: accountKey, accessToken, symbolId })
   }
   const requested = String(symbol || '').trim()
   if (!requested) throw new Error('cTrader symbol is missing. SHAFX did not send a symbol.')
-  const symbols = await getCtraderSymbols({ environment, accountId: String(account), accessToken })
+
+  const cacheKey = [safeEnvironment(environment), accountKey, normalizeSymbol(requested)].join(':')
+  const cached = ctraderResolvedSymbolCache.get(cacheKey)
+  if (cached && cached.expiresAt > Date.now()) return cached.symbol
+
+  const symbols = await getCtraderSymbols({ environment, accountId: accountKey, accessToken })
   const match = findSymbol(symbols, requested)
   if (!match) throw new Error('cTrader does not expose the selected symbol: ' + requested)
   const matchedId = requirePositiveInt('symbol ID', match.symbolId)
-  return getCtraderFullSymbolById({ environment, accountId: String(account), accessToken, symbolId: matchedId })
+  const full = await getCtraderFullSymbolById({ environment, accountId: accountKey, accessToken, symbolId: matchedId })
+  ctraderResolvedSymbolCache.set(cacheKey, { symbol: full, expiresAt: Date.now() + CTRADER_RESOLVED_SYMBOL_CACHE_MS })
+  return full
 }
 
 export const normalizeCtraderInstrument = (symbol) => {
@@ -398,10 +408,6 @@ export const getCtraderQuote = async ({ environment, accountId, accessToken, sym
   const cacheKey = [safeEnvironment(environment), String(account), String(id)].join(':')
   const cached = ctraderQuoteCache.get(cacheKey)
   if (cached && cached.expiresAt > Date.now()) return cached.quote
-
-  // Desktop and mobile SHAFX views can request the same broker quote at the
-  // same time. Reuse one in-flight cTrader request for the same account/symbol
-  // instead of opening several concurrent WebSocket sessions.
   const inflight = ctraderQuoteInflight.get(cacheKey)
   if (inflight) return inflight
 
@@ -410,19 +416,74 @@ export const getCtraderQuote = async ({ environment, accountId, accessToken, sym
     try {
       await authenticateApplication(socket)
       await authenticateAccount(socket, account, accessToken)
-      await ctraderRequest(socket, 2127, {
-        ctidTraderAccountId: account,
-        symbolId: [id],
-        subscribeToSpotTimestamp: true,
-      }, (message) => message.payloadType === 2128)
-      const spot = await ctraderRequest(socket, 2131, {}, (message) => message.payloadType === 2131 && Number(message.payload?.symbolId) === id, 10000)
-      const body = asObject(spot.payload)
-      const quote = {
-        symbolId: Number(body.symbolId),
-        bid: body.bid == null ? undefined : decodePrice(body.bid),
-        ask: body.ask == null ? undefined : decodePrice(body.ask),
-        timestamp: body.timestamp ? new Date(Number(body.timestamp)).toISOString() : new Date().toISOString(),
-      }
+
+      // Register the spot-event listener before sending the subscribe request.
+      // cTrader can deliver the first spot immediately after 2128; a
+      // sequential request/read pair can otherwise miss that event.
+      const quote = await new Promise((resolve, reject) => {
+        let settled = false
+        const timer = setTimeout(() => finishReject(new Error('cTrader spot price timed out after subscription.')), 10000)
+        const cleanup = () => {
+          clearTimeout(timer)
+          socket.removeEventListener('message', onMessage)
+          socket.removeEventListener('error', onError)
+          socket.removeEventListener('close', onClose)
+        }
+        const finishResolve = (value) => {
+          if (settled) return
+          settled = true
+          cleanup()
+          resolve(value)
+        }
+        const finishReject = (error) => {
+          if (settled) return
+          settled = true
+          cleanup()
+          reject(error)
+        }
+        const onError = (event) => finishReject(new Error(event?.message || 'cTrader Open API socket error.'))
+        const onClose = () => finishReject(new Error('cTrader Open API socket closed before the spot price arrived.'))
+        const onMessage = (event) => {
+          try {
+            const raw = typeof event.data === 'string' ? event.data : Buffer.from(event.data).toString('utf8')
+            const message = JSON.parse(raw)
+            if (message.payloadType === 2142) {
+              const body = asObject(message.payload)
+              finishReject(Object.assign(new Error(body.description || body.errorCode || 'cTrader rejected the quote request.'), {
+                code: body.errorCode || 'CTRADER_ERROR',
+                providerCode: body.errorCode,
+              }))
+              return
+            }
+            if (message.payloadType !== 2131) return
+            const body = asObject(message.payload)
+            if (Number(body.ctidTraderAccountId) !== account || Number(body.symbolId) !== id) return
+            if (body.bid == null && body.ask == null) return
+            finishResolve({
+              symbolId: Number(body.symbolId),
+              bid: body.bid == null ? undefined : decodePrice(body.bid),
+              ask: body.ask == null ? undefined : decodePrice(body.ask),
+              timestamp: body.timestamp ? new Date(Number(body.timestamp)).toISOString() : new Date().toISOString(),
+            })
+          } catch (error) {
+            finishReject(error instanceof Error ? error : new Error('Unable to parse cTrader spot data.'))
+          }
+        }
+
+        socket.addEventListener('message', onMessage)
+        socket.addEventListener('error', onError)
+        socket.addEventListener('close', onClose)
+        socket.send(JSON.stringify({
+          clientMsgId: randomUUID(),
+          payloadType: 2127,
+          payload: {
+            ctidTraderAccountId: account,
+            symbolId: [id],
+            subscribeToSpotTimestamp: true,
+          },
+        }))
+      })
+
       ctraderQuoteCache.set(cacheKey, { quote, expiresAt: Date.now() + CTRADER_QUOTE_CACHE_MS })
       return quote
     } finally {
@@ -437,7 +498,6 @@ export const getCtraderQuote = async ({ environment, accountId, accessToken, sym
     if (ctraderQuoteInflight.get(cacheKey) === request) ctraderQuoteInflight.delete(cacheKey)
   }
 }
-
 export const getCtraderMargin = async ({ environment, accountId, accessToken, symbolId, volume }) => {
   const account = requirePositiveInt('account ID', accountId)
   const id = requirePositiveInt('symbol ID', symbolId)
