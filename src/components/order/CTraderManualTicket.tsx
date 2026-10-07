@@ -141,15 +141,18 @@ const lineFor = (id: string, price: number | null | undefined, label: string, co
 const providerSymbolSpec = (base: SymbolSpec, instrument: ProviderInstrument | null): SymbolSpec => {
   const priceIncrement = Number(instrument?.priceIncrement)
   return {
-  ...base,
-  contractSize: Number(instrument?.contractSize) > 0 ? Number(instrument?.contractSize) : base.contractSize,
-  pipSize: Number(instrument?.pipSize) > 0 ? Number(instrument?.pipSize) : base.pipSize,
-  minLotSize: Number(instrument?.quantityMin) > 0 ? Number(instrument?.quantityMin) : base.minLotSize,
-  maxLotSize: Number(instrument?.quantityMax) > 0 ? Number(instrument?.quantityMax) : base.maxLotSize,
-  lotStep: Number(instrument?.quantityStep) > 0 ? Number(instrument?.quantityStep) : base.lotStep,
-  pricePrecision: priceIncrement > 0
-    ? Math.max(0, Math.ceil(-Math.log10(priceIncrement)))
-    : base.pricePrecision,
+    ...base,
+    // Keep SHAFX's standard-lot contract size for risk math.
+    // cTrader's lotSize field is a broker volume-conversion unit, not the
+    // same semantic contract-size value used by the SHAFX risk engine.
+    contractSize: base.contractSize,
+    pipSize: Number(instrument?.pipSize) > 0 ? Number(instrument?.pipSize) : base.pipSize,
+    minLotSize: Number(instrument?.quantityMin) > 0 ? Number(instrument?.quantityMin) : base.minLotSize,
+    maxLotSize: Number(instrument?.quantityMax) > 0 ? Number(instrument?.quantityMax) : base.maxLotSize,
+    lotStep: Number(instrument?.quantityStep) > 0 ? Number(instrument?.quantityStep) : base.lotStep,
+    pricePrecision: priceIncrement > 0
+      ? Math.max(0, Math.ceil(-Math.log10(priceIncrement)))
+      : base.pricePrecision,
   }
 }
 
@@ -332,8 +335,8 @@ export const CTraderManualTicket: React.FC<Props> = ({
     setState('placing')
     setError('')
     try {
-      let marginToUse = margin
-      if (marginToUse === null && instrument?.providerSymbol) {
+      let marginToUse: MarginResult | null = null
+      if (instrument?.providerSymbol) {
         const roundedLots = Number(Number(plan.lotSize).toFixed(2))
         const key = [
           connection.environment,
