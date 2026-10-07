@@ -16,7 +16,7 @@ const LIVE_ENDPOINT = 'wss://live.ctraderapi.com:5036'
 const ctraderQuoteCache = new Map()
 const ctraderQuoteInflight = new Map()
 const ctraderQuoteStreams = new Map()
-const CTRADER_QUOTE_CACHE_MS = 5000
+const CTRADER_QUOTE_CACHE_MS = 100
 const CTRADER_QUOTE_STREAM_STALE_MS = 15000
 
 export const cTraderConfigured = () => Boolean(
