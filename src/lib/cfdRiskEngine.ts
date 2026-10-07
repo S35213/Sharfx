@@ -21,6 +21,7 @@ export interface CfdRiskInput {
 export interface CfdRiskPlan {
   valid: boolean
   error?: string
+  warning?: string
   entryPrice: number
   stopLossPrice: number
   takeProfitPrice: number
@@ -145,7 +146,9 @@ export const calculateCfdRiskPlan = (input: CfdRiskInput): CfdRiskPlan => {
   if (!isPositiveFinite(pipValuePerLot)) return { valid: false, error: 'SHAFX needs a valid pip-value conversion before sizing the position.', entryPrice, stopLossPrice, takeProfitPrice, stopDistancePips, targetDistancePips, riskRewardRatio, requestedRiskAmount, riskPercent: riskPct, pipValuePerLot, lotSize: calculatedLots, notionalValue, estimatedLossAtStop, estimatedRewardAtTarget, estimatedMargin }
   if (!isPositiveFinite(calculatedLots)) return { valid: false, error: 'The requested risk would produce a volume below the broker minimum or an invalid position size.', entryPrice, stopLossPrice, takeProfitPrice, stopDistancePips, targetDistancePips, riskRewardRatio, requestedRiskAmount, riskPercent: riskPct, pipValuePerLot, lotSize: calculatedLots, notionalValue, estimatedLossAtStop, estimatedRewardAtTarget, estimatedMargin }
   if (calculatedLots < symbol.minLotSize - EPSILON || calculatedLots > symbol.maxLotSize + EPSILON) return { valid: false, error: 'Position size is outside the broker symbol range.', entryPrice, stopLossPrice, takeProfitPrice, stopDistancePips, targetDistancePips, riskRewardRatio, requestedRiskAmount, riskPercent: riskPct, pipValuePerLot, lotSize: calculatedLots, notionalValue, estimatedLossAtStop, estimatedRewardAtTarget, estimatedMargin }
-  if (requestedRiskAmount > 0 && estimatedLossAtStop > requestedRiskAmount * 1.05 && lots === undefined) return { valid: false, error: 'The broker lot step prevents SHAFX from staying inside the requested risk window.', entryPrice, stopLossPrice, takeProfitPrice, stopDistancePips, targetDistancePips, riskRewardRatio, requestedRiskAmount, riskPercent: riskPct, pipValuePerLot, lotSize: calculatedLots, notionalValue, estimatedLossAtStop, estimatedRewardAtTarget, estimatedMargin }
+  const brokerMinimumRiskWarning = requestedRiskAmount > 0 && estimatedLossAtStop > requestedRiskAmount * 1.05 && lots === undefined
+    ? 'The broker minimum lot requires more stop-loss risk than the selected risk amount. SHAFX will show the actual broker-sized risk and ask cTrader to confirm margin when you trade.'
+    : undefined
 
-  return { valid: true, entryPrice, stopLossPrice, takeProfitPrice, stopDistancePips, targetDistancePips, riskRewardRatio, requestedRiskAmount, riskPercent: riskPct, pipValuePerLot, lotSize: calculatedLots, notionalValue, estimatedLossAtStop, estimatedRewardAtTarget, estimatedMargin }
+  return { valid: true, ...(brokerMinimumRiskWarning ? { warning: brokerMinimumRiskWarning } : {}), entryPrice, stopLossPrice, takeProfitPrice, stopDistancePips, targetDistancePips, riskRewardRatio, requestedRiskAmount, riskPercent: riskPct, pipValuePerLot, lotSize: calculatedLots, notionalValue, estimatedLossAtStop, estimatedRewardAtTarget, estimatedMargin }
 }
