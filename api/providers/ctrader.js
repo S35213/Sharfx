@@ -99,7 +99,15 @@ const handleGet = async (req, res, user) => {
   const query = new URL(req.url || '/', 'http://shafx.local').searchParams
   const op = String(query.get('op') || '')
   if (op === 'login') return handleLogin(req, res)
-  if (op === 'callback') return handleCallback(req, res, user, query)
+  // cTrader may return to the registered redirect URI with only OAuth query
+  // parameters (code/state/error). Accept that shape as the callback too, so
+  // the connection does not depend on the redirect URI containing ?op=callback.
+  if (
+    op === 'callback' ||
+    query.has('code') ||
+    query.has('state') ||
+    query.has('error')
+  ) return handleCallback(req, res, user, query)
   return json(res, 400, { ok: false, error: 'Unsupported cTrader operation.' })
 }
 
