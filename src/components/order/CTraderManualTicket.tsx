@@ -55,6 +55,51 @@ interface MarginResult {
   sellMargin: number | null
 }
 
+interface SharedCTraderQuoteResult {
+  quote: ProviderQuote
+  instrument: ProviderInstrument
+}
+
+const sharedCTraderQuoteCache = new Map<string, { value: SharedCTraderQuoteResult; expiresAt: number }>()
+const sharedCTraderQuoteInflight = new Map<string, Promise<SharedCTraderQuoteResult>>()
+const SHARED_CTRADER_QUOTE_CACHE_MS = 1500
+
+const getSharedCTraderQuote = async (body: Record<string, unknown>): Promise<SharedCTraderQuoteResult> => {
+  const key = [
+    String(body.environment || 'demo'),
+    String(body.accountId || ''),
+    String(body.symbolId || body.symbol || ''),
+  ].join(':')
+  const cached = sharedCTraderQuoteCache.get(key)
+  if (cached && cached.expiresAt > Date.now()) return cached.value
+
+  const inflight = sharedCTraderQuoteInflight.get(key)
+  if (inflight) return inflight
+
+  const request = (async () => {
+    const payload = await postCTrader(body)
+    const nextQuote = payload.quote as ProviderQuote
+    const nextInstrument = payload.instrument as ProviderInstrument
+    if (!nextInstrument?.providerSymbol || !Number.isFinite(Number(nextQuote?.bid)) || !Number.isFinite(Number(nextQuote?.ask))) {
+      throw new Error('cTrader returned an incomplete broker price. SHAFX will keep the last valid price.')
+    }
+    const value = { quote: nextQuote, instrument: nextInstrument }
+    sharedCTraderQuoteCache.set(key, { value, expiresAt: Date.now() + SHARED_CTRADER_QUOTE_CACHE_MS })
+    return value
+  })()
+
+  sharedCTraderQuoteInflight.set(key, request)
+  try {
+    return await request
+  } finally {
+    if (sharedCTraderQuoteInflight.get(key) === request) sharedCTraderQuoteInflight.delete(key)
+  }
+}
+
+const sharedCTraderMarginCache = new Map<string, { margin: MarginResult; expiresAt: number }>()
+const sharedCTraderMarginInflight = new Map<string, Promise<MarginResult>>()
+const SHARED_CTRADER_MARGIN_CACHE_MS = 5000
+
 const postCTrader = async (body: Record<string, unknown>): Promise<Record<string, unknown>> => {
   const response = await fetch('/api/providers/ctrader', {
     method: 'POST',
@@ -192,11 +237,12 @@ export const CTraderManualTicket: React.FC<Props> = ({
   useEffect(() => {
     if (!connection?.accountId || providerSelection?.providerId !== 'ctrader') return
     let cancelled = false
+    let firstLoad = true
 
     const load = async (): Promise<void> => {
-      setQuoteLoading(true)
+      if (firstLoad) setQuoteLoading(true)
       try {
-        const payload = await postCTrader({
+        const value = await getSharedCTraderQuote({
           connectionId: connection.connectionId,
           accountId: connection.accountId,
           environment: connection.environment,
@@ -205,20 +251,27 @@ export const CTraderManualTicket: React.FC<Props> = ({
           ...(instrument?.providerSymbol ? { symbolId: instrument.providerSymbol } : {}),
         })
         if (cancelled) return
-        const nextQuote = payload.quote as ProviderQuote
-        const nextInstrument = payload.instrument as ProviderInstrument
-        setQuote(nextQuote)
-        setInstrument(nextInstrument)
+        setQuote(value.quote)
+        setInstrument(value.instrument)
         setError('')
+        firstLoad = false
       } catch (err) {
         if (!cancelled) {
           const message = err instanceof Error ? err.message : 'Unable to read the cTrader quote.'
+          const hasUsableQuote = Boolean(
+            quote &&
+            Number.isFinite(Number(quote.bid)) &&
+            Number.isFinite(Number(quote.ask)) &&
+            Number(quote.bid) > 0 &&
+            Number(quote.ask) > 0,
+          )
           const nowMs = Date.now()
-          if (message !== lastQuoteError.current || nowMs - lastQuoteErrorAt.current > 5000) {
+          if (!hasUsableQuote && (message !== lastQuoteError.current || nowMs - lastQuoteErrorAt.current > 5000)) {
             lastQuoteError.current = message
             lastQuoteErrorAt.current = nowMs
             setError(message)
           }
+          firstLoad = false
         }
       } finally {
         if (!cancelled) setQuoteLoading(false)
@@ -226,7 +279,7 @@ export const CTraderManualTicket: React.FC<Props> = ({
     }
 
     void load()
-    refreshTimer.current = window.setInterval(() => { void load() }, 1200)
+    refreshTimer.current = window.setInterval(() => { void load() }, 1800)
     return () => {
       cancelled = true
       if (refreshTimer.current) window.clearInterval(refreshTimer.current)
@@ -235,31 +288,55 @@ export const CTraderManualTicket: React.FC<Props> = ({
   }, [connection?.accountId, connection?.connectionId, connection?.environment, instrument?.providerSymbol, providerSelection?.providerId, symbol])
 
   useEffect(() => {
-    if (!connection?.accountId || providerSelection?.providerId !== 'ctrader' || !plan.valid) {
+    if (!connection?.accountId || providerSelection?.providerId !== 'ctrader' || !plan.valid || !instrument?.providerSymbol) {
       setMargin(null)
       return
     }
     if (marginTimer.current) window.clearTimeout(marginTimer.current)
     marginTimer.current = window.setTimeout(async () => {
       setMarginLoading(true)
+      const roundedLots = Number(Number(plan.lotSize).toFixed(2))
+      const key = [
+        connection.environment,
+        connection.accountId,
+        instrument.providerSymbol,
+        roundedLots.toFixed(2),
+      ].join(':')
       try {
-        const payload = await postCTrader({
-          connectionId: connection.connectionId,
-          accountId: connection.accountId,
-          environment: connection.environment,
-          action: 'margin',
-          symbol,
-          ...(instrument?.providerSymbol ? { symbolId: instrument.providerSymbol } : {}),
-          lots: plan.lotSize,
-        })
-        const next = payload.margin as MarginResult
-        setMargin(next)
+        const cached = sharedCTraderMarginCache.get(key)
+        if (cached && cached.expiresAt > Date.now()) {
+          setMargin(cached.margin)
+          return
+        }
+        let marginResult = sharedCTraderMarginInflight.get(key)
+        if (!marginResult) {
+          marginResult = (async () => {
+            const payload = await postCTrader({
+              connectionId: connection.connectionId,
+              accountId: connection.accountId,
+              environment: connection.environment,
+              action: 'margin',
+              symbol,
+              symbolId: instrument.providerSymbol,
+              lots: roundedLots,
+            })
+            const next = payload.margin as MarginResult
+            sharedCTraderMarginCache.set(key, { margin: next, expiresAt: Date.now() + SHARED_CTRADER_MARGIN_CACHE_MS })
+            return next
+          })()
+          sharedCTraderMarginInflight.set(key, marginResult)
+        }
+        try {
+          setMargin(await marginResult)
+        } finally {
+          if (sharedCTraderMarginInflight.get(key) === marginResult) sharedCTraderMarginInflight.delete(key)
+        }
       } catch {
         setMargin(null)
       } finally {
         setMarginLoading(false)
       }
-    }, 300)
+    }, 800)
     return () => {
       if (marginTimer.current) window.clearTimeout(marginTimer.current)
     }
@@ -444,7 +521,7 @@ export const CTraderManualTicket: React.FC<Props> = ({
       <div className="bg-[#080D13] p-3 sm:p-4">
         <div className="flex items-center justify-between gap-2">
           <div><div className="text-[10px] font-semibold uppercase tracking-[0.16em]">SHAFX CFD • manual</div><div className="mt-0.5 font-mono text-[8px] text-shafx-textMuted">{symbol} • {timeframe} • Deriv cTrader</div></div>
-          <div className="rounded-full border border-shafx-accent/25 bg-shafx-accent/10 px-2 py-1 text-[7px] font-bold tracking-wide text-shafx-accent">{quoteLoading ? 'UPDATING' : brokerQuoteReady ? 'LIVE PRICE' : 'WAITING'}</div>
+          <div className="rounded-full border border-shafx-accent/25 bg-shafx-accent/10 px-2 py-1 text-[7px] font-bold tracking-wide text-shafx-accent">{brokerQuoteReady ? 'LIVE PRICE' : quoteLoading ? 'CONNECTING' : 'WAITING'}</div>
         </div>
 
         {aiSetup && <div className="mt-2 flex items-center gap-2 rounded-xl border border-shafx-accent/20 bg-shafx-accent/[0.05] px-2.5 py-2 text-[8px] text-shafx-accent"><CheckCircle2 className="h-3.5 w-3.5" />AI reviewed setup loaded — SHAFX still waits for your manual confirm.</div>}
