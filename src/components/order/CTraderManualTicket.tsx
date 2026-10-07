@@ -7,6 +7,7 @@ import { calculateCfdRiskPlan } from '../../lib/cfdRiskEngine'
 import { formatCurrency, formatPrice } from '../../lib/format'
 import type { DerivOrderConnection } from '../../data/deriv/derivTrading'
 import type { ChartAnnotation } from '../chart/CandlestickChart'
+import { subscribeCTraderLiveQuote } from '../../data/ctrader/CTraderLiveQuote'
 
 interface Props {
   symbol: string
@@ -53,47 +54,6 @@ interface ProviderInstrument {
 interface MarginResult {
   buyMargin: number | null
   sellMargin: number | null
-}
-
-interface SharedCTraderQuoteResult {
-  quote: ProviderQuote
-  instrument: ProviderInstrument
-}
-
-const sharedCTraderQuoteCache = new Map<string, { value: SharedCTraderQuoteResult; expiresAt: number }>()
-const sharedCTraderQuoteInflight = new Map<string, Promise<SharedCTraderQuoteResult>>()
-const SHARED_CTRADER_QUOTE_CACHE_MS = 250
-
-const getSharedCTraderQuote = async (body: Record<string, unknown>): Promise<SharedCTraderQuoteResult> => {
-  const key = [
-    String(body.environment || 'demo'),
-    String(body.accountId || ''),
-    String(body.symbolId || body.symbol || ''),
-  ].join(':')
-  const cached = sharedCTraderQuoteCache.get(key)
-  if (cached && cached.expiresAt > Date.now()) return cached.value
-
-  const inflight = sharedCTraderQuoteInflight.get(key)
-  if (inflight) return inflight
-
-  const request = (async () => {
-    const payload = await postCTrader(body)
-    const nextQuote = payload.quote as ProviderQuote
-    const nextInstrument = payload.instrument as ProviderInstrument
-    if (!nextInstrument?.providerSymbol || !Number.isFinite(Number(nextQuote?.bid)) || !Number.isFinite(Number(nextQuote?.ask))) {
-      throw new Error('cTrader returned an incomplete broker price. SHAFX will keep the last valid price.')
-    }
-    const value = { quote: nextQuote, instrument: nextInstrument }
-    sharedCTraderQuoteCache.set(key, { value, expiresAt: Date.now() + SHARED_CTRADER_QUOTE_CACHE_MS })
-    return value
-  })()
-
-  sharedCTraderQuoteInflight.set(key, request)
-  try {
-    return await request
-  } finally {
-    if (sharedCTraderQuoteInflight.get(key) === request) sharedCTraderQuoteInflight.delete(key)
-  }
 }
 
 const sharedCTraderMarginCache = new Map<string, { margin: MarginResult; expiresAt: number }>()
@@ -236,58 +196,24 @@ export const CTraderManualTicket: React.FC<Props> = ({
   }, [activePosition?.openTime])
 
   useEffect(() => {
-    if (!connection?.accountId || providerSelection?.providerId !== 'ctrader') return
-    let cancelled = false
-    let firstLoad = true
-
-    const load = async (): Promise<void> => {
-      if (firstLoad) setQuoteLoading(true)
-      try {
-        const value = await getSharedCTraderQuote({
-          connectionId: connection.connectionId,
-          accountId: connection.accountId,
-          environment: connection.environment,
-          action: 'quote',
-          symbol,
-          ...(instrument?.providerSymbol ? { symbolId: instrument.providerSymbol } : {}),
-        })
-        if (cancelled) return
-        setQuote(value.quote)
-        setInstrument(value.instrument)
-        setError('')
-        firstLoad = false
-      } catch (err) {
-        if (!cancelled) {
-          const message = err instanceof Error ? err.message : 'Unable to read the cTrader quote.'
-          const hasUsableQuote = Boolean(
-            quote &&
-            Number.isFinite(Number(quote.bid)) &&
-            Number.isFinite(Number(quote.ask)) &&
-            Number(quote.bid) > 0 &&
-            Number(quote.ask) > 0,
-          )
-          const nowMs = Date.now()
-          if (!hasUsableQuote && (message !== lastQuoteError.current || nowMs - lastQuoteErrorAt.current > 5000)) {
-            lastQuoteError.current = message
-            lastQuoteErrorAt.current = nowMs
-            setError(message)
-          }
-          firstLoad = false
-        }
-      } finally {
-        if (!cancelled) setQuoteLoading(false)
-      }
-    }
-
-    void load()
-    refreshTimer.current = window.setInterval(() => { void load() }, 350)
+    if (!connection?.accountId || !connection.connectionId || providerSelection?.providerId !== 'ctrader') return
+    setQuoteLoading(true)
+    const unsubscribe = subscribeCTraderLiveQuote({
+      connectionId: connection.connectionId,
+      accountId: connection.accountId,
+      environment: connection.environment === 'live' ? 'live' : 'demo',
+      symbol,
+    }, (nextQuote, nextInstrument) => {
+      setQuote(nextQuote)
+      setInstrument(nextInstrument)
+      setQuoteLoading(false)
+      setError('')
+    })
     return () => {
-      cancelled = true
-      if (refreshTimer.current) window.clearInterval(refreshTimer.current)
-      refreshTimer.current = null
+      unsubscribe()
+      setQuoteLoading(false)
     }
-  }, [connection?.accountId, connection?.connectionId, connection?.environment, instrument?.providerSymbol, providerSelection?.providerId, symbol])
-
+  }, [connection?.accountId, connection?.connectionId, connection?.environment, providerSelection?.providerId, symbol])
 
   const lines = useMemo<ChartAnnotation[]>(() => {
     if (activePosition) {
