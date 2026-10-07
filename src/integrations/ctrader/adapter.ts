@@ -237,7 +237,7 @@ export const CTRADER_PROVIDER_ADAPTER: ProviderAdapter = {
     }
 
     await poll()
-    const timer: ReturnType<typeof setInterval> = globalThis.setInterval(() => { void poll() }, 1000)
+    const timer: ReturnType<typeof setInterval> = globalThis.setInterval(() => { void poll() }, 1500)
     return {
       streamId: connection.connectionId + ':' + account + ':' + symbols[0] + ':' + Date.now(),
       close: async () => {
@@ -266,7 +266,7 @@ export const CTRADER_PROVIDER_ADAPTER: ProviderAdapter = {
     }
 
     await poll()
-    const timer: ReturnType<typeof setInterval> = globalThis.setInterval(() => { void poll() }, 5000)
+    const timer: ReturnType<typeof setInterval> = globalThis.setInterval(() => { void poll() }, 8000)
     return {
       streamId: connection.connectionId + ':' + account + ':' + Date.now(),
       close: async () => {
