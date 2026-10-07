@@ -9,6 +9,7 @@ import {
   getCtraderMargin,
   getCtraderQuote,
   getCtraderSymbols,
+  getCtraderSymbol,
   getCtraderTrader,
   loadCtraderConnection,
   normalizeCtraderInstrument,
