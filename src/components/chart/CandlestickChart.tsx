@@ -581,8 +581,13 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       upsertLine(
         annotation,
         0,
-        !compact && annotation.id.endsWith('-entry'),
-        compact ? '' : annotation.label,
+        showPriceLabels,
+        compact ? (
+          annotation.id.endsWith('-entry') ? 'ENTRY' :
+          annotation.id.endsWith('-stop') ? 'SL' :
+          annotation.id.endsWith('-target') ? 'TP' :
+          ''
+        ) : annotation.label,
       )
     })
 
