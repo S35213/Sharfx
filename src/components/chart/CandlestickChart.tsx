@@ -73,7 +73,6 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const seriesRef = useRef<ShafxSeries | null>(null)
   const seriesConfigRef = useRef<{ chartMode: ChartMode; pipSize: number } | null>(null)
   const chartData = useMemo(() => prepareData(data), [data])
-  useEffect(() => { chartDataSourceRef.current = data }, [data])
   const visualData = useMemo(() => {
     if (chartMode === 'candles' || chartMode === 'bars') return chartData
     return chartData.map((candle) => ({ time: candle.time, value: candle.close }))
@@ -98,6 +97,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const [crosshairInfo, setCrosshairInfo] = useState<{ price: number; time: string } | null>(null)
   const [hoverCandle, setHoverCandle] = useState<{ time: number; open?: number; high?: number; low?: number; close: number } | null>(null)
   const chartDataSourceRef = useRef<OHLCV[]>(data)
+  useEffect(() => { chartDataSourceRef.current = data }, [data])
   const [timelineMarks, setTimelineMarks] = useState<Array<{ x: number; label: string }>>([])
   const displayedStructuralAnnotationsRef = useRef<ChartAnnotation[]>([])
   const structuralZoneLayerRef = useRef<HTMLDivElement | null>(null)
@@ -683,6 +683,72 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   useEffect(() => {
     const series = seriesRef.current
     if (!series) return
+
+    const compact = (containerRef.current?.clientWidth ?? 1000) < 640
+    const desired = new Set<string>()
+
+    if (priceLinesSeriesRef.current !== series) {
+      priceLinesRef.current.clear()
+      priceLinesSeriesRef.current = series
+    }
+
+    const upsertLine = (
+      annotation: ChartAnnotation | UserLevel,
+      lineStyle: 0 | 1 | 2,
+      axisLabelVisible: boolean,
+      title: string,
+    ): void => {
+      if (!annotation.id || !Number.isFinite(annotation.price) || annotation.price <= 0) return
+      desired.add(annotation.id)
+
+      const options = {
+        price: annotation.price,
+        color: annotation.color,
+        lineWidth: annotation.lineWidth ?? (lineStyle === 0 ? 2 : 1),
+        lineStyle,
+        axisLabelVisible,
+        title,
+      }
+
+      const existing = priceLinesRef.current.get(annotation.id)
+      if (existing) {
+        existing.applyOptions(options)
+        return
+      }
+
+      priceLinesRef.current.set(annotation.id, series.createPriceLine(options))
+    }
+
+    userLevels.forEach((annotation) => {
+      upsertLine(annotation, annotation.dashed ? 2 : 1, showPriceLabels && !compact, compact ? '' : annotation.label)
+    })
+
+    armedAlerts.forEach((annotation) => {
+      upsertLine(annotation, 2, showPriceLabels && !compact, compact ? '' : annotation.label)
+    })
+
+    tradeLines.forEach((annotation) => {
+      if (!Number.isFinite(annotation.price) || annotation.price <= 0) return
+      upsertLine(
+        annotation,
+        0,
+        !compact && annotation.id.endsWith('-entry'),
+        compact ? '' : annotation.label,
+      )
+    })
+
+    for (const [id, line] of priceLinesRef.current) {
+      if (desired.has(id)) continue
+      try { series.removePriceLine(line) } catch { /* series may have been replaced */ }
+      priceLinesRef.current.delete(id)
+    }
+  }, [annotations, armedAlerts, chartMode, pipSize, showPriceLabels, tradeLines, userLevels])
+
+  // Live broker prices stay on the price axis as labels only. No horizontal
+  // bid/ask rail is drawn across the candle pane.
+  useEffect(() => {
+    const series = seriesRef.current
+    if (!series) return
     const compact = (containerRef.current?.clientWidth ?? 1000) < 640
 
     const updateLine = (
@@ -718,17 +784,11 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       }
     }
 
-    const bid = Number.isFinite(bidPrice) && bidPrice > 0 ? Number(bidPrice) : lastClose
-    const ask = Number.isFinite(askPrice) && askPrice > 0 ? Number(askPrice) : displayBid
-
+    const bid = Number.isFinite(bidPrice) && Number(bidPrice) > 0 ? Number(bidPrice) : lastClose
+    const ask = Number.isFinite(askPrice) && Number(askPrice) > 0 ? Number(askPrice) : bid
     updateLine(marketBidLineRef, bid, '#FF5C75', compact ? 'SELL' : 'SELL / BID')
     updateLine(marketAskLineRef, ask, '#22D3A5', compact ? 'BUY' : 'BUY / ASK')
-
-    return () => {
-      // Keep the objects alive across quote ticks; cleanup happens when the
-      // series itself is replaced/unmounted.
-    }
-  }, [askPrice, bidPrice, compact, displayBid, lastClose, showPriceLabels])
+  }, [askPrice, bidPrice, lastClose, showPriceLabels])
 
   useEffect(() => {
     const chart = chartRef.current
