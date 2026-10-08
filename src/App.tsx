@@ -33,7 +33,7 @@ import { analyzeSupportResistance } from './engine/supportResistance'
 import { TIMEFRAMES, type AccountData, type BotPaperTrade, type MarketAnalysis, type MarketPair, type OHLCV, type SymbolSpec, type TradeOrder } from './types'
 import type { SetupCandidate } from './engine/setup/types'
 import { mockWatchlist } from './data/mock/watchlist'
-import { fetchDerivActiveForexSymbols, subscribeDerivForexQuotes } from './data/deriv/DerivPublicMarketFeed'
+import { fetchDerivActiveForexSymbols, fetchDerivMultiTimeframeCandles, subscribeDerivForexQuotes } from './data/deriv/DerivPublicMarketFeed'
 import { cTraderQuoteBucket, subscribeCTraderLiveQuote } from './data/ctrader/CTraderLiveQuote'
 
 const normalizeProviderSymbol = (value: string): string => {
@@ -219,8 +219,8 @@ const TerminalContent: React.FC = () => {
   const selectedSymbolRef = useRef(selectedSymbol)
   const watchlistReferencePricesRef = useRef<Record<string, number>>({})
   const candleCacheRef = useRef<Record<string, OHLCV[]>>({})
+  const historyWarmInFlightRef = useRef<Record<string, Promise<Partial<Record<(typeof TIMEFRAMES)[number], OHLCV[]>>>>({})
   const latestCTraderPriceRef = useRef<number | null>(null)
-  const cTraderChartSeededRef = useRef(false)
   const toastId = useRef(0)
   const lastStreamToastAt = useRef(0)
   const lastStreamToastText = useRef('')
@@ -308,17 +308,59 @@ const TerminalContent: React.FC = () => {
 
   useEffect(() => {
     setSymbolSpec(getSymbolSpec(selectedSymbol))
+    latestCTraderPriceRef.current = null
+    setLiveBidPrice(0)
+    setLiveAskPrice(0)
+    setLiveMarketActive(false)
+
+    const warm = async (): Promise<void> => {
+      const existing = historyWarmInFlightRef.current[selectedSymbol]
+      const request = existing ?? fetchDerivMultiTimeframeCandles(selectedSymbol, TIMEFRAMES)
+      if (!existing) historyWarmInFlightRef.current[selectedSymbol] = request
+      try {
+        const warmed = await request
+        if (selectedSymbolRef.current !== selectedSymbol) return
+        for (const [tf, candles] of Object.entries(warmed) as Array<[typeof TIMEFRAMES[number], OHLCV[] | undefined]>) {
+          if (!candles?.length) continue
+          const key = selectedSymbol + ':' + tf
+          const current = candleCacheRef.current[key] ?? []
+          if (candles.length > current.length) candleCacheRef.current[key] = candles
+        }
+        const currentKey = selectedSymbol + ':' + timeframe
+        const current = candleCacheRef.current[currentKey] ?? []
+        if (current.length > 1) {
+          setLiveCandles(current)
+          const last = current[current.length - 1]
+          setCurrentPrice(last?.close ?? 0)
+          setMarketTimestamp(last ? Math.floor(last.time / 1000) : 0)
+        }
+      } catch {
+        // The primary live stream remains responsible for the selected timeframe.
+      } finally {
+        if (historyWarmInFlightRef.current[selectedSymbol] === request) delete historyWarmInFlightRef.current[selectedSymbol]
+      }
+    }
+
     const cacheKey = selectedSymbol + ':' + timeframe
     const cached = candleCacheRef.current[cacheKey] ?? []
     setLiveCandles(cached)
     const last = cached[cached.length - 1]
     setCurrentPrice(last?.close ?? 0)
-    setLiveBidPrice(0)
-    setLiveAskPrice(0)
     setMarketTimestamp(last ? Math.floor(last.time / 1000) : 0)
-    latestCTraderPriceRef.current = null
-    cTraderChartSeededRef.current = false
-    setLiveMarketActive(false)
+    void warm()
+  }, [selectedSymbol])
+
+  useEffect(() => {
+    const cacheKey = selectedSymbol + ':' + timeframe
+    const cached = candleCacheRef.current[cacheKey] ?? []
+    if (cached.length > 1) {
+      setLiveCandles(cached)
+      const last = cached[cached.length - 1]
+      setCurrentPrice(last?.close ?? 0)
+      setMarketTimestamp(last ? Math.floor(last.time / 1000) : 0)
+    } else {
+      setLiveCandles([])
+    }
   }, [selectedSymbol, timeframe])
 
   useEffect(() => {
@@ -492,16 +534,6 @@ const TerminalContent: React.FC = () => {
     const livePrice = cTraderActive && latestCTraderPriceRef.current && latestCTraderPriceRef.current > 0
       ? latestCTraderPriceRef.current
       : price
-    if (cTraderActive) {
-      if (!cTraderChartSeededRef.current && valid.length > 0) {
-        candleCacheRef.current[cacheKey] = valid
-        setLiveCandles(valid)
-        cTraderChartSeededRef.current = true
-      }
-      setCurrentPrice(livePrice)
-      setMarketTimestamp(Math.floor(epoch / 1000))
-      return
-    }
     candleCacheRef.current[cacheKey] = valid
     setLiveCandles(valid)
     setCurrentPrice(livePrice)
