@@ -428,6 +428,43 @@ const TerminalContent: React.FC = () => {
   }, [])
 
   useEffect(() => {
+    const selection = activeProviderSelection
+    if (selection?.providerId !== 'ctrader' || !selection.connectionId || !selection.accountId) return
+
+    let cancelled = false
+    const loadHistory = async (): Promise<void> => {
+      try {
+        const response = await fetch('/api/providers/ctrader', {
+          method: 'POST',
+          credentials: 'include',
+          cache: 'no-store',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            providerId: 'ctrader',
+            connectionId: selection.connectionId,
+            accountId: selection.accountId,
+            environment: selection.environment,
+            action: 'history',
+            lookbackDays: 1825,
+          }),
+        })
+        const payload = await response.json().catch(() => ({})) as { ok?: boolean; history?: TradeOrder[] }
+        if (cancelled || !response.ok || !payload.ok || !Array.isArray(payload.history)) return
+        setTradeHistory(payload.history)
+      } catch {
+        // Keep any history already rendered when the broker history endpoint is temporarily unavailable.
+      }
+    }
+
+    void loadHistory()
+    const timer = window.setInterval(() => { void loadHistory() }, 30000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [activeProviderSelection?.connectionId, activeProviderSelection?.accountId, activeProviderSelection?.environment, activeProviderSelection?.providerId])
+
+  useEffect(() => {
     const manager = accountStreamManager.current
     if (!activeProviderSelection?.providerId || !['deriv', 'ctrader'].includes(activeProviderSelection.providerId) || !activeProviderSelection.connectionId || !activeProviderSelection.accountId) {
       void manager.stopAll()
