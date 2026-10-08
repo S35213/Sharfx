@@ -272,9 +272,12 @@ export const CTRADER_PROVIDER_ADAPTER: ProviderAdapter = {
       if (closed || pollInFlight) return
       pollInFlight = true
       try {
-        const accountSnapshot = await CTRADER_PROVIDER_ADAPTER.getAccountSnapshot!(connection, account)
-        onEvent({ type: 'account', account: accountSnapshot })
-        const payload = await request(connection, account, 'reconcile')
+        // The server account snapshot performs one broker reconciliation and
+        // returns the authoritative positions/orders alongside the account
+        // figures. Using that same response avoids a second reconcile request
+        // racing the initial position restore after a cold browser start.
+        const payload = await request(connection, account, 'account')
+        onEvent({ type: 'account', account: normalizeAccount(payload.account) })
         for (const position of toObjects(payload.positions)) onEvent({ type: 'position', position: normalizePosition(position) })
         for (const order of toObjects(payload.orders)) onEvent({ type: 'order', order: normalizeOrder(order) })
       } catch (error) {
@@ -285,15 +288,15 @@ export const CTRADER_PROVIDER_ADAPTER: ProviderAdapter = {
     }
 
     await poll()
-    const timer: ReturnType<typeof setInterval> = globalThis.setInterval(() => { void poll() }, 8000)
+    const timer: ReturnType<typeof setInterval> = globalThis.setInterval(() => { void poll() }, 3000)
     return {
       streamId: connection.connectionId + ':' + account + ':' + Date.now(),
       close: async () => {
         closed = true
-        if (timer) globalThis.clearInterval(timer)
+        globalThis.clearInterval(timer)
       },
     }
-  },
+  }
 }
 
 export default CTRADER_PROVIDER_ADAPTER
