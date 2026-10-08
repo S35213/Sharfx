@@ -559,9 +559,9 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         return { fill: 'rgba(255,92,117,.09)', border: 'rgba(255,92,117,.34)', badge: 'rgba(255,92,117,.16)', shortLabel: 'RES' }
       }
       return {
-        fill: 'rgba(167,139,250,.08)',
-        border: 'rgba(167,139,250,.34)',
-        badge: 'rgba(167,139,250,.15)',
+        fill: 'transparent',
+        border: 'rgba(92,168,255,.70)',
+        badge: 'rgba(92,168,255,.14)',
         shortLabel: annotation.id.includes('buy') ? 'BSL' : annotation.id.includes('sell') ? 'SSL' : 'LIQ',
       }
     }
@@ -591,8 +591,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         el.style.display = 'block'
         el.style.left = left + 'px'
         el.style.width = width + 'px'
-        el.style.top = Math.round(y - height / 2) + 'px'
-        el.style.height = height + 'px'
+        el.style.top = Math.round(y - (isLiquidity ? 0 : 1)) + 'px'
+        el.style.height = '0'
       }
     }
 
@@ -606,9 +606,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         el = document.createElement('div')
         el.style.position = 'absolute'
         el.style.boxSizing = 'border-box'
-        el.style.borderRadius = '4px'
+        el.style.borderRadius = '0'
         el.style.pointerEvents = 'none'
-        el.style.backdropFilter = 'blur(1px)'
         el.style.transition = 'none'
 
         const badge = document.createElement('span')
@@ -645,9 +644,10 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       const badge = el.querySelector('[data-role="badge"]') as HTMLSpanElement | null
       const label = el.querySelector('[data-role="label"]') as HTMLSpanElement | null
 
-      el.style.background = palette.fill
-      el.style.border = '1px ' + (annotation.id.includes('liquidity') ? 'dashed ' : 'solid ') + palette.border
-      el.style.boxShadow = 'inset 0 0 0 1px ' + palette.border
+      el.style.background = 'transparent'
+      el.style.border = '0'
+      el.style.borderTop = (annotation.id.includes('liquidity') ? '1px dashed ' : '2px solid ') + palette.border
+      el.style.boxShadow = 'none'
       if (badge) {
         badge.textContent = palette.shortLabel
         badge.style.background = palette.badge
