@@ -218,6 +218,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       chartRef.current = null
       seriesRef.current = null
       seriesConfigRef.current = null
+      marketBidLineRef.current = null
+      marketAskLineRef.current = null
     }
   }, [])
   useEffect(() => {
@@ -681,6 +683,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   useEffect(() => {
     const series = seriesRef.current
     if (!series) return
+    const compact = (containerRef.current?.clientWidth ?? 1000) < 640
 
     const updateLine = (
       ref: React.MutableRefObject<IPriceLine | null>,
