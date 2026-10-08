@@ -220,7 +220,7 @@ const TerminalContent: React.FC = () => {
   const timeframeRef = useRef(timeframe)
   const watchlistReferencePricesRef = useRef<Record<string, number>>({})
   const candleCacheRef = useRef<Record<string, OHLCV[]>>({})
-  const historyWarmInFlightRef = useRef<Record<string, Promise<Partial<Record<(typeof TIMEFRAMES)[number], OHLCV[]>>>>({})
+  const historyWarmInFlightRef = useRef<Record<string, Promise<Partial<Record<(typeof TIMEFRAMES)[number], OHLCV[]>>>>>({})
   const latestCTraderPriceRef = useRef<number | null>(null)
   const toastId = useRef(0)
   const lastStreamToastAt = useRef(0)
