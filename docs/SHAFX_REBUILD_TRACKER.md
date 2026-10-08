@@ -14,6 +14,16 @@
 - **Scope:** test branch only. `main` and Cloudflare production were not modified.
 - **Browser inspection:** repository and Render runtime were inspected directly. A connected Chrome/DevTools browser session is not currently available, so handset-level console/network/performance tracing is still separate from the verified server/build checks.
 
+
+## Chart source/visual repair — 2026-10-08 follow-up
+
+- **Native history fix:** cTrader now supplies authenticated historical trendbars directly to SHAFX for M1/M5/M15/M30/H1/H4/D1/W1 instead of mixing Deriv historical candles with cTrader live quotes. cTrader documents `ProtoOAGetTrendbarsReq` for this exact historical-bar path and the supported periods include M1, M5, M15, M30, H1, H4, D1 and W1. citeturn838390search0turn838390search1
+- **Visual fix:** support, resistance and liquidity are now rendered as real chart price levels rather than floating HTML boxes; live BUY/SELL values are compact tags beside the chart price scale, with no full-width live bid/ask rail.
+- **Live stability:** unchanged cTrader bid/ask polls are deduplicated; chart structural analysis is no longer tied to every quote tick; Lightweight Charts realtime updates use `series.update()` rather than replacing the full series on each tick, matching the library's recommended realtime pattern. citeturn954190search0turn954190search2
+- **Latest verified deployment:** Render `dep-db3rig0473hc73bucbcg` is LIVE; build completed successfully; no Render error/fatal logs were recorded after that deployment.
+- **Browser limitation:** direct text fetch of the live Render URL was not available in the current tool session, so no claim is made that an interactive browser/console inspection has been completed yet.
+- **Scope:** all changes remain on `test/rebuild-deriv-native-manual-20260930`; main/Cloudflare production remain untouched.
+
 ## Goal
 
 Preserve the core SHAFX idea:
