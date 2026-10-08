@@ -559,6 +559,63 @@ export const getCtraderQuote = async ({ environment, accountId, accessToken, sym
     key,
   })
 }
+
+const ctraderTrendbarPeriods = {
+  M1: 1,
+  M5: 5,
+  M15: 7,
+  M30: 8,
+  H1: 9,
+  H4: 10,
+  D1: 12,
+  W1: 13,
+}
+
+export const getCtraderTrendbars = async ({ environment, accountId, accessToken, symbolId, timeframe, count = 300 }) => {
+  const account = requirePositiveInt('account ID', accountId)
+  const id = requirePositiveInt('symbol ID', symbolId)
+  const period = ctraderTrendbarPeriods[String(timeframe || '').toUpperCase()]
+  if (!period) throw new Error('Unsupported cTrader chart timeframe.')
+  const safeCount = Math.max(30, Math.min(300, Math.floor(Number(count) || 300)))
+  const response = await authenticatedRequest({
+    environment,
+    accessToken,
+    accountId: account,
+    payloadType: 2137,
+    payload: {
+      ctidTraderAccountId: account,
+      period,
+      symbolId: id,
+      toTimestamp: Date.now(),
+      count: safeCount,
+    },
+    matcher: (message) => message.payloadType === 2138,
+    timeoutMs: 20000,
+  })
+  const body = asObject(response.payload)
+  const rows = Array.isArray(body.trendbar) ? body.trendbar : []
+  return rows.map((row) => {
+    const low = decodePrice(row.low)
+    return {
+      time: Math.trunc(Number(row.utcTimestampInMinutes || 0) * 60 * 1000),
+      open: decodePrice(Number(row.low || 0) + Number(row.deltaOpen || 0)),
+      high: decodePrice(Number(row.low || 0) + Number(row.deltaHigh || 0)),
+      low,
+      close: decodePrice(Number(row.low || 0) + Number(row.deltaClose || 0)),
+      volume: Number(row.volume || 0),
+    }
+  }).filter((row) =>
+    Number.isFinite(row.time) &&
+    row.time > 0 &&
+    Number.isFinite(row.open) &&
+    Number.isFinite(row.high) &&
+    Number.isFinite(row.low) &&
+    Number.isFinite(row.close) &&
+    row.high >= Math.max(row.open, row.close) &&
+    row.low <= Math.min(row.open, row.close) &&
+    row.low <= row.high
+  ).sort((a, b) => a.time - b.time)
+}
 export const getCtraderDealHistory = async ({ environment, accountId, accessToken, lookbackDays = 1825 }) => {
   const account = requirePositiveInt('account ID', accountId)
   const endTimestamp = Date.now()
