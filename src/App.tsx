@@ -721,6 +721,52 @@ const TerminalContent: React.FC = () => {
     [openPositions, selectedSymbol],
   )
 
+  const brokerPositionTradeLines = useMemo<ChartAnnotation[]>(() => {
+    const position = selectedOpenPosition
+    if (!position || !Number.isFinite(position.entryPrice) || position.entryPrice <= 0) return []
+
+    const entryColor = position.type === 'BUY' ? '#22D3A5' : '#FF5C75'
+    const lines: ChartAnnotation[] = [
+      {
+        id: position.id + '-entry',
+        price: position.entryPrice,
+        label: position.type + ' ENTRY',
+        color: entryColor,
+        lineWidth: 2,
+      },
+    ]
+
+    if (Number.isFinite(position.stopLoss) && Number(position.stopLoss) > 0) {
+      lines.push({
+        id: position.id + '-stop',
+        price: Number(position.stopLoss),
+        label: 'STOP LOSS',
+        color: '#FF5C75',
+        lineWidth: 2,
+      })
+    }
+
+    if (Number.isFinite(position.takeProfit) && Number(position.takeProfit) > 0) {
+      lines.push({
+        id: position.id + '-target',
+        price: Number(position.takeProfit),
+        label: 'TAKE PROFIT',
+        color: '#22D3A5',
+        lineWidth: 2,
+      })
+    }
+
+    return lines
+  }, [selectedOpenPosition])
+
+  const combinedTradeLines = useMemo(
+    () => [
+      ...tradeLines.filter((line) => !brokerPositionTradeLines.some((broker) => broker.id === line.id)),
+      ...brokerPositionTradeLines,
+    ],
+    [brokerPositionTradeLines, tradeLines],
+  )
+
   // Deriv public market data requires no authenticated account. Keep chart startup
   // independent from the slower OAuth/account synchronization path.
   const activeMarketConnection = useMemo(() => ({
@@ -939,7 +985,7 @@ const TerminalContent: React.FC = () => {
            </div>
            <MobileChartTools tool={chartTool} onToolChange={setChartTool} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} />
            <div className="shafx-chart-stage relative min-h-0 p-1 sm:p-2 lg:flex-1">
-             {liveCandles.length > 0 ? <CandlestickChart data={liveCandles} symbol={selectedSymbol} timeframe={timeframe} annotations={chartAnnotations} tradeLines={tradeLines} bidPrice={chartBidPrice} askPrice={chartAskPrice} toolMode={chartToolMode} pipSize={symbolSpec.pipSize} onToolNotice={pushToast} showGrid={chartSettings.showGrid} showPriceLabels={chartSettings.showPriceLabels} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} marketTimestamp={marketTimestamp} onTimeframeChange={setTimeframe} replayMode={false} /> : <div className="flex h-full min-h-[320px] items-center justify-center text-sm text-shafx-textMuted">Waiting for the live market stream…</div>}
+             {liveCandles.length > 0 ? <CandlestickChart data={liveCandles} symbol={selectedSymbol} timeframe={timeframe} annotations={chartAnnotations} tradeLines={combinedTradeLines} bidPrice={chartBidPrice} askPrice={chartAskPrice} toolMode={chartToolMode} pipSize={symbolSpec.pipSize} onToolNotice={pushToast} showGrid={chartSettings.showGrid} showPriceLabels={chartSettings.showPriceLabels} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} marketTimestamp={marketTimestamp} onTimeframeChange={setTimeframe} replayMode={false} /> : <div className="flex h-full min-h-[320px] items-center justify-center text-sm text-shafx-textMuted">Waiting for the live market stream…</div>}
            </div>
           <div className="shafx-landscape-secondary grid grid-cols-2 gap-2 border-t border-shafx-border bg-shafx-surface/55 p-2 sm:grid-cols-4">
             <button type="button" onClick={() => openMobileDock('insights')} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Structure</span><div className="mt-1 text-xs font-semibold">{marketAnalysis.bias} • {marketAnalysis.structure.type}</div></button>
