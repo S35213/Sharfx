@@ -584,7 +584,6 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         }
 
         const isLiquidity = annotation.id.includes('liquidity')
-        const height = isLiquidity ? (compact ? 10 : 12) : (compact ? 14 : 18)
         const left = isLiquidity ? liqLeft : srLeft
         const width = isLiquidity ? liqWidth : srWidth
 
