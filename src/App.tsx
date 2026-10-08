@@ -618,7 +618,7 @@ const TerminalContent: React.FC = () => {
             close: price,
           }]
         }
-        return [...current, { time: bucket, open: price, high: price, low: price, close: price }].slice(-300)
+        return [...current, { time: bucket, open: price, high: price, low: price, close: price }].slice(-1000)
       })
     })
     return unsubscribe
