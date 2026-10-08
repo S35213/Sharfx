@@ -98,6 +98,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const [hoverCandle, setHoverCandle] = useState<{ time: number; open?: number; high?: number; low?: number; close: number } | null>(null)
   const [timelineMarks, setTimelineMarks] = useState<Array<{ x: number; label: string }>>([])
   const displayedStructuralAnnotationsRef = useRef<ChartAnnotation[]>([])
+  const priceLinesRef = useRef<Map<string, IPriceLine>>(new Map())
+  const priceLinesSeriesRef = useRef<ShafxSeries | null>(null)
   // Fullscreen is an explicit user action only. Device rotation must never pin the chart.
 
   useEffect(() => {
@@ -242,6 +244,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         try { chart.removeSeries(seriesRef.current) } catch { /* stale series during a live mode switch */ }
         seriesRef.current = null
       }
+      priceLinesRef.current.clear()
+      priceLinesSeriesRef.current = null
 
       let nextSeries: ShafxSeries
       if (chartMode === 'bars') {
@@ -493,52 +497,90 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   useEffect(() => {
     const series = seriesRef.current
     if (!series) return
-    const lines: IPriceLine[] = []
-    const seen = new Set<string>()
+
     const compact = (containerRef.current?.clientWidth ?? 1000) < 640
-    // Keep the latest-price label visible on mobile. It is tied to the chart's
-    // price scale, so it follows the latest candle instead of floating beside it.
-    series.applyOptions({ lastValueVisible: false })
+    const desired = new Set<string>()
+
+    // A new chart series has no relationship to the old price-line objects.
+    // Drop the old references without removing them from the already-discarded
+    // series, then build the lines once for the new series.
+    if (priceLinesSeriesRef.current !== series) {
+      priceLinesRef.current.clear()
+      priceLinesSeriesRef.current = series
+    }
 
     const structuralAnnotations = followRealtimeRef.current || displayedStructuralAnnotationsRef.current.length === 0
       ? annotations
       : displayedStructuralAnnotationsRef.current
-    if (followRealtimeRef.current) displayedStructuralAnnotationsRef.current = annotations
 
-    const addLine = (annotation: ChartAnnotation | UserLevel): void => {
-      if (!annotation.id || seen.has(annotation.id) || !Number.isFinite(annotation.price) || annotation.price <= 0) return
-      seen.add(annotation.id)
-      const isLiquidity = annotation.id.includes('liquidity')
-      lines.push(series.createPriceLine({
-        price: annotation.price,
-        color: annotation.color,
-        lineWidth: annotation.lineWidth ?? 1,
-        lineStyle: isLiquidity ? 2 : 1,
-        axisLabelVisible: showPriceLabels && (!compact || annotation.id.includes('support') || annotation.id.includes('resistance') || isLiquidity),
-        title: compact && !annotation.id.includes('support') && !annotation.id.includes('resistance') && !isLiquidity ? '' : annotation.label,
-      }))
+    if (followRealtimeRef.current) {
+      displayedStructuralAnnotationsRef.current = annotations
     }
 
-    structuralAnnotations.forEach(addLine)
-    userLevels.forEach(addLine)
-    armedAlerts.forEach(addLine)
+    const upsertLine = (
+      annotation: ChartAnnotation | UserLevel,
+      lineStyle: 0 | 1 | 2,
+      axisLabelVisible: boolean,
+      title: string,
+    ): void => {
+      if (!annotation.id || !Number.isFinite(annotation.price) || annotation.price <= 0) return
+      desired.add(annotation.id)
 
-    tradeLines.forEach((annotation) => {
-      if (!Number.isFinite(annotation.price) || annotation.price <= 0 || seen.has(annotation.id)) return
-      seen.add(annotation.id)
-      lines.push(series.createPriceLine({
+      const options = {
         price: annotation.price,
         color: annotation.color,
-        lineWidth: annotation.lineWidth ?? 2,
-        lineStyle: 0,
-        axisLabelVisible: !compact && annotation.id.endsWith('-entry'),
-        title: compact ? '' : annotation.label,
-      }))
+        lineWidth: annotation.lineWidth ?? (lineStyle === 0 ? 2 : 1),
+        lineStyle,
+        axisLabelVisible,
+        title,
+      } as Parameters<IPriceLine['applyOptions']>[0]
+
+      const existing = priceLinesRef.current.get(annotation.id)
+      if (existing) {
+        existing.applyOptions(options)
+        return
+      }
+
+      priceLinesRef.current.set(annotation.id, series.createPriceLine(options))
+    }
+
+    structuralAnnotations.forEach((annotation) => {
+      const isLiquidity = annotation.id.includes('liquidity')
+      upsertLine(
+        annotation,
+        isLiquidity ? 2 : 1,
+        showPriceLabels && (!compact || annotation.id.includes('support') || annotation.id.includes('resistance') || isLiquidity),
+        compact && !annotation.id.includes('support') && !annotation.id.includes('resistance') && !isLiquidity ? '' : annotation.label,
+      )
     })
 
-    return () => { lines.forEach((line) => series.removePriceLine(line)) }
-  }, [annotations, armedAlerts, showPriceLabels, tradeLines, userLevels])
+    userLevels.forEach((annotation) => {
+      upsertLine(annotation, annotation.dashed ? 2 : 1, showPriceLabels && !compact, compact ? '' : annotation.label)
+    })
 
+    armedAlerts.forEach((annotation) => {
+      upsertLine(annotation, 2, showPriceLabels && !compact, compact ? '' : annotation.label)
+    })
+
+    tradeLines.forEach((annotation) => {
+      if (!Number.isFinite(annotation.price) || annotation.price <= 0) return
+      upsertLine(
+        annotation,
+        0,
+        !compact && annotation.id.endsWith('-entry'),
+        compact ? '' : annotation.label,
+      )
+    })
+
+    // Remove only lines that are no longer wanted. Existing lines stay alive
+    // and are updated in place, so live ticks no longer cause a remove/create
+    // flash on every candle update.
+    for (const [id, line] of priceLinesRef.current) {
+      if (desired.has(id)) continue
+      try { series.removePriceLine(line) } catch { /* series may have been replaced */ }
+      priceLinesRef.current.delete(id)
+    }
+  }, [annotations, armedAlerts, chartMode, pipSize, showPriceLabels, tradeLines, userLevels])
   useEffect(() => {
     const series = seriesRef.current
     if (!series) return
