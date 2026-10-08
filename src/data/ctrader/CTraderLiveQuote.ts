@@ -1,4 +1,4 @@
-import type { Timeframe } from '../../types'
+import type { OHLCV, Timeframe } from '../../types'
 
 export interface CTraderLiveQuote {
   symbol: string
@@ -68,6 +68,37 @@ const requestQuote = async (args: SubscribeArgs): Promise<{ quote: CTraderLiveQu
   }
   return { quote, instrument }
 }
+export const fetchCTraderHistoricalCandles = async (args: SubscribeArgs & { timeframe: Timeframe; count?: number }): Promise<OHLCV[]> => {
+  const response = await fetch('/api/providers/ctrader', {
+    method: 'POST',
+    credentials: 'include',
+    cache: 'no-store',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      providerId: 'ctrader',
+      connectionId: args.connectionId,
+      accountId: args.accountId,
+      environment: args.environment,
+      action: 'candles',
+      symbol: args.symbol,
+      timeframe: args.timeframe,
+      count: args.count ?? 300,
+    }),
+  })
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok || !payload?.ok || !Array.isArray(payload.candles)) {
+    throw new Error(typeof payload?.error === 'string' ? payload.error : 'SHAFX cTrader historical candles request failed.')
+  }
+  return (payload.candles as OHLCV[]).filter((candle) =>
+    Number.isFinite(Number(candle.time)) &&
+    Number.isFinite(Number(candle.open)) &&
+    Number.isFinite(Number(candle.high)) &&
+    Number.isFinite(Number(candle.low)) &&
+    Number.isFinite(Number(candle.close)),
+  )
+}
+
+
 
 const poll = async (key: string, args: SubscribeArgs, state: StreamState): Promise<void> => {
   if (state.stopped || state.inFlight) return
