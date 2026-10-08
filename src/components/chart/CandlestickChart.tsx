@@ -73,6 +73,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const seriesRef = useRef<ShafxSeries | null>(null)
   const seriesConfigRef = useRef<{ chartMode: ChartMode; pipSize: number } | null>(null)
   const chartData = useMemo(() => prepareData(data), [data])
+  useEffect(() => { chartDataSourceRef.current = data }, [data])
   const visualData = useMemo(() => {
     if (chartMode === 'candles' || chartMode === 'bars') return chartData
     return chartData.map((candle) => ({ time: candle.time, value: candle.close }))
@@ -96,12 +97,15 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const renderedDataLengthRef = useRef(0)
   const [crosshairInfo, setCrosshairInfo] = useState<{ price: number; time: string } | null>(null)
   const [hoverCandle, setHoverCandle] = useState<{ time: number; open?: number; high?: number; low?: number; close: number } | null>(null)
+  const chartDataSourceRef = useRef<OHLCV[]>(data)
   const [timelineMarks, setTimelineMarks] = useState<Array<{ x: number; label: string }>>([])
   const displayedStructuralAnnotationsRef = useRef<ChartAnnotation[]>([])
   const structuralZoneLayerRef = useRef<HTMLDivElement | null>(null)
   const structuralZoneElementsRef = useRef<Map<string, HTMLDivElement>>(new Map())
   const priceLinesRef = useRef<Map<string, IPriceLine>>(new Map())
   const priceLinesSeriesRef = useRef<ShafxSeries | null>(null)
+  const marketBidLineRef = useRef<IPriceLine | null>(null)
+  const marketAskLineRef = useRef<IPriceLine | null>(null)
   // Fullscreen is an explicit user action only. Device rotation must never pin the chart.
 
   useEffect(() => {
@@ -278,6 +282,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       }
       priceLinesRef.current.clear()
       priceLinesSeriesRef.current = null
+      marketBidLineRef.current = null
+      marketAskLineRef.current = null
 
       let nextSeries: ShafxSeries
       if (chartMode === 'bars') {
@@ -673,8 +679,58 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   }, [annotations, chartMode, isFullscreen, pipSize, timeframe])
 
   useEffect(() => {
+    const series = seriesRef.current
+    if (!series) return
+
+    const updateLine = (
+      ref: React.MutableRefObject<IPriceLine | null>,
+      price: number,
+      color: string,
+      title: string,
+    ): void => {
+      const valid = Number.isFinite(price) && price > 0 && showPriceLabels
+      if (!valid) {
+        if (ref.current) {
+          try { series.removePriceLine(ref.current) } catch { /* stale series during a mode switch */ }
+          ref.current = null
+        }
+        return
+      }
+
+      const options = {
+        price,
+        color: 'transparent',
+        lineWidth: 1 as const,
+        lineStyle: 0 as const,
+        axisLabelVisible: true,
+        axisLabelColor: color,
+        axisLabelTextColor: color === '#22D3A5' ? '#07110E' : '#19070B',
+        title,
+      }
+
+      if (ref.current) {
+        ref.current.applyOptions(options)
+      } else {
+        ref.current = series.createPriceLine(options)
+      }
+    }
+
+    const bid = Number.isFinite(bidPrice) && bidPrice > 0 ? Number(bidPrice) : lastClose
+    const ask = Number.isFinite(askPrice) && askPrice > 0 ? Number(askPrice) : displayBid
+
+    updateLine(marketBidLineRef, bid, '#FF5C75', compact ? 'SELL' : 'SELL / BID')
+    updateLine(marketAskLineRef, ask, '#22D3A5', compact ? 'BUY' : 'BUY / ASK')
+
+    return () => {
+      // Keep the objects alive across quote ticks; cleanup happens when the
+      // series itself is replaced/unmounted.
+    }
+  }, [askPrice, bidPrice, compact, displayBid, lastClose, showPriceLabels])
+
+  useEffect(() => {
     const chart = chartRef.current
     if (!chart) return
+    chartDataSourceRef.current = data
 
     const handler = (param: Parameters<NonNullable<Parameters<IChartApi['subscribeCrosshairMove']>[0]>>[0]) => {
       if (!param.time) {
@@ -684,7 +740,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       const targetTime = Number(param.time)
       let closest: OHLCV | undefined
       let closestDistance = Number.POSITIVE_INFINITY
-      for (const candle of data) {
+      for (const candle of chartDataSourceRef.current) {
         const distance = Math.abs(Number(candle.time) - targetTime)
         if (distance < closestDistance) {
           closest = candle
@@ -706,7 +762,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
 
     chart.subscribeCrosshairMove(handler)
     return () => chart.unsubscribeCrosshairMove(handler)
-  }, [data, timeframe])
+  }, [timeframe])
 
   useEffect(() => {
     const chart = chartRef.current
