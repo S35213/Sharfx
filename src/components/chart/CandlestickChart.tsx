@@ -93,6 +93,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const [timeframeMenuOpen, setTimeframeMenuOpen] = useState(false)
   const renderedFirstTimeRef = useRef<number | null>(null)
   const renderedLastTimeRef = useRef<number | null>(null)
+  const renderedDataLengthRef = useRef(0)
   const [crosshairInfo, setCrosshairInfo] = useState<{ price: number; time: string } | null>(null)
   const [hoverCandle, setHoverCandle] = useState<{ time: number; open?: number; high?: number; low?: number; close: number } | null>(null)
   const [timelineMarks, setTimelineMarks] = useState<Array<{ x: number; label: string }>>([])
@@ -312,10 +313,17 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     const symbolChanged = previousSymbolRef.current !== symbol
     const timeframeChanged = previousTimeframeRef.current !== timeframe
     const replayWindowReset = renderedLastTimeRef.current !== null && lastTime < renderedLastTimeRef.current
-    const rangeNeedsReset = !viewInitializedRef.current || symbolChanged || timeframeChanged || replayWindowReset
-
     const previousLastTime = renderedLastTimeRef.current
     const previousLastIndex = latestIndexRef.current
+    const previousDataLength = renderedDataLengthRef.current
+    const isModeSwitch = currentConfig?.chartMode !== chartMode || currentConfig?.pipSize !== pipSize
+    const structureChanged =
+      previousDataLength === 0 ||
+      firstTime !== renderedFirstTimeRef.current ||
+      (previousLastTime !== null && lastTime < previousLastTime) ||
+      visualData.length < previousDataLength
+    const rangeNeedsReset = !viewInitializedRef.current || symbolChanged || timeframeChanged || replayWindowReset
+    const visibleTimeRange = chart.timeScale().getVisibleRange()
     const visibleRange = chart.timeScale().getVisibleLogicalRange()
     const wasFollowingRealtime =
       !chartInteractionRef.current &&
@@ -323,10 +331,15 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         !visibleRange ||
         (previousLastIndex >= 0 && visibleRange.to >= previousLastIndex - 1))
     const isNewBar = previousLastTime !== null && lastTime > previousLastTime
-    const isModeSwitch = currentConfig?.chartMode !== chartMode || currentConfig?.pipSize !== pipSize
 
-    if (!rangeNeedsReset && !isModeSwitch && previousLastTime !== null && lastTime === previousLastTime) {
+    // Updating the entire series on every tick makes Lightweight Charts reconsider
+    // its logical range. That is exactly what causes an historical view to snap
+    // back toward the newest candles. Keep setData for real dataset changes and
+    // use update() for normal live ticks/new bars.
+    if (!structureChanged && !rangeNeedsReset && !isModeSwitch) {
       series.update(visualData[visualData.length - 1])
+    } else {
+      series.setData(visualData)
     }
 
     if (rangeNeedsReset) {
@@ -345,9 +358,16 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       verticalScaleMarginsRef.current = { top: 0.08, bottom: 0.08 }
       series.priceScale().applyOptions({ autoScale: true, scaleMargins: { top: 0.08, bottom: 0.08 } })
       followRealtimeRef.current = true
-    } else if (isNewBar && wasFollowingRealtime) {
-      chart.timeScale().scrollToRealTime()
-      followRealtimeRef.current = true
+    } else {
+      // When the user has deliberately scrolled back in history, preserve the
+      // exact historical time window even if a live tick updates the series.
+      if (!wasFollowingRealtime && visibleTimeRange && (structureChanged || isModeSwitch)) {
+        try { chart.timeScale().setVisibleRange(visibleTimeRange) } catch { /* keep current broker view */ }
+      }
+      if (isNewBar && wasFollowingRealtime) {
+        chart.timeScale().scrollToRealTime()
+        followRealtimeRef.current = true
+      }
     }
 
     latestIndexRef.current = lastIndex
@@ -356,6 +376,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     previousTimeframeRef.current = timeframe
     renderedFirstTimeRef.current = firstTime
     renderedLastTimeRef.current = lastTime
+    renderedDataLengthRef.current = visualData.length
   }, [visualData, symbol, timeframe, chartMode, pipSize, candleTheme])
   useEffect(() => {
     const chart = chartRef.current
@@ -636,6 +657,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
 
   const handleChartPointerDown = (event: React.PointerEvent<HTMLDivElement>): void => {
     chartInteractionRef.current = true
+    if (toolMode === 'cursor' || toolMode === 'crosshair') followRealtimeRef.current = false
     tapGestureRef.current = { startX: event.clientX, startY: event.clientY, moved: false }
   }
 
