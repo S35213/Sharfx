@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ColorType, createChart, type CandlestickData, type IChartApi, type IPriceLine, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts'
 import { Crosshair, Eraser, Maximize2, Minimize2, Ruler, RotateCcw } from 'lucide-react'
 import type { CandleTheme, ChartMode } from '../../app/chartSettings'
@@ -262,7 +262,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     })
   }, [showGrid])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const chart = chartRef.current
     if (!chart || !visualData.length) return
 
@@ -350,6 +350,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       visualData.length < previousDataLength
     const rangeNeedsReset = !viewInitializedRef.current || symbolChanged || timeframeChanged || replayWindowReset
     const visibleTimeRange = chart.timeScale().getVisibleRange()
+    const visibleLogicalRange = chart.timeScale().getVisibleLogicalRange()
     const wasFollowingRealtime = followRealtimeRef.current && !chartInteractionRef.current
     const isNewBar = previousLastTime !== null && lastTime > previousLastTime
 
@@ -393,9 +394,13 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
        * across a data-window replacement. We restore by time rather than logical
        * index so older bars do not shift the user's viewport.
        */
-      if (!wasFollowingRealtime && visibleTimeRange && (structureChanged || isModeSwitch)) {
+      if (!wasFollowingRealtime && (structureChanged || isModeSwitch)) {
         try {
-          chart.timeScale().setVisibleRange(visibleTimeRange)
+          if (visibleLogicalRange) {
+            chart.timeScale().setVisibleLogicalRange(visibleLogicalRange)
+          } else if (visibleTimeRange) {
+            chart.timeScale().setVisibleRange(visibleTimeRange)
+          }
         } catch {
           /* The broker may have replaced a range that is no longer available. */
         }
