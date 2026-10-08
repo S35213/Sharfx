@@ -135,8 +135,6 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const verticalScaleDragRef = useRef<{ startY: number; top: number; bottom: number } | null>(null)
   const verticalScaleMarginsRef = useRef({ top: 0.08, bottom: 0.08 })
   const priceAxisLastTapRef = useRef<number>(0)
-  const marketBidLineRef = useRef<IPriceLine | null>(null)
-  const marketAskLineRef = useRef<IPriceLine | null>(null)
   const followRealtimeRef = useRef(true)
   const latestIndexRef = useRef(-1)
   const candleColors: Record<CandleTheme, { up: string; down: string }> = {
@@ -216,8 +214,6 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       chartRef.current = null
       seriesRef.current = null
       seriesConfigRef.current = null
-      marketBidLineRef.current = null
-      marketAskLineRef.current = null
     }
   }, [])
   useEffect(() => {
@@ -533,7 +529,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       timeScale.unsubscribeVisibleLogicalRangeChange(updateTimeline)
       window.removeEventListener('resize', onResize)
     }
-  }, [chartData, timeframe, isFullscreen, marketTimestamp])
+  }, [chartData, timeframe, isFullscreen])
 
   useEffect(() => {
     const chart = chartRef.current
@@ -675,133 +671,6 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       ro.disconnect()
     }
   }, [annotations, chartMode, isFullscreen, pipSize, timeframe])
-
-  useEffect(() => {
-    const series = seriesRef.current
-    if (!series) return
-
-    const compact = (containerRef.current?.clientWidth ?? 1000) < 640
-    const desired = new Set<string>()
-
-    // A new chart series has no relationship to the old price-line objects.
-    // Drop the old references without removing them from the already-discarded
-    // series, then build the lines once for the new series.
-    if (priceLinesSeriesRef.current !== series) {
-      priceLinesRef.current.clear()
-      priceLinesSeriesRef.current = series
-    }
-
-    const upsertLine = (
-      annotation: ChartAnnotation | UserLevel,
-      lineStyle: 0 | 1 | 2,
-      axisLabelVisible: boolean,
-      title: string,
-    ): void => {
-      if (!annotation.id || !Number.isFinite(annotation.price) || annotation.price <= 0) return
-      desired.add(annotation.id)
-
-      const options = {
-        price: annotation.price,
-        color: annotation.color,
-        lineWidth: annotation.lineWidth ?? (lineStyle === 0 ? 2 : 1),
-        lineStyle,
-        axisLabelVisible,
-        title,
-      }
-
-      const existing = priceLinesRef.current.get(annotation.id)
-      if (existing) {
-        existing.applyOptions(options)
-        return
-      }
-
-      priceLinesRef.current.set(annotation.id, series.createPriceLine(options))
-    }
-
-    userLevels.forEach((annotation) => {
-      upsertLine(annotation, annotation.dashed ? 2 : 1, showPriceLabels && !compact, compact ? '' : annotation.label)
-    })
-
-    armedAlerts.forEach((annotation) => {
-      upsertLine(annotation, 2, showPriceLabels && !compact, compact ? '' : annotation.label)
-    })
-
-    tradeLines.forEach((annotation) => {
-      if (!Number.isFinite(annotation.price) || annotation.price <= 0) return
-      upsertLine(
-        annotation,
-        0,
-        !compact && annotation.id.endsWith('-entry'),
-        compact ? '' : annotation.label,
-      )
-    })
-
-    // Remove only lines that are no longer wanted. Existing lines stay alive
-    // and are updated in place, so live ticks no longer cause a remove/create
-    // flash on every candle update.
-    for (const [id, line] of priceLinesRef.current) {
-      if (desired.has(id)) continue
-      try { series.removePriceLine(line) } catch { /* series may have been replaced */ }
-      priceLinesRef.current.delete(id)
-    }
-  }, [annotations, armedAlerts, chartMode, pipSize, showPriceLabels, tradeLines, userLevels])
-  useEffect(() => {
-    const series = seriesRef.current
-    if (!series) return
-    const compact = (containerRef.current?.clientWidth ?? 1000) < 640
-    const bid = Number.isFinite(bidPrice) && Number(bidPrice) > 0 ? Number(bidPrice) : lastClose
-    const ask = Number.isFinite(askPrice) && Number(askPrice) > 0 ? Number(askPrice) : bid
-
-    const updateLine = (
-      ref: React.MutableRefObject<IPriceLine | null>,
-      options: (Parameters<IPriceLine['applyOptions']>[0] & { price: number }) | null,
-    ): void => {
-      if (!options) {
-        if (ref.current) {
-          series.removePriceLine(ref.current)
-          ref.current = null
-        }
-        return
-      }
-      if (ref.current) {
-        ref.current.applyOptions(options)
-      } else {
-        ref.current = series.createPriceLine(options)
-      }
-    }
-
-    updateLine(
-      marketBidLineRef,
-      Number.isFinite(bid) && bid > 0
-        ? {
-            price: bid,
-            color: '#FF5C75',
-            lineWidth: 2,
-            lineStyle: 0,
-            axisLabelVisible: showPriceLabels,
-            axisLabelColor: '#FF5C75',
-            axisLabelTextColor: '#19070B',
-            title: compact ? 'SELL' : 'SELL / BID',
-          }
-        : null,
-    )
-    updateLine(
-      marketAskLineRef,
-      Number.isFinite(ask) && ask > 0
-        ? {
-            price: ask,
-            color: '#22D3A5',
-            lineWidth: 2,
-            lineStyle: 0,
-            axisLabelVisible: showPriceLabels,
-            axisLabelColor: '#22D3A5',
-            axisLabelTextColor: '#07110E',
-            title: compact ? 'BUY' : 'BUY / ASK',
-          }
-        : null,
-    )
-  }, [askPrice, bidPrice, lastClose, showPriceLabels])
-
 
   useEffect(() => {
     const chart = chartRef.current
@@ -1134,7 +1003,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       </div>
     )}
     <div className="absolute right-3 top-3 z-20 flex items-center gap-1">
-      <div className="pointer-events-none hidden items-center gap-1 rounded-xl border border-shafx-border/70 bg-shafx-surface/85 px-1 py-0.5 shadow-md backdrop-blur sm:flex">
+      <div className="pointer-events-none flex items-center gap-1 rounded-xl border border-shafx-border/70 bg-shafx-surface/85 px-1 py-0.5 shadow-md backdrop-blur">
         <span className="rounded-lg px-1.5 py-0.5 text-[8px] font-bold tabular text-shafx-success"><span className="mr-1 text-[8px] uppercase tracking-[0.12em]">SELL</span>{Number.isFinite(displayBid) ? displayBid.toFixed(quotePrecision) : '—'}</span>
         <span className="h-3.5 w-px bg-shafx-border" />
         <span className="rounded-lg px-2 py-1 text-[9px] font-bold tabular text-shafx-danger"><span className="mr-1 text-[8px] uppercase tracking-[0.12em]">BUY</span>{Number.isFinite(displayAsk) ? displayAsk.toFixed(quotePrecision) : '—'}</span>
