@@ -726,6 +726,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     const series = seriesRef.current
     const layer = liveQuoteLayerRef.current
     if (!series || !layer) return
+    const precision = pricePrecision
 
     const place = (side: 'bid' | 'ask', price: number, text: string): void => {
       const tag = liveQuoteTagRefs.current[side]
@@ -744,15 +745,15 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     }
 
     const bid = Number.isFinite(bidPrice) && Number(bidPrice) > 0 ? Number(bidPrice) : lastClose
-    const ask = Number.isFinite(askPrice) && Number(askPrice) > 0 ? Number(askPrice) : displayBid
-    place('bid', bid, 'SELL ' + bid.toFixed(quotePrecision))
-    place('ask', ask, 'BUY ' + ask.toFixed(quotePrecision))
+    const ask = Number.isFinite(askPrice) && Number(askPrice) > 0 ? Number(askPrice) : bid
+    place('bid', bid, 'SELL ' + bid.toFixed(precision))
+    place('ask', ask, 'BUY ' + ask.toFixed(precision))
 
     const onRange = (): void => {
       const nextBid = Number.isFinite(bidPrice) && Number(bidPrice) > 0 ? Number(bidPrice) : lastClose
-      const nextAsk = Number.isFinite(askPrice) && Number(askPrice) > 0 ? Number(askPrice) : displayBid
-      place('bid', nextBid, 'SELL ' + nextBid.toFixed(quotePrecision))
-      place('ask', nextAsk, 'BUY ' + nextAsk.toFixed(quotePrecision))
+      const nextAsk = Number.isFinite(askPrice) && Number(askPrice) > 0 ? Number(askPrice) : nextBid
+      place('bid', nextBid, 'SELL ' + nextBid.toFixed(precision))
+      place('ask', nextAsk, 'BUY ' + nextAsk.toFixed(precision))
     }
     const resize = new ResizeObserver(onRange)
     resize.observe(layer)
@@ -761,7 +762,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       resize.disconnect()
       chartRef.current?.timeScale().unsubscribeVisibleLogicalRangeChange(onRange)
     }
-  }, [askPrice, bidPrice, displayBid, lastClose, quotePrecision, showPriceLabels])
+  }, [askPrice, bidPrice, lastClose, pricePrecision, showPriceLabels])
 
   useEffect(() => {
     const chart = chartRef.current
