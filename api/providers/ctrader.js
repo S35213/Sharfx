@@ -69,6 +69,34 @@ const normalizePositionForApi = (position, symbolNames, pnlMap, instrumentsById 
   }
 }
 
+const buildNormalizedReconcile = async ({ environment, accountId, accessToken, connectionId, reconcile, pnlMap }) => {
+  const positionsRaw = Array.isArray(reconcile?.position) ? reconcile.position : []
+  const uniqueSymbolIds = [...new Set(positionsRaw.map((position) => String(position?.tradeData?.symbolId || '')).filter(Boolean))]
+  const fullSymbols = await Promise.all(uniqueSymbolIds.map(async (symbolId) => {
+    try {
+      return [symbolId, await loadCtraderFullSymbol({
+        environment,
+        accountId,
+        accessToken,
+        symbolId,
+      })]
+    } catch {
+      return [symbolId, null]
+    }
+  }))
+  const instrumentsById = Object.fromEntries(fullSymbols.filter(([, symbol]) => Boolean(symbol)))
+  const symbolNames = Object.fromEntries(fullSymbols.map(([symbolId, symbol]) => [symbolId, symbol?.name || symbol?.symbolName || symbolId]))
+  const positions = positionsRaw.map((position) => normalizePositionForApi(
+    position,
+    symbolNames,
+    pnlMap,
+    instrumentsById,
+    { connectionId, accountId },
+  ))
+  const orders = (Array.isArray(reconcile?.order) ? reconcile.order : []).map(normalizeCtraderOrder)
+  return { positions, orders }
+}
+
 const authorizeUser = async (req, res) => {
   const user = await getShafxUser(req)
   if (!user) { json(res, 401, { ok: false, error: 'SHAFX sign-in is required.' }); return null }
@@ -152,21 +180,32 @@ const handlePost = async (req, res, user, body) => {
     const accountCurrency = names[String(trader.depositAssetId || '')] || 'USD'
     const balance = Number(trader.balance || 0) / (10 ** moneyDigits)
 
-    // Keep the lightweight account snapshot alive even when a secondary
-    // positions/P&L query is temporarily unavailable.
-    let reconcile = { position: [] }
+    // Account reconciliation is authoritative after a browser/app restart.
+    // Keep the account snapshot usable during a transient P&L failure, but return
+    // the broker positions from the same successful reconcile when available so
+    // the client can restore open trades immediately.
+    let reconcile = { position: [], order: [] }
     let pnlMap = {}
     try {
       reconcile = await reconcileCtrader({ environment: context.environment, accountId, accessToken: tokens.accessToken })
     } catch {}
+
     try {
       pnlMap = await buildCtraderPositionPnlMap({ environment: context.environment, accountId, accessToken: tokens.accessToken })
     } catch {}
 
-    const positions = Array.isArray(reconcile.position) ? reconcile.position : []
-    const floatingPL = positions.reduce((sum, item) => sum + Number(pnlMap[String(item.positionId)] || 0), 0)
-    const usedMargin = positions.reduce((sum, item) => sum + Number(item.usedMargin || 0) / (10 ** Number(item.moneyDigits || 8)), 0)
+    const positionsRaw = Array.isArray(reconcile.position) ? reconcile.position : []
+    const floatingPL = positionsRaw.reduce((sum, item) => sum + Number(pnlMap[String(item.positionId)] || 0), 0)
+    const usedMargin = positionsRaw.reduce((sum, item) => sum + Number(item.usedMargin || 0) / (10 ** Number(item.moneyDigits || 8)), 0)
     const equity = balance + floatingPL
+    const normalized = await buildNormalizedReconcile({
+      environment: context.environment,
+      accountId,
+      accessToken: tokens.accessToken,
+      connectionId,
+      reconcile,
+      pnlMap,
+    })
     const account = {
       accountId,
       accountLabel: context.connection.label || 'Deriv cTrader',
@@ -179,7 +218,7 @@ const handlePost = async (req, res, user, body) => {
       floatingPL,
     }
     await upsertProviderAccount({ connectionId, userId: user.id, providerId: 'ctrader', account })
-    return json(res, 200, { ok: true, account })
+    return json(res, 200, { ok: true, account, positions: normalized.positions, orders: normalized.orders })
   }
 
   if (action === 'reconcile') {
@@ -188,32 +227,15 @@ const handlePost = async (req, res, user, body) => {
     try {
       pnlMap = await buildCtraderPositionPnlMap({ environment: context.environment, accountId, accessToken: tokens.accessToken })
     } catch {}
-
-    const positionsRaw = Array.isArray(reconcile.position) ? reconcile.position : []
-    const uniqueSymbolIds = [...new Set(positionsRaw.map((position) => String(position?.tradeData?.symbolId || '')).filter(Boolean))]
-    const fullSymbols = await Promise.all(uniqueSymbolIds.map(async (symbolId) => {
-      try {
-        return [symbolId, await loadCtraderFullSymbol({
-          environment: context.environment,
-          accountId,
-          accessToken: tokens.accessToken,
-          symbolId,
-        })]
-      } catch {
-        return [symbolId, null]
-      }
-    }))
-    const instrumentsById = Object.fromEntries(fullSymbols.filter(([, symbol]) => Boolean(symbol)))
-    const symbolNames = Object.fromEntries(fullSymbols.map(([symbolId, symbol]) => [symbolId, symbol?.name || symbol?.symbolName || symbolId]))
-    const positions = positionsRaw.map((position) => normalizePositionForApi(
-      position,
-      symbolNames,
+    const normalized = await buildNormalizedReconcile({
+      environment: context.environment,
+      accountId,
+      accessToken: tokens.accessToken,
+      connectionId,
+      reconcile,
       pnlMap,
-      instrumentsById,
-      { connectionId, accountId },
-    ))
-    const orders = (Array.isArray(reconcile.order) ? reconcile.order : []).map(normalizeCtraderOrder)
-    return json(res, 200, { ok: true, positions, orders })
+    })
+    return json(res, 200, { ok: true, ...normalized })
   }
 
   if (action === 'instruments') {
