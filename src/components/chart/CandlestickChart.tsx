@@ -687,14 +687,6 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       priceLinesSeriesRef.current = series
     }
 
-    const structuralAnnotations = followRealtimeRef.current || displayedStructuralAnnotationsRef.current.length === 0
-      ? annotations
-      : displayedStructuralAnnotationsRef.current
-
-    if (followRealtimeRef.current) {
-      displayedStructuralAnnotationsRef.current = annotations
-    }
-
     const upsertLine = (
       annotation: ChartAnnotation | UserLevel,
       lineStyle: 0 | 1 | 2,
