@@ -35,6 +35,7 @@ const timeframeSeconds: Record<Timeframe, number> = {
 
 const historyGranularitySeconds = (timeframe: Timeframe): number => timeframe === 'W1' ? 86400 : timeframeSeconds[timeframe]
 const historyDefaultCount = (timeframe: Timeframe): number => timeframe === 'W1' ? 650 : 300
+const LIVE_CHART_BUFFER_BARS = 1000
 
 export const createDerivCandleHistoryRequest = (
   symbol: string,
@@ -650,7 +651,7 @@ export class DerivPublicMarketFeed {
           }
           receivedMarketData = receivedCandles.length > 0 || receivedMarketData
           clearFirstDataTimer()
-          this.candles = receivedCandles.slice(-300)
+          this.candles = receivedCandles.slice(-LIVE_CHART_BUFFER_BARS)
           const lastCandle = this.candles[this.candles.length - 1]
           if (lastCandle) {
             const epoch = Math.trunc(lastCandle.time)
@@ -688,7 +689,7 @@ export class DerivPublicMarketFeed {
           const last = this.candles[this.candles.length - 1]
           if (!last || last.time !== bucket) this.candles = [...this.candles, { time: bucket, open: price, high: price, low: price, close: price }]
           else this.candles = [...this.candles.slice(0, -1), { ...last, high: Math.max(last.high, price), low: Math.min(last.low, price), close: price }]
-          this.candles = this.candles.slice(-300)
+          this.candles = this.candles.slice(-LIVE_CHART_BUFFER_BARS)
           this.onUpdate?.(this.candles, price, epochMs)
         }
       } catch {
