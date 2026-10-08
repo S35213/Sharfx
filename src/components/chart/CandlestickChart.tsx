@@ -533,7 +533,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         lineStyle,
         axisLabelVisible,
         title,
-      } as Parameters<IPriceLine['applyOptions']>[0]
+      }
 
       const existing = priceLinesRef.current.get(annotation.id)
       if (existing) {
