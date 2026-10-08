@@ -34,6 +34,8 @@ interface StreamState {
   inFlight: Promise<void> | null
   stopped: boolean
   instrument: CTraderLiveInstrument | null
+  lastBid: number | null
+  lastAsk: number | null
 }
 
 const streams = new Map<string, StreamState>()
@@ -73,6 +75,11 @@ const poll = async (key: string, args: SubscribeArgs, state: StreamState): Promi
     try {
       const result = await requestQuote(args)
       if (state.stopped) return
+      const bid = Number(result.quote.bid)
+      const ask = Number(result.quote.ask)
+      if (state.lastBid === bid && state.lastAsk === ask) return
+      state.lastBid = bid
+      state.lastAsk = ask
       state.instrument = result.instrument
       for (const listener of state.listeners) listener(result.quote, result.instrument)
     } catch {
@@ -95,6 +102,8 @@ export const subscribeCTraderLiveQuote = (args: SubscribeArgs, listener: (quote:
       inFlight: null,
       stopped: false,
       instrument: null,
+      lastBid: null,
+      lastAsk: null,
     }
     streams.set(key, state)
     void poll(key, args, state)
