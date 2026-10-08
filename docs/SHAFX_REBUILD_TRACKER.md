@@ -4,6 +4,16 @@
 >
 > **Rule:** A checkbox is marked `[x]` only after the corresponding action is actually verified. A deployment being "started" is never recorded as passed.
 
+
+## Chart stability repair — 2026-10-08
+
+- **Root cause found:** the chart was drawing live BUY/SELL bid/ask values as full-width Lightweight Charts price lines. Official Lightweight Charts documents price lines as horizontal lines across the chart; this matched the user's screenshot and was visually cluttering the candle pane.
+- **Commit:** `8543c5f5f5aa513da3140f7d4fd03334a9b7db65`
+- **Changes:** live bid/ask rails are now axis-label-only; trade-entry/SL/TP and user-level lines remain; structural-analysis annotations recalculate only when the current candle bucket changes; unchanged cTrader bid/ask polls are deduplicated; timeline/crosshair handlers no longer resubscribe on every live quote.
+- **Verification:** Render deployment `dep-db3ra50br16s73ed2mcg` is LIVE; build completed successfully; Render returned no error/fatal logs after the live deployment.
+- **Scope:** test branch only. `main` and Cloudflare production were not modified.
+- **Browser inspection:** repository and Render runtime were inspected directly. A connected Chrome/DevTools browser session is not currently available, so handset-level console/network/performance tracing is still separate from the verified server/build checks.
+
 ## Goal
 
 Preserve the core SHAFX idea:
