@@ -97,6 +97,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const [crosshairInfo, setCrosshairInfo] = useState<{ price: number; time: string } | null>(null)
   const [hoverCandle, setHoverCandle] = useState<{ time: number; open?: number; high?: number; low?: number; close: number } | null>(null)
   const [timelineMarks, setTimelineMarks] = useState<Array<{ x: number; label: string }>>([])
+  const displayedStructuralAnnotationsRef = useRef<ChartAnnotation[]>([])
   // Fullscreen is an explicit user action only. Device rotation must never pin the chart.
 
   useEffect(() => {
@@ -457,6 +458,11 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     // price scale, so it follows the latest candle instead of floating beside it.
     series.applyOptions({ lastValueVisible: false })
 
+    const structuralAnnotations = followRealtimeRef.current || displayedStructuralAnnotationsRef.current.length === 0
+      ? annotations
+      : displayedStructuralAnnotationsRef.current
+    if (followRealtimeRef.current) displayedStructuralAnnotationsRef.current = annotations
+
     const addLine = (annotation: ChartAnnotation | UserLevel): void => {
       if (!annotation.id || seen.has(annotation.id) || !Number.isFinite(annotation.price) || annotation.price <= 0) return
       seen.add(annotation.id)
@@ -471,7 +477,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       }))
     }
 
-    annotations.forEach(addLine)
+    structuralAnnotations.forEach(addLine)
     userLevels.forEach(addLine)
     armedAlerts.forEach(addLine)
 
