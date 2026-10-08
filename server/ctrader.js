@@ -559,6 +559,52 @@ export const getCtraderQuote = async ({ environment, accountId, accessToken, sym
     key,
   })
 }
+export const getCtraderDealHistory = async ({ environment, accountId, accessToken, lookbackDays = 1825 }) => {
+  const account = requirePositiveInt('account ID', accountId)
+  const endTimestamp = Date.now()
+  const startTimestamp = Math.max(0, endTimestamp - Math.max(1, Number(lookbackDays || 1825)) * 86400000)
+  let fromTimestamp = startTimestamp
+  const deals = []
+
+  for (let page = 0; page < 50; page += 1) {
+    const response = await authenticatedRequest({
+      environment,
+      accessToken,
+      accountId: String(account),
+      payloadType: 2133,
+      payload: {
+        ctidTraderAccountId: account,
+        fromTimestamp,
+        toTimestamp: endTimestamp,
+        maxRows: 1000,
+      },
+      matcher: (message) => message.payloadType === 2134,
+      timeoutMs: 20000,
+    })
+    const body = asObject(response.payload)
+    const rows = Array.isArray(body.deal) ? body.deal : []
+    deals.push(...rows)
+
+    if (!body.hasMore || rows.length === 0) break
+    const lastTimestamp = Math.max(
+      ...rows.map((deal) => Number(deal.executionTimestamp || deal.utcLastUpdateTimestamp || deal.createTimestamp || 0)).filter(Number.isFinite),
+    )
+    if (!Number.isFinite(lastTimestamp) || lastTimestamp < fromTimestamp) break
+    fromTimestamp = lastTimestamp + 1
+    if (fromTimestamp > endTimestamp) break
+  }
+
+  const seen = new Set()
+  return deals
+    .filter((deal) => {
+      const id = String(deal?.dealId || '')
+      if (!id || seen.has(id)) return false
+      seen.add(id)
+      return true
+    })
+    .sort((a, b) => Number(a.executionTimestamp || a.createTimestamp || 0) - Number(b.executionTimestamp || b.createTimestamp || 0))
+}
+
 export const getCtraderMargin = async ({ environment, accountId, accessToken, symbolId, volume }) => {
   const account = requirePositiveInt('account ID', accountId)
   const id = requirePositiveInt('symbol ID', symbolId)
