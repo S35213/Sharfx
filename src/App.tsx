@@ -217,6 +217,7 @@ const TerminalContent: React.FC = () => {
   const [isLandscapeCompactViewport, setIsLandscapeCompactViewport] = useState(() => typeof window !== 'undefined' && window.matchMedia('(orientation: landscape) and (max-width: 999px)').matches)
   const accountStreamManager = useRef(new ProviderAccountStreamManager())
   const selectedSymbolRef = useRef(selectedSymbol)
+  const timeframeRef = useRef(timeframe)
   const watchlistReferencePricesRef = useRef<Record<string, number>>({})
   const candleCacheRef = useRef<Record<string, OHLCV[]>>({})
   const historyWarmInFlightRef = useRef<Record<string, Promise<Partial<Record<(typeof TIMEFRAMES)[number], OHLCV[]>>>>({})
@@ -248,7 +249,10 @@ const TerminalContent: React.FC = () => {
   }, [botPaperHistory])
   const dismissToast = useCallback(() => setToast(null), [])
 
-  useEffect(() => { selectedSymbolRef.current = selectedSymbol }, [selectedSymbol])
+  useEffect(() => {
+    selectedSymbolRef.current = selectedSymbol
+    timeframeRef.current = timeframe
+  }, [selectedSymbol, timeframe])
 
   useEffect(() => {
     const compactMedia = window.matchMedia('(max-width: 999px)')
@@ -326,7 +330,7 @@ const TerminalContent: React.FC = () => {
           const current = candleCacheRef.current[key] ?? []
           if (candles.length > current.length) candleCacheRef.current[key] = candles
         }
-        const currentKey = selectedSymbol + ':' + timeframe
+        const currentKey = selectedSymbol + ':' + timeframeRef.current
         const current = candleCacheRef.current[currentKey] ?? []
         if (current.length > 1) {
           setLiveCandles(current)
