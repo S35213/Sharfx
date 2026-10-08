@@ -594,8 +594,8 @@ const TerminalContent: React.FC = () => {
     const load = async (): Promise<void> => {
       try {
         const candles = await fetchCTraderHistoricalCandles({
-          connectionId: selection.connectionId,
-          accountId: selection.accountId,
+          connectionId: String(selection.connectionId),
+          accountId: String(selection.accountId),
           environment: selection.environment === 'live' ? 'live' : 'demo',
           symbol: selectedSymbol,
           timeframe,
