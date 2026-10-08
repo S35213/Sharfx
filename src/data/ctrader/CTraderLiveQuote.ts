@@ -37,7 +37,7 @@ interface StreamState {
 }
 
 const streams = new Map<string, StreamState>()
-const POLL_INTERVAL_MS = 250
+const POLL_INTERVAL_MS = 350
 
 const streamKey = ({ connectionId, accountId, environment, symbol }: SubscribeArgs): string =>
   [connectionId, accountId, environment, symbol.toUpperCase()].join(':')
