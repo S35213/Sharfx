@@ -9,6 +9,7 @@ import {
   getCtraderMargin,
   getCtraderDealHistory,
   getCtraderQuote,
+  getCtraderTrendbars,
   getCtraderSymbols,
   getCtraderSymbol,
   getCtraderTrader,
@@ -384,6 +385,30 @@ const handlePost = async (req, res, user, body) => {
       } catch {}
     }
     return json(res, 200, { ok: true, instruments })
+  }
+
+  if (action === 'candles') {
+    const full = await resolveCtraderSymbol({
+      environment: context.environment,
+      accountId,
+      accessToken: tokens.accessToken,
+      symbol: String(body.symbol || ''),
+      symbolId: body.symbolId,
+    })
+    const candles = await getCtraderTrendbars({
+      environment: context.environment,
+      accountId,
+      accessToken: tokens.accessToken,
+      symbolId: full.symbolId,
+      timeframe: String(body.timeframe || ''),
+      count: Number(body.count || 300),
+    })
+    return json(res, 200, {
+      ok: true,
+      symbol: String(full.name || body.symbol || ''),
+      instrument: normalizeCtraderInstrument(full),
+      candles,
+    })
   }
 
   if (action === 'quote') {
