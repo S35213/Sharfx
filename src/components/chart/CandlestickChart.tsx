@@ -103,6 +103,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const priceLinesSeriesRef = useRef<ShafxSeries | null>(null)
   const marketBidLineRef = useRef<IPriceLine | null>(null)
   const marketAskLineRef = useRef<IPriceLine | null>(null)
+  const liveQuoteLayerRef = useRef<HTMLDivElement | null>(null)
+  const liveQuoteTagRefs = useRef<{ bid: HTMLDivElement | null; ask: HTMLDivElement | null }>({ bid: null, ask: null })
   // Fullscreen is an explicit user action only. Device rotation must never pin the chart.
 
   useEffect(() => {
@@ -217,6 +219,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       seriesConfigRef.current = null
       marketBidLineRef.current = null
       marketAskLineRef.current = null
+      liveQuoteLayerRef.current = null
+      liveQuoteTagRefs.current = { bid: null, ask: null }
     }
   }, [])
   useEffect(() => {
@@ -657,51 +661,107 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     }
   }, [annotations, armedAlerts, chartMode, pipSize, showPriceLabels, tradeLines, userLevels])
 
-  // Live broker prices stay on the price axis as labels only. No horizontal
-  // bid/ask rail is drawn across the candle pane.
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    const layer = document.createElement('div')
+    layer.setAttribute('aria-hidden', 'true')
+    layer.style.position = 'absolute'
+    layer.style.left = '0'
+    layer.style.top = '40px'
+    layer.style.right = '82px'
+    layer.style.bottom = '32px'
+    layer.style.pointerEvents = 'none'
+    layer.style.overflow = 'visible'
+    layer.style.zIndex = '22'
+    layer.style.fontFamily = 'Arial, sans-serif'
+
+    const makeTag = (side: 'bid' | 'ask'): HTMLDivElement => {
+      const tag = document.createElement('div')
+      tag.style.position = 'absolute'
+      tag.style.right = '2px'
+      tag.style.transform = 'translateY(-50%)'
+      tag.style.padding = '4px 6px'
+      tag.style.borderRadius = '3px'
+      tag.style.fontSize = '9px'
+      tag.style.fontWeight = '700'
+      tag.style.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'
+      tag.style.lineHeight = '1'
+      tag.style.whiteSpace = 'nowrap'
+      tag.style.boxShadow = '0 1px 3px rgba(0,0,0,.24)'
+      tag.style.display = 'none'
+      if (side === 'bid') {
+        tag.style.background = '#FF5C75'
+        tag.style.color = '#19070B'
+      } else {
+        tag.style.background = '#22D3A5'
+        tag.style.color = '#07110E'
+      }
+      layer.appendChild(tag)
+      liveQuoteTagRefs.current[side] = tag
+      return tag
+    }
+
+    makeTag('bid')
+    makeTag('ask')
+    liveQuoteLayerRef.current = layer
+    container.appendChild(layer)
+
+    const onResize = (): void => {
+      layer.style.right = container.clientWidth < 640 ? '82px' : '96px'
+    }
+    onResize()
+    window.addEventListener('resize', onResize)
+
+    return () => {
+      window.removeEventListener('resize', onResize)
+      layer.remove()
+      liveQuoteLayerRef.current = null
+      liveQuoteTagRefs.current = { bid: null, ask: null }
+    }
+  }, [])
+
   useEffect(() => {
     const series = seriesRef.current
-    if (!series) return
-    const compact = (containerRef.current?.clientWidth ?? 1000) < 640
+    const layer = liveQuoteLayerRef.current
+    if (!series || !layer) return
 
-    const updateLine = (
-      ref: React.MutableRefObject<IPriceLine | null>,
-      price: number,
-      color: string,
-      title: string,
-    ): void => {
-      const valid = Number.isFinite(price) && price > 0 && showPriceLabels
-      if (!valid) {
-        if (ref.current) {
-          try { series.removePriceLine(ref.current) } catch { /* stale series during a mode switch */ }
-          ref.current = null
-        }
+    const place = (side: 'bid' | 'ask', price: number, text: string): void => {
+      const tag = liveQuoteTagRefs.current[side]
+      if (!tag || !showPriceLabels || !Number.isFinite(price) || price <= 0) {
+        if (tag) tag.style.display = 'none'
         return
       }
-
-      const options = {
-        price,
-        color: 'transparent',
-        lineWidth: 1 as const,
-        lineStyle: 0 as const,
-        axisLabelVisible: true,
-        axisLabelColor: color,
-        axisLabelTextColor: color === '#22D3A5' ? '#07110E' : '#19070B',
-        title,
+      const y = series.priceToCoordinate(price)
+      if (y === null || !Number.isFinite(y) || y < 0 || y > layer.clientHeight) {
+        tag.style.display = 'none'
+        return
       }
-
-      if (ref.current) {
-        ref.current.applyOptions(options)
-      } else {
-        ref.current = series.createPriceLine(options)
-      }
+      tag.textContent = text
+      tag.style.top = Math.round(y) + 'px'
+      tag.style.display = 'block'
     }
 
     const bid = Number.isFinite(bidPrice) && Number(bidPrice) > 0 ? Number(bidPrice) : lastClose
-    const ask = Number.isFinite(askPrice) && Number(askPrice) > 0 ? Number(askPrice) : bid
-    updateLine(marketBidLineRef, bid, '#FF5C75', compact ? 'SELL' : 'SELL / BID')
-    updateLine(marketAskLineRef, ask, '#22D3A5', compact ? 'BUY' : 'BUY / ASK')
-  }, [askPrice, bidPrice, lastClose, showPriceLabels])
+    const ask = Number.isFinite(askPrice) && Number(askPrice) > 0 ? Number(askPrice) : displayBid
+    place('bid', bid, 'SELL ' + bid.toFixed(quotePrecision))
+    place('ask', ask, 'BUY ' + ask.toFixed(quotePrecision))
+
+    const onRange = (): void => {
+      const nextBid = Number.isFinite(bidPrice) && Number(bidPrice) > 0 ? Number(bidPrice) : lastClose
+      const nextAsk = Number.isFinite(askPrice) && Number(askPrice) > 0 ? Number(askPrice) : displayBid
+      place('bid', nextBid, 'SELL ' + nextBid.toFixed(quotePrecision))
+      place('ask', nextAsk, 'BUY ' + nextAsk.toFixed(quotePrecision))
+    }
+    const resize = new ResizeObserver(onRange)
+    resize.observe(layer)
+    chartRef.current?.timeScale().subscribeVisibleLogicalRangeChange(onRange)
+    return () => {
+      resize.disconnect()
+      chartRef.current?.timeScale().unsubscribeVisibleLogicalRangeChange(onRange)
+    }
+  }, [askPrice, bidPrice, displayBid, lastClose, quotePrecision, showPriceLabels])
 
   useEffect(() => {
     const chart = chartRef.current
