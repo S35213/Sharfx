@@ -7,6 +7,7 @@ import {
   exchangeCtraderCode,
   getCtraderAssets,
   getCtraderMargin,
+  getCtraderDealHistory,
   getCtraderQuote,
   getCtraderSymbols,
   getCtraderSymbol,
@@ -95,6 +96,122 @@ const buildNormalizedReconcile = async ({ environment, accountId, accessToken, c
   ))
   const orders = (Array.isArray(reconcile?.order) ? reconcile.order : []).map(normalizeCtraderOrder)
   return { positions, orders }
+}
+
+const normalizeCtraderHistory = async ({ deals, environment, accountId, accessToken, connectionId }) => {
+  const filledDeals = (Array.isArray(deals) ? deals : []).filter((deal) => {
+    const status = Number(deal?.dealStatus)
+    const filledVolume = Number(deal?.filledVolume || 0)
+    return (status === 2 || status === 3) && filledVolume > 0
+  })
+  const symbolIds = [...new Set(filledDeals.map((deal) => String(deal?.symbolId || '')).filter(Boolean))]
+  const fullSymbols = await Promise.all(symbolIds.map(async (symbolId) => {
+    try {
+      return [symbolId, await loadCtraderFullSymbol({ environment, accountId, accessToken, symbolId })]
+    } catch {
+      return [symbolId, null]
+    }
+  }))
+  const instrumentsById = Object.fromEntries(fullSymbols.filter(([, symbol]) => Boolean(symbol)))
+  const symbolNames = Object.fromEntries(fullSymbols.map(([symbolId, symbol]) => [
+    symbolId,
+    symbol?.name || symbol?.symbolName || symbolId,
+  ]))
+
+  const groups = new Map()
+  for (const deal of filledDeals) {
+    const positionId = String(deal.positionId || deal.dealId || '')
+    if (!positionId) continue
+    const list = groups.get(positionId) || []
+    list.push(deal)
+    groups.set(positionId, list)
+  }
+
+  const history = []
+  for (const [positionId, rows] of groups) {
+    rows.sort((a, b) => Number(a.executionTimestamp || a.createTimestamp || 0) - Number(b.executionTimestamp || b.createTimestamp || 0))
+    const opening = rows.filter((deal) => !deal.closePositionDetail)
+    const closing = rows.filter((deal) => Boolean(deal.closePositionDetail))
+    const openingVolume = opening.reduce((sum, deal) => sum + Number(deal.filledVolume || 0), 0)
+    const closingVolume = closing.reduce((sum, deal) => sum + Number(deal.filledVolume || 0), 0)
+
+    // A position that was only partially closed is still an open position;
+    // the live account reconciliation remains the source of truth for it.
+    if (!opening.length || !closing.length || closingVolume < openingVolume) continue
+
+    const weighted = (items, field) => {
+      let numerator = 0
+      let denominator = 0
+      for (const deal of items) {
+        const volume = Number(deal.filledVolume || 0)
+        const price = Number(deal[field] ?? 0)
+        if (volume > 0 && price > 0) {
+          numerator += price * volume
+          denominator += volume
+        }
+      }
+      return denominator > 0 ? numerator / denominator : 0
+    }
+
+    const first = opening[0]
+    const lastClose = closing[closing.length - 1]
+    const symbolId = String(first.symbolId || lastClose.symbolId || '')
+    const instrument = instrumentsById[symbolId]
+    const lotSizeProtocol = Number(instrument?.lotSize || 0)
+    const lots = lotSizeProtocol > 0 ? openingVolume / lotSizeProtocol : 0
+    const entryPrice = weighted(opening, 'executionPrice')
+    const exitPrice = weighted(closing, 'executionPrice')
+
+    let profit = 0
+    let commission = 0
+    for (const deal of closing) {
+      const moneyDigits = Number(deal.moneyDigits || 8)
+      const detail = deal.closePositionDetail || {}
+      profit += Number(detail.grossProfit || 0) / (10 ** moneyDigits)
+      commission += Math.abs(Number(deal.commission || 0)) / (10 ** moneyDigits)
+      commission += Math.abs(Number(detail.commission || 0)) / (10 ** moneyDigits)
+    }
+
+    const openTimestamp = Math.min(...opening.map((deal) => Number(deal.executionTimestamp || deal.createTimestamp || 0)).filter(Number.isFinite))
+    const closeTimestamp = Math.max(...closing.map((deal) => Number(deal.executionTimestamp || deal.utcLastUpdateTimestamp || 0)).filter(Number.isFinite))
+    const side = Number(first.tradeSide) === 2 ? 'SELL' : 'BUY'
+
+    history.push({
+      id: positionId,
+      symbol: symbolNames[symbolId] || symbolId,
+      type: side,
+      lotSize: lots,
+      volumeLots: lots,
+      entryPrice,
+      exitPrice: exitPrice || undefined,
+      stopLoss: null,
+      takeProfit: null,
+      riskPercent: 0,
+      riskAmount: 0,
+      rewardAmount: 0,
+      riskRewardRatio: 0,
+      status: 'closed',
+      openTime: new Date(openTimestamp).toISOString(),
+      closeTime: closeTimestamp > 0 ? new Date(closeTimestamp).toISOString() : undefined,
+      profit: profit - commission,
+      commission,
+      providerOrderId: String(lastClose.orderId || first.orderId || ''),
+      brokerProduct: 'SHAFX_CFD_CTRADER',
+      providerId: 'ctrader',
+      providerConnectionId: String(connectionId || ''),
+      providerAccountId: String(accountId || ''),
+      usedMargin: undefined,
+      metadata: {
+        provider: 'ctrader',
+        positionId,
+        symbolId,
+        openingDeals: String(opening.length),
+        closingDeals: String(closing.length),
+      },
+    })
+  }
+
+  return history.sort((a, b) => String(b.closeTime || b.openTime).localeCompare(String(a.closeTime || a.openTime)))
 }
 
 const authorizeUser = async (req, res) => {
@@ -219,6 +336,23 @@ const handlePost = async (req, res, user, body) => {
     }
     await upsertProviderAccount({ connectionId, userId: user.id, providerId: 'ctrader', account })
     return json(res, 200, { ok: true, account, positions: normalized.positions, orders: normalized.orders })
+  }
+
+  if (action === 'history') {
+    const deals = await getCtraderDealHistory({
+      environment: context.environment,
+      accountId,
+      accessToken: tokens.accessToken,
+      lookbackDays: Number(body.lookbackDays || 1825),
+    })
+    const history = await normalizeCtraderHistory({
+      deals,
+      environment: context.environment,
+      accountId,
+      accessToken: tokens.accessToken,
+      connectionId,
+    })
+    return json(res, 200, { ok: true, history })
   }
 
   if (action === 'reconcile') {
