@@ -43,8 +43,8 @@ export const buildAIChartAnnotations = (symbol: string, candles: OHLCV[]): Chart
 
   add('support', supportResistance.nearestSupport, 'Support', '#22D3A5', 2)
   add('resistance', supportResistance.nearestResistance, 'Resistance', '#FF5C75', 2)
-  add('liquidity-buy', liquidity.nearestBuySide?.referencePrice ?? null, 'Buy-side liquidity', '#A78BFA', 1)
-  add('liquidity-sell', liquidity.nearestSellSide?.referencePrice ?? null, 'Sell-side liquidity', '#A78BFA', 1)
+  add('liquidity-buy', liquidity.nearestBuySide?.referencePrice ?? null, 'Buy-side liquidity', '#5CA8FF', 1)
+  add('liquidity-sell', liquidity.nearestSellSide?.referencePrice ?? null, 'Sell-side liquidity', '#5CA8FF', 1)
 
   const setup = analyzeCurrentSetup(symbol, candles)
   const preferred = setup?.preferredSetup ?? null
@@ -82,7 +82,7 @@ export const buildStructuralChartAnnotations = (symbol: string, candles: OHLCV[]
         if (!duplicate.label.includes('liquidity')) return
         duplicate.label = `${prefix}Liquidity`
         duplicate.id = 'liquidity-both'
-        duplicate.color = '#A78BFA'
+        duplicate.color = '#5CA8FF'
         duplicate.lineWidth = 1
       }
       return
@@ -93,8 +93,8 @@ export const buildStructuralChartAnnotations = (symbol: string, candles: OHLCV[]
 
   add('support', supportResistance.nearestSupport, 'Support', '#22D3A5', 2)
   add('resistance', supportResistance.nearestResistance, 'Resistance', '#FF5C75', 2)
-  add('liquidity-buy', liquidity.nearestBuySide?.referencePrice ?? null, 'Buy-side liquidity', '#A78BFA', 1)
-  add('liquidity-sell', liquidity.nearestSellSide?.referencePrice ?? null, 'Sell-side liquidity', '#A78BFA', 1)
+  add('liquidity-buy', liquidity.nearestBuySide?.referencePrice ?? null, 'Buy-side liquidity', '#5CA8FF', 1)
+  add('liquidity-sell', liquidity.nearestSellSide?.referencePrice ?? null, 'Sell-side liquidity', '#5CA8FF', 1)
 
   return result.sort((a, b) => a.price - b.price)
 }
