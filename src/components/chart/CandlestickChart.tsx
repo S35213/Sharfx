@@ -100,8 +100,6 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   useEffect(() => { chartDataSourceRef.current = data }, [data])
   const [timelineMarks, setTimelineMarks] = useState<Array<{ x: number; label: string }>>([])
   const displayedStructuralAnnotationsRef = useRef<ChartAnnotation[]>([])
-  const structuralZoneLayerRef = useRef<HTMLDivElement | null>(null)
-  const structuralZoneElementsRef = useRef<Map<string, HTMLDivElement>>(new Map())
   const priceLinesRef = useRef<Map<string, IPriceLine>>(new Map())
   const priceLinesSeriesRef = useRef<ShafxSeries | null>(null)
   const marketBidLineRef = useRef<IPriceLine | null>(null)
@@ -222,38 +220,6 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       marketAskLineRef.current = null
     }
   }, [])
-  useEffect(() => {
-    const container = containerRef.current
-    if (!container) return
-
-    const layer = document.createElement('div')
-    layer.setAttribute('aria-hidden', 'true')
-    layer.style.position = 'absolute'
-    layer.style.left = '0'
-    layer.style.top = '40px'
-    layer.style.right = '82px'
-    layer.style.bottom = '32px'
-    layer.style.pointerEvents = 'none'
-    layer.style.overflow = 'hidden'
-    layer.style.zIndex = '8'
-    layer.style.fontFamily = 'Arial, sans-serif'
-    container.appendChild(layer)
-    structuralZoneLayerRef.current = layer
-
-    const onResize = (): void => {
-      layer.style.right = container.clientWidth < 640 ? '82px' : '96px'
-    }
-    onResize()
-    window.addEventListener('resize', onResize)
-
-    return () => {
-      window.removeEventListener('resize', onResize)
-      layer.remove()
-      structuralZoneLayerRef.current = null
-      structuralZoneElementsRef.current.clear()
-    }
-  }, [])
-
   useEffect(() => {
     const chart = chartRef.current
     if (!chart) return
@@ -539,146 +505,94 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     }
   }, [chartData, timeframe, isFullscreen])
 
+
   useEffect(() => {
-    const chart = chartRef.current
     const series = seriesRef.current
-    const layer = structuralZoneLayerRef.current
-    const container = containerRef.current
-    if (!chart || !series || !layer || !container) return
+    if (!series) return
 
-    const structuralAnnotations = followRealtimeRef.current || displayedStructuralAnnotationsRef.current.length === 0
-      ? annotations
-      : displayedStructuralAnnotationsRef.current
-
-    if (followRealtimeRef.current) displayedStructuralAnnotationsRef.current = annotations
-
+    const compact = (containerRef.current?.clientWidth ?? 1000) < 640
     const desired = new Set<string>()
-    const elements = structuralZoneElementsRef.current
 
-    const paletteFor = (annotation: ChartAnnotation): { fill: string; border: string; badge: string; shortLabel: string } => {
-      if (annotation.id.includes('support')) {
-        return { fill: 'rgba(34,211,165,.09)', border: 'rgba(34,211,165,.34)', badge: 'rgba(34,211,165,.16)', shortLabel: 'SUP' }
-      }
-      if (annotation.id.includes('resistance')) {
-        return { fill: 'rgba(255,92,117,.09)', border: 'rgba(255,92,117,.34)', badge: 'rgba(255,92,117,.16)', shortLabel: 'RES' }
-      }
-      return {
-        fill: 'transparent',
-        border: 'rgba(92,168,255,.70)',
-        badge: 'rgba(92,168,255,.14)',
-        shortLabel: annotation.id.includes('buy') ? 'BSL' : annotation.id.includes('sell') ? 'SSL' : 'LIQ',
-      }
+    if (priceLinesSeriesRef.current !== series) {
+      priceLinesRef.current.clear()
+      priceLinesSeriesRef.current = series
     }
 
-    const updatePositions = (): void => {
-      const compact = container.clientWidth < 640
-      const plotWidth = Math.max(220, container.clientWidth - (compact ? 82 : 96))
-      const srLeft = compact ? Math.round(plotWidth * 0.20) : Math.round(plotWidth * 0.34)
-      const srWidth = compact ? Math.round(plotWidth * 0.64) : Math.round(plotWidth * 0.56)
-      const liqLeft = compact ? Math.round(plotWidth * 0.52) : Math.round(plotWidth * 0.58)
-      const liqWidth = compact ? Math.round(plotWidth * 0.30) : Math.round(plotWidth * 0.30)
-
-      for (const annotation of structuralAnnotations) {
-        const el = elements.get(annotation.id)
-        if (!el) continue
-        const y = series.priceToCoordinate(annotation.price)
-        if (y === null || !Number.isFinite(y)) {
-          el.style.display = 'none'
-          continue
-        }
-
-        const isLiquidity = annotation.id.includes('liquidity')
-        const left = isLiquidity ? liqLeft : srLeft
-        const width = isLiquidity ? liqWidth : srWidth
-
-        el.style.display = 'block'
-        el.style.left = left + 'px'
-        el.style.width = width + 'px'
-        el.style.top = Math.round(y - (isLiquidity ? 0 : 1)) + 'px'
-        el.style.height = '0'
+    const shortStructuralLabel = (annotation: ChartAnnotation): string => {
+      if (annotation.id.includes('support')) return 'SUP'
+      if (annotation.id.includes('resistance')) return 'RES'
+      if (annotation.id.includes('liquidity')) {
+        if (annotation.id.includes('sell')) return 'SSL'
+        if (annotation.id.includes('buy')) return 'BSL'
+        return 'LIQ'
       }
+      if (annotation.id.includes('ai-entry')) return 'AI ENTRY'
+      if (annotation.id.includes('ai-stop')) return 'AI SL'
+      if (annotation.id.includes('ai-target')) return 'AI TP'
+      return annotation.label
     }
 
-    for (const annotation of structuralAnnotations) {
-      if (!annotation.id || !Number.isFinite(annotation.price) || annotation.price <= 0) continue
+    const upsertLine = (
+      annotation: ChartAnnotation | UserLevel,
+      lineStyle: 0 | 1 | 2,
+      axisLabelVisible: boolean,
+      title: string,
+    ): void => {
+      if (!annotation.id || !Number.isFinite(annotation.price) || annotation.price <= 0) return
       desired.add(annotation.id)
 
-      const palette = paletteFor(annotation)
-      let el = elements.get(annotation.id)
-      if (!el) {
-        el = document.createElement('div')
-        el.style.position = 'absolute'
-        el.style.boxSizing = 'border-box'
-        el.style.borderRadius = '0'
-        el.style.pointerEvents = 'none'
-        el.style.transition = 'none'
-
-        const badge = document.createElement('span')
-        badge.dataset.role = 'badge'
-        badge.style.position = 'absolute'
-        badge.style.left = '6px'
-        badge.style.top = '50%'
-        badge.style.transform = 'translateY(-50%)'
-        badge.style.padding = '1px 4px'
-        badge.style.borderRadius = '3px'
-        badge.style.fontSize = '8px'
-        badge.style.fontWeight = '700'
-        badge.style.letterSpacing = '.08em'
-        badge.style.lineHeight = '1'
-        badge.style.whiteSpace = 'nowrap'
-
-        const label = document.createElement('span')
-        label.dataset.role = 'label'
-        label.style.position = 'absolute'
-        label.style.right = '6px'
-        label.style.top = '50%'
-        label.style.transform = 'translateY(-50%)'
-        label.style.fontSize = '8px'
-        label.style.fontWeight = '600'
-        label.style.opacity = '.78'
-        label.style.whiteSpace = 'nowrap'
-
-        el.appendChild(badge)
-        el.appendChild(label)
-        layer.appendChild(el)
-        elements.set(annotation.id, el)
+      const options = {
+        price: annotation.price,
+        color: annotation.color,
+        lineWidth: annotation.lineWidth ?? (lineStyle === 0 ? 2 : 1),
+        lineStyle,
+        axisLabelVisible,
+        title,
       }
 
-      const badge = el.querySelector('[data-role="badge"]') as HTMLSpanElement | null
-      const label = el.querySelector('[data-role="label"]') as HTMLSpanElement | null
+      const existing = priceLinesRef.current.get(annotation.id)
+      if (existing) {
+        existing.applyOptions(options)
+        return
+      }
 
-      el.style.background = 'transparent'
-      el.style.border = '0'
-      el.style.borderTop = (annotation.id.includes('liquidity') ? '1px dashed ' : '2px solid ') + palette.border
-      el.style.boxShadow = 'none'
-      if (badge) {
-        badge.textContent = palette.shortLabel
-        badge.style.background = palette.badge
-        badge.style.color = palette.border
-      }
-      if (label) {
-        label.textContent = annotation.label
-        label.style.color = palette.border
-        label.style.display = container.clientWidth < 640 ? 'none' : 'block'
-      }
+      priceLinesRef.current.set(annotation.id, series.createPriceLine(options))
     }
 
-    for (const [id, element] of elements) {
+    annotations.forEach((annotation) => {
+      const liquidity = annotation.id.includes('liquidity')
+      upsertLine(
+        annotation,
+        liquidity ? 2 : 0,
+        showPriceLabels,
+        compact ? shortStructuralLabel(annotation) : annotation.label,
+      )
+    })
+
+    userLevels.forEach((annotation) => {
+      upsertLine(annotation, annotation.dashed ? 2 : 1, showPriceLabels && !compact, compact ? '' : annotation.label)
+    })
+
+    armedAlerts.forEach((annotation) => {
+      upsertLine(annotation, 2, showPriceLabels && !compact, compact ? '' : annotation.label)
+    })
+
+    tradeLines.forEach((annotation) => {
+      if (!Number.isFinite(annotation.price) || annotation.price <= 0) return
+      upsertLine(
+        annotation,
+        0,
+        !compact && annotation.id.endsWith('-entry'),
+        compact ? '' : annotation.label,
+      )
+    })
+
+    for (const [id, line] of priceLinesRef.current) {
       if (desired.has(id)) continue
-      element.remove()
-      elements.delete(id)
+      try { series.removePriceLine(line) } catch { /* series may have been replaced */ }
+      priceLinesRef.current.delete(id)
     }
-
-    updatePositions()
-    const onRange = (): void => updatePositions()
-    chart.timeScale().subscribeVisibleLogicalRangeChange(onRange)
-    const ro = new ResizeObserver(updatePositions)
-    ro.observe(container)
-    return () => {
-      chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRange)
-      ro.disconnect()
-    }
-  }, [annotations, chartMode, isFullscreen, pipSize, timeframe])
+  }, [annotations, armedAlerts, chartMode, pipSize, showPriceLabels, tradeLines, userLevels])
 
   useEffect(() => {
     const series = seriesRef.current
