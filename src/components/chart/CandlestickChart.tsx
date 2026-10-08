@@ -300,7 +300,6 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     const timeframeChanged = previousTimeframeRef.current !== timeframe
     const replayWindowReset = renderedLastTimeRef.current !== null && lastTime < renderedLastTimeRef.current
     const previousLastTime = renderedLastTimeRef.current
-    const previousLastIndex = latestIndexRef.current
     const previousDataLength = renderedDataLengthRef.current
     const isModeSwitch = currentConfig?.chartMode !== chartMode || currentConfig?.pipSize !== pipSize
     const structureChanged =
