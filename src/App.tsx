@@ -675,8 +675,9 @@ const TerminalContent: React.FC = () => {
         : Number((chartBidPrice + symbolSpec.pipSize).toFixed(symbolSpec.pricePrecision))
     })()
 
+  const structureBarTime = liveCandles.length ? Number(liveCandles[liveCandles.length - 1]?.time ?? 0) : 0
   const chartAnnotations = useMemo(() => buildStructuralChartAnnotations(selectedSymbol, liveCandles, timeframe)
-    .map((annotation) => ({ ...annotation, id: 'live-' + timeframe + '-' + annotation.id })), [liveCandles, selectedSymbol, timeframe])
+    .map((annotation) => ({ ...annotation, id: 'live-' + timeframe + '-' + annotation.id })), [selectedSymbol, timeframe, structureBarTime])
 
   const selectedOpenPosition = useMemo(
     () => openPositions.find((position) => position.symbol === selectedSymbol) ?? null,
