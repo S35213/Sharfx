@@ -34,7 +34,7 @@ import { TIMEFRAMES, type AccountData, type BotPaperTrade, type MarketAnalysis, 
 import type { SetupCandidate } from './engine/setup/types'
 import { mockWatchlist } from './data/mock/watchlist'
 import { fetchDerivActiveForexSymbols, fetchDerivMultiTimeframeCandles, subscribeDerivForexQuotes } from './data/deriv/DerivPublicMarketFeed'
-import { cTraderQuoteBucket, subscribeCTraderLiveQuote } from './data/ctrader/CTraderLiveQuote'
+import { cTraderQuoteBucket, fetchCTraderHistoricalCandles, subscribeCTraderLiveQuote } from './data/ctrader/CTraderLiveQuote'
 
 const normalizeProviderSymbol = (value: string): string => {
   if (/^frx[A-Z0-9]{6}$/i.test(value)) {
@@ -312,6 +312,7 @@ const TerminalContent: React.FC = () => {
 
   useEffect(() => {
     setSymbolSpec(getSymbolSpec(selectedSymbol))
+    if (activeProviderSelection?.providerId === 'ctrader') return
     latestCTraderPriceRef.current = null
     setLiveBidPrice(0)
     setLiveAskPrice(0)
@@ -352,9 +353,10 @@ const TerminalContent: React.FC = () => {
     setCurrentPrice(last?.close ?? 0)
     setMarketTimestamp(last ? Math.floor(last.time / 1000) : 0)
     void warm()
-  }, [selectedSymbol])
+  }, [selectedSymbol, activeProviderSelection?.providerId])
 
   useEffect(() => {
+    if (activeProviderSelection?.providerId === 'ctrader') return
     const cacheKey = selectedSymbol + ':' + timeframe
     const cached = candleCacheRef.current[cacheKey] ?? []
     if (cached.length > 1) {
@@ -365,7 +367,7 @@ const TerminalContent: React.FC = () => {
     } else {
       setLiveCandles([])
     }
-  }, [selectedSymbol, timeframe])
+  }, [selectedSymbol, timeframe, activeProviderSelection?.providerId])
 
   useEffect(() => {
     let cancelled = false
@@ -580,6 +582,41 @@ const TerminalContent: React.FC = () => {
     setCurrentPrice(livePrice)
     setMarketTimestamp(Math.floor(epoch / 1000))
   }, [activeProviderSelection?.providerId, timeframe])
+
+  useEffect(() => {
+    const selection = activeProviderSelection
+    if (selection?.providerId !== 'ctrader' || !selection.connectionId || !selection.accountId) return
+
+    let cancelled = false
+    setLiveCandles([])
+    setLiveMarketActive(false)
+
+    const load = async (): Promise<void> => {
+      try {
+        const candles = await fetchCTraderHistoricalCandles({
+          connectionId: selection.connectionId,
+          accountId: selection.accountId,
+          environment: selection.environment === 'live' ? 'live' : 'demo',
+          symbol: selectedSymbol,
+          timeframe,
+          count: 300,
+        })
+        if (cancelled || !candles.length) return
+        candleCacheRef.current[selectedSymbol + ':' + timeframe] = candles
+        setLiveCandles(candles)
+        const last = candles[candles.length - 1]
+        if (last) {
+          setCurrentPrice(last.close)
+          setMarketTimestamp(Math.floor(last.time / 1000))
+        }
+      } catch (error) {
+        if (!cancelled) pushStreamToast(error instanceof Error ? error.message : 'cTrader chart history could not be loaded.')
+      }
+    }
+
+    void load()
+    return () => { cancelled = true }
+  }, [activeProviderSelection?.accountId, activeProviderSelection?.connectionId, activeProviderSelection?.environment, activeProviderSelection?.providerId, pushStreamToast, selectedSymbol, timeframe])
 
   useEffect(() => {
     const selection = activeProviderSelection
