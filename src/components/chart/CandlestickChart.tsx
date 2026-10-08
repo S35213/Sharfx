@@ -281,35 +281,9 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     const series = seriesRef.current
     if (!series) return
 
-    // This is deliberately in the same effect as series creation. A mode switch
-    // therefore receives the current candles immediately instead of waiting for
-    // the next timeframe/data update.
-    series.setData(visualData)
-
-    if (chartMode === 'wave') {
-      series.applyOptions({ color: colors.up, lineColor: colors.up })
-    } else if (chartMode === 'area') {
-      series.applyOptions({ lineColor: colors.up, topColor: colors.up + '66', bottomColor: colors.up + '05' })
-    } else if (chartMode === 'bars') {
-      series.applyOptions({
-        upColor: colors.up,
-        downColor: colors.down,
-        priceFormat: { type: 'price', precision, minMove: priceStep },
-      })
-    } else {
-      series.applyOptions({
-        upColor: colors.up,
-        downColor: colors.down,
-        borderUpColor: colors.up,
-        borderDownColor: colors.down,
-        wickUpColor: colors.up,
-        wickDownColor: colors.down,
-        priceFormat: { type: 'price', precision, minMove: priceStep },
-      })
-    }
-
     const lastIndex = visualData.length - 1
-    const lastTime = Number(visualData[lastIndex].time)
+    const lastPoint = visualData[lastIndex]
+    const lastTime = Number(lastPoint.time)
     const firstTime = Number(visualData[0].time)
     const symbolChanged = previousSymbolRef.current !== symbol
     const timeframeChanged = previousTimeframeRef.current !== timeframe
@@ -319,28 +293,31 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     const previousDataLength = renderedDataLengthRef.current
     const isModeSwitch = currentConfig?.chartMode !== chartMode || currentConfig?.pipSize !== pipSize
     const structureChanged =
+      needsNewSeries ||
       previousDataLength === 0 ||
       firstTime !== renderedFirstTimeRef.current ||
       (previousLastTime !== null && lastTime < previousLastTime) ||
       visualData.length < previousDataLength
     const rangeNeedsReset = !viewInitializedRef.current || symbolChanged || timeframeChanged || replayWindowReset
     const visibleTimeRange = chart.timeScale().getVisibleRange()
-    const visibleRange = chart.timeScale().getVisibleLogicalRange()
-    const wasFollowingRealtime =
-      !chartInteractionRef.current &&
-      (followRealtimeRef.current ||
-        !visibleRange ||
-        (previousLastIndex >= 0 && visibleRange.to >= previousLastIndex - 1))
+    const wasFollowingRealtime = followRealtimeRef.current && !chartInteractionRef.current
     const isNewBar = previousLastTime !== null && lastTime > previousLastTime
 
-    // Updating the entire series on every tick makes Lightweight Charts reconsider
-    // its logical range. That is exactly what causes an historical view to snap
-    // back toward the newest candles. Keep setData for real dataset changes and
-    // use update() for normal live ticks/new bars.
-    if (!structureChanged && !rangeNeedsReset && !isModeSwitch) {
-      series.update(visualData[visualData.length - 1])
-    } else {
+    /*
+     * IMPORTANT:
+     * Do not call setData() for every quote tick. Lightweight Charts can rebuild
+     * the logical range when the whole dataset is replaced, which is what made
+     * historical scrolling jump back to the newest candle and made the viewport
+     * appear to zoom/flicker.
+     *
+     * Normal live candles use update(). setData() is reserved for a real dataset
+     * replacement: first render, timeframe/symbol changes, mode changes, or when
+     * the rolling history window actually shifts.
+     */
+    if (structureChanged || rangeNeedsReset || isModeSwitch) {
       series.setData(visualData)
+    } else {
+      series.update(lastPoint)
     }
 
     if (rangeNeedsReset) {
@@ -349,6 +326,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       const plotWidth = Math.max(280, containerWidth - (containerWidth < 640 ? 82 : 96))
       const targetBars = visibleBarsForTimeframe(timeframe, containerWidth)
       const initialBarSpacing = Math.max(5, Math.min(20, plotWidth / Math.max(1, targetBars)))
+
       chart.timeScale().applyOptions({
         barSpacing: initialBarSpacing,
         minBarSpacing: 1,
@@ -360,11 +338,25 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       series.priceScale().applyOptions({ autoScale: true, scaleMargins: { top: 0.08, bottom: 0.08 } })
       followRealtimeRef.current = true
     } else {
-      // When the user has deliberately scrolled back in history, preserve the
-      // exact historical time window even if a live tick updates the series.
+      /*
+       * When the user is looking at history, preserve the exact time window
+       * across a data-window replacement. We restore by time rather than logical
+       * index so older bars do not shift the user's viewport.
+       */
       if (!wasFollowingRealtime && visibleTimeRange && (structureChanged || isModeSwitch)) {
-        try { chart.timeScale().setVisibleRange(visibleTimeRange) } catch { /* keep current broker view */ }
+        try {
+          chart.timeScale().setVisibleRange(visibleTimeRange)
+        } catch {
+          /* The broker may have replaced a range that is no longer available. */
+        }
+        followRealtimeRef.current = false
       }
+
+      /*
+       * Only a user who is already following the live edge should be advanced
+       * when a new candle is created. A trader browsing history must never be
+       * dragged to the front by a live candle.
+       */
       if (isNewBar && wasFollowingRealtime) {
         chart.timeScale().scrollToRealTime()
         followRealtimeRef.current = true
@@ -378,7 +370,47 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     renderedFirstTimeRef.current = firstTime
     renderedLastTimeRef.current = lastTime
     renderedDataLengthRef.current = visualData.length
-  }, [visualData, symbol, timeframe, chartMode, pipSize, candleTheme])
+  }, [visualData, symbol, timeframe, chartMode, pipSize])
+
+  /*
+   * Presentation changes are separate from data updates. This prevents quote
+   * ticks from repeatedly re-applying series options while the user is trying
+   * to scroll or zoom, which is another source of visual jitter.
+   */
+  useEffect(() => {
+    const series = seriesRef.current
+    if (!series) return
+
+    const colors = candleColors[candleTheme]
+    if (chartMode === 'wave') {
+      series.applyOptions({
+        color: colors.up,
+        lineColor: colors.up,
+      })
+    } else if (chartMode === 'area') {
+      series.applyOptions({
+        lineColor: colors.up,
+        topColor: colors.up + '66',
+        bottomColor: colors.up + '05',
+      })
+    } else if (chartMode === 'bars') {
+      series.applyOptions({
+        upColor: colors.up,
+        downColor: colors.down,
+        priceFormat: { type: 'price', precision: pricePrecision, minMove: priceStep },
+      })
+    } else {
+      series.applyOptions({
+        upColor: colors.up,
+        downColor: colors.down,
+        borderUpColor: colors.up,
+        borderDownColor: colors.down,
+        wickUpColor: colors.up,
+        wickDownColor: colors.down,
+        priceFormat: { type: 'price', precision: pricePrecision, minMove: priceStep },
+      })
+    }
+  }, [chartMode, candleTheme, pipSize])
   useEffect(() => {
     const chart = chartRef.current
     if (!chart || !chartData.length || !timeframe) {
