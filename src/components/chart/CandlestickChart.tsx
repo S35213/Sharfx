@@ -183,12 +183,23 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       if (width > 0 && h > 0) chart.applyOptions({ width, height: Math.max(280, h) })
     })
     const onVisibleRangeChange = (range: { from: number; to: number } | null): void => {
-      if (!range) {
+      if (!range) return
+
+      const lastIndex = latestIndexRef.current
+      if (lastIndex < 0) {
         followRealtimeRef.current = true
         return
       }
-      const lastIndex = latestIndexRef.current
-      followRealtimeRef.current = lastIndex < 0 || range.to >= lastIndex - 1
+
+      // Never let a transient range callback re-enable realtime-follow while
+      // the user is actively dragging/zooming. Pointer-up evaluates the final
+      // range once the gesture is complete.
+      if (chartInteractionRef.current) {
+        if (range.to < lastIndex - 1) followRealtimeRef.current = false
+        return
+      }
+
+      followRealtimeRef.current = range.to >= lastIndex - 1
     }
     chart.timeScale().subscribeVisibleLogicalRangeChange(onVisibleRangeChange)
     ro.observe(el)
@@ -711,6 +722,18 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
 
   const handleChartPointerUp = (event: React.PointerEvent<HTMLDivElement>): void => {
     chartInteractionRef.current = false
+
+    // Capture the range after a drag/pinch. This prevents the next live tick
+    // from deciding to follow realtime unless the user actually finished at
+    // the newest candles.
+    if (toolMode === 'cursor' || toolMode === 'crosshair') {
+      const range = chartRef.current?.timeScale().getVisibleLogicalRange()
+      const lastIndex = latestIndexRef.current
+      if (range && lastIndex >= 0) {
+        followRealtimeRef.current = range.to >= lastIndex - 1
+      }
+    }
+
     if (!chartFullscreen || (toolMode !== 'cursor' && toolMode !== 'crosshair')) return
     if (event.pointerType === 'mouse' && event.button !== 0) return
     const target = event.target
