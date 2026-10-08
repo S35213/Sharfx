@@ -43,8 +43,13 @@ export const buildAIChartAnnotations = (symbol: string, candles: OHLCV[]): Chart
 
   add('support', supportResistance.nearestSupport, 'Support', '#22D3A5', 2)
   add('resistance', supportResistance.nearestResistance, 'Resistance', '#FF5C75', 2)
-  add('liquidity-buy', liquidity.nearestBuySide?.referencePrice ?? null, 'Buy-side liquidity', '#5CA8FF', 1)
-  add('liquidity-sell', liquidity.nearestSellSide?.referencePrice ?? null, 'Sell-side liquidity', '#5CA8FF', 1)
+  const latestSwingHigh = swings.highs.length ? swings.highs[swings.highs.length - 1].price : null
+  const latestSwingLow = swings.lows.length ? swings.lows[swings.lows.length - 1].price : null
+  const buyLiquidity = liquidity.nearestBuySide?.referencePrice ?? latestSwingHigh
+  const sellLiquidity = liquidity.nearestSellSide?.referencePrice ?? latestSwingLow
+
+  add('liquidity-buy', buyLiquidity, 'Buy-side liquidity', '#5CA8FF', 1)
+  add('liquidity-sell', sellLiquidity, 'Sell-side liquidity', '#5CA8FF', 1)
 
   const setup = analyzeCurrentSetup(symbol, candles)
   const preferred = setup?.preferredSetup ?? null
