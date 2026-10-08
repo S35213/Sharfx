@@ -99,7 +99,6 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const chartDataSourceRef = useRef<OHLCV[]>(data)
   useEffect(() => { chartDataSourceRef.current = data }, [data])
   const [timelineMarks, setTimelineMarks] = useState<Array<{ x: number; label: string }>>([])
-  const displayedStructuralAnnotationsRef = useRef<ChartAnnotation[]>([])
   const priceLinesRef = useRef<Map<string, IPriceLine>>(new Map())
   const priceLinesSeriesRef = useRef<ShafxSeries | null>(null)
   const marketBidLineRef = useRef<IPriceLine | null>(null)
