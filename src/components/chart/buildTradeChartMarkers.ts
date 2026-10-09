@@ -1,5 +1,5 @@
 import type { SeriesMarker, UTCTimestamp } from 'lightweight-charts'
-import type { OHLCV, Timeframe } from '../../types'
+import type { Timeframe } from '../../types'
 
 export interface TradeChartMarker {
   id: string
@@ -37,24 +37,32 @@ const candleBucket = (timestampSeconds: number, timeframe: Timeframe): number =>
   return Math.floor(date.getTime() / 1000)
 }
 
-const candleAtTradeTime = (timestampText: string | undefined, candles: readonly OHLCV[], timeframe: Timeframe): number | null => {
+interface CandleTimeLike { time: unknown }
+
+const candleAtTradeTime = (timestampText: string | undefined, candles: readonly CandleTimeLike[], timeframe: Timeframe): number | null => {
   if (!timestampText || candles.length === 0) return null
   const timestampMs = Date.parse(timestampText)
   if (!Number.isFinite(timestampMs)) return null
 
   const timestamp = Math.floor(timestampMs / 1000)
   const bucket = candleBucket(timestamp, timeframe)
-  const exact = candles.find((candle) => candle.time === bucket)
-  if (exact) return exact.time
+  const candleTimes = candles.map((candle) => Number(candle.time)).filter(Number.isFinite)
+  const exact = candleTimes.find((candleTime) => candleTime === bucket)
+  if (exact !== undefined) return exact
 
   // Only associate a trade with a candle if the timestamp lies inside that
   // candle's timeframe interval. Do not pin markers to an unrelated candle
   // when broker history genuinely has a missing bar.
-  const previous = candles.find((candle, index) => {
-    const next = candles[index + 1]
-    return candle.time <= timestamp && (next ? timestamp < next.time : timestamp < candle.time + timeframeSeconds[timeframe])
-  })
-  return previous && timestamp < previous.time + timeframeSeconds[timeframe] ? previous.time : null
+  for (let index = 0; index < candleTimes.length; index += 1) {
+    const candleTime = candleTimes[index]
+    const nextTime = candleTimes[index + 1]
+    const isInsideCandle = candleTime <= timestamp &&
+      (nextTime !== undefined ? timestamp < nextTime : timestamp < candleTime + timeframeSeconds[timeframe])
+    if (isInsideCandle) {
+      return timestamp < candleTime + timeframeSeconds[timeframe] ? candleTime : null
+    }
+  }
+  return null
 }
 
 interface MarkerGroup {
@@ -71,7 +79,7 @@ interface MarkerGroup {
  * lines, so markers add time context without pretending to be exact price levels.
  */
 export const buildTradeChartMarkers = (
-  candles: readonly OHLCV[],
+  candles: readonly CandleTimeLike[],
   trades: readonly TradeChartMarker[],
   timeframe: Timeframe,
 ): SeriesMarker<UTCTimestamp>[] => {
