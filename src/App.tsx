@@ -892,13 +892,17 @@ const TerminalContent: React.FC = () => {
     return lines
   }, [selectedOpenPosition])
 
-  const combinedTradeLines = useMemo(
-    () => [
-      ...tradeLines.filter((line) => !brokerPositionTradeLines.some((broker) => broker.id === line.id)),
+  const combinedTradeLines = useMemo(() => {
+    const draftLevelIds = new Set(['shafx-cfd-sl', 'shafx-cfd-tp', 'plan-sl', 'plan-tp'])
+    const hasOpenPositionForChart = Boolean(selectedOpenPosition)
+    return [
+      ...tradeLines.filter((line) =>
+        !(hasOpenPositionForChart && draftLevelIds.has(line.id)) &&
+        !brokerPositionTradeLines.some((broker) => broker.id === line.id),
+      ),
       ...brokerPositionTradeLines,
-    ],
-    [brokerPositionTradeLines, tradeLines],
-  )
+    ]
+  }, [brokerPositionTradeLines, selectedOpenPosition, tradeLines])
 
   // Deriv public market data requires no authenticated account. Keep chart startup
   // independent from the slower OAuth/account synchronization path.
