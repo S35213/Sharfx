@@ -288,3 +288,125 @@ input::placeholder { color: #667285; }
   .shafx-terminal-root .shafx-watchlist-panel { width: clamp(210px, 18vw, 240px); }
   .shafx-terminal-root .shafx-workspace-panel { width: clamp(300px, 23vw, 360px); }
 }
+
+
+/* SHAFX market levels: compact supply/demand ribbons and right-edge trade tags. */
+.shafx-market-zone-band,
+.shafx-trade-level-segment {
+  pointer-events: none;
+  will-change: top, height;
+}
+.shafx-chart-overlay-tag {
+  max-width: 34%;
+  min-height: 20px;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  backdrop-filter: blur(10px);
+}
+.shafx-market-zone-band {
+  min-height: 10px;
+  opacity: 1;
+  background-clip: padding-box;
+}
+@media (max-width: 639px) {
+  .shafx-market-zone-band { left: 42% !important; right: 82px !important; }
+  .shafx-trade-level-segment { left: 30% !important; right: 82px !important; }
+  .shafx-chart-overlay-tag { right: 84px !important; max-width: 45% !important; padding: 5px 6px; }
+}
+@media (min-width: 640px) and (max-width: 999px) {
+  .shafx-market-zone-band { left: 55% !important; right: 96px !important; }
+  .shafx-trade-level-segment { left: 42% !important; right: 96px !important; }
+  .shafx-chart-overlay-tag { right: 98px !important; max-width: 38% !important; }
+}
+
+/* Laptop-first workstation proportions: one clean chart center, usable side rails. */
+@media (min-width: 1000px) {
+  .shafx-terminal-root {
+    min-height: 0 !important;
+    height: 100svh !important;
+    max-height: 100svh;
+    overflow: hidden;
+  }
+  .shafx-terminal-root > main {
+    min-height: 0;
+    height: 0;
+  }
+  .shafx-terminal-root .shafx-market-section {
+    min-width: 0;
+    flex: 1 1 0%;
+  }
+  .shafx-terminal-root .shafx-chart-stage {
+    min-width: 0;
+    min-height: 0 !important;
+    padding: 8px;
+  }
+  .shafx-terminal-root .shafx-chart-stage > .shafx-chart-shell {
+    min-height: 0 !important;
+    height: 100% !important;
+    border-radius: 10px;
+    border: 1px solid #202A38;
+    background: #070A0F;
+  }
+  .shafx-terminal-root .shafx-watchlist-panel {
+    width: 220px;
+    min-width: 205px;
+    max-width: 230px;
+  }
+  .shafx-terminal-root .shafx-desktop-right-panel {
+    width: clamp(300px, 23vw, 350px);
+    min-width: 300px;
+    max-width: 350px;
+  }
+  .shafx-terminal-root .shafx-right-panel-header {
+    background: #0C1119;
+  }
+  .shafx-terminal-root .shafx-right-panel-content {
+    scrollbar-gutter: stable;
+  }
+  .shafx-terminal-root .shafx-trades-dock {
+    height: clamp(132px, 18svh, 178px);
+    padding: 8px;
+  }
+  .shafx-terminal-root .shafx-timeframe-bar button {
+    font-size: 10px;
+    min-width: 38px;
+  }
+  .shafx-terminal-root .shafx-market-header {
+    min-height: 46px;
+  }
+  .shafx-terminal-root > footer {
+    flex-shrink: 0;
+  }
+}
+@media (min-width: 1000px) and (max-width: 1179px) {
+  .shafx-terminal-root .shafx-watchlist-panel {
+    display: none !important;
+  }
+  .shafx-terminal-root .shafx-desktop-right-panel {
+    width: 294px;
+    min-width: 294px;
+    max-width: 294px;
+  }
+  .shafx-terminal-root .shafx-trades-dock {
+    height: 126px;
+  }
+}
+@media (min-width: 1180px) and (max-width: 1399px) {
+  .shafx-terminal-root .shafx-watchlist-panel {
+    width: 205px;
+    min-width: 205px;
+    max-width: 205px;
+  }
+  .shafx-terminal-root .shafx-desktop-right-panel {
+    width: 310px;
+    min-width: 300px;
+    max-width: 310px;
+  }
+}
+@media (min-width: 1000px) and (max-height: 760px) {
+  .shafx-terminal-root .shafx-market-header { min-height: 40px; }
+  .shafx-terminal-root .shafx-timeframe-bar { min-height: 38px; }
+  .shafx-terminal-root .shafx-right-panel-content { padding: 10px; }
+  .shafx-terminal-root .shafx-trades-dock { height: clamp(108px, 15svh, 132px); }
+  .shafx-terminal-root > footer { height: 24px; }
+}
