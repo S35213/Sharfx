@@ -40,7 +40,9 @@ interface StreamState {
 }
 
 const streams = new Map<string, StreamState>()
-const POLL_INTERVAL_MS = 350
+// Check the persistent server-side cTrader spot stream frequently so the chart
+// reflects broker ticks promptly. In-flight requests are still deduplicated.
+const POLL_INTERVAL_MS = 150
 
 const streamKey = ({ connectionId, accountId, environment, symbol }: SubscribeArgs): string =>
   [connectionId, accountId, environment, symbol.toUpperCase()].join(':')
@@ -221,6 +223,42 @@ export const applyCTraderQuoteToCandles = (
     ...current,
     { time: quoteBucket, open: bidPrice, high: bidPrice, low: bidPrice, close: bidPrice },
   ]).slice(-1000)
+}
+
+
+/**
+ * Merge broker history with any quote-updated candles received while the history
+ * request was in flight. Historical open prices remain authoritative; live ticks
+ * can extend the current candle's range and own its latest close. Newer live
+ * buckets are kept instead of being overwritten by an older history response.
+ */
+export const mergeCTraderHistoricalAndLiveCandles = (
+  historical: readonly OHLCV[],
+  live: readonly OHLCV[],
+): OHLCV[] => {
+  const base = normalizeCTraderHistoricalCandles(historical)
+  const current = normalizeCTraderHistoricalCandles(live)
+  const merged = new Map<number, OHLCV>(base.map((candle) => [candle.time, candle]))
+  const latestHistoricalTime = base[base.length - 1]?.time ?? Number.NEGATIVE_INFINITY
+
+  for (const liveCandle of current) {
+    const historicalCandle = merged.get(liveCandle.time)
+    if (historicalCandle) {
+      merged.set(liveCandle.time, {
+        ...historicalCandle,
+        high: Math.max(historicalCandle.high, liveCandle.high, liveCandle.close),
+        low: Math.min(historicalCandle.low, liveCandle.low, liveCandle.close),
+        close: liveCandle.close,
+      })
+      continue
+    }
+
+    // Do not resurrect old, missing cache bars over the broker's refreshed
+    // history. Only preserve quote-created candles that are newer than it.
+    if (liveCandle.time > latestHistoricalTime) merged.set(liveCandle.time, liveCandle)
+  }
+
+  return [...merged.values()].sort((a, b) => a.time - b.time).slice(-1000)
 }
 
 export const cTraderQuoteBucket = (epochMs: number, timeframe: Timeframe): number => {
