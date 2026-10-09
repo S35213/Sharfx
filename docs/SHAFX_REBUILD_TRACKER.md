@@ -5,6 +5,16 @@
 > **Rule:** A checkbox is marked `[x]` only after the corresponding action is actually verified. A deployment being "started" is never recorded as passed.
 
 
+## Chart clutter and HP/laptop desktop redesign — 2026-10-09
+
+- **Scope:** only `sharfx-deriv-render` and `test/rebuild-deriv-native-manual-20260930`. Do not touch production/main, sibling Render projects, provider settings, or order execution.
+- **Before:** support/resistance/liquidity each rendered as long full-width lines, while active Entry/SL/TP used full-width price lines too. Fixed side panels could consume too much of an HP laptop's chart width.
+- **After:** `src/components/chart/CandlestickChart.tsx` paints structural levels as faint right-side price ribbons, merges levels within 14px into one labeled zone, and paints trade entry/stop/target as short segments with `ENTRY` / `SL` / `TP` tags. Real BUY/ASK and SELL/BID remain the only intentional full-width market quote lines; drawing/alert controls are unchanged. `src/App.tsx` and `src/index.css` tune desktop to fill the browser height, give the chart more horizontal room at smaller desktop widths, improve timeframe/header readability, and compress the bottom trades dock on short screens.
+- **Code:** `d9d5493d84bf786229e481f41df6038b2df0f855`; Render deploy `dep-db4ili8ae00c73eepqng` verified **LIVE** after correcting compile-time overlay union typing.
+- **Automated checks:** run `37969797680`: build/static-server/lint passed. 311 tests passed and 2 failed of 313. Failures are the same pre-existing cTrader order-status expectation and CFD quote-currency-conversion expectation. cTrader live/history suite: 12/12 pass.
+- **Visual verification:** pending until the user saves a SHAFX-authenticated TinyFish browser profile. The last profile check returned no saved sign-in, so the authenticated terminal cannot yet be inspected at HP/laptop dimensions. Must run actual desktop and responsive browser checks before calling the redesign visually accepted.
+- **Safety:** no trade placed/confirmed; credentials and provider/account settings were untouched.
+
 ## Candle-load continuity and responsive cTrader quotes — 2026-10-09
 
 - **Scope:** only `sharfx-deriv-render` and `test/rebuild-deriv-native-manual-20260930`. No production/main, sibling Render projects, credentials, or order/execution changes.
