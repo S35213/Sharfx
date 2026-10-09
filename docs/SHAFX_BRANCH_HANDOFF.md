@@ -338,4 +338,12 @@ Repair committed on the experimental branch:
 - Reject stale quote callbacks after a symbol/timeframe switch and prevent older buckets from being appended to the right edge.
 - Add focused regression tests for milliseconds-to-seconds normalization, already-normalized timestamps, duplicate bars, and all timeframe bucket units.
 
-Verification state: these source changes are awaiting branch CI and a fresh Render deployment check. Authenticated visual timeframe testing is still required before saying the chart is user-visibly fixed. TinyFish can currently see only the sign-in page; do not merge to `main` or deploy Cloudflare production.
+Verification results on commit `91bc9a6419f2912f816210bcf45cdfd869172039` (2026-10-09):
+- `npm run build`: passed in GitHub Actions and on Render.
+- `npm run lint`: passed.
+- `src/data/ctrader/CTraderLiveQuote.test.ts`: 3/3 regression tests passed.
+- Render test smoke: passed. Render deployment `dep-db4ate9bgiqc738numk0` is live on `sharfx-deriv-render`.
+- Full `npm test`: 300 passed, 2 failed across 73 test files. The remaining failures are the previously tracked, unrelated baseline failures: cTrader order-status normalization and CFD pip-value conversion when quote/account currencies differ. Do not change unrelated order execution or risk-engine logic in this chart fix.
+- Authenticated visual timeframe testing remains blocked because TinyFish has no saved SHAFX sign-in and the public route shows only the login/registration page. Do not claim the user-visible chart is fixed until the signed-in chart is checked across M1/M5/M15/M30/H1/H4/D1/W1, with candle spacing and structural/trade-level persistence verified.
+
+Do not merge to `main` or deploy Cloudflare production.
