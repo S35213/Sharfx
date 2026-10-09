@@ -472,11 +472,11 @@ export const CTraderManualTicket: React.FC<Props> = ({
         <div className="mt-3 grid grid-cols-2 gap-1.5">
           <button type="button" data-market-direction={marketDirection} data-button-tone={buyButtonDirection} aria-label="Select BUY at Ask price" aria-pressed={side === 'BUY'} onClick={() => chooseSide('BUY')} className={'shafx-trade-side-button min-h-14 border px-3 py-2 text-left text-shafx-text transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ' + tradeSideButtonTone(buyButtonDirection) + (side === 'BUY' ? ' ring-2 ring-white/90 ring-offset-1 ring-offset-[#080D13]' : ' hover:brightness-110')}>
             <span className="flex items-center justify-between gap-1 text-[10px] font-bold"><span><ArrowUpRight className="mr-1 inline h-3.5 w-3.5" />BUY</span><span className="text-[7px] uppercase tracking-[0.12em]">ASK</span></span>
-            <span className="mt-1 block rounded-md px-1 py-0.5 font-mono text-[10px] font-semibold tabular-nums text-shafx-text">{formatPrice(Number(quote?.ask ?? askPrice ?? currentPrice), effectiveSymbol.pricePrecision)}</span>
+            <span style={{ color: '#E7EAF0' }} className="mt-1 block rounded-md px-1 py-0.5 font-mono text-[10px] font-semibold tabular-nums">{formatPrice(Number(quote?.ask ?? askPrice ?? currentPrice), effectiveSymbol.pricePrecision)}</span>
           </button>
           <button type="button" data-market-direction={marketDirection} data-button-tone={sellButtonDirection} aria-label="Select SELL at Bid price" aria-pressed={side === 'SELL'} onClick={() => chooseSide('SELL')} className={'shafx-trade-side-button min-h-14 border px-3 py-2 text-left text-shafx-text transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ' + tradeSideButtonTone(sellButtonDirection) + (side === 'SELL' ? ' ring-2 ring-white/90 ring-offset-1 ring-offset-[#080D13]' : ' hover:brightness-110')}>
             <span className="flex items-center justify-between gap-1 text-[10px] font-bold"><span><ArrowDownRight className="mr-1 inline h-3.5 w-3.5" />SELL</span><span className="text-[7px] uppercase tracking-[0.12em]">BID</span></span>
-            <span className="mt-1 block rounded-md px-1 py-0.5 font-mono text-[10px] font-semibold tabular-nums text-shafx-text">{formatPrice(Number(quote?.bid ?? bidPrice ?? currentPrice), effectiveSymbol.pricePrecision)}</span>
+            <span style={{ color: '#E7EAF0' }} className="mt-1 block rounded-md px-1 py-0.5 font-mono text-[10px] font-semibold tabular-nums">{formatPrice(Number(quote?.bid ?? bidPrice ?? currentPrice), effectiveSymbol.pricePrecision)}</span>
           </button>
         </div>
 

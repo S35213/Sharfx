@@ -719,7 +719,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
           y: series.priceToCoordinate(line.price),
         }))
         .filter((line): line is typeof line & { y: number } =>
-          line.y !== null && Number.isFinite(line.y) && line.y >= minY && line.y <= maxY,
+          line.y !== null && Number.isFinite(line.y) && line.y >= 0 && line.y <= host.clientHeight,
         )
         .sort((a, b) => a.y - b.y || a.id.localeCompare(b.id))
 
@@ -775,7 +775,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         const visible = entries
           .map((entry) => ({ id: entry.id, y: liveSeries.priceToCoordinate(entry.price) }))
           .filter((entry): entry is typeof entry & { y: number } =>
-            entry.y !== null && Number.isFinite(entry.y) && entry.y >= currentMinY && entry.y <= currentMaxY,
+            entry.y !== null && Number.isFinite(entry.y) && entry.y >= 0 && entry.y <= liveHost.clientHeight,
           )
           .sort((a, b) => a.y - b.y)
         const currentPositions = visible.map((entry) => Math.max(currentMinY, Math.min(currentMaxY, entry.y)))
