@@ -5,6 +5,7 @@ import type { CandleTheme, ChartMode } from '../../app/chartSettings'
 import { TIMEFRAMES, type OHLCV, type Timeframe } from '../../types'
 import { buildTradeChartMarkers, type TradeChartMarker } from './buildTradeChartMarkers'
 import { isPriceLevelOccludedByQuote } from './priceLineVisibility'
+import { resolvePriceLabelY } from './priceLineLabelLayout'
 
 export interface ChartAnnotation { id: string; price: number; label: string; color: string; lineWidth?: 1 | 2 | 3 | 4 }
 export type ChartToolMode = 'cursor' | 'crosshair' | 'level' | 'measure' | 'alert'
@@ -716,11 +717,10 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
           price: line.price,
           color: line.color,
           name: shortTitle(line),
-          y: series.priceToCoordinate(line.price),
+          // Even if the real line is just outside the current price scale,
+          // keep its named price tag visible at the nearest chart edge.
+          y: resolvePriceLabelY(series.priceToCoordinate(line.price), line.price, lastClose, minY, maxY),
         }))
-        .filter((line): line is typeof line & { y: number } =>
-          line.y !== null && Number.isFinite(line.y) && line.y >= 0 && line.y <= host.clientHeight,
-        )
         .sort((a, b) => a.y - b.y || a.id.localeCompare(b.id))
 
       const rowGap = 19
@@ -773,10 +773,10 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         const currentMinY = 42
         const currentMaxY = Math.max(currentMinY, liveHost.clientHeight - 40)
         const visible = entries
-          .map((entry) => ({ id: entry.id, y: liveSeries.priceToCoordinate(entry.price) }))
-          .filter((entry): entry is typeof entry & { y: number } =>
-            entry.y !== null && Number.isFinite(entry.y) && entry.y >= 0 && entry.y <= liveHost.clientHeight,
-          )
+          .map((entry) => ({
+            id: entry.id,
+            y: resolvePriceLabelY(liveSeries.priceToCoordinate(entry.price), entry.price, lastClose, currentMinY, currentMaxY),
+          }))
           .sort((a, b) => a.y - b.y)
         const currentPositions = visible.map((entry) => Math.max(currentMinY, Math.min(currentMaxY, entry.y)))
         for (let index = 1; index < currentPositions.length; index += 1) {
@@ -799,7 +799,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       }
       lineLabelSyncRef.current()
     }
-  }, [annotations, armedAlerts, askPrice, bidPrice, chartMode, pipSize, showPriceLabels, tradeLines, userLevels])
+  }, [annotations, armedAlerts, askPrice, bidPrice, chartMode, lastClose, pipSize, showPriceLabels, tradeLines, userLevels])
 
   useEffect(() => {
     const chart = chartRef.current
