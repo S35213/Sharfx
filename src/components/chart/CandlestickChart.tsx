@@ -1056,7 +1056,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     </div>}
 
     <div className="pointer-events-none absolute bottom-0 left-0 right-[82px] z-30 h-8 border-t border-shafx-border/70 bg-shafx-bg/95 sm:right-[96px]">
-      {timelineMarks.map((mark, index) => (
+      {timelineMarks.map((mark) => (
         <span
           key={mark.time}
           className="absolute top-1 -translate-x-1/2 whitespace-nowrap font-mono text-[8px] tabular text-shafx-textMuted sm:text-[9px]"
