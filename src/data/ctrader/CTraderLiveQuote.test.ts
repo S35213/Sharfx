@@ -6,6 +6,7 @@ import {
   cTraderQuoteBucket,
   isCTraderQuoteBucketCurrent,
   normalizeCTraderHistoricalCandles,
+  shouldRepairCTraderHistoryForGap,
 } from './CTraderLiveQuote'
 
 const candle = (time: number, open = 1.1, high = 1.12, low = 1.09, close = 1.11) => ({
@@ -170,5 +171,48 @@ describe('cTrader chart timestamps', () => {
     expect(mondayUtc.getUTCDay()).toBe(1)
     expect(mondayUtc.getUTCHours()).toBe(0)
     expect(mondayUtc.getUTCMinutes()).toBe(0)
+  })
+})
+
+
+describe('cTrader history gap recovery', () => {
+  it('requests broker history when live quotes skip one or more candle buckets', () => {
+    const lastM1 = 1_791_547_200
+    expect(shouldRepairCTraderHistoryForGap(lastM1, lastM1 + 60, 'M1')).toBe(false)
+    expect(shouldRepairCTraderHistoryForGap(lastM1, lastM1 + 120, 'M1')).toBe(true)
+    expect(shouldRepairCTraderHistoryForGap(lastM1, lastM1 + 300, 'M1')).toBe(true)
+  })
+
+  it('uses the selected timeframe duration when detecting a skipped bucket', () => {
+    const last = 1_791_547_200
+    expect(shouldRepairCTraderHistoryForGap(last, last + 300, 'M5')).toBe(false)
+    expect(shouldRepairCTraderHistoryForGap(last, last + 600, 'M5')).toBe(true)
+    expect(shouldRepairCTraderHistoryForGap(last, last + 3600, 'H1')).toBe(false)
+    expect(shouldRepairCTraderHistoryForGap(last, last + 7200, 'H1')).toBe(true)
+  })
+
+  it('does not infer or synthesize missing candle OHLC values', () => {
+    const last = 1_791_547_200
+    const sparse = [candle(last, 1.11980, 1.11990, 1.11970, 1.11980)]
+    const next = applyCTraderQuoteToCandles(sparse, last + 120, 1.12000)
+    expect(next.map((item) => item.time)).toEqual([last, last + 120])
+    expect(next.some((item) => item.time === last + 60)).toBe(false)
+    expect(shouldRepairCTraderHistoryForGap(last, last + 120, 'M1')).toBe(true)
+  })
+
+  it('restores skipped bars only when the broker history response contains them', () => {
+    const firstTime = 1_791_547_200
+    const historical = [
+      candle(firstTime, 1.11970, 1.11990, 1.11960, 1.11980),
+      candle(firstTime + 60, 1.11980, 1.12000, 1.11970, 1.11995),
+      candle(firstTime + 120, 1.11995, 1.12010, 1.11990, 1.12000),
+    ]
+    const live = [
+      candle(firstTime, 1.11970, 1.11990, 1.11960, 1.11980),
+      candle(firstTime + 120, 1.11995, 1.12010, 1.11990, 1.12000),
+    ]
+    const repaired = mergeCTraderHistoricalAndLiveCandles(historical, live)
+    expect(repaired.map((item) => item.time)).toEqual([firstTime, firstTime + 60, firstTime + 120])
+    expect(repaired[1]).toMatchObject({ open: 1.11980, close: 1.11995 })
   })
 })
