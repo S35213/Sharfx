@@ -288,3 +288,10 @@ Patch in this checkpoint:
 - Add unit tests for out-of-order candles, repeated forming candles, and malformed market data.
 
 Verification still required: `npm run build`, `npm run lint`, `npm test`, live Render deployment/health, and an authenticated browser pass across M1/M5/M15/M30/H1/H4/D1/W1 at laptop resolution. Anonymous TinyFish browser access reaches only the login page and is not chart verification.
+
+
+### 2026-10-09 — duplicate chart-line reconciler root cause
+
+A deeper source pass found two chart effects reconciling the same shared `priceLinesRef`. The first maintained structural Support/Resistance and liquidity alongside user levels, alerts, and trade levels. The second repeated much of that work but did not add structural annotations to its `desired` set, so its cleanup loop removed the Support/Resistance and liquidity price lines which the first effect had just maintained. This could make those lines disappear on updates and produce unstable overlays.
+
+Correction: removed the redundant second reconciler so one effect now owns the full structural + user + alert + trade line set. The earlier lifecycle/timeframe fixes and this correction are in the experimental branch. Build and automated verification are still pending for the latest combined commit; authenticated visual chart testing remains outstanding.

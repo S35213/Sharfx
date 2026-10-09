@@ -312,3 +312,8 @@ A corrective patch is now on this experimental branch: layout-phase chart initia
 TinyFish confirmed the public Render URL only shows the sign-in page without authentication; it could not test the chart. The existing TinyFish profile has no recorded SHAFX sign-in. Ask the user to authorize a sign-in setup session before performing authenticated browser QA; never request a password in chat.
 
 Continue only on `test/rebuild-deriv-native-manual-20260930` / Render service `sharfx-deriv-render`. Do not merge to `main`, and do not deploy Cloudflare production.
+
+
+### Chart-line cleanup correction — 2026-10-09
+
+The chart component had two effects using the same price-line map and cleanup loop. The first reconciled structural annotations, user levels, alerts and trade levels; the second duplicated user/alert/trade handling but omitted structural annotations from its keep-set and therefore deleted support/resistance and liquidity after they were created. The redundant second reconciler has been removed. Verify the new commit through build/lint/tests and Render deployment, then test authenticated timeframe switches and line persistence before claiming the user-visible issue is fixed.
