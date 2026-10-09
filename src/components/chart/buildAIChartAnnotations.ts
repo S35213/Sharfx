@@ -133,10 +133,11 @@ export const buildStructuralChartAnnotations = (symbol: string, candles: OHLCV[]
     .sort((a, b) => a.price - b.price)[0]?.price ?? null
 
   // Strongly trending or short-history higher-timeframe samples can contain
-  // no confirmed 2-left/2-right pivot at all. In that case derive a conservative
-  // range reference from earlier closed candles (excluding the last two bars so
-  // the level does not hug the currently forming price action).
-  const priorCandles = structuralCandles.slice(0, -1).slice(-48)
+  // no confirmed 2-left/2-right pivot at all. Derive fallback references from
+  // the latest confirmed candle range (the forming live candle is already
+  // excluded above), plus a bounded lookback. This keeps sparse D1/W1 charts
+  // contextual without allowing the live tick to drag levels around.
+  const priorCandles = structuralCandles.slice(-48)
   const fallbackSupportFromRange = priorCandles
     .map((candle) => candle.low)
     .filter((price) => Number.isFinite(price) && price > 0 && price < currentPrice)
