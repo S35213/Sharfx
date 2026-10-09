@@ -1225,7 +1225,20 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
 
   const chartFullscreen = isFullscreen;
 
-  return <div ref={containerRef} onPointerDownCapture={handleChartPointerDown} onPointerMoveCapture={handleChartPointerMove} onPointerUpCapture={handleChartPointerUp} onPointerCancel={handleChartPointerCancel} onPointerDown={placeTool} className={`shafx-chart-shell relative w-full overflow-hidden border border-shafx-border bg-shafx-bg touch-pan-y ${['level', 'alert', 'measure'].includes(toolMode) ? 'cursor-crosshair' : ''} ${chartFullscreen ? 'fixed inset-0 z-[200] h-[100svh] w-screen' : ''}`} style={{ height: chartFullscreen ? '100svh' : height, minHeight: 280 }}>
+  return <div
+    ref={containerRef}
+    data-shafx-chart-symbol={symbol}
+    data-shafx-trade-line-count={tradeLines.length}
+    data-shafx-trade-line-labels={tradeLines.map((line) => line.label).join('|')}
+    data-shafx-trade-line-values={tradeLines.map((line) => line.label + ':' + line.price).join('|')}
+    onPointerDownCapture={handleChartPointerDown}
+    onPointerMoveCapture={handleChartPointerMove}
+    onPointerUpCapture={handleChartPointerUp}
+    onPointerCancel={handleChartPointerCancel}
+    onPointerDown={placeTool}
+    className={`shafx-chart-shell relative w-full overflow-hidden border border-shafx-border bg-shafx-bg touch-pan-y ${['level', 'alert', 'measure'].includes(toolMode) ? 'cursor-crosshair' : ''} ${chartFullscreen ? 'fixed inset-0 z-[200] h-[100svh] w-screen' : ''}`}
+    style={{ height: chartFullscreen ? '100svh' : height, minHeight: 280 }}
+  >
     <div ref={chartHostRef} className="absolute inset-0 z-0" aria-hidden="true" />
     <div ref={lineLabelsHostRef} aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 right-[82px] z-20 overflow-hidden sm:right-[96px]" />
     <div className="pointer-events-none absolute left-3 top-3 z-30 flex items-center gap-2 rounded-xl border border-shafx-border/70 bg-shafx-surface/88 px-2.5 py-1.5 shadow-md backdrop-blur">
