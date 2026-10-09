@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDownRight, ArrowUpRight, CheckCircle2, Clock3, LoaderCircle, ShieldCheck, XCircle } from 'lucide-react'
 import type { SymbolSpec, Timeframe, TradeOrder, TradeSide } from '../../types'
 import type { SetupCandidate } from '../../engine/setup/types'
@@ -8,6 +8,7 @@ import { formatCurrency, formatPrice } from '../../lib/format'
 import type { DerivOrderConnection } from '../../data/deriv/derivTrading'
 import type { ChartAnnotation } from '../chart/CandlestickChart'
 import { subscribeCTraderLiveQuote } from '../../data/ctrader/CTraderLiveQuote'
+import { getQuoteTickDirection, type QuoteTickDirection } from './quoteTickDirection'
 
 interface Props {
   symbol: string
@@ -147,6 +148,9 @@ export const CTraderManualTicket: React.FC<Props> = ({
   const [state, setState] = useState<TicketState>('ready')
   const [error, setError] = useState('')
   const [now, setNow] = useState(0)
+  const previousQuoteRef = useRef<{ bid: number; ask: number } | null>(null)
+  const quoteToneTimerRef = useRef<number | null>(null)
+  const [quoteDirections, setQuoteDirections] = useState<{ bid: QuoteTickDirection; ask: QuoteTickDirection }>({ bid: 'neutral', ask: 'neutral' })
 
   const entryPrice = side === 'BUY'
     ? Number(quote?.ask ?? askPrice ?? currentPrice)
@@ -191,6 +195,31 @@ export const CTraderManualTicket: React.FC<Props> = ({
     const timer = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(timer)
   }, [activePosition?.openTime])
+
+  useEffect(() => {
+    const bid = Number(quote?.bid ?? bidPrice ?? currentPrice)
+    const ask = Number(quote?.ask ?? askPrice ?? currentPrice)
+    const previous = previousQuoteRef.current
+    previousQuoteRef.current = { bid, ask }
+    if (!previous) return
+
+    const nextDirections = {
+      bid: getQuoteTickDirection(bid, previous.bid),
+      ask: getQuoteTickDirection(ask, previous.ask),
+    }
+    if (nextDirections.bid === 'neutral' && nextDirections.ask === 'neutral') return
+
+    setQuoteDirections(nextDirections)
+    if (quoteToneTimerRef.current !== null) window.clearTimeout(quoteToneTimerRef.current)
+    quoteToneTimerRef.current = window.setTimeout(() => {
+      setQuoteDirections({ bid: 'neutral', ask: 'neutral' })
+      quoteToneTimerRef.current = null
+    }, 15000)
+  }, [askPrice, bidPrice, currentPrice, quote?.ask, quote?.bid])
+
+  useEffect(() => () => {
+    if (quoteToneTimerRef.current !== null) window.clearTimeout(quoteToneTimerRef.current)
+  }, [])
 
   useEffect(() => {
     if (!connection?.accountId || !connection.connectionId || providerSelection?.providerId !== 'ctrader') return
@@ -435,8 +464,14 @@ export const CTraderManualTicket: React.FC<Props> = ({
         {aiSetup && <div className="mt-2 flex items-center gap-2 rounded-xl border border-shafx-accent/20 bg-shafx-accent/[0.05] px-2.5 py-2 text-[8px] text-shafx-accent"><CheckCircle2 className="h-3.5 w-3.5" />AI reviewed setup loaded — SHAFX still waits for your manual confirm.</div>}
 
         <div className="mt-3 grid grid-cols-2 gap-1.5">
-          <button type="button" onClick={() => chooseSide('BUY')} className={'min-h-12 border px-3 text-left ' + (side === 'BUY' ? 'border-shafx-success bg-shafx-success/[0.12]' : 'border-shafx-border bg-shafx-surface')}><span className={'text-[10px] font-bold ' + (side === 'BUY' ? 'text-shafx-success' : 'text-shafx-textMuted')}><ArrowUpRight className="mr-1 inline h-3.5 w-3.5" />BUY</span><span className="mt-1 block font-mono text-[8px] text-shafx-textMuted">ASK {quote?.ask ? formatPrice(quote.ask, effectiveSymbol.pricePrecision) : formatPrice(askPrice || currentPrice, effectiveSymbol.pricePrecision)}</span></button>
-          <button type="button" onClick={() => chooseSide('SELL')} className={'min-h-12 border px-3 text-left ' + (side === 'SELL' ? 'border-shafx-danger bg-shafx-danger/[0.12]' : 'border-shafx-border bg-shafx-surface')}><span className={'text-[10px] font-bold ' + (side === 'SELL' ? 'text-shafx-danger' : 'text-shafx-textMuted')}><ArrowDownRight className="mr-1 inline h-3.5 w-3.5" />SELL</span><span className="mt-1 block font-mono text-[8px] text-shafx-textMuted">BID {quote?.bid ? formatPrice(quote.bid, effectiveSymbol.pricePrecision) : formatPrice(bidPrice || currentPrice, effectiveSymbol.pricePrecision)}</span></button>
+          <button type="button" aria-pressed={side === 'BUY'} onClick={() => chooseSide('BUY')} className={'min-h-14 border px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-success ' + (side === 'BUY' ? 'border-shafx-success bg-shafx-success/[0.18] ring-1 ring-shafx-success/35' : 'border-shafx-success/35 bg-shafx-success/[0.05] hover:bg-shafx-success/[0.10]')}>
+            <span className="flex items-center justify-between gap-1 text-[10px] font-bold text-shafx-success"><span><ArrowUpRight className="mr-1 inline h-3.5 w-3.5" />BUY</span><span className="text-[7px] uppercase tracking-[0.12em]">ASK</span></span>
+            <span data-quote-direction={quoteDirections.ask} className={'mt-1 block rounded-md px-1 py-0.5 font-mono text-[10px] font-semibold tabular-nums transition-colors ' + (quoteDirections.ask === 'up' ? 'bg-shafx-success/20 text-shafx-success' : quoteDirections.ask === 'down' ? 'bg-shafx-danger/20 text-shafx-danger' : 'text-shafx-textMuted')}>{formatPrice(Number(quote?.ask ?? askPrice ?? currentPrice), effectiveSymbol.pricePrecision)}</span>
+          </button>
+          <button type="button" aria-pressed={side === 'SELL'} onClick={() => chooseSide('SELL')} className={'min-h-14 border px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-danger ' + (side === 'SELL' ? 'border-shafx-danger bg-shafx-danger/[0.18] ring-1 ring-shafx-danger/35' : 'border-shafx-danger/35 bg-shafx-danger/[0.05] hover:bg-shafx-danger/[0.10]')}>
+            <span className="flex items-center justify-between gap-1 text-[10px] font-bold text-shafx-danger"><span><ArrowDownRight className="mr-1 inline h-3.5 w-3.5" />SELL</span><span className="text-[7px] uppercase tracking-[0.12em]">BID</span></span>
+            <span data-quote-direction={quoteDirections.bid} className={'mt-1 block rounded-md px-1 py-0.5 font-mono text-[10px] font-semibold tabular-nums transition-colors ' + (quoteDirections.bid === 'up' ? 'bg-shafx-success/20 text-shafx-success' : quoteDirections.bid === 'down' ? 'bg-shafx-danger/20 text-shafx-danger' : 'text-shafx-textMuted')}>{formatPrice(Number(quote?.bid ?? bidPrice ?? currentPrice), effectiveSymbol.pricePrecision)}</span>
+          </button>
         </div>
 
         <div className="mt-3 rounded-2xl border border-shafx-border bg-shafx-surface">

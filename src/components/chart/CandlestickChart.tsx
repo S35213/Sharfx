@@ -4,6 +4,7 @@ import { Crosshair, Eraser, Maximize2, Minimize2, Ruler, RotateCcw } from 'lucid
 import type { CandleTheme, ChartMode } from '../../app/chartSettings'
 import { TIMEFRAMES, type OHLCV, type Timeframe } from '../../types'
 import { buildTradeChartMarkers, type TradeChartMarker } from './buildTradeChartMarkers'
+import { isPriceLevelOccludedByQuote } from './priceLineVisibility'
 
 export interface ChartAnnotation { id: string; price: number; label: string; color: string; lineWidth?: 1 | 2 | 3 | 4 }
 export type ChartToolMode = 'cursor' | 'crosshair' | 'level' | 'measure' | 'alert'
@@ -115,6 +116,10 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const chartTimeSignature = chartData.map((candle) => Number(candle.time)).join(',')
   const priceLinesRef = useRef<Map<string, IPriceLine>>(new Map())
   const priceLinesSeriesRef = useRef<ShafxSeries | null>(null)
+  const lineLabelsHostRef = useRef<HTMLDivElement | null>(null)
+  const lineLabelNodesRef = useRef<Map<string, HTMLSpanElement>>(new Map())
+  const lineLabelSyncRef = useRef<(() => void) | null>(null)
+  const structuralOcclusionRef = useRef<Map<string, boolean>>(new Map())
   const tradeMarkerSignatureRef = useRef('')
   const marketBidLineRef = useRef<IPriceLine | null>(null)
   const marketAskLineRef = useRef<IPriceLine | null>(null)
@@ -558,34 +563,55 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   }, [chartTimeSignature, timeframe, isFullscreen])
 
 
-  // All price-sensitive levels use Lightweight Charts' native price-line
-  // API. This binds every marker to its absolute price so pan/zoom, resize,
-  // live quotes and timeframe changes cannot leave a floating HTML tag behind.
+  // Keep true-price lines independent and label each one directly inside the chart.
+  // When a structural level occupies the same pixel row as a live Bid/Ask quote,
+  // hide just that structural line temporarily; it returns once the quote has passed.
   useEffect(() => {
     const series = seriesRef.current
+    const host = lineLabelsHostRef.current
     if (!series) return
 
+    const quoteYs = [bidPrice, askPrice]
+      .filter((price): price is number => Number.isFinite(price) && Number(price) > 0)
+      .map((price) => series.priceToCoordinate(Number(price)))
+
+    const hiddenStructuralIds = new Set<string>()
     const desired = new Set<string>()
+    const labelCandidates: Array<ChartAnnotation | UserLevel> = []
+
+    const isStructuralOccluded = (annotation: ChartAnnotation): boolean => {
+      const levelY = series.priceToCoordinate(annotation.price)
+      const wasHidden = structuralOcclusionRef.current.get(annotation.id) === true
+      // A wider restore threshold avoids flicker if the quote taps the same level.
+      const isHidden = isPriceLevelOccludedByQuote(levelY, quoteYs, wasHidden ? 12 : 7)
+      structuralOcclusionRef.current.set(annotation.id, isHidden)
+      return isHidden
+    }
 
     if (priceLinesSeriesRef.current !== series) {
       priceLinesRef.current.clear()
       priceLinesSeriesRef.current = series
+      structuralOcclusionRef.current.clear()
     }
 
     const shortTitle = (annotation: ChartAnnotation | UserLevel): string => {
       const ids = annotation.id.toLowerCase().split('+')
       const labels: string[] = []
-      if (ids.some((id) => id.includes('support'))) labels.push('SUP')
-      if (ids.some((id) => id.includes('resistance'))) labels.push('RES')
-      if (ids.some((id) => id.includes('liquidity-buy'))) labels.push('BSL')
-      if (ids.some((id) => id.includes('liquidity-sell'))) labels.push('SSL')
-      if (ids.some((id) => id.includes('liquidity') && !id.includes('liquidity-buy') && !id.includes('liquidity-sell'))) labels.push('LIQ')
+      if (ids.some((id) => id.includes('support'))) labels.push('SUPPORT')
+      if (ids.some((id) => id.includes('resistance'))) labels.push('RESISTANCE')
+      if (ids.some((id) => id.includes('liquidity-buy'))) labels.push('BUY-SIDE LIQUIDITY')
+      if (ids.some((id) => id.includes('liquidity-sell'))) labels.push('SELL-SIDE LIQUIDITY')
+      if (ids.some((id) => id.includes('liquidity') && !id.includes('liquidity-buy') && !id.includes('liquidity-sell'))) labels.push('LIQUIDITY')
       if (labels.length) return [...new Set(labels)].join(' / ')
       const id = annotation.id.toLowerCase()
-      if (id.includes('ai-entry') || id.includes('entry')) return 'ENTRY'
-      if (id.includes('ai-stop') || id.includes('stop') || /(?:^|[-_])sl(?:$|[-_])/.test(id)) return 'SL'
-      if (id.includes('ai-target') || id.includes('target') || /(?:^|[-_])tp(?:$|[-_])/.test(id)) return 'TP'
-      return annotation.label
+      if (id.includes('ai-entry')) return 'AI ENTRY'
+      if (id.includes('ai-stop')) return 'AI STOP'
+      if (id.includes('ai-target')) return 'AI TARGET'
+      if (id.includes('entry')) return 'ENTRY'
+      if (id.includes('stop') || /(?:^|[-_])sl(?:$|[-_])/.test(id)) return 'STOP LOSS'
+      if (id.includes('target') || /(?:^|[-_])tp(?:$|[-_])/.test(id)) return 'TAKE PROFIT'
+      if (id.includes('alert')) return 'PRICE ALERT'
+      return annotation.label.toUpperCase()
     }
 
     const isStop = (id: string): boolean => id.includes('stop') || /(?:^|[-_])sl(?:$|[-_])/.test(id)
@@ -618,34 +644,44 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       priceLinesRef.current.set(annotation.id, series.createPriceLine(options))
     }
 
+    const currentAnnotationIds = new Set(annotations.map((annotation) => annotation.id))
+    for (const id of structuralOcclusionRef.current.keys()) {
+      if (!currentAnnotationIds.has(id)) structuralOcclusionRef.current.delete(id)
+    }
+
     annotations.forEach((annotation) => {
       const structuralKind = structuralOverlayKind(annotation)
+      if (structuralKind && isStructuralOccluded(annotation)) {
+        hiddenStructuralIds.add(annotation.id)
+        return
+      }
       const id = annotation.id.toLowerCase()
       const lineStyle: 0 | 1 | 2 = structuralKind === 'liquidity' ? 1
         : structuralKind || isStop(id) ? 2
         : isTarget(id) ? 0
         : 0
-      // Keep structural labels on their own price lines; reserve the price-axis
-      // labels for the live SELL/BID and BUY/ASK rails so their tags cannot merge.
       const title = shortTitle(annotation) + ' ' + annotation.price.toFixed(pricePrecision)
       upsertLine(annotation, lineStyle, false, title)
+      labelCandidates.push(annotation)
     })
 
-    // The active trade ticket provides one canonical set of entry/SL/TP levels.
-    // Their numeric prices remain fixed once the position is open.
+    // Trade Entry/SL/TP, user levels and alerts remain separate from structure.
     tradeLines.forEach((line) => {
       const id = line.id.toLowerCase()
       const lineStyle: 0 | 1 | 2 = isStop(id) ? 2 : isTarget(id) ? 0 : 0
-      const title = isStop(id) ? 'SL' : isTarget(id) ? 'TP' : id.includes('entry') ? 'ENTRY' : line.label.toUpperCase()
-      upsertLine(line, lineStyle, false, title + ' ' + line.price.toFixed(pricePrecision))
+      const title = shortTitle(line) + ' ' + line.price.toFixed(pricePrecision)
+      upsertLine(line, lineStyle, false, title)
+      labelCandidates.push(line)
     })
 
     userLevels.forEach((level) => {
       upsertLine(level, level.dashed ? 2 : 1, false, level.label + ' ' + level.price.toFixed(pricePrecision))
+      labelCandidates.push(level)
     })
 
     armedAlerts.forEach((alert) => {
       upsertLine(alert, 2, false, alert.label + ' ' + alert.price.toFixed(pricePrecision))
+      labelCandidates.push(alert)
     })
 
     for (const [id, line] of priceLinesRef.current) {
@@ -653,9 +689,120 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       try { series.removePriceLine(line) } catch { /* series may have been replaced */ }
       priceLinesRef.current.delete(id)
     }
-  }, [annotations, armedAlerts, chartMode, pipSize, showPriceLabels, tradeLines, userLevels])
 
-    // Live broker quote rails behave like MT5's optional Bid/Ask lines. The
+    if (host) {
+      const minY = 42
+      const maxY = Math.max(minY, host.clientHeight - 40)
+      const entries = labelCandidates
+        .map((line) => ({
+          id: line.id,
+          price: line.price,
+          color: line.color,
+          name: shortTitle(line),
+          y: series.priceToCoordinate(line.price),
+        }))
+        .filter((line): line is typeof line & { y: number } =>
+          line.y !== null && Number.isFinite(line.y) && line.y >= minY && line.y <= maxY,
+        )
+        .sort((a, b) => a.y - b.y || a.id.localeCompare(b.id))
+
+      const rowGap = 19
+      const positions = entries.map((entry) => Math.max(minY, Math.min(maxY, entry.y)))
+      for (let index = 1; index < positions.length; index += 1) {
+        positions[index] = Math.max(positions[index], positions[index - 1] + rowGap)
+      }
+      if (positions.length > 0 && positions[positions.length - 1] > maxY) {
+        positions[positions.length - 1] = maxY
+        for (let index = positions.length - 2; index >= 0; index -= 1) {
+          positions[index] = Math.min(positions[index], positions[index + 1] - rowGap)
+        }
+      }
+      if (positions.length > 0 && positions[0] < minY) {
+        const shift = minY - positions[0]
+        for (let index = 0; index < positions.length; index += 1) positions[index] += shift
+      }
+
+      const activeLabelIds = new Set<string>()
+      entries.forEach((entry, index) => {
+        activeLabelIds.add(entry.id)
+        let node = lineLabelNodesRef.current.get(entry.id)
+        if (!node) {
+          node = document.createElement('span')
+          node.className = 'shafx-price-line-label'
+          node.setAttribute('data-shafx-price-line-label', entry.id)
+          node.setAttribute('role', 'img')
+          lineLabelNodesRef.current.set(entry.id, node)
+          host.appendChild(node)
+        }
+        const text = entry.name + '  ' + entry.price.toFixed(pricePrecision)
+        node.textContent = text
+        node.title = text
+        node.setAttribute('aria-label', text)
+        node.style.top = positions[index] + 'px'
+        node.style.borderLeftColor = entry.color
+        node.style.color = entry.color
+      })
+
+      for (const [id, node] of lineLabelNodesRef.current) {
+        if (activeLabelIds.has(id)) continue
+        node.remove()
+        lineLabelNodesRef.current.delete(id)
+      }
+
+      lineLabelSyncRef.current = () => {
+        const liveHost = lineLabelsHostRef.current
+        const liveSeries = seriesRef.current
+        if (!liveHost || !liveSeries) return
+        const currentMinY = 42
+        const currentMaxY = Math.max(currentMinY, liveHost.clientHeight - 40)
+        const visible = entries
+          .map((entry) => ({ id: entry.id, y: liveSeries.priceToCoordinate(entry.price) }))
+          .filter((entry): entry is typeof entry & { y: number } =>
+            entry.y !== null && Number.isFinite(entry.y) && entry.y >= currentMinY && entry.y <= currentMaxY,
+          )
+          .sort((a, b) => a.y - b.y)
+        const currentPositions = visible.map((entry) => Math.max(currentMinY, Math.min(currentMaxY, entry.y)))
+        for (let index = 1; index < currentPositions.length; index += 1) {
+          currentPositions[index] = Math.max(currentPositions[index], currentPositions[index - 1] + rowGap)
+        }
+        if (currentPositions.length > 0 && currentPositions[currentPositions.length - 1] > currentMaxY) {
+          currentPositions[currentPositions.length - 1] = currentMaxY
+          for (let index = currentPositions.length - 2; index >= 0; index -= 1) {
+            currentPositions[index] = Math.min(currentPositions[index], currentPositions[index + 1] - rowGap)
+          }
+        }
+        if (currentPositions.length > 0 && currentPositions[0] < currentMinY) {
+          const shift = currentMinY - currentPositions[0]
+          for (let index = 0; index < currentPositions.length; index += 1) currentPositions[index] += shift
+        }
+        visible.forEach((entry, index) => {
+          const node = lineLabelNodesRef.current.get(entry.id)
+          if (node) node.style.top = currentPositions[index] + 'px'
+        })
+      }
+      lineLabelSyncRef.current()
+    }
+  }, [annotations, armedAlerts, askPrice, bidPrice, chartMode, pipSize, showPriceLabels, tradeLines, userLevels])
+
+  useEffect(() => {
+    const chart = chartRef.current
+    if (!chart) return
+    const syncLabels = (): void => lineLabelSyncRef.current?.()
+    chart.timeScale().subscribeVisibleLogicalRangeChange(syncLabels)
+    chart.subscribeCrosshairMove(syncLabels)
+    const shell = containerRef.current
+    const observer = shell && typeof ResizeObserver !== 'undefined' ? new ResizeObserver(syncLabels) : null
+    if (shell && observer) observer.observe(shell)
+    window.addEventListener('resize', syncLabels)
+    return () => {
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(syncLabels)
+      chart.unsubscribeCrosshairMove(syncLabels)
+      observer?.disconnect()
+      window.removeEventListener('resize', syncLabels)
+    }
+  }, [chartMode, candleTheme, pipSize])
+
+  // Live broker quote rails behave like MT5's optional Bid/Ask lines. The
   // SELL/BID rail meets the bid-based candle close; BUY/ASK stays spread-width
   // above it. The labels can be hidden independently without hiding the rails.
   useEffect(() => {
@@ -1053,6 +1200,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
 
   return <div ref={containerRef} onPointerDownCapture={handleChartPointerDown} onPointerMoveCapture={handleChartPointerMove} onPointerUpCapture={handleChartPointerUp} onPointerCancel={handleChartPointerCancel} onPointerDown={placeTool} className={`shafx-chart-shell relative w-full overflow-hidden border border-shafx-border bg-shafx-bg touch-pan-y ${['level', 'alert', 'measure'].includes(toolMode) ? 'cursor-crosshair' : ''} ${chartFullscreen ? 'fixed inset-0 z-[200] h-[100svh] w-screen' : ''}`} style={{ height: chartFullscreen ? '100svh' : height, minHeight: 280 }}>
     <div ref={chartHostRef} className="absolute inset-0 z-0" aria-hidden="true" />
+    <div ref={lineLabelsHostRef} aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-[82px] z-20 overflow-hidden sm:right-[96px]" />
     <div className="pointer-events-none absolute left-3 top-3 z-30 flex items-center gap-2 rounded-xl border border-shafx-border/70 bg-shafx-surface/88 px-2.5 py-1.5 shadow-md backdrop-blur">
       {!replayMode && countdown !== null && <span className="font-mono text-[8px] font-semibold tabular text-shafx-accent">CLOSE {formatCountdown(countdown)}</span>}
       {replayMode && <span className="font-mono text-[8px] font-semibold tabular text-shafx-accent">HISTORICAL</span>}

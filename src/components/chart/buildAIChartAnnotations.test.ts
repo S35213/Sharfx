@@ -91,6 +91,13 @@ describe('buildStructuralChartAnnotations', () => {
     expect(annotations.some((item) => item.id.includes('liquidity-buy'))).toBe(true)
   })
 
+  it('keeps support, resistance and liquidity as independent line identities', () => {
+    const annotations = buildStructuralChartAnnotations('EUR/USD', candles, 'M5')
+    expect(annotations).toHaveLength(4)
+    expect(new Set(annotations.map((item) => item.id)).size).toBe(4)
+    expect(annotations.every((item) => !item.id.includes('+'))).toBe(true)
+  })
+
   it('keeps range references visible when a timeframe has no confirmed pivot swings', () => {
     const oneWayMove = Array.from({ length: 12 }, (_, index) => {
       const close = 1.1000 + index * 0.0003

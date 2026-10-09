@@ -96,27 +96,11 @@ export const buildStructuralChartAnnotations = (symbol: string, candles: OHLCV[]
   const prefix = sourceLabel ? `${sourceLabel} ` : ''
 
   const result: ChartAnnotation[] = []
-  const priceTolerance = annotationPriceTolerance(symbol)
   const add = (id: string, price: number | null, label: string, color: string, lineWidth: 1 | 2 = 1): void => {
     if (typeof price !== 'number' || !Number.isFinite(price) || price <= 0) return
 
-    const incoming = { id, price, label, color, lineWidth }
-    const duplicate = result.find((item) => Math.abs(item.price - price) <= priceTolerance)
-    if (duplicate) {
-      // Nearby levels can cluster at the same visual pixel. Keep their meaning
-      // explicit in a combined label instead of silently dropping BSL/SSL.
-      const duplicateLabel = duplicate.label.startsWith(prefix) ? duplicate.label.slice(prefix.length) : duplicate.label
-      const merged = mergeNearbyStructuralAnnotations(
-        { ...duplicate, label: duplicateLabel },
-        incoming,
-      )
-      duplicate.id = merged.id
-      duplicate.label = `${prefix}${merged.label}`
-      duplicate.color = merged.color
-      duplicate.lineWidth = merged.lineWidth
-      return
-    }
-
+    // Keep every market concept as its own line. Labels are separated in the chart,
+    // rather than merging nearby Support/Resistance/Liquidity into one annotation.
     result.push({ id, price, label: `${prefix}${label}`, color, lineWidth })
   }
 

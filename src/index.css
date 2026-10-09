@@ -410,3 +410,30 @@ input::placeholder { color: #667285; }
   .shafx-terminal-root .shafx-trades-dock { height: clamp(108px, 15svh, 132px); }
   .shafx-terminal-root > footer { height: 24px; }
 }
+
+
+/* Directly label every independent chart line, stacking nearby tags without merging prices. */
+.shafx-price-line-label {
+  position: absolute;
+  right: 4px;
+  transform: translateY(-50%);
+  max-width: min(190px, calc(100% - 8px));
+  overflow: hidden;
+  padding: 3px 6px;
+  border: 1px solid #263342;
+  border-left-width: 3px;
+  border-radius: 4px;
+  background: rgba(7, 10, 15, 0.96);
+  font: 700 9px/1.25 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+}
+@media (max-width: 639px) {
+  .shafx-price-line-label {
+    max-width: min(148px, calc(100% - 8px));
+    padding: 3px 4px;
+    font-size: 8px;
+  }
+}
