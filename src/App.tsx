@@ -196,6 +196,7 @@ const TerminalContent: React.FC = () => {
   const [currentPrice, setCurrentPrice] = useState(0)
   const [liveBidPrice, setLiveBidPrice] = useState(0)
   const [liveAskPrice, setLiveAskPrice] = useState(0)
+  const [liveQuoteIdentity, setLiveQuoteIdentity] = useState<string | null>(null)
   const [marketTimestamp, setMarketTimestamp] = useState(0)
   const [liveCandles, setLiveCandles] = useState<OHLCV[]>([])
   const [accountData, setAccountData] = useState<AccountData | null>(null)
@@ -274,6 +275,7 @@ const TerminalContent: React.FC = () => {
     setLiveCandles(nextCandles)
     setLiveBidPrice(0)
     setLiveAskPrice(0)
+    setLiveQuoteIdentity(null)
     latestCTraderPriceRef.current = null
     liveQuoteIdentityRef.current = null
     const last = nextCandles[nextCandles.length - 1]
@@ -724,7 +726,16 @@ const TerminalContent: React.FC = () => {
       }
 
       latestCTraderPriceRef.current = price
-      liveQuoteIdentityRef.current = subscriptionSymbol + ':' + subscriptionTimeframe + ':ctrader'
+      const quoteIdentity = [
+        subscriptionSymbol,
+        subscriptionTimeframe,
+        'ctrader',
+        String(selection.connectionId),
+        String(selection.accountId),
+        selection.environment === 'live' ? 'live' : 'demo',
+      ].join(':')
+      liveQuoteIdentityRef.current = quoteIdentity
+      setLiveQuoteIdentity(quoteIdentity)
       setLiveBidPrice(Number.isFinite(bid) && bid > 0 ? bid : price)
       setLiveAskPrice(Number.isFinite(ask) && ask > 0 ? ask : price)
       setCurrentPrice(price)
@@ -774,8 +785,16 @@ const TerminalContent: React.FC = () => {
   // away the final price digit on each tick. The spread remains a display estimate until
   // a broker-side bid/ask feed is available.
   const usingCTrader = activeProviderSelection?.providerId === 'ctrader'
+  const selectedCTraderQuoteIdentity = [
+    selectedSymbol,
+    timeframe,
+    'ctrader',
+    String(activeProviderSelection?.connectionId ?? ''),
+    String(activeProviderSelection?.accountId ?? ''),
+    activeProviderSelection?.environment === 'live' ? 'live' : 'demo',
+  ].join(':')
   const cTraderQuoteMatchesChart = usingCTrader &&
-    liveQuoteIdentityRef.current === selectedSymbol + ':' + timeframe + ':ctrader'
+    liveQuoteIdentity === selectedCTraderQuoteIdentity
   const latestCandleClose = Number(liveCandles[liveCandles.length - 1]?.close ?? 0)
   const chartBidRaw = usingCTrader
     ? cTraderQuoteMatchesChart && liveBidPrice > 0 ? liveBidPrice : latestCandleClose
