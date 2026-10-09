@@ -90,4 +90,22 @@ describe('buildStructuralChartAnnotations', () => {
     expect(annotations.some((item) => item.id.includes('resistance'))).toBe(true)
     expect(annotations.some((item) => item.id.includes('liquidity-buy'))).toBe(true)
   })
+
+  it('keeps range references visible when a timeframe has no confirmed pivot swings', () => {
+    const oneWayMove = Array.from({ length: 12 }, (_, index) => {
+      const close = 1.1000 + index * 0.0003
+      return {
+        time: (index + 1) * 86400,
+        open: close - 0.0001,
+        high: close + 0.00015,
+        low: close - 0.0002,
+        close,
+      }
+    })
+    const annotations = buildStructuralChartAnnotations('EUR/USD', oneWayMove, 'D1')
+    expect(annotations.some((item) => item.id.includes('support'))).toBe(true)
+    expect(annotations.some((item) => item.id.includes('resistance'))).toBe(true)
+    expect(annotations.some((item) => item.id.includes('liquidity-buy'))).toBe(true)
+    expect(annotations.some((item) => item.id.includes('liquidity-sell'))).toBe(true)
+  })
 })
