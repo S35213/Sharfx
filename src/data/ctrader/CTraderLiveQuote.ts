@@ -184,6 +184,45 @@ export const isCTraderQuoteBucketCurrent = (
   return quoteBucket >= latestCandleTime
 }
 
+/**
+ * Apply one accepted broker bid tick to the forming candle.
+ *
+ * Bid is the OHLC candle source, like an OTC FX chart in MT5. Ask remains a
+ * separate live quote/line, so the spread is visible without falsifying the
+ * candle's historical high/low. Keeping the open stable lets the candle body
+ * switch bullish/bearish naturally whenever the live close crosses that open.
+ */
+export const applyCTraderQuoteToCandles = (
+  candles: readonly OHLCV[],
+  quoteBucket: number,
+  bidPrice: number,
+): OHLCV[] => {
+  const current = normalizeMarketCandles(candles)
+  if (!Number.isFinite(quoteBucket) || quoteBucket <= 0 || !Number.isFinite(bidPrice) || bidPrice <= 0) {
+    return current
+  }
+
+  const last = current[current.length - 1]
+  if (last && quoteBucket < last.time) return current
+
+  if (last && quoteBucket === last.time) {
+    return [
+      ...current.slice(0, -1),
+      {
+        ...last,
+        high: Math.max(last.high, bidPrice),
+        low: Math.min(last.low, bidPrice),
+        close: bidPrice,
+      },
+    ]
+  }
+
+  return normalizeMarketCandles([
+    ...current,
+    { time: quoteBucket, open: bidPrice, high: bidPrice, low: bidPrice, close: bidPrice },
+  ]).slice(-1000)
+}
+
 export const cTraderQuoteBucket = (epochMs: number, timeframe: Timeframe): number => {
   const seconds: Record<Timeframe, number> = { M1: 60, M5: 300, M15: 900, M30: 1800, H1: 3600, H4: 14400, D1: 86400, W1: 604800 }
   const epochSeconds = Math.floor(epochMs / 1000)

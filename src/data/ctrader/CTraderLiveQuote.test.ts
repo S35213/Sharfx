@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Timeframe } from '../../types'
 import {
+  applyCTraderQuoteToCandles,
   cTraderQuoteBucket,
   isCTraderQuoteBucketCurrent,
   normalizeCTraderHistoricalCandles,
@@ -12,6 +13,54 @@ const candle = (time: number, open = 1.1, high = 1.12, low = 1.09, close = 1.11)
   high,
   low,
   close,
+})
+
+describe('cTrader live candle updates', () => {
+  it('updates the forming candle close/high/low while preserving its open', () => {
+    const initial = [candle(1_791_547_200, 1.10000, 1.10030, 1.09970, 1.10010)]
+    const next = applyCTraderQuoteToCandles(initial, 1_791_547_200, 1.10040)
+    expect(next).toHaveLength(1)
+    expect(next[0]).toMatchObject({
+      time: 1_791_547_200,
+      open: 1.10000,
+      high: 1.10040,
+      low: 1.09970,
+      close: 1.10040,
+    })
+    expect(next[0].close).toBeGreaterThan(next[0].open)
+  })
+
+  it('flips candle direction when live bid crosses its unchanged open', () => {
+    const initial = [candle(1_791_547_200, 1.10000, 1.10020, 1.09980, 1.10010)]
+    const bearish = applyCTraderQuoteToCandles(initial, 1_791_547_200, 1.09990)
+    expect(bearish[0].open).toBe(1.10000)
+    expect(bearish[0].close).toBeLessThan(bearish[0].open)
+
+    const bullish = applyCTraderQuoteToCandles(bearish, 1_791_547_200, 1.10030)
+    expect(bullish[0].open).toBe(1.10000)
+    expect(bullish[0].high).toBe(1.10030)
+    expect(bullish[0].low).toBe(1.09980)
+    expect(bullish[0].close).toBeGreaterThan(bullish[0].open)
+  })
+
+  it('opens a new live candle at the first bid tick of its timeframe', () => {
+    const initial = [candle(1_791_547_200, 1.10000, 1.10020, 1.09980, 1.10010)]
+    const next = applyCTraderQuoteToCandles(initial, 1_791_547_260, 1.10050)
+    expect(next).toHaveLength(2)
+    expect(next[1]).toEqual({
+      time: 1_791_547_260,
+      open: 1.10050,
+      high: 1.10050,
+      low: 1.10050,
+      close: 1.10050,
+    })
+  })
+
+  it('does not alter the chart for stale or invalid quote data', () => {
+    const initial = [candle(1_791_547_260, 1.10000, 1.10020, 1.09980, 1.10010)]
+    expect(applyCTraderQuoteToCandles(initial, 1_791_547_200, 1.10100)).toEqual(initial)
+    expect(applyCTraderQuoteToCandles(initial, 1_791_547_260, Number.NaN)).toEqual(initial)
+  })
 })
 
 describe('cTrader chart timestamps', () => {

@@ -35,7 +35,7 @@ import { normalizeMarketCandles } from './lib/marketCandles'
 import type { SetupCandidate } from './engine/setup/types'
 import { mockWatchlist } from './data/mock/watchlist'
 import { fetchDerivActiveForexSymbols, fetchDerivMultiTimeframeCandles, subscribeDerivForexQuotes } from './data/deriv/DerivPublicMarketFeed'
-import { cTraderQuoteBucket, fetchCTraderHistoricalCandles, isCTraderQuoteBucketCurrent, subscribeCTraderLiveQuote } from './data/ctrader/CTraderLiveQuote'
+import { applyCTraderQuoteToCandles, cTraderQuoteBucket, fetchCTraderHistoricalCandles, isCTraderQuoteBucketCurrent, subscribeCTraderLiveQuote } from './data/ctrader/CTraderLiveQuote'
 
 const normalizeProviderSymbol = (value: string): string => {
   if (/^frx[A-Z0-9]{6}$/i.test(value)) {
@@ -703,23 +703,12 @@ const TerminalContent: React.FC = () => {
       const last = currentCandles[currentCandles.length - 1]
       if (!isCTraderQuoteBucketCurrent(bucket, last?.time)) return
 
-      if (last) {
-        const nextCandles = bucket === last.time
-          ? [
-              ...currentCandles.slice(0, -1),
-              {
-                ...last,
-                high: Math.max(last.high, price),
-                low: Math.min(last.low, price),
-                close: price,
-              },
-            ]
-          : normalizeMarketCandles([
-              ...currentCandles,
-              { time: bucket, open: price, high: price, low: price, close: price },
-            ]).slice(-1000)
-
-        // Commit candles and quote markers from the same accepted tick.
+      // Candle OHLC is bid-based. This shared helper preserves the candle open,
+      // extends its wick, and updates close on every accepted tick so Lightweight
+      // Charts can switch the forming body between up/down colors when close crosses open.
+      const nextCandles = applyCTraderQuoteToCandles(currentCandles, bucket, price)
+      if (nextCandles.length > 0) {
+        // Commit the candle and the quote markers from the same accepted tick.
         liveCandlesRef.current = nextCandles
         candleCacheRef.current[subscriptionSymbol + ':' + subscriptionTimeframe] = nextCandles
         setLiveCandles(nextCandles)

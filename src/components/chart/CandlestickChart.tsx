@@ -613,8 +613,9 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     }
   }, [annotations, armedAlerts, chartMode, pipSize, showPriceLabels, tradeLines, userLevels])
 
-  // Broker BUY/SELL values use Lightweight Charts price-axis labels only.
-  // They are deliberately transparent as lines: no full-width rail is drawn.
+  // Live broker quote rails behave like MT5's optional Bid/Ask lines. The
+  // SELL/BID rail meets the bid-based candle close; BUY/ASK stays spread-width
+  // above it. The labels can be hidden independently without hiding the rails.
   useEffect(() => {
     const series = seriesRef.current
     if (!series) return
@@ -625,7 +626,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       color: string,
       title: string,
     ): void => {
-      const valid = showPriceLabels && Number.isFinite(price) && price > 0
+      const valid = Number.isFinite(price) && price > 0
       if (!valid) {
         if (ref.current) {
           try { series.removePriceLine(ref.current) } catch { /* stale series */ }
@@ -634,12 +635,15 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         return
       }
 
+      const railColor = color === '#FF5C75'
+        ? 'rgba(255, 92, 117, 0.78)'
+        : 'rgba(34, 211, 165, 0.78)'
       const options = {
         price,
-        color: 'transparent',
+        color: railColor,
         lineWidth: 1 as const,
-        lineStyle: 0 as const,
-        axisLabelVisible: true,
+        lineStyle: 2 as const,
+        axisLabelVisible: showPriceLabels,
         axisLabelColor: color,
         axisLabelTextColor: color === '#22D3A5' ? '#07110E' : '#19070B',
         title,
