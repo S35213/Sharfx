@@ -1089,11 +1089,11 @@ const TerminalContent: React.FC = () => {
 
   }
 
-  return <div className={'shafx-terminal-root min-h-[100svh] w-full min-w-0 overflow-x-hidden bg-shafx-bg text-shafx-text lg:flex lg:h-[calc(100vh-28px)] lg:flex-col lg:overflow-hidden' + (isLandscapeCompactViewport ? ' shafx-landscape-mode' : '')}>
+  return <div className={'shafx-terminal-root min-h-[100svh] w-full min-w-0 overflow-x-hidden bg-shafx-bg text-shafx-text lg:flex lg:min-h-0 lg:h-[100svh] lg:flex-col lg:overflow-hidden' + (isLandscapeCompactViewport ? ' shafx-landscape-mode' : '')}>
     <TopNav symbol={selectedSymbol} price={currentPrice} pricePrecision={symbolSpec.pricePrecision} pairs={watchlist} onSelectPair={setSelectedSymbol} view={mobileTab === 'history' ? 'history' : mobileTab === 'account' || mobileTab === 'funds' ? 'account' : 'market'} />
     <main className="shafx-mobile-content flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-visible lg:flex-row lg:overflow-hidden">
       <WorkspaceRail tool={chartTool} onToolChange={setChartTool} dock={dock} onDockChange={setDock} />
-      <aside className="hidden w-[230px] min-w-[210px] max-w-[250px] flex-shrink-0 border-r border-shafx-border bg-[#090D13] lg:block">
+      <aside className="shafx-watchlist-panel hidden w-[220px] min-w-[210px] max-w-[240px] flex-shrink-0 border-r border-shafx-border bg-[#090D13] lg:block">
         <Watchlist pairs={watchlist} selectedPair={selectedSymbol} onSelectPair={setSelectedSymbol} />
       </aside>
 
@@ -1108,14 +1108,14 @@ const TerminalContent: React.FC = () => {
           </div>
         </div>
         <div className="flex min-h-0 flex-1 flex-col overflow-visible">
-          <div className="flex min-h-9 flex-shrink-0 items-center justify-between gap-2 border-b border-shafx-border bg-[#0A0E14] px-3 sm:px-4 lg:min-h-10">
-            <div className="flex min-w-0 items-center gap-2"><span className="truncate text-xs font-semibold">{selectedSymbol}</span><span className="font-mono text-[10px] font-semibold tabular-nums text-shafx-textMuted">{Number.isFinite(currentPrice) && currentPrice > 0 ? currentPrice.toFixed(symbolSpec.pricePrecision) : '—'}</span><span className={'rounded-full border px-2 py-0.5 text-[8px] font-semibold ' + (liveMarketActive ? 'border-shafx-success/25 bg-shafx-success/5 text-shafx-success' : 'border-shafx-warning/25 bg-shafx-warning/5 text-shafx-warning')}>{liveMarketActive ? 'LIVE' : 'CONNECTING'}</span></div>
+          <div className="shafx-market-header flex min-h-10 flex-shrink-0 items-center justify-between gap-3 border-b border-shafx-border bg-[#0A0E14] px-3 sm:px-4 lg:min-h-12">
+            <div className="flex min-w-0 items-center gap-2"><span className="truncate text-sm font-semibold">{selectedSymbol}</span><span className="font-mono text-xs font-semibold tabular-nums text-shafx-textMuted">{Number.isFinite(currentPrice) && currentPrice > 0 ? currentPrice.toFixed(symbolSpec.pricePrecision) : '—'}</span><span className={'rounded-full border px-2 py-0.5 text-[8px] font-semibold ' + (liveMarketActive ? 'border-shafx-success/25 bg-shafx-success/5 text-shafx-success' : 'border-shafx-warning/25 bg-shafx-warning/5 text-shafx-warning')}>{liveMarketActive ? 'LIVE' : 'CONNECTING'}</span></div>
             <div className="flex items-center gap-1.5">{liveControl}</div>
           </div>
-           <div className="flex min-h-10 flex-shrink-0 items-center gap-1 overflow-x-auto border-b border-shafx-border bg-[#0C1118] px-3 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:px-4">
+           <div className="shafx-timeframe-bar flex min-h-11 flex-shrink-0 items-center gap-1 overflow-x-auto border-b border-shafx-border bg-[#0C1118] px-3 py-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:px-4">
              <span className="mr-1 hidden text-[8px] font-bold uppercase tracking-[0.16em] text-shafx-textMuted sm:inline">TIMEFRAME</span>
              {TIMEFRAMES.map((tf) => (
-               <button key={tf} type="button" onClick={() => handleTimeframeChange(tf)} aria-pressed={timeframe === tf} className={'min-h-8 flex-shrink-0 rounded-md px-2.5 text-[8px] font-bold tracking-wide transition ' + (timeframe === tf ? 'bg-shafx-accent text-white shadow-md' : 'text-shafx-textMuted hover:bg-shafx-bg hover:text-shafx-text')}>
+               <button key={tf} type="button" onClick={() => handleTimeframeChange(tf)} aria-pressed={timeframe === tf} className={'min-h-9 flex-shrink-0 rounded-md px-3 text-[9px] font-bold tracking-wide transition ' + (timeframe === tf ? 'bg-shafx-accent text-white shadow-md' : 'text-shafx-textMuted hover:bg-shafx-bg hover:text-shafx-text')}>
                  {tf}
                </button>
              ))}
@@ -1132,7 +1132,7 @@ const TerminalContent: React.FC = () => {
             <button type="button" onClick={() => openMobileDock('orders')} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Account</span><div className="mt-1 text-xs font-semibold">{accountModeLabel}</div></button>
             <button type="button" onClick={() => { setMobileTab('account'); setMobileDockOpen(false) }} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Funding</span><div className="mt-1 text-xs font-semibold">Deposit • Withdraw</div></button>
           </div>
-          <div className="hidden h-36 flex-shrink-0 xl:h-40 border-t border-shafx-border bg-[#090D13] p-1.5 lg:block"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={currentPrice} selectedSymbol={selectedSymbol} onClosePosition={(id) => { void handleClosePosition(id) }} onBulkClose={handleBulkClose} currency={resolvedAccountData.currency} botPaperHistory={botPaperHistory} /></div>
+          <div className="shafx-trades-dock hidden h-36 flex-shrink-0 xl:h-40 border-t border-shafx-border bg-[#090D13] p-2 lg:block"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={currentPrice} selectedSymbol={selectedSymbol} onClosePosition={(id) => { void handleClosePosition(id) }} onBulkClose={handleBulkClose} currency={resolvedAccountData.currency} botPaperHistory={botPaperHistory} /></div>
           {mobileDockOpen && <div id="mobile-market-workspace" className="border-t border-shafx-border bg-shafx-surface p-3 lg:hidden">
             <div className="mb-3 flex items-center justify-between gap-3"><div><div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Market workspace</div><div className="text-sm font-semibold">{dock === 'insights' ? 'Structure & AI' : dock === 'liquidity' ? 'Liquidity' : 'Deriv account'}</div></div><button type="button" onClick={() => setMobileDockOpen(false)} className="min-h-10 rounded-xl border border-shafx-border px-3 text-[10px] font-semibold text-shafx-textMuted">Close</button></div>
             {dockContent[dock === 'agent' || dock === 'research' ? 'insights' : dock]}
@@ -1152,9 +1152,9 @@ const TerminalContent: React.FC = () => {
       <aside className={showFunds ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><DerivCashierLinks /></div></aside>
       <aside className={showAccount ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><AccountPanel account={resolvedAccountData} activeProviderSelection={activeProviderSelection} /></div></aside>
 
-       {!isCompactViewport && <aside className="hidden w-[340px] min-w-[320px] max-w-[360px] flex-shrink-0 flex-col overflow-hidden border-l border-shafx-border bg-[#090D13] lg:flex xl:w-[360px]">
-        <div className="flex h-10 flex-shrink-0 items-center justify-between border-b border-shafx-border px-3"><div><div className="text-[8px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">{dock === 'orders' ? 'TRADE' : 'WORKSPACE'}</div><div className="text-xs font-semibold">{dock === 'insights' ? 'Market intelligence' : dock === 'chat' ? 'Chat & Order Ticket' : dock === 'bot' ? 'SHAFX Signal Desk' : dock === 'liquidity' ? 'Liquidity & depth' : 'Trade ticket'}</div></div></div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-3">{dockContent[dock === 'agent' || dock === 'research' ? 'insights' : dock]}</div>
+       {!isCompactViewport && <aside className="shafx-desktop-right-panel hidden w-[320px] min-w-[300px] max-w-[340px] flex-shrink-0 flex-col overflow-hidden border-l border-shafx-border bg-[#090D13] lg:flex xl:w-[340px] 2xl:w-[360px]">
+        <div className="shafx-right-panel-header flex h-12 flex-shrink-0 items-center justify-between border-b border-shafx-border px-4"><div><div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">{dock === 'orders' ? 'TRADE' : 'WORKSPACE'}</div><div className="text-xs font-semibold">{dock === 'insights' ? 'Market intelligence' : dock === 'chat' ? 'Chat & Order Ticket' : dock === 'bot' ? 'SHAFX Signal Desk' : dock === 'liquidity' ? 'Liquidity & depth' : 'Trade ticket'}</div></div></div>
+        <div className="shafx-right-panel-content min-h-0 flex-1 overflow-y-auto p-4">{dockContent[dock === 'agent' || dock === 'research' ? 'insights' : dock]}</div>
       </aside>}
     </main>
     <MobileNav activeTab={mobileTab} onChange={setMobileTab} />
