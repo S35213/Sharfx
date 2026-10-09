@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildAIChartAnnotations, buildStructuralChartAnnotations } from './buildAIChartAnnotations'
+import { buildAIChartAnnotations, buildStructuralChartAnnotations, mergeNearbyStructuralAnnotations } from './buildAIChartAnnotations'
 
 const candles = [
   { time: 60, open: 1.1, high: 1.102, low: 1.098, close: 1.101 },
@@ -28,6 +28,30 @@ describe('buildAIChartAnnotations', () => {
 
   it('returns no annotations for empty data', () => {
     expect(buildAIChartAnnotations('EURUSD', [])).toEqual([])
+  })
+})
+
+describe('mergeNearbyStructuralAnnotations', () => {
+  it('retains both structure and liquidity labels when nearby levels cluster', () => {
+    const merged = mergeNearbyStructuralAnnotations(
+      { id: 'support', price: 1.102, label: 'Support', color: '#22D3A5', lineWidth: 2 },
+      { id: 'liquidity-buy', price: 1.10202, label: 'Buy-side liquidity', color: '#5CA8FF', lineWidth: 1 },
+    )
+
+    expect(merged.id).toBe('support+liquidity-buy')
+    expect(merged.label).toBe('Support / Buy-side liquidity')
+    expect(merged.price).toBe(1.102)
+  })
+
+  it('keeps buy-side and sell-side liquidity distinct when they share a level', () => {
+    const merged = mergeNearbyStructuralAnnotations(
+      { id: 'liquidity-buy', price: 1.102, label: 'Buy-side liquidity', color: '#5CA8FF', lineWidth: 1 },
+      { id: 'liquidity-sell', price: 1.102, label: 'Sell-side liquidity', color: '#5CA8FF', lineWidth: 1 },
+    )
+
+    expect(merged.id).toBe('liquidity-buy+liquidity-sell')
+    expect(merged.label).toBe('Buy-side liquidity / Sell-side liquidity')
+    expect(merged.color).toBe('#5CA8FF')
   })
 })
 

@@ -62,6 +62,28 @@ export const buildAIChartAnnotations = (symbol: string, candles: OHLCV[]): Chart
   return result.sort((a, b) => a.price - b.price).slice(-8)
 }
 
+/**
+ * Combine nearby analysis levels without silently discarding a market concept.
+ * When multiple real levels are within the chart's clustering tolerance, one
+ * representative line carries every label that contributed to the cluster.
+ */
+export const mergeNearbyStructuralAnnotations = (
+  existing: ChartAnnotation,
+  incoming: ChartAnnotation,
+): ChartAnnotation => {
+  const ids = [...new Set([...existing.id.split('+'), ...incoming.id.split('+')])]
+  const labels = [...new Set(`${existing.label} / ${incoming.label}`.split(' / ').map((label) => label.trim()).filter(Boolean))]
+  const liquidityOnly = ids.every((id) => id.startsWith('liquidity-'))
+
+  return {
+    ...existing,
+    id: ids.join('+'),
+    label: labels.join(' / '),
+    color: liquidityOnly ? '#5CA8FF' : existing.color,
+    lineWidth: liquidityOnly ? 1 : existing.lineWidth,
+  }
+}
+
 export const buildStructuralChartAnnotations = (symbol: string, candles: OHLCV[], sourceLabel?: string): ChartAnnotation[] => {
   if (candles.length === 0) return []
   const structuralCandles = candles.length > 1 ? candles.slice(0, -1) : candles
@@ -78,18 +100,20 @@ export const buildStructuralChartAnnotations = (symbol: string, candles: OHLCV[]
   const add = (id: string, price: number | null, label: string, color: string, lineWidth: 1 | 2 = 1): void => {
     if (typeof price !== 'number' || !Number.isFinite(price) || price <= 0) return
 
+    const incoming = { id, price, label, color, lineWidth }
     const duplicate = result.find((item) => Math.abs(item.price - price) <= priceTolerance)
     if (duplicate) {
-      // A buy-side and sell-side liquidity pool can collapse to the same
-      // reference price after clustering. Rendering both labels on one
-      // horizontal line creates a misleading duplicate label in the chart.
-      if (duplicate.id.startsWith('liquidity-') && id.startsWith('liquidity-')) {
-        if (!duplicate.label.includes('liquidity')) return
-        duplicate.label = `${prefix}Liquidity`
-        duplicate.id = 'liquidity-both'
-        duplicate.color = '#5CA8FF'
-        duplicate.lineWidth = 1
-      }
+      // Nearby levels can cluster at the same visual pixel. Keep their meaning
+      // explicit in a combined label instead of silently dropping BSL/SSL.
+      const duplicateLabel = duplicate.label.startsWith(prefix) ? duplicate.label.slice(prefix.length) : duplicate.label
+      const merged = mergeNearbyStructuralAnnotations(
+        { ...duplicate, label: duplicateLabel },
+        incoming,
+      )
+      duplicate.id = merged.id
+      duplicate.label = `${prefix}${merged.label}`
+      duplicate.color = merged.color
+      duplicate.lineWidth = merged.lineWidth
       return
     }
 

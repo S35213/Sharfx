@@ -533,13 +533,13 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     }
 
     const shortStructuralLabel = (annotation: ChartAnnotation): string => {
-      if (annotation.id.includes('support')) return 'SUP'
-      if (annotation.id.includes('resistance')) return 'RES'
-      if (annotation.id.includes('liquidity')) {
-        if (annotation.id.includes('sell')) return 'SSL'
-        if (annotation.id.includes('buy')) return 'BSL'
-        return 'LIQ'
-      }
+      const labels: string[] = []
+      if (annotation.id.includes('support')) labels.push('SUP')
+      if (annotation.id.includes('resistance')) labels.push('RES')
+      if (annotation.id.includes('liquidity-buy')) labels.push('BSL')
+      if (annotation.id.includes('liquidity-sell')) labels.push('SSL')
+      if (annotation.id.includes('liquidity') && !annotation.id.includes('liquidity-buy') && !annotation.id.includes('liquidity-sell')) labels.push('LIQ')
+      if (labels.length) return [...new Set(labels)].join(' / ')
       if (annotation.id.includes('ai-entry')) return 'AI ENTRY'
       if (annotation.id.includes('ai-stop')) return 'AI SL'
       if (annotation.id.includes('ai-target')) return 'AI TP'
