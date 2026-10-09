@@ -34,6 +34,17 @@
 8. **Do not claim a real broker flow is working unless it has actually been exercised against the provider.**
 9. **Every meaningful milestone must leave a note in this file and/or the implementation tree, including failures and why a direction changed.**
 
+## Live bid/ask alignment against the current candle — 2026-10-09
+
+- **Target:** only Render service `sharfx-deriv-render`, URL https://sharfx-deriv-render.onrender.com, branch `test/rebuild-deriv-native-manual-20260930`. Do not edit the sibling Render services, `main`, Cloudflare production, or Supabase data for this chart issue.
+- **Root cause:** the cTrader quote callback could publish new BUY/SELL bid/ask values before its candle updater checked the quote’s timeframe bucket. When an out-of-order quote belonged to an older bucket, the candle updater correctly discarded it but the bid/ask markers had already advanced. This let price tags and the latest candle represent different ticks/time windows.
+- **Fix commits:** `9c222539c6cf48559d12736d97af25988b96e84d` validates the quote bucket before updating price markers, synchronizes the accepted quote and candle update, and adds bucket-validation tests; `35dac5b0c7e764461cc0f7bab828a7fbe30cc813` scopes displayed quotes to the current symbol/timeframe; `6ba5c99a6d36c5a162b09ee732fc3a69b8daa8e8` keeps the render check in React state rather than reading a ref during render.
+- **Current Render deployment:** `dep-db4c2j60tbcc73ct9etg` is LIVE for `6ba5c99a6d36c5a162b09ee732fc3a69b8daa8e8`. Render build completed successfully. The Render static-site smoke test `37917599292` passed.
+- **Browser verification:** TinyFish run `fa20f4a5-b834-4b16-a405-18c4a769393e` waited approximately 20 seconds and switched M1 → M5 → H1 → M1. Header price matched SELL/BID for every check. BUY/ASK remained approximately 1.1–1.2 pips above SELL/BID. Sample reads: M1 1.12153 / 1.12165; M5 1.12148 / 1.12159; H1 1.12150 / 1.12162; final M1 1.12149 / 1.12161. Candles remained visible; no reload was needed and this final run did not reproduce the `insertBefore` crash. An earlier run on the previous deployment had reported one transient `insertBefore` error; keep monitoring rather than assuming that issue is impossible.
+- **Checks:** latest GitHub lint passed with 0 errors (52 existing warnings). New `src/data/ctrader/CTraderLiveQuote.test.ts` reports 6/6 passing. The full test suite reports 305 passed and 2 failed (307 total); the failures are the existing unrelated `server/ctrader.test.js` order-status expectation (expects `rejected`, receives `filled`) and `src/lib/cfdRiskEngine.test.ts` conversion expectation (expects `null`, receives `10`). Do not conceal these two failures or change unrelated broker execution/risk behavior under this chart fix. The separate CI production-build step was skipped after the suite failed, but Render’s own production build/deploy succeeded.
+- **Order safety:** no orders were placed or confirmed during browser checks. No provider settings, account settings, or credentials were changed.
+- **Status:** current-price marker/candle synchronization has passed the latest live-browser timeframe regression. Continue monitoring the previously observed transient React DOM error separately. Do not merge this experimental branch to `main` or deploy it to Cloudflare without the remaining release gates and explicit user approval.
+
 ## Chart regression repair — 2026-10-09
 
 Current chart work is isolated to `test/rebuild-deriv-native-manual-20260930` and Render service `sharfx-deriv-render`.
