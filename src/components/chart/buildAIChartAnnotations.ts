@@ -125,17 +125,36 @@ export const buildStructuralChartAnnotations = (symbol: string, candles: OHLCV[]
   // be the nearest visible decision level on a higher timeframe. Fall back to
   // the nearest confirmed swing on the correct side of price when no cluster
   // is available, instead of silently losing RES/SUP on H4/D1/W1.
-  const fallbackSupport = swings.lows
+  const fallbackSupportFromSwing = swings.lows
     .filter((point) => point.price <= currentPrice)
     .sort((a, b) => b.price - a.price)[0]?.price ?? null
-  const fallbackResistance = swings.highs
+  const fallbackResistanceFromSwing = swings.highs
     .filter((point) => point.price >= currentPrice)
     .sort((a, b) => a.price - b.price)[0]?.price ?? null
 
+  // Strongly trending or short-history higher-timeframe samples can contain
+  // no confirmed 2-left/2-right pivot at all. In that case derive a conservative
+  // range reference from earlier closed candles (excluding the last two bars so
+  // the level does not hug the currently forming price action).
+  const priorCandles = structuralCandles.slice(0, -1).slice(-48)
+  const fallbackSupportFromRange = priorCandles
+    .map((candle) => candle.low)
+    .filter((price) => Number.isFinite(price) && price > 0 && price < currentPrice)
+    .sort((a, b) => b - a)[0] ?? null
+  const fallbackResistanceFromRange = priorCandles
+    .map((candle) => candle.high)
+    .filter((price) => Number.isFinite(price) && price > currentPrice)
+    .sort((a, b) => a - b)[0] ?? null
+
+  const fallbackSupport = fallbackSupportFromSwing ?? fallbackSupportFromRange
+  const fallbackResistance = fallbackResistanceFromSwing ?? fallbackResistanceFromRange
+  const buySideFallback = fallbackResistance
+  const sellSideFallback = fallbackSupport
+
   add('support', supportResistance.nearestSupport ?? fallbackSupport, 'Support', '#22D3A5', 2)
   add('resistance', supportResistance.nearestResistance ?? fallbackResistance, 'Resistance', '#FF5C75', 2)
-  add('liquidity-buy', liquidity.nearestBuySide?.referencePrice ?? fallbackResistance, 'Buy-side liquidity', '#5CA8FF', 1)
-  add('liquidity-sell', liquidity.nearestSellSide?.referencePrice ?? fallbackSupport, 'Sell-side liquidity', '#5CA8FF', 1)
+  add('liquidity-buy', liquidity.nearestBuySide?.referencePrice ?? buySideFallback, 'Buy-side liquidity', '#5CA8FF', 1)
+  add('liquidity-sell', liquidity.nearestSellSide?.referencePrice ?? sellSideFallback, 'Sell-side liquidity', '#5CA8FF', 1)
 
   return result.sort((a, b) => a.price - b.price)
 }
