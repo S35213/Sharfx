@@ -549,7 +549,6 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     const series = seriesRef.current
     if (!series) return
 
-    const compact = (containerRef.current?.clientWidth ?? 1000) < 640
     const desired = new Set<string>()
 
     if (priceLinesSeriesRef.current !== series) {
