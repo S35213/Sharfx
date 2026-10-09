@@ -427,3 +427,28 @@ Do not merge to `main` or deploy Cloudflare production.
 - **Verification:** Render build/deploy succeeded. The latest GitHub test run shows 331 passed, 2 failed of 333. The failures are the same two existing unrelated expectations: `server/ctrader.test.js` order status expected `rejected` but got `filled`, and `src/lib/cfdRiskEngine.test.ts` expected `null` pip-value conversion but got `10`. The newly added candle-gap, marker, and provider-symbol tests passed in the run.
 - **Remaining:** confirm trade markers appear when the selected symbol and candle-history window actually contain an execution time. Never place a trade to force a marker; use existing history data and keep browser inspection read-only around the trade panel.
 
+
+
+
+## Chart line labels, quote overlap and MT5-style quote tint — 2026-10-09
+
+Scope: still restricted to `test/rebuild-deriv-native-manual-20260930` and Render service `sharfx-deriv-render`. Do not merge to `main` / deploy Cloudflare production. No order was submitted or closed for this task; the browser check avoided trade/position controls.
+
+Code commits:
+- `31c1e5b0867fa5be37913a145c36880acf5165f1` — separate structural annotations, add price-line label overlays, make ticket quote numbers change tint according to real observed bid/ask direction, add tests.
+- `a39c038138630860fe1f93d7e626183a9dbb49db` — remove an unused helper identified by the first failed TypeScript build.
+
+Implementation:
+- Production structural annotation building no longer merges nearby Support, Resistance, Buy-side Liquidity and Sell-side Liquidity into one annotation. Each retains its own identity.
+- Chart chips show each line's meaning and actual price. Chips are stacked vertically when their price rows are too close to read; the underlying line prices are not altered to make space.
+- A structural line is programmatically suppressed when it is within a small pixel threshold of a live Bid/Ask quote rail, then restored outside a wider threshold to avoid edge flicker. A natural quote crossing that visibly exercises this suppress/restore behavior was **not** observed during this browser window; do not record this edge case as visually verified yet.
+- Ticket BUY and SELL remain selectable side controls. Their semantic styling stays green for BUY and red for SELL; the quote-number cells compare actual received quotes with the previous tick, tint green for an uptick and red for a downtick, then return to neutral after 15 seconds with no further direction change. No synthetic quotes are added.
+
+Verification on the latest live app code commit `a39c038138630860fe1f93d7e626183a9dbb49db`:
+- TypeScript + Vite production build: **passed** on Render; deployment `dep-db4k1j6gekts73fkvqa0` is live at `https://sharfx-deriv-render.onrender.com`.
+- Lint: **passed** in GitHub Actions.
+- New unit tests for quote tick direction (3/3) and structural quote-overlap predicate (3/3) passed. Independent structural line identities also passed.
+- Full unit test suite: **338 passed, 2 failed of 340**. The same unrelated existing failures remain: cTrader order-status normalization expected `rejected` but got `filled`; CFD pip-value conversion test expected `null` but got `10`. Do not modify broker execution or risk-engine logic as part of this presentation patch.
+- Read-only TinyFish browser review: workspace loaded with continuously updating EUR/USD quotes; all four structural labels and numeric prices were visible as separate tags, including Support and Sell-side Liquidity at a shared price. No runtime error was observed during the 25+ second watch. BUY appeared green, SELL red, and displayed quote values changed with live ticks. The review did not prove the quote-number tint alternated on each individual tick, and it did not observe an actual structural line hide/restore event; these remain visual acceptance checks, not claimed passes.
+- The separate GitHub `Render test smoke` workflow failed because Playwright timed out waiting for `#root` to become visible (25 checks reported it hidden). Keep this red check visible in status; do not describe smoke as passing. The read-only interactive workspace inspection did load the chart, so diagnose the smoke/session behavior separately rather than changing authentication or environment settings in this chart task.
+
