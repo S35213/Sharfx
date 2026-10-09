@@ -30,6 +30,7 @@ interface CandlestickChartProps {
 
 interface UserLevel { id: string; price: number; label: string; color: string; lineWidth?: 1 | 2 | 3 | 4; dashed?: boolean; armed?: boolean }
 type OverlayKind = 'support' | 'resistance' | 'liquidity' | 'entry' | 'stop' | 'target' | 'trade'
+interface OverlaySource { id: string; kind: OverlayKind; price: number; label: string; color: string; fill: string; border: string }
 interface PositionedOverlay { id: string; kind: OverlayKind | 'zone'; price: number; priceLow: number; priceHigh: number; y: number; top: number; height: number; tagTop: number; label: string; color: string; fill: string; border: string }
 type ShafxSeries = ISeriesApi<'Candlestick'> | ISeriesApi<'Bar'> | ISeriesApi<'Line'> | ISeriesApi<'Area'>
 
@@ -647,7 +648,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       return
     }
 
-    const structure = annotations.flatMap((annotation) => {
+    const structure: OverlaySource[] = annotations.flatMap((annotation) => {
       const kind = structuralOverlayKind(annotation)
       if (!kind || !Number.isFinite(annotation.price) || annotation.price <= 0) return []
       const palette = overlayColours(kind)
@@ -661,7 +662,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         border: palette.border,
       }]
     })
-    const risk = tradeLines.flatMap((line) => {
+    const risk: OverlaySource[] = tradeLines.flatMap((line) => {
       if (!Number.isFinite(line.price) || line.price <= 0) return []
       const id = line.id.toLowerCase()
       const kind: OverlayKind = id.includes('stop') ? 'stop'
@@ -687,7 +688,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     const updatePositions = (): void => {
       const height = shell.clientHeight
       if (height <= 0) return
-      const visible = [...structure, ...risk].flatMap((item) => {
+      const visible: PositionedOverlay[] = [...structure, ...risk].flatMap((item): PositionedOverlay[] => {
         const center = series.priceToCoordinate(item.price)
         if (center === null || center < -20 || center > height + 20) return []
         const isStructure = item.kind === 'support' || item.kind === 'resistance' || item.kind === 'liquidity'
