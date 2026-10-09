@@ -1,0 +1,37 @@
+name: SHAFX manual CFD branch verification
+
+on:
+  push:
+    branches:
+      - test/rebuild-deriv-native-manual-20260930
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout experimental branch
+        uses: actions/checkout@v4
+
+      - name: Use Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          # This repo intentionally has no lockfile; npm caching requires one.
+          # Keep this verification job runnable without adding a generated lockfile.
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test -- --reporter=dot
+
+      - name: Production build
+        run: npm run build

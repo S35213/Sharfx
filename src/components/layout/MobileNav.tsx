@@ -8,7 +8,7 @@ interface MobileNavProps { activeTab: MobileNavTab; onChange: (tab: MobileNavTab
 
 const items: Array<{ id: MobileNavTab; label: string; icon: React.ElementType }> = [
   { id: 'chat', label: 'Chat', icon: MessageCircle },
-  { id: 'bot', label: 'Bot', icon: Bot },
+  { id: 'bot', label: 'Signals', icon: Bot },
   { id: 'history', label: 'History', icon: History },
   { id: 'funds', label: 'Funds', icon: WalletCards },
   { id: 'account', label: 'Account', icon: UserCircle },

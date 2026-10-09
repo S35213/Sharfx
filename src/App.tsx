@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { PanelRight, SlidersHorizontal } from 'lucide-react'
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+
 import { TerminalProvider, useTerminal } from './app/TerminalContext'
 import { ErrorBoundary } from './app/ErrorBoundary'
 import { TopNav } from './components/layout/TopNav'
@@ -10,16 +10,17 @@ import { WorkspaceStatus } from './components/layout/WorkspaceStatus'
 import { ProviderLiveControl } from './components/market/ProviderLiveControl'
 import { DerivCashierLinks } from './components/market/DerivCashierLinks'
 import { LiquidityPanel } from './components/market/LiquidityPanel'
-import { ProviderCapabilityPanel } from './components/market/ProviderCapabilityPanel'
 import { FXMoveMatrix } from './components/market/FXMoveMatrix'
 import { CandlestickChart, type ChartAnnotation, type ChartToolMode } from './components/chart/CandlestickChart'
+import type { TradeChartMarker } from './components/chart/buildTradeChartMarkers'
+import { buildOpenPositionChartLines } from './components/chart/buildPositionChartLines'
 import { buildStructuralChartAnnotations } from './components/chart/buildAIChartAnnotations'
 import { Watchlist } from './components/watchlist/Watchlist'
 import { MarketAnalysisPanel } from './components/analysis/MarketAnalysis'
 import { AIAssistantPanel } from './components/ai/AIAssistantPanel'
-import { TradingAgentPanel } from './components/ai/TradingAgentPanel'
+import { SignalDeskPanel } from './components/ai/SignalDeskPanel'
 import { OrderPanel } from './components/order/OrderPanel'
-import { closeDerivContract, placeDerivContract } from './data/deriv/derivTrading'
+import { closeDerivContract } from './data/deriv/derivTrading'
 import { AccountPanel } from './components/account/AccountPanel'
 import { TradesPanel } from './components/trades/TradesPanel'
 import { Toast, type ToastMessage } from './components/common/Toast'
@@ -27,18 +28,170 @@ import { CHART_SETTINGS_EVENT, readChartWorkspaceSettings, type ChartWorkspaceSe
 import { getSymbolSpec, SYMBOL_SPECS } from './data/mock/symbols'
 import { getProviderConnections, chooseDefaultProviderSelection, getStoredProviderSelection, subscribeToProviderSelection, type ActiveProviderSelection } from './data/provider/providerConnections'
 import { ProviderAccountStreamManager, providerAccountStreamKey } from './data/provider/ProviderAccountStreamManager'
+import type { ProviderOrderResult, ProviderPosition, ProviderStreamEvent } from './integrations/core/types'
 import { analyzeLiquidity } from './engine/liquidity'
 import { analyzeMarketStructure, findSwingPoints } from './engine/marketStructure'
 import { analyzeSupportResistance } from './engine/supportResistance'
-import type { AccountData, MarketAnalysis, MarketPair, OHLCV, SimulatedOrderDraft, SymbolSpec, TradeOrder } from './types'
+import { TIMEFRAMES, type AccountData, type BotPaperTrade, type MarketAnalysis, type MarketPair, type OHLCV, type SymbolSpec, type Timeframe, type TradeOrder } from './types'
+import { normalizeMarketCandles } from './lib/marketCandles'
+import { normalizeProviderSymbol, providerSymbolsMatch } from './lib/normalizeProviderSymbol'
 import type { SetupCandidate } from './engine/setup/types'
 import { mockWatchlist } from './data/mock/watchlist'
-import { fetchDerivActiveForexSymbols, subscribeDerivForexQuotes } from './data/deriv/DerivPublicMarketFeed'
+import { fetchDerivActiveForexSymbols, fetchDerivMultiTimeframeCandles, subscribeDerivForexQuotes } from './data/deriv/DerivPublicMarketFeed'
+import { applyCTraderQuoteToCandles, cTraderQuoteBucket, fetchCTraderHistoricalCandles, isCTraderQuoteBucketCurrent, mergeCTraderHistoricalAndLiveCandles, shouldRepairCTraderHistoryForGap, subscribeCTraderLiveQuote } from './data/ctrader/CTraderLiveQuote'
+
+const providerPositionToTrade = (position: ProviderPosition): TradeOrder => {
+  const metadata = position.metadata || {}
+  const raw = (metadata.raw && typeof metadata.raw === 'object') ? metadata.raw as Record<string, unknown> : {}
+  const entryPrice = Number(position.entryPrice ?? 0)
+  const currentPrice = Number(position.currentPrice ?? 0)
+
+  if (metadata.provider === 'ctrader') {
+    const lots = Number(position.quantity)
+    const stopLoss = Number(position.stopLoss)
+    const takeProfit = Number(position.takeProfit)
+    const usedMargin = Number(metadata.usedMargin)
+    const stopLossPips = Number(metadata.stopLossPips)
+    const takeProfitPips = Number(metadata.takeProfitPips)
+    return {
+      id: String(position.id),
+      symbol: normalizeProviderSymbol(position.symbol),
+      type: position.side,
+      lotSize: Number.isFinite(lots) ? lots : 0,
+      volumeLots: Number.isFinite(lots) ? lots : 0,
+      entryPrice: Number.isFinite(entryPrice) ? entryPrice : 0,
+      currentPrice: Number.isFinite(currentPrice) && currentPrice > 0 ? currentPrice : undefined,
+      stopLoss: Number.isFinite(stopLoss) && stopLoss > 0 ? stopLoss : null,
+      takeProfit: Number.isFinite(takeProfit) && takeProfit > 0 ? takeProfit : null,
+      plannedStopLossPrice: Number.isFinite(stopLoss) && stopLoss > 0 ? stopLoss : null,
+      plannedTakeProfitPrice: Number.isFinite(takeProfit) && takeProfit > 0 ? takeProfit : null,
+      riskPercent: 0,
+      riskAmount: 0,
+      rewardAmount: 0,
+      riskRewardRatio: 0,
+      status: 'open',
+      openTime: typeof metadata.openTimestamp === 'string' && metadata.openTimestamp
+        ? new Date(Number(metadata.openTimestamp)).toISOString()
+        : new Date().toISOString(),
+      profit: Number.isFinite(position.unrealizedPL) ? position.unrealizedPL : 0,
+      providerOrderId: String(position.id),
+      brokerProduct: 'SHAFX_CFD_CTRADER',
+      providerId: 'ctrader',
+      providerConnectionId: String(metadata.connectionId || ''),
+      providerAccountId: String(metadata.accountId || ''),
+      usedMargin: Number.isFinite(usedMargin) ? usedMargin : undefined,
+      stopLossPips: Number.isFinite(stopLossPips) && stopLossPips > 0 ? stopLossPips : undefined,
+      takeProfitPips: Number.isFinite(takeProfitPips) && takeProfitPips > 0 ? takeProfitPips : undefined,
+      commission: Number(metadata.commission),
+    }
+  }
+
+  const stake = Number(metadata.stake ?? position.quantity ?? 0)
+  const multiplierValue = Number(metadata.multiplier ?? 0)
+  const stopLossAmount = Number(position.stopLoss ?? raw.stop_loss ?? 0)
+  const takeProfitAmount = Number(position.takeProfit ?? raw.take_profit ?? 0)
+  return {
+    id: String(position.id),
+    symbol: normalizeProviderSymbol(position.symbol),
+    type: position.side,
+    lotSize: Number.isFinite(stake) ? stake : 0,
+    entryPrice: Number.isFinite(entryPrice) ? entryPrice : 0,
+    currentPrice: Number.isFinite(currentPrice) && currentPrice > 0 ? currentPrice : undefined,
+    stopLoss: null,
+    takeProfit: null,
+    riskPercent: 0,
+    riskAmount: Number.isFinite(stopLossAmount) && stopLossAmount > 0 ? stopLossAmount : (Number.isFinite(stake) ? stake : 0),
+    rewardAmount: Number.isFinite(takeProfitAmount) && takeProfitAmount > 0 ? takeProfitAmount : 0,
+    riskRewardRatio: Number.isFinite(stopLossAmount) && stopLossAmount > 0 && Number.isFinite(takeProfitAmount) && takeProfitAmount > 0 ? takeProfitAmount / stopLossAmount : 0,
+    status: 'open',
+    openTime: typeof metadata.purchaseTime === 'number' ? new Date(metadata.purchaseTime * 1000).toISOString() : new Date().toISOString(),
+    profit: Number.isFinite(position.unrealizedPL) ? position.unrealizedPL : 0,
+    providerOrderId: String(position.id),
+    brokerProduct: 'DERIV_MULTIPLIER',
+    stake: Number.isFinite(stake) ? stake : 0,
+    multiplier: Number.isFinite(multiplierValue) && multiplierValue > 0 ? multiplierValue : undefined,
+    stopLossAmount: Number.isFinite(stopLossAmount) && stopLossAmount > 0 ? stopLossAmount : undefined,
+    takeProfitAmount: Number.isFinite(takeProfitAmount) && takeProfitAmount > 0 ? takeProfitAmount : undefined,
+  }
+}
+
+const providerOrderToTrade = (order: ProviderOrderResult): TradeOrder | null => {
+  if (order.raw && typeof order.raw === 'object') {
+    const raw = order.raw as Record<string, unknown>
+    if (String(raw.provider || '') === 'ctrader') {
+      const providerOrderId = String(order.providerOrderId || raw.orderId || '')
+      if (!providerOrderId) return null
+      return {
+        id: providerOrderId,
+        symbol: normalizeProviderSymbol(String(order.symbol || raw.symbol || '')),
+        type: order.side === 'SELL' ? 'SELL' : 'BUY',
+        lotSize: Number(order.quantity ?? raw.quantity ?? 0),
+        entryPrice: Number(raw.price ?? 0),
+        stopLoss: null,
+        takeProfit: null,
+        riskPercent: 0,
+        riskAmount: 0,
+        rewardAmount: 0,
+        riskRewardRatio: 0,
+        status: order.status === 'filled' ? 'closed' : 'pending',
+        openTime: order.timestamp || new Date().toISOString(),
+        closeTime: order.status === 'filled' ? order.timestamp : undefined,
+        profit: Number(raw.profit ?? 0),
+        providerOrderId,
+        brokerProduct: 'SHAFX_CFD_CTRADER',
+        providerId: 'ctrader',
+      }
+    }
+  }
+
+  const raw = (order.raw && typeof order.raw === 'object') ? order.raw as Record<string, unknown> : {}
+  const contractId = String(order.providerOrderId || raw.contractId || '')
+  if (!contractId) return null
+  const stake = Number(raw.stake ?? order.quantity ?? 0)
+  const profit = Number(raw.profit)
+  const symbol = normalizeProviderSymbol(String(order.symbol || raw.symbol || ''))
+  return {
+    id: contractId,
+    symbol: symbol || 'EUR/USD',
+    type: order.side === 'SELL' ? 'SELL' : 'BUY',
+    lotSize: Number.isFinite(stake) ? stake : 0,
+    entryPrice: Number(raw.entryPrice ?? raw.startSpot ?? raw.buyPrice ?? 0),
+    stopLoss: null,
+    takeProfit: null,
+    riskPercent: 0,
+    riskAmount: Number.isFinite(stake) ? stake : 0,
+    rewardAmount: 0,
+    riskRewardRatio: 0,
+    status: 'closed',
+    openTime: typeof raw.purchaseTime === 'number' ? new Date(raw.purchaseTime * 1000).toISOString() : order.timestamp || new Date().toISOString(),
+    closeTime: order.timestamp || new Date().toISOString(),
+    profit: Number.isFinite(profit) ? profit : 0,
+    providerOrderId: contractId,
+    brokerProduct: 'DERIV_MULTIPLIER',
+    stake: Number.isFinite(stake) ? stake : undefined,
+    multiplier: Number(raw.multiplier) > 0 ? Number(raw.multiplier) : undefined,
+  }
+}
+
+const BOT_PAPER_HISTORY_STORAGE_KEY = 'shafx-bot-paper-history-v1'
+
+const readBotPaperHistory = (): BotPaperTrade[] => {
+  if (typeof window === 'undefined') return []
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(BOT_PAPER_HISTORY_STORAGE_KEY) || '[]')
+    return Array.isArray(parsed) ? parsed as BotPaperTrade[] : []
+  } catch {
+    return []
+  }
+}
 
 const TerminalContent: React.FC = () => {
   const { selectedSymbol, setSelectedSymbol, timeframe, setTimeframe } = useTerminal()
   const [activeProviderSelection, setActiveProviderSelection] = useState<ActiveProviderSelection | null>(() => getStoredProviderSelection())
   const [currentPrice, setCurrentPrice] = useState(0)
+  const [liveBidPrice, setLiveBidPrice] = useState(0)
+  const [liveAskPrice, setLiveAskPrice] = useState(0)
+  const [liveQuoteIdentity, setLiveQuoteIdentity] = useState<string | null>(null)
   const [marketTimestamp, setMarketTimestamp] = useState(0)
   const [liveCandles, setLiveCandles] = useState<OHLCV[]>([])
   const [accountData, setAccountData] = useState<AccountData | null>(null)
@@ -47,34 +200,119 @@ const TerminalContent: React.FC = () => {
   const [openPositions, setOpenPositions] = useState<TradeOrder[]>([])
   const [pendingOrders] = useState<TradeOrder[]>([])
   const [tradeHistory, setTradeHistory] = useState<TradeOrder[]>([])
-  const [botOrderIds, setBotOrderIds] = useState<string[]>([])
+  const [botPaperHistory, setBotPaperHistory] = useState<BotPaperTrade[]>(() => readBotPaperHistory())
   const [reviewSetup, setReviewSetup] = useState<SetupCandidate | null>(null)
   const [liveMarketActive, setLiveMarketActive] = useState(false)
   const [chartSettings, setChartSettings] = useState<ChartWorkspaceSettings>(() => readChartWorkspaceSettings())
   const [toast, setToast] = useState<ToastMessage | null>(null)
+  const [tradeLines, setTradeLines] = useState<ChartAnnotation[]>([])
   const [chartTool, setChartTool] = useState<WorkspaceTool>('cursor')
-  const [dock, setDock] = useState<WorkspaceDock>('insights')
+  const [dock, setDock] = useState<WorkspaceDock>('orders')
   const [mobileTab, setMobileTab] = useState<MobileNavTab>('market')
   const [mobileDockOpen, setMobileDockOpen] = useState(false)
+  const [isCompactViewport, setIsCompactViewport] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 999px)').matches)
   const [isLandscapeCompactViewport, setIsLandscapeCompactViewport] = useState(() => typeof window !== 'undefined' && window.matchMedia('(orientation: landscape) and (max-width: 999px)').matches)
   const accountStreamManager = useRef(new ProviderAccountStreamManager())
   const selectedSymbolRef = useRef(selectedSymbol)
+  const timeframeRef = useRef(timeframe)
   const watchlistReferencePricesRef = useRef<Record<string, number>>({})
   const candleCacheRef = useRef<Record<string, OHLCV[]>>({})
+  // cTrader chart history is kept separately from other providers so switching
+  // back to an already-viewed symbol/timeframe can paint immediately without
+  // briefly showing bars sourced from a different provider.
+  const cTraderCandleCacheRef = useRef<Record<string, OHLCV[]>>({})
+  const liveCandlesRef = useRef<OHLCV[]>([])
+  const historyWarmInFlightRef = useRef<Record<string, Promise<Partial<Record<(typeof TIMEFRAMES)[number], OHLCV[]>>>>>({})
+  const latestCTraderPriceRef = useRef<number | null>(null)
+  const liveQuoteIdentityRef = useRef<string | null>(null)
   const toastId = useRef(0)
+  const lastStreamToastAt = useRef(0)
+  const lastStreamToastText = useRef('')
+
+  // Keep the newest rendered candle synchronously available to the broker
+  // quote callback, so it can reject an old quote before moving the price tags.
+  useLayoutEffect(() => {
+    liveCandlesRef.current = liveCandles
+  }, [liveCandles])
+
+  useEffect(() => {
+    // Invalidate the last quote when the chart identity changes. The rendered
+    // values are gated by this identity, avoiding stale tags without an extra
+    // setState render from inside an effect.
+    liveQuoteIdentityRef.current = null
+    latestCTraderPriceRef.current = null
+  }, [selectedSymbol, timeframe, activeProviderSelection?.providerId])
 
   const pushToast = useCallback((text: string) => {
     toastId.current += 1
     setToast({ id: toastId.current, text })
   }, [])
+
+  const pushStreamToast = useCallback((text: string): void => {
+    const now = Date.now()
+    if (text === lastStreamToastText.current && now - lastStreamToastAt.current < 15000) return
+    lastStreamToastText.current = text
+    lastStreamToastAt.current = now
+    pushToast(text)
+  }, [pushToast])
+
+  // Change timeframe and candle snapshot together. A passive cache effect can
+  // otherwise render the new timeframe with the previous timeframe's candles.
+  const handleTimeframeChange = useCallback((nextTimeframe: Timeframe): void => {
+    if (timeframeRef.current === nextTimeframe) return
+
+    timeframeRef.current = nextTimeframe
+    setTimeframe(nextTimeframe)
+
+    // Reuse only the exact target timeframe's cache. Never keep rendering the
+    // previous interval while the selected cTrader history request is in flight.
+    const cTraderKey = activeProviderSelection?.providerId === 'ctrader'
+      ? [
+          String(activeProviderSelection.connectionId ?? ''),
+          String(activeProviderSelection.accountId ?? ''),
+          activeProviderSelection.environment,
+          selectedSymbolRef.current,
+          nextTimeframe,
+        ].join(':')
+      : ''
+    const cached = activeProviderSelection?.providerId === 'ctrader'
+      ? cTraderCandleCacheRef.current[cTraderKey] ?? []
+      : candleCacheRef.current[`${selectedSymbolRef.current}:${nextTimeframe}`] ?? []
+    const nextCandles = cached.length > 1 ? cached : []
+    liveCandlesRef.current = nextCandles
+    setLiveCandles(nextCandles)
+    setLiveBidPrice(0)
+    setLiveAskPrice(0)
+    setLiveQuoteIdentity(null)
+    latestCTraderPriceRef.current = null
+    liveQuoteIdentityRef.current = null
+    const last = nextCandles[nextCandles.length - 1]
+    setCurrentPrice(last?.close ?? 0)
+    setMarketTimestamp(last ? Math.floor(last.time / 1000) : 0)
+  }, [activeProviderSelection?.providerId, setTimeframe])
+
+  const handleBotPaperRoundClosed = useCallback((trade: BotPaperTrade): void => {
+    setBotPaperHistory((current) => [trade, ...current.filter((item) => item.id !== trade.id)].slice(0, 200))
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(BOT_PAPER_HISTORY_STORAGE_KEY, JSON.stringify(botPaperHistory))
+  }, [botPaperHistory])
   const dismissToast = useCallback(() => setToast(null), [])
 
-  useEffect(() => { selectedSymbolRef.current = selectedSymbol }, [selectedSymbol])
+  useLayoutEffect(() => {
+    selectedSymbolRef.current = selectedSymbol
+    timeframeRef.current = timeframe
+  }, [selectedSymbol, timeframe])
 
   useEffect(() => {
     const compactMedia = window.matchMedia('(max-width: 999px)')
     const landscapeMedia = window.matchMedia('(orientation: landscape) and (max-width: 999px)')
-    const sync = () => { setIsLandscapeCompactViewport(landscapeMedia.matches) }
+    const sync = () => {
+      setIsCompactViewport(compactMedia.matches)
+      setIsLandscapeCompactViewport(landscapeMedia.matches)
+    }
     sync()
     compactMedia.addEventListener('change', sync)
     landscapeMedia.addEventListener('change', sync)
@@ -101,7 +339,7 @@ const TerminalContent: React.FC = () => {
       try {
         const connections = await getProviderConnections()
         const selected = chooseDefaultProviderSelection(connections)
-        if (cancelled || !selected || selected.providerId !== 'deriv' || !selected.accountId) return
+        if (cancelled || !selected || !['deriv', 'ctrader'].includes(selected.providerId) || !selected.accountId) return
         setActiveProviderSelection(selected)
         const connection = connections.find((item) => item.id === selected.connectionId)
         const account = connection?.accounts.find((item) => item.providerAccountId === selected.accountId && item.active)
@@ -126,14 +364,62 @@ const TerminalContent: React.FC = () => {
 
   useEffect(() => {
     setSymbolSpec(getSymbolSpec(selectedSymbol))
+    if (activeProviderSelection?.providerId === 'ctrader') return
+    latestCTraderPriceRef.current = null
+    setLiveBidPrice(0)
+    setLiveAskPrice(0)
+    setLiveMarketActive(false)
+
+    const warm = async (): Promise<void> => {
+      const existing = historyWarmInFlightRef.current[selectedSymbol]
+      const request = existing ?? fetchDerivMultiTimeframeCandles(selectedSymbol, TIMEFRAMES)
+      if (!existing) historyWarmInFlightRef.current[selectedSymbol] = request
+      try {
+        const warmed = await request
+        if (selectedSymbolRef.current !== selectedSymbol) return
+        for (const [tf, candles] of Object.entries(warmed) as Array<[typeof TIMEFRAMES[number], OHLCV[] | undefined]>) {
+          if (!candles?.length) continue
+          const key = selectedSymbol + ':' + tf
+          const current = candleCacheRef.current[key] ?? []
+          if (candles.length > current.length) candleCacheRef.current[key] = candles
+        }
+        const currentKey = selectedSymbol + ':' + timeframeRef.current
+        const current = candleCacheRef.current[currentKey] ?? []
+        if (current.length > 1) {
+          setLiveCandles(current)
+          const last = current[current.length - 1]
+          setCurrentPrice(last?.close ?? 0)
+          setMarketTimestamp(last ? Math.floor(last.time / 1000) : 0)
+        }
+      } catch {
+        // The primary live stream remains responsible for the selected timeframe.
+      } finally {
+        if (historyWarmInFlightRef.current[selectedSymbol] === request) delete historyWarmInFlightRef.current[selectedSymbol]
+      }
+    }
+
     const cacheKey = selectedSymbol + ':' + timeframe
     const cached = candleCacheRef.current[cacheKey] ?? []
     setLiveCandles(cached)
     const last = cached[cached.length - 1]
     setCurrentPrice(last?.close ?? 0)
     setMarketTimestamp(last ? Math.floor(last.time / 1000) : 0)
-    setLiveMarketActive(false)
-  }, [selectedSymbol, timeframe])
+    void warm()
+  }, [selectedSymbol, activeProviderSelection?.providerId])
+
+  useEffect(() => {
+    if (activeProviderSelection?.providerId === 'ctrader') return
+    const cacheKey = selectedSymbol + ':' + timeframe
+    const cached = candleCacheRef.current[cacheKey] ?? []
+    if (cached.length > 1) {
+      setLiveCandles(cached)
+      const last = cached[cached.length - 1]
+      setCurrentPrice(last?.close ?? 0)
+      setMarketTimestamp(last ? Math.floor(last.time / 1000) : 0)
+    } else {
+      setLiveCandles([])
+    }
+  }, [selectedSymbol, timeframe, activeProviderSelection?.providerId])
 
   useEffect(() => {
     let cancelled = false
@@ -196,8 +482,45 @@ const TerminalContent: React.FC = () => {
   }, [])
 
   useEffect(() => {
+    const selection = activeProviderSelection
+    if (selection?.providerId !== 'ctrader' || !selection.connectionId || !selection.accountId) return
+
+    let cancelled = false
+    const loadHistory = async (): Promise<void> => {
+      try {
+        const response = await fetch('/api/providers/ctrader', {
+          method: 'POST',
+          credentials: 'include',
+          cache: 'no-store',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            providerId: 'ctrader',
+            connectionId: selection.connectionId,
+            accountId: selection.accountId,
+            environment: selection.environment,
+            action: 'history',
+            lookbackDays: 1825,
+          }),
+        })
+        const payload = await response.json().catch(() => ({})) as { ok?: boolean; history?: TradeOrder[] }
+        if (cancelled || !response.ok || !payload.ok || !Array.isArray(payload.history)) return
+        setTradeHistory(payload.history)
+      } catch {
+        // Keep any history already rendered when the broker history endpoint is temporarily unavailable.
+      }
+    }
+
+    void loadHistory()
+    const timer = window.setInterval(() => { void loadHistory() }, 30000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [activeProviderSelection?.connectionId, activeProviderSelection?.accountId, activeProviderSelection?.environment, activeProviderSelection?.providerId])
+
+  useEffect(() => {
     const manager = accountStreamManager.current
-    if (!activeProviderSelection?.providerId || activeProviderSelection.providerId !== 'deriv' || !activeProviderSelection.connectionId || !activeProviderSelection.accountId) {
+    if (!activeProviderSelection?.providerId || !['deriv', 'ctrader'].includes(activeProviderSelection.providerId) || !activeProviderSelection.connectionId || !activeProviderSelection.accountId) {
       void manager.stopAll()
       return
     }
@@ -205,7 +528,7 @@ const TerminalContent: React.FC = () => {
     let cancelled = false
     const accountType = activeProviderSelection.environment === 'demo' ? 'demo' as const : 'real' as const
     const spec = {
-      providerId: 'deriv',
+      providerId: activeProviderSelection.providerId,
       connectionId: activeProviderSelection.connectionId,
       accountId: activeProviderSelection.accountId,
       accountType,
@@ -242,7 +565,46 @@ const TerminalContent: React.FC = () => {
           },
           (status) => {
             if (cancelled) return
-            if (status === 'error') pushToast('Deriv account stream interrupted. SHAFX is reconnecting.')
+            if (status === 'error') pushStreamToast((activeProviderSelection.providerId === 'ctrader' ? 'cTrader' : 'Deriv') + ' account stream interrupted. SHAFX is reconnecting.')
+          },
+          (event: ProviderStreamEvent) => {
+            if (cancelled || key !== providerAccountStreamKey({
+              providerId: activeProviderSelection.providerId,
+              connectionId: activeProviderSelection.connectionId,
+              accountId: activeProviderSelection.accountId ?? '',
+              accountType: activeProviderSelection.environment === 'demo' ? 'demo' : 'real',
+            })) return
+
+            if (event.type === 'position') {
+              const trade = providerPositionToTrade(event.position)
+              setOpenPositions((current) => {
+                const previous = current.find((item) => item.id === trade.id)
+                const nextTrade: TradeOrder = {
+                  ...trade,
+                  chartTimeframe: previous?.chartTimeframe ?? timeframe,
+                  plannedStopLossPrice: previous?.plannedStopLossPrice ?? null,
+                  plannedTakeProfitPrice: previous?.plannedTakeProfitPrice ?? null,
+                  commission: previous?.commission,
+                  payout: previous?.payout,
+                }
+                const next = current.filter((item) => item.id !== trade.id)
+                return [...next, nextTrade].sort((a, b) => b.openTime.localeCompare(a.openTime))
+              })
+              setTradeHistory((current) => current.filter((item) => item.id !== trade.id))
+              return
+            }
+
+            if (event.type === 'order') {
+              const raw = (event.order.raw && typeof event.order.raw === 'object') ? event.order.raw as Record<string, unknown> : {}
+              if (raw.closed !== true) return
+              const trade = providerOrderToTrade(event.order)
+              if (!trade) return
+              setOpenPositions((current) => current.filter((item) => item.id !== trade.id))
+              setTradeHistory((current) => {
+                const next = [trade, ...current.filter((item) => item.id !== trade.id)]
+                return next.sort((a, b) => String(b.closeTime || b.openTime).localeCompare(String(a.closeTime || a.openTime)))
+              })
+            }
           },
         )
       } catch (error) {
@@ -251,23 +613,226 @@ const TerminalContent: React.FC = () => {
     }
     void start()
     return () => { cancelled = true; void manager.stopAll() }
-  }, [activeProviderSelection?.providerId, activeProviderSelection?.connectionId, activeProviderSelection?.accountId, activeProviderSelection?.environment, pushToast])
+  }, [activeProviderSelection?.providerId, activeProviderSelection?.connectionId, activeProviderSelection?.accountId, activeProviderSelection?.environment, pushStreamToast])
 
   const handleLiveUpdate = useCallback((candles: OHLCV[], price: number, epoch: number): void => {
-    const valid = candles.filter((candle, index) =>
-      Number.isFinite(candle.time) &&
-      Number.isFinite(candle.open) &&
-      Number.isFinite(candle.high) &&
-      Number.isFinite(candle.low) &&
-      Number.isFinite(candle.close) &&
-      (index === 0 || candle.time > candles[index - 1].time)
-    )
-    const cacheKey = selectedSymbolRef.current + ':' + timeframe
+    // A prior symbol/timeframe subscription can deliver a final callback after
+    // a switch. Do not let that stale snapshot overwrite the active chart.
+    if (selectedSymbolRef.current !== selectedSymbol || timeframeRef.current !== timeframe) return
+
+    const valid = normalizeMarketCandles(candles)
+    // Keep the last good chart mounted during transient invalid/empty snapshots.
+    if (!valid.length) return
+
+    const cacheKey = selectedSymbol + ':' + timeframe
+    const cTraderActive = activeProviderSelection?.providerId === 'ctrader'
+    const livePrice = cTraderActive && latestCTraderPriceRef.current && latestCTraderPriceRef.current > 0
+      ? latestCTraderPriceRef.current
+      : price
     candleCacheRef.current[cacheKey] = valid
     setLiveCandles(valid)
-    setCurrentPrice(price)
+    setCurrentPrice(livePrice)
     setMarketTimestamp(Math.floor(epoch / 1000))
-  }, [timeframe])
+  }, [activeProviderSelection?.providerId, selectedSymbol, timeframe])
+
+  useEffect(() => {
+    const selection = activeProviderSelection
+    if (selection?.providerId !== 'ctrader' || !selection.connectionId || !selection.accountId) return
+
+    let cancelled = false
+    const cacheKey = [
+      String(selection.connectionId),
+      String(selection.accountId),
+      selection.environment,
+      selectedSymbol,
+      timeframe,
+    ].join(':')
+    const cachedCandles = cTraderCandleCacheRef.current[cacheKey] ?? []
+    // Keep the exact symbol/timeframe's previously loaded bars visible during
+    // refresh. This avoids a blank chart while the broker history request waits.
+    liveCandlesRef.current = cachedCandles
+    setLiveCandles(cachedCandles)
+    setLiveMarketActive(false)
+    const cachedLast = cachedCandles[cachedCandles.length - 1]
+    if (cachedLast) {
+      setCurrentPrice(cachedLast.close)
+      setMarketTimestamp(Math.floor(cachedLast.time))
+    }
+
+    const load = async (): Promise<void> => {
+      try {
+        const candles = await fetchCTraderHistoricalCandles({
+          connectionId: String(selection.connectionId),
+          accountId: String(selection.accountId),
+          environment: selection.environment === 'live' ? 'live' : 'demo',
+          symbol: selectedSymbol,
+          timeframe,
+          count: 300,
+        })
+        if (cancelled || !candles.length) return
+        // A quote may arrive before the slower historical snapshot. Merge the
+        // two so the history response cannot rewind or erase current live ticks.
+        const liveDuringLoad = cTraderCandleCacheRef.current[cacheKey] ?? liveCandlesRef.current
+        const mergedCandles = mergeCTraderHistoricalAndLiveCandles(candles, liveDuringLoad)
+        cTraderCandleCacheRef.current[cacheKey] = mergedCandles
+        candleCacheRef.current[selectedSymbol + ':' + timeframe] = mergedCandles
+        liveCandlesRef.current = mergedCandles
+        setLiveCandles(mergedCandles)
+        const last = mergedCandles[mergedCandles.length - 1]
+        if (last && !(latestCTraderPriceRef.current && latestCTraderPriceRef.current > 0)) {
+          setCurrentPrice(last.close)
+          setMarketTimestamp(Math.floor(last.time))
+        }
+      } catch (error) {
+        if (!cancelled) pushStreamToast(error instanceof Error ? error.message : 'cTrader chart history could not be loaded.')
+      }
+    }
+
+    void load()
+    return () => { cancelled = true }
+  }, [activeProviderSelection?.accountId, activeProviderSelection?.connectionId, activeProviderSelection?.environment, activeProviderSelection?.providerId, pushStreamToast, selectedSymbol, timeframe])
+
+  useEffect(() => {
+    const selection = activeProviderSelection
+    if (selection?.providerId !== 'ctrader' || !selection.connectionId || !selection.accountId) return
+
+    // Old quote requests can finish after cleanup. Capture identity and reject
+    // callbacks that no longer belong to the active symbol/timeframe.
+    let cancelled = false
+    let historyRepairInFlight = false
+    let lastHistoryRepairAt = 0
+    const subscriptionSymbol = selectedSymbol
+    const subscriptionTimeframe = timeframe
+    const historyRepairKey = [
+      String(selection.connectionId),
+      String(selection.accountId),
+      selection.environment,
+      subscriptionSymbol,
+      subscriptionTimeframe,
+    ].join(':')
+
+    const repairSkippedCandles = async (): Promise<void> => {
+      // Backfill actual cTrader bars after a quote jumps over a candle bucket.
+      // Never synthesize flat candles to hide a gap: the broker's OHLC history
+      // is the only source allowed to fill those missing timestamps.
+      if (cancelled || historyRepairInFlight || Date.now() - lastHistoryRepairAt < 15_000) return
+      historyRepairInFlight = true
+      lastHistoryRepairAt = Date.now()
+      try {
+        const history = await fetchCTraderHistoricalCandles({
+          connectionId: String(selection.connectionId),
+          accountId: String(selection.accountId),
+          environment: selection.environment === 'live' ? 'live' : 'demo',
+          symbol: subscriptionSymbol,
+          timeframe: subscriptionTimeframe,
+          count: 300,
+        })
+        if (
+          cancelled ||
+          selectedSymbolRef.current !== subscriptionSymbol ||
+          timeframeRef.current !== subscriptionTimeframe
+        ) return
+
+        const latestLive = cTraderCandleCacheRef.current[historyRepairKey] ?? liveCandlesRef.current
+        const repaired = mergeCTraderHistoricalAndLiveCandles(history, latestLive)
+        const unchanged = repaired.length === latestLive.length && repaired.every((bar, index) => {
+          const previous = latestLive[index]
+          return previous &&
+            previous.time === bar.time &&
+            previous.open === bar.open &&
+            previous.high === bar.high &&
+            previous.low === bar.low &&
+            previous.close === bar.close
+        })
+        if (unchanged) return
+
+        cTraderCandleCacheRef.current[historyRepairKey] = repaired
+        candleCacheRef.current[subscriptionSymbol + ':' + subscriptionTimeframe] = repaired
+        liveCandlesRef.current = repaired
+        setLiveCandles(repaired)
+        // Keep the quote/header time from the live stream; this request repairs
+        // candle history only and must never make the visible price jump backward.
+      } catch {
+        // A later genuine gap can retry; do not replace good live candles with a failed refresh.
+      } finally {
+        historyRepairInFlight = false
+      }
+    }
+
+    const unsubscribe = subscribeCTraderLiveQuote({
+      connectionId: selection.connectionId,
+      accountId: selection.accountId,
+      environment: selection.environment === 'live' ? 'live' : 'demo',
+      symbol: subscriptionSymbol,
+    }, (nextQuote) => {
+      if (
+        cancelled ||
+        selectedSymbolRef.current !== subscriptionSymbol ||
+        timeframeRef.current !== subscriptionTimeframe
+      ) return
+
+      const bid = Number(nextQuote.bid)
+      const ask = Number(nextQuote.ask)
+      const price = Number.isFinite(bid) && bid > 0
+        ? bid
+        : Number.isFinite(ask) && ask > 0
+          ? ask
+          : 0
+      if (!price) return
+      const epochMs = Date.parse(nextQuote.timestamp)
+      const timestamp = Number.isFinite(epochMs) ? epochMs : Date.now()
+      const bucket = cTraderQuoteBucket(timestamp, subscriptionTimeframe)
+
+      // Validate the quote against the displayed timeframe's latest candle BEFORE
+      // changing currentPrice or BUY/SELL. Previously a stale bucket moved those
+      // labels, while the candle updater below discarded the same tick.
+      const currentCandles = normalizeMarketCandles(liveCandlesRef.current)
+      const last = currentCandles[currentCandles.length - 1]
+      if (!isCTraderQuoteBucketCurrent(bucket, last?.time)) return
+      const skippedCandleBucket = shouldRepairCTraderHistoryForGap(last?.time, bucket, subscriptionTimeframe)
+
+      // Candle OHLC is bid-based. This shared helper preserves the candle open,
+      // extends its wick, and updates close on every accepted tick so Lightweight
+      // Charts can switch the forming body between up/down colors when close crosses open.
+      const nextCandles = applyCTraderQuoteToCandles(currentCandles, bucket, price)
+      if (nextCandles.length > 0) {
+        // Commit the candle and the quote markers from the same accepted tick.
+        const cTraderKey = [
+          String(selection.connectionId),
+          String(selection.accountId),
+          selection.environment,
+          subscriptionSymbol,
+          subscriptionTimeframe,
+        ].join(':')
+        liveCandlesRef.current = nextCandles
+        cTraderCandleCacheRef.current[cTraderKey] = nextCandles
+        candleCacheRef.current[subscriptionSymbol + ':' + subscriptionTimeframe] = nextCandles
+        setLiveCandles(nextCandles)
+      }
+      if (skippedCandleBucket) void repairSkippedCandles()
+
+      latestCTraderPriceRef.current = price
+      const quoteIdentity = [
+        subscriptionSymbol,
+        subscriptionTimeframe,
+        'ctrader',
+        String(selection.connectionId),
+        String(selection.accountId),
+        selection.environment === 'live' ? 'live' : 'demo',
+      ].join(':')
+      liveQuoteIdentityRef.current = quoteIdentity
+      setLiveQuoteIdentity(quoteIdentity)
+      setLiveBidPrice(Number.isFinite(bid) && bid > 0 ? bid : price)
+      setLiveAskPrice(Number.isFinite(ask) && ask > 0 ? ask : price)
+      setCurrentPrice(price)
+      setMarketTimestamp(Math.floor(timestamp / 1000))
+      setLiveMarketActive(true)
+    })
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
+  }, [activeProviderSelection?.accountId, activeProviderSelection?.connectionId, activeProviderSelection?.environment, activeProviderSelection?.providerId, selectedSymbol, timeframe])
 
   const handleLiveActiveChange = useCallback((active: boolean): void => {
     setLiveMarketActive(active)
@@ -301,10 +866,97 @@ const TerminalContent: React.FC = () => {
     }
   }, [liveCandles, selectedSymbol])
 
-  const chartAnnotations = useMemo(() => buildStructuralChartAnnotations(selectedSymbol, liveCandles, timeframe)
-    .map((annotation) => ({ ...annotation, id: 'live-' + timeframe + '-' + annotation.id })), [liveCandles, selectedSymbol, timeframe])
+  // Deriv's public FX stream gives SHAFX one live market price rather than a broker-side
+  // bid/ask pair. Keep the terminal MT5-like at the fractional-pip level without rounding
+  // away the final price digit on each tick. The spread remains a display estimate until
+  // a broker-side bid/ask feed is available.
+  const usingCTrader = activeProviderSelection?.providerId === 'ctrader'
+  const selectedCTraderQuoteIdentity = [
+    selectedSymbol,
+    timeframe,
+    'ctrader',
+    String(activeProviderSelection?.connectionId ?? ''),
+    String(activeProviderSelection?.accountId ?? ''),
+    activeProviderSelection?.environment === 'live' ? 'live' : 'demo',
+  ].join(':')
+  const cTraderQuoteMatchesChart = usingCTrader &&
+    liveQuoteIdentity === selectedCTraderQuoteIdentity
+  const latestCandleClose = Number(liveCandles[liveCandles.length - 1]?.close ?? 0)
+  const chartBidRaw = usingCTrader
+    ? cTraderQuoteMatchesChart && liveBidPrice > 0 ? liveBidPrice : latestCandleClose
+    : Number.isFinite(currentPrice) && currentPrice > 0 ? currentPrice : latestCandleClose
+  const chartBidPrice = Number(chartBidRaw.toFixed(symbolSpec.pricePrecision))
+  const chartSpread = Math.max(symbolSpec.pipSize * 0.2, symbolSpec.pipSize / 10)
+  const chartAskPrice = usingCTrader
+    ? cTraderQuoteMatchesChart && liveAskPrice > 0
+      ? Number(liveAskPrice.toFixed(symbolSpec.pricePrecision))
+      : chartBidPrice > 0
+        ? (() => {
+          const chartAskCandidate = Number((chartBidPrice + chartSpread).toFixed(symbolSpec.pricePrecision))
+          return chartAskCandidate > chartBidPrice
+            ? chartAskCandidate
+            : Number((chartBidPrice + symbolSpec.pipSize).toFixed(symbolSpec.pricePrecision))
+        })()
+        : 0
+    : (() => {
+      const chartAskCandidate = Number((chartBidPrice + chartSpread).toFixed(symbolSpec.pricePrecision))
+      return chartAskCandidate > chartBidPrice
+        ? chartAskCandidate
+        : Number((chartBidPrice + symbolSpec.pipSize).toFixed(symbolSpec.pricePrecision))
+    })()
 
-  const tradeLines = useMemo<ChartAnnotation[]>(() => [], [])
+  const structureBarTime = liveCandles.length ? Number(liveCandles[liveCandles.length - 1]?.time ?? 0) : 0
+  const chartAnnotations = useMemo(() => buildStructuralChartAnnotations(selectedSymbol, liveCandles, timeframe)
+    .map((annotation) => ({ ...annotation, id: 'live-' + timeframe + '-' + annotation.id })), [selectedSymbol, timeframe, structureBarTime])
+
+  const selectedOpenPosition = useMemo(
+    () => openPositions.find((position) => providerSymbolsMatch(position.symbol, selectedSymbol)) ?? null,
+    [openPositions, selectedSymbol],
+  )
+
+  const brokerPositionTradeLines = useMemo<ChartAnnotation[]>(
+    () => buildOpenPositionChartLines(selectedOpenPosition, chartBidPrice, chartAskPrice),
+    [selectedOpenPosition, chartBidPrice, chartAskPrice],
+  )
+
+  const combinedTradeLines = useMemo(() => {
+    const draftLevelIds = new Set(['shafx-cfd-sl', 'shafx-cfd-tp', 'plan-sl', 'plan-tp'])
+    const hasOpenPositionForChart = Boolean(selectedOpenPosition)
+    return [
+      ...tradeLines.filter((line) =>
+        !(hasOpenPositionForChart && draftLevelIds.has(line.id)) &&
+        !brokerPositionTradeLines.some((broker) => broker.id === line.id),
+      ),
+      ...brokerPositionTradeLines,
+    ]
+  }, [brokerPositionTradeLines, selectedOpenPosition, tradeLines])
+
+  // The chart's trade map includes entries and exits for this symbol only.
+  // Marker coordinates resolve against historical candle timestamps; no prices
+  // are invented and trades outside the loaded history simply remain in the blotter.
+  const chartTradeMarkers = useMemo<TradeChartMarker[]>(() => {
+    const seen = new Set<string>()
+    const trades = [...openPositions, ...tradeHistory.slice(0, 40)]
+    return trades
+      .filter((trade) => providerSymbolsMatch(trade.symbol, selectedSymbol))
+      .filter((trade) => {
+        if (!trade.id || seen.has(trade.id)) return false
+        seen.add(trade.id)
+        return Number.isFinite(trade.entryPrice) && trade.entryPrice > 0 && Boolean(trade.openTime)
+      })
+      .map((trade) => ({
+        id: trade.id,
+        side: trade.type,
+        openTime: trade.openTime,
+        closeTime: trade.closeTime,
+        entryPrice: trade.entryPrice,
+        exitPrice: trade.exitPrice,
+        volume: Number(trade.volumeLots ?? trade.lotSize ?? 0),
+        status: trade.status,
+        profit: Number(trade.profit ?? 0),
+      }))
+  }, [openPositions, selectedSymbol, tradeHistory])
+
   // Deriv public market data requires no authenticated account. Keep chart startup
   // independent from the slower OAuth/account synchronization path.
   const activeMarketConnection = useMemo(() => ({
@@ -315,7 +967,7 @@ const TerminalContent: React.FC = () => {
     state: 'connected' as const,
     connectedAt: new Date().toISOString(),
   }), [activeProviderSelection?.providerId, activeProviderSelection?.connectionId, activeProviderSelection?.accountId, activeProviderSelection?.environment])
-  const activeProviderName = 'Deriv'
+  const activeProviderName = activeProviderSelection?.providerId === 'ctrader' ? 'Deriv cTrader' : 'Deriv'
   const accountModeLabel = activeProviderSelection?.environment === 'live' ? 'REAL ACCOUNT' : 'DEMO ACCOUNT'
   const accountModeTone = activeProviderSelection?.environment === 'live' ? 'text-shafx-accent' : 'text-shafx-success'
   const chartToolMode: ChartToolMode = chartTool
@@ -328,29 +980,81 @@ const TerminalContent: React.FC = () => {
       }
     : null
 
-  const handleBotOrder = useCallback((order: TradeOrder): void => {
-    setOpenPositions((current) => current.some((item) => item.id === order.id) ? current : [...current, order])
-    setBotOrderIds((current) => current.includes(order.id) ? current : [...current, order.id])
-  }, [])
-
   const handleClosePosition = useCallback(async (id: string): Promise<TradeOrder | null> => {
     const existing = openPositions.find((order) => order.id === id) || tradeHistory.find((order) => order.id === id)
     if (!derivOrderConnection) {
-      pushToast('Connect Deriv before closing a trade.')
+      pushToast('Connect a trading account before closing a trade.')
       return null
     }
     try {
-      const closed = await closeDerivContract(derivOrderConnection, id, existing)
+      let closed: TradeOrder | null = null
+      if (activeProviderSelection?.providerId === 'ctrader') {
+        const response = await fetch('/api/providers/ctrader', {
+          method: 'POST',
+          credentials: 'include',
+          cache: 'no-store',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ providerId: 'ctrader', connectionId: derivOrderConnection.connectionId, accountId: derivOrderConnection.accountId, environment: derivOrderConnection.environment, action: 'closePosition', positionId: id }),
+        })
+        const payload = await response.json().catch(() => ({})) as { ok?: boolean; error?: string; order?: { timestamp?: string } }
+        if (!response.ok || !payload.ok) throw new Error(payload.error || 'Unable to close the cTrader position.')
+        const result = payload.order
+        closed = {
+          ...(existing || {
+            id,
+            symbol: selectedSymbol,
+            type: 'BUY' as const,
+            lotSize: 0,
+            entryPrice: 0,
+            stopLoss: null,
+            takeProfit: null,
+            riskPercent: 0,
+            riskAmount: 0,
+            rewardAmount: 0,
+            riskRewardRatio: 0,
+            status: 'open' as const,
+            openTime: new Date().toISOString(),
+          }),
+          status: 'closed',
+          closeTime: result?.timestamp || new Date().toISOString(),
+          profit: existing?.profit ?? 0,
+        }
+      } else {
+        closed = await closeDerivContract(derivOrderConnection, id, existing)
+      }
+
       if (!closed) return null
       setOpenPositions((current) => current.filter((order) => order.id !== id))
-      setTradeHistory((current) => [closed, ...current.filter((order) => order.id !== id)])
+      setTradeHistory((current) => [closed as TradeOrder, ...current.filter((order) => order.id !== id)])
+      setTradeLines((current) => current.filter((line) => !line.id.startsWith(id + '-')))
       return closed
     } catch (error) {
-      pushToast(error instanceof Error ? error.message : 'Unable to close the Deriv trade.')
+      pushToast(error instanceof Error ? error.message : 'Unable to close the selected trade.')
       return null
     }
-  }, [derivOrderConnection, openPositions, pushToast, tradeHistory])
+  }, [activeProviderSelection, derivOrderConnection, openPositions, pushToast, selectedSymbol, tradeHistory])
 
+  const handleBulkClose = useCallback(async (mode: 'winning' | 'losing' | 'all'): Promise<void> => {
+    const candidates = openPositions
+      .filter((trade) => mode === 'all' || (mode === 'winning' ? Number(trade.profit ?? 0) > 0 : Number(trade.profit ?? 0) < 0))
+      .map((trade) => trade.id)
+
+    if (!candidates.length) return
+
+    let closedCount = 0
+    for (const id of candidates) {
+      const closed = await handleClosePosition(id)
+      if (closed) closedCount += 1
+    }
+
+    if (closedCount > 0) {
+      pushToast('Closed ' + closedCount + ' ' + (closedCount === 1 ? 'trade' : 'trades') + '.')
+    }
+  }, [handleClosePosition, openPositions, pushToast])
+
+  // Deriv's authenticated account stream is the source of truth for
+  // balance, equity, free margin and floating P/L. Do not overwrite broker
+  // accounting with the public chart price.
   const resolvedAccountData = accountData ?? {
     balance: 0,
     equity: 0,
@@ -359,49 +1063,6 @@ const TerminalContent: React.FC = () => {
     floatingPL: 0,
     currency: 'USD',
   }
-
-  const accountConversionRate = useMemo(() => {
-    const accountCurrency = resolvedAccountData.currency.toUpperCase()
-    const quoteCurrency = symbolSpec.quoteCurrency.toUpperCase()
-    if (quoteCurrency === accountCurrency) return 1
-    const direct = watchlist.find((pair) => pair.symbol.toUpperCase() === quoteCurrency + '/' + accountCurrency && Number(pair.price) > 0)
-    if (direct) return Number(direct.price)
-    const inverse = watchlist.find((pair) => pair.symbol.toUpperCase() === accountCurrency + '/' + quoteCurrency && Number(pair.price) > 0)
-    if (inverse) return 1 / Number(inverse.price)
-    return undefined
-  }, [resolvedAccountData.currency, symbolSpec.quoteCurrency, watchlist])
-
-  const handleManualOrder = useCallback(async (draft: SimulatedOrderDraft): Promise<void> => {
-    if (!derivOrderConnection) {
-      pushToast('Connect a Deriv account before placing a trade.')
-      return
-    }
-    try {
-      const order = await placeDerivContract({
-        connection: derivOrderConnection,
-        symbol: draft.symbol,
-        side: draft.type,
-        stake: Math.max(1, draft.riskAmount),
-        currency: resolvedAccountData.currency,
-        multiplier: 100,
-        durationSeconds: 30,
-        takeProfitAmount: draft.rewardAmount,
-        stopLossAmount: draft.riskAmount,
-        entryPrice: draft.entryPrice,
-        stopLoss: draft.stopLoss,
-        takeProfit: draft.takeProfit,
-        riskPercent: draft.riskPercent,
-        riskAmount: draft.riskAmount,
-        rewardAmount: draft.rewardAmount,
-        riskRewardRatio: draft.riskRewardRatio,
-      })
-      setOpenPositions((current) => [...current, order])
-      pushToast('Deriv ' + draft.type + ' trade opened.')
-      setReviewSetup(null)
-    } catch (error) {
-      pushToast(error instanceof Error ? error.message : 'Unable to place the Deriv trade.')
-    }
-  }, [accountData, derivOrderConnection, pushToast])
 
   const handleReviewSetup = useCallback((setup?: SetupCandidate | null): void => {
     setReviewSetup(setup || null)
@@ -423,101 +1084,107 @@ const TerminalContent: React.FC = () => {
   const showFunds = mobileTab === 'funds'
   const showAccount = mobileTab === 'account'
 
-  const liveControl = <ProviderLiveControl
-    providerId="deriv"
-    connection={activeMarketConnection}
-    symbol={selectedSymbol}
-    timeframe={timeframe}
-    onUpdate={handleLiveUpdate}
-    onActiveChange={handleLiveActiveChange}
-  />
+  // cTrader supplies the authenticated live quote stream. Do not mount the
+  // public Deriv candle stream at the same time: both feeds can update
+  // liveCandles and make the chart oscillate between two price sources.
+  const liveControl = activeProviderSelection?.providerId === 'ctrader'
+    ? <div className="flex min-h-10 items-center gap-2 rounded-lg border border-shafx-success/25 bg-shafx-success/5 px-3 text-[10px] font-semibold text-shafx-success">
+        <span className="h-2 w-2 rounded-full bg-shafx-success" />
+        cTrader LIVE
+      </div>
+    : <ProviderLiveControl
+        providerId="deriv"
+        connection={activeMarketConnection}
+        symbol={selectedSymbol}
+        timeframe={timeframe}
+        onUpdate={handleLiveUpdate}
+        onActiveChange={handleLiveActiveChange}
+      />
 
   const dockContent = {
     insights: <div className="space-y-3">
       <FXMoveMatrix pairs={watchlist} />
       <MarketAnalysisPanel analysis={marketAnalysis} pricePrecision={symbolSpec.pricePrecision} pipSize={symbolSpec.pipSize} currentPrice={currentPrice} timeframe={timeframe} />
 <AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={liveCandles} setup={reviewSetup} onReviewSetup={() => handleReviewSetup(reviewSetup)} />
-      <OrderPanel symbol={selectedSymbol} currentPrice={currentPrice} bidPrice={currentPrice} askPrice={currentPrice} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} onSubmitOrder={(draft) => { void handleManualOrder(draft) }} aiSetup={reviewSetup} autoApplyAISetup={Boolean(reviewSetup)} />
     </div>,
     chat: <div className="space-y-3">
       <AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={liveCandles} setup={reviewSetup} onReviewSetup={() => handleReviewSetup(reviewSetup)} />
-      <OrderPanel symbol={selectedSymbol} currentPrice={currentPrice} bidPrice={currentPrice} askPrice={currentPrice} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} onSubmitOrder={(draft) => { void handleManualOrder(draft) }} aiSetup={reviewSetup} autoApplyAISetup={Boolean(reviewSetup)} />
+      <OrderPanel providerSelection={activeProviderSelection} symbol={selectedSymbol} currentPrice={currentPrice} bidPrice={chartBidPrice} askPrice={chartAskPrice} accountBalance={resolvedAccountData.balance} accountFreeMargin={resolvedAccountData.freeMargin} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} timeframe={timeframe} connection={derivOrderConnection} activePosition={selectedOpenPosition} onTradeClosed={(id) => { void handleClosePosition(id) }} onTradeLinesChange={setTradeLines} onTradeOpened={(order) => {
+      setOpenPositions((current) => [order, ...current.filter((item) => item.id !== order.id)])
+      setTradeHistory((current) => current.filter((item) => item.id !== order.id))
+      setTradeLines([])
+      setReviewSetup(null)
+      pushToast((activeProviderSelection?.providerId === 'ctrader' ? 'cTrader ' : 'Deriv ') + order.type + ' trade opened on ' + (order.chartTimeframe ?? timeframe) + '.')
+    }} aiSetup={reviewSetup} />
     </div>,
-    bot: <TradingAgentPanel
+    bot: <SignalDeskPanel
       symbol={selectedSymbol}
-      derivConnectionId={derivOrderConnection?.connectionId}
-      derivAccountId={derivOrderConnection?.accountId}
-      derivEnvironment={derivOrderConnection?.environment}
       timeframe={timeframe}
       candles={liveCandles}
       currentPrice={currentPrice}
-      activePosition={openPositions.find((order) => botOrderIds.includes(order.id)) ?? null}
-      tradeHistory={tradeHistory}
+      analysis={marketAnalysis}
+      setup={reviewSetup}
       accountBalance={resolvedAccountData.balance}
       accountCurrency={resolvedAccountData.currency}
-      symbolSpec={symbolSpec}
-      conversionRate={accountConversionRate}
-      botOrderIds={botOrderIds}
-      onBotOrder={handleBotOrder}
-      onBotClose={(id) => handleClosePosition(id)}
+      connected={Boolean(derivOrderConnection)}
       onReviewSetup={handleReviewSetup}
+      onPaperRoundClosed={handleBotPaperRoundClosed}
     />,
     liquidity: <LiquidityPanel key={selectedSymbol} symbol={selectedSymbol} price={currentPrice} precision={symbolSpec.pricePrecision} pipSize={symbolSpec.pipSize} candles={liveCandles} />,
-    orders: <ProviderCapabilityPanel descriptor={{
-      id: 'deriv',
-      name: 'Deriv',
-      kind: 'broker',
-      status: 'available',
-      executionMode: 'external',
-      authMethods: ['oauth2'],
-      description: activeProviderSelection?.environment === 'demo'
-        ? 'Connected Deriv demo account • demo order placement is enabled for testing.'
-        : 'Connected Deriv live account • live order placement is disabled during SHAFX release testing.',
-      capabilities: {
-        accountRead: true, marketData: true, historicalCandles: true, realtimeMarketData: true, realtimeAccountData: true,
-        positionsRead: false, ordersRead: false, orderPlacement: true, orderCancellation: false, orderModification: false,
-        orderLookupByClientOrderId: false, positionClose: true, multipleAccounts: true, demoAccounts: true, symbolMetadata: false,
-        funding: { deposit: 'redirect', withdrawal: 'redirect' },
-      },
-    }} environment={activeProviderSelection?.environment ?? 'demo'} />,
+    orders: <OrderPanel providerSelection={activeProviderSelection} symbol={selectedSymbol} currentPrice={currentPrice} bidPrice={chartBidPrice} askPrice={chartAskPrice} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} timeframe={timeframe} connection={derivOrderConnection} activePosition={selectedOpenPosition} onTradeClosed={(id) => { void handleClosePosition(id) }} onTradeLinesChange={setTradeLines} onTradeOpened={(order) => {
+      setOpenPositions((current) => [order, ...current.filter((item) => item.id !== order.id)])
+      setTradeHistory((current) => current.filter((item) => item.id !== order.id))
+      setTradeLines([])
+      setReviewSetup(null)
+      pushToast((activeProviderSelection?.providerId === 'ctrader' ? 'cTrader ' : 'SHAFX ') + order.type + ' trade opened on ' + (order.chartTimeframe ?? timeframe) + '.')
+    }} aiSetup={reviewSetup} />,
+
   }
 
-  return <div className={'shafx-terminal-root min-h-[100svh] w-full min-w-0 overflow-x-hidden bg-shafx-bg text-shafx-text lg:flex lg:h-[calc(100vh-28px)] lg:flex-col lg:overflow-hidden' + (isLandscapeCompactViewport ? ' shafx-landscape-mode' : '')}>
-    <TopNav symbol={selectedSymbol} price={currentPrice} pricePrecision={symbolSpec.pricePrecision} timeframe={timeframe} onTimeframeChange={setTimeframe} pairs={watchlist} onSelectPair={setSelectedSymbol} view={mobileTab === 'history' ? 'history' : mobileTab === 'account' || mobileTab === 'funds' ? 'account' : 'market'} />
+  return <div className={'shafx-terminal-root min-h-[100svh] w-full min-w-0 overflow-x-hidden bg-shafx-bg text-shafx-text lg:flex lg:min-h-0 lg:h-[100svh] lg:flex-col lg:overflow-hidden' + (isLandscapeCompactViewport ? ' shafx-landscape-mode' : '')}>
+    <TopNav symbol={selectedSymbol} price={currentPrice} pricePrecision={symbolSpec.pricePrecision} pairs={watchlist} onSelectPair={setSelectedSymbol} view={mobileTab === 'history' ? 'history' : mobileTab === 'account' || mobileTab === 'funds' ? 'account' : 'market'} />
     <main className="shafx-mobile-content flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-visible lg:flex-row lg:overflow-hidden">
       <WorkspaceRail tool={chartTool} onToolChange={setChartTool} dock={dock} onDockChange={setDock} />
-      <aside className="hidden w-[clamp(210px,20vw,280px)] min-w-0 flex-shrink-0 flex-col gap-3 border-r border-shafx-border bg-shafx-surface/40 p-3 lg:flex lg:overflow-y-auto">
+      <aside className="shafx-watchlist-panel hidden w-[220px] min-w-[210px] max-w-[240px] flex-shrink-0 border-r border-shafx-border bg-[#090D13] lg:block">
         <Watchlist pairs={watchlist} selectedPair={selectedSymbol} onSelectPair={setSelectedSymbol} />
-        <AccountPanel account={resolvedAccountData} activeProviderSelection={activeProviderSelection} />
       </aside>
 
       <section className={`shafx-market-section ${showMarket ? 'flex' : 'hidden'} min-w-0 flex-1 flex-col overflow-visible lg:overflow-hidden`}>
-        <div className="shafx-landscape-secondary"><WorkspaceStatus provider={activeProviderName} mode="broker" symbol={selectedSymbol} price={currentPrice} precision={symbolSpec.pricePrecision} live={liveMarketActive} /></div>
-        <div className="shafx-landscape-secondary border-b border-shafx-border bg-shafx-surface/70 px-2 py-2 sm:px-3">
+        <div className="lg:hidden"><WorkspaceStatus provider={activeProviderName} mode="broker" symbol={selectedSymbol} price={currentPrice} precision={symbolSpec.pricePrecision} live={liveMarketActive} /></div>
+        <div className="lg:hidden border-b border-shafx-border bg-shafx-surface/70 px-2 py-2 sm:px-3">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <div className="rounded-xl border border-shafx-border bg-shafx-bg/80 px-3 py-2"><div className="flex items-center justify-between gap-2"><span className="text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted">Account</span><span className={accountModeTone + " font-mono text-[8px] font-bold"}>{accountModeLabel}</span></div><div className="mt-1 font-mono text-sm font-bold tabular-nums">{resolvedAccountData.currency} {resolvedAccountData.balance.toFixed(2)}</div></div>
-            <div className="rounded-xl border border-shafx-border bg-shafx-bg/80 px-3 py-2"><div className="text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted">Equity</div><div className="mt-1 font-mono text-sm font-bold tabular-nums">{resolvedAccountData.currency} {resolvedAccountData.equity.toFixed(2)}</div><div className={resolvedAccountData.floatingPL >= 0 ? 'text-[8px] text-shafx-success' : 'text-[8px] text-shafx-danger'}>{resolvedAccountData.floatingPL >= 0 ? '+' : ''}{resolvedAccountData.floatingPL.toFixed(2)} floating</div></div>
-            <div className="rounded-xl border border-shafx-border bg-shafx-bg/80 px-3 py-2"><div className="text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted">Deriv connection</div><div className="mt-1 text-xs font-semibold">{liveMarketActive ? 'Live market stream' : 'Connecting'}</div><div className="text-[8px] text-shafx-textMuted">Auto reconnect enabled</div></div>
-            <div className="rounded-xl border border-shafx-border bg-shafx-bg/80 px-3 py-2"><div className="text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted">Free margin</div><div className="mt-1 font-mono text-sm font-bold tabular-nums">{resolvedAccountData.currency} {resolvedAccountData.freeMargin.toFixed(2)}</div></div>
+            <div className="rounded-xl border border-shafx-border bg-shafx-bg/80 px-3 py-2"><div className="text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted">Equity</div><div className="mt-1 font-mono text-sm font-bold tabular-nums">{resolvedAccountData.currency} {resolvedAccountData.equity.toFixed(4)}</div><div className={resolvedAccountData.floatingPL >= 0 ? 'text-[8px] text-shafx-success' : 'text-[8px] text-shafx-danger'}>{resolvedAccountData.floatingPL >= 0 ? '+' : ''}{resolvedAccountData.floatingPL.toFixed(4)} floating</div></div>
+            <div className="rounded-xl border border-shafx-border bg-shafx-bg/80 px-3 py-2"><div className="text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted">{activeProviderSelection?.providerId === 'ctrader' ? 'cTrader connection' : 'Deriv connection'}</div><div className="mt-1 text-xs font-semibold">{liveMarketActive ? 'Live market stream' : 'Connecting'}</div><div className="text-[8px] text-shafx-textMuted">Auto reconnect enabled</div></div>
+            <div className="rounded-xl border border-shafx-border bg-shafx-bg/80 px-3 py-2"><div className="text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted">Free margin</div><div className="mt-1 font-mono text-sm font-bold tabular-nums">{resolvedAccountData.currency} {resolvedAccountData.freeMargin.toFixed(4)}</div></div>
           </div>
         </div>
-
         <div className="flex min-h-0 flex-1 flex-col overflow-visible">
-          <div className="flex min-h-10 flex-shrink-0 items-center justify-between gap-2 border-b border-shafx-border bg-shafx-surface/45 px-3 sm:px-4">
-            <div className="flex min-w-0 items-center gap-2"><span className="truncate text-xs font-semibold">{selectedSymbol}</span><span className={'rounded-md border px-2 py-1 text-[9px] ' + (liveMarketActive ? 'border-shafx-success/25 bg-shafx-success/5 text-shafx-success' : 'border-shafx-warning/25 bg-shafx-warning/5 text-shafx-warning')}>{liveMarketActive ? 'LIVE • DERIV' : 'CONNECTING • DERIV'}</span></div>
-            <div className="flex items-center gap-1.5"><span className="hidden text-[9px] uppercase tracking-[0.15em] text-shafx-textMuted sm:block">Feed</span>{liveControl}<button type="button" onClick={() => setDock(dock === 'orders' ? 'insights' : 'orders')} className="flex min-h-10 items-center gap-1.5 rounded-xl border border-shafx-border bg-shafx-bg px-2.5 text-[9px] font-semibold hover:border-shafx-accent/40"><SlidersHorizontal className="h-3.5 w-3.5 text-shafx-accent" />Account</button></div>
+          <div className="shafx-market-header flex min-h-10 flex-shrink-0 items-center justify-between gap-3 border-b border-shafx-border bg-[#0A0E14] px-3 sm:px-4 lg:min-h-12">
+            <div className="flex min-w-0 items-center gap-2"><span className="truncate text-sm font-semibold">{selectedSymbol}</span><span className="font-mono text-xs font-semibold tabular-nums text-shafx-textMuted">{Number.isFinite(currentPrice) && currentPrice > 0 ? currentPrice.toFixed(symbolSpec.pricePrecision) : '—'}</span><span className={'rounded-full border px-2 py-0.5 text-[8px] font-semibold ' + (liveMarketActive ? 'border-shafx-success/25 bg-shafx-success/5 text-shafx-success' : 'border-shafx-warning/25 bg-shafx-warning/5 text-shafx-warning')}>{liveMarketActive ? 'LIVE' : 'CONNECTING'}</span></div>
+            <div className="flex items-center gap-1.5">{liveControl}</div>
           </div>
-          <MobileChartTools tool={chartTool} onToolChange={setChartTool} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} />
-          <div className="shafx-chart-stage relative min-h-0 p-1 sm:p-2 lg:flex-1">
-            {liveCandles.length > 0 ? <CandlestickChart data={liveCandles} symbol={selectedSymbol} timeframe={timeframe} annotations={chartAnnotations} tradeLines={tradeLines} bidPrice={currentPrice} askPrice={currentPrice} toolMode={chartToolMode} pipSize={symbolSpec.pipSize} onToolNotice={pushToast} showGrid={chartSettings.showGrid} showPriceLabels={chartSettings.showPriceLabels} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} marketTimestamp={marketTimestamp} onTimeframeChange={setTimeframe} replayMode={false} /> : <div className="flex h-full min-h-[320px] items-center justify-center text-sm text-shafx-textMuted">Waiting for the live Deriv market stream…</div>}
-          </div>
+           <div className="shafx-timeframe-bar flex min-h-11 flex-shrink-0 items-center gap-1 overflow-x-auto border-b border-shafx-border bg-[#0C1118] px-3 py-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:px-4">
+             <span className="mr-1 hidden text-[8px] font-bold uppercase tracking-[0.16em] text-shafx-textMuted sm:inline">TIMEFRAME</span>
+             {TIMEFRAMES.map((tf) => (
+               <button key={tf} type="button" onClick={() => handleTimeframeChange(tf)} aria-pressed={timeframe === tf} className={'min-h-9 flex-shrink-0 rounded-md px-3 text-[9px] font-bold tracking-wide transition ' + (timeframe === tf ? 'bg-shafx-accent text-white shadow-md' : 'text-shafx-textMuted hover:bg-shafx-bg hover:text-shafx-text')}>
+                 {tf}
+               </button>
+             ))}
+             <span className="ml-auto hidden rounded-lg border border-shafx-border bg-shafx-bg px-2 py-1 font-mono text-[8px] text-shafx-textMuted md:inline">{timeframe}</span>
+           </div>
+           <MobileChartTools tool={chartTool} onToolChange={setChartTool} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} />
+           <div className="shafx-chart-stage relative min-h-0 p-1 sm:p-2 lg:flex-1">
+             <CandlestickChart data={liveCandles} symbol={selectedSymbol} timeframe={timeframe} annotations={chartAnnotations} tradeLines={combinedTradeLines} tradeMarkers={chartTradeMarkers} bidPrice={chartBidPrice} askPrice={chartAskPrice} toolMode={chartToolMode} pipSize={symbolSpec.pipSize} onToolNotice={pushToast} showGrid={chartSettings.showGrid} showPriceLabels={chartSettings.showPriceLabels} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} marketTimestamp={marketTimestamp} onTimeframeChange={handleTimeframeChange} replayMode={false} />
+             {liveCandles.length === 0 && <div role="status" aria-live="polite" className="pointer-events-none absolute inset-0 z-40 flex min-h-[320px] items-center justify-center bg-shafx-bg/80 text-sm text-shafx-textMuted">Waiting for the live market stream…</div>}
+           </div>
           <div className="shafx-landscape-secondary grid grid-cols-2 gap-2 border-t border-shafx-border bg-shafx-surface/55 p-2 sm:grid-cols-4">
             <button type="button" onClick={() => openMobileDock('insights')} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Structure</span><div className="mt-1 text-xs font-semibold">{marketAnalysis.bias} • {marketAnalysis.structure.type}</div></button>
             <button type="button" onClick={() => openMobileDock('liquidity')} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Liquidity</span><div className="mt-1 text-xs font-semibold">{marketAnalysis.liquidity.previousHigh?.toFixed(symbolSpec.pricePrecision) ?? '—'}</div></button>
             <button type="button" onClick={() => openMobileDock('orders')} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Account</span><div className="mt-1 text-xs font-semibold">{accountModeLabel}</div></button>
             <button type="button" onClick={() => { setMobileTab('account'); setMobileDockOpen(false) }} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Funding</span><div className="mt-1 text-xs font-semibold">Deposit • Withdraw</div></button>
           </div>
-          <div className="hidden h-56 flex-shrink-0 border-t border-shafx-border bg-shafx-surface/25 p-2 lg:block"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={currentPrice} selectedSymbol={selectedSymbol} onClosePosition={(id) => { void handleClosePosition(id) }} /></div>
+          <div className="shafx-trades-dock hidden h-36 flex-shrink-0 xl:h-40 border-t border-shafx-border bg-[#090D13] p-2 lg:block"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={currentPrice} selectedSymbol={selectedSymbol} onClosePosition={(id) => { void handleClosePosition(id) }} onBulkClose={handleBulkClose} currency={resolvedAccountData.currency} botPaperHistory={botPaperHistory} /></div>
           {mobileDockOpen && <div id="mobile-market-workspace" className="border-t border-shafx-border bg-shafx-surface p-3 lg:hidden">
             <div className="mb-3 flex items-center justify-between gap-3"><div><div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Market workspace</div><div className="text-sm font-semibold">{dock === 'insights' ? 'Structure & AI' : dock === 'liquidity' ? 'Liquidity' : 'Deriv account'}</div></div><button type="button" onClick={() => setMobileDockOpen(false)} className="min-h-10 rounded-xl border border-shafx-border px-3 text-[10px] font-semibold text-shafx-textMuted">Close</button></div>
             {dockContent[dock === 'agent' || dock === 'research' ? 'insights' : dock]}
@@ -525,22 +1192,25 @@ const TerminalContent: React.FC = () => {
         </div>
       </section>
 
-      <aside className={showChat ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={liveCandles} setup={reviewSetup} onReviewSetup={() => handleReviewSetup(reviewSetup)} /><OrderPanel symbol={selectedSymbol} currentPrice={currentPrice} bidPrice={currentPrice} askPrice={currentPrice} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} onSubmitOrder={(draft) => { void handleManualOrder(draft) }} aiSetup={reviewSetup} autoApplyAISetup={Boolean(reviewSetup)} /></div></aside>
-      <aside className={showBot ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><TradingAgentPanel symbol={selectedSymbol}
-      derivConnectionId={derivOrderConnection?.connectionId}
-      derivAccountId={derivOrderConnection?.accountId}
-      derivEnvironment={derivOrderConnection?.environment} timeframe={timeframe} candles={liveCandles} currentPrice={currentPrice} activePosition={openPositions.find((order) => botOrderIds.includes(order.id)) ?? null} tradeHistory={tradeHistory} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} botOrderIds={botOrderIds} onBotOrder={handleBotOrder} onBotClose={(id) => handleClosePosition(id)} onReviewSetup={handleReviewSetup} /></aside>
-      <aside className={showHistory ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><TradesPanel positionsOnly openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={currentPrice} selectedSymbol={selectedSymbol} onClosePosition={(id) => { void handleClosePosition(id) }} /></div></aside>
+      {isCompactViewport && <aside className={showChat && !(mobileDockOpen && dock === 'orders') ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><AIAssistantPanel symbol={selectedSymbol} timeframe={timeframe} candles={liveCandles} setup={reviewSetup} onReviewSetup={() => handleReviewSetup(reviewSetup)} /><OrderPanel providerSelection={activeProviderSelection} symbol={selectedSymbol} currentPrice={currentPrice} bidPrice={chartBidPrice} askPrice={chartAskPrice} accountBalance={resolvedAccountData.balance} accountFreeMargin={resolvedAccountData.freeMargin} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} timeframe={timeframe} connection={derivOrderConnection} activePosition={selectedOpenPosition} onTradeClosed={(id) => { void handleClosePosition(id) }} onTradeLinesChange={setTradeLines} onTradeOpened={(order) => {
+      setOpenPositions((current) => [order, ...current.filter((item) => item.id !== order.id)])
+      setTradeHistory((current) => current.filter((item) => item.id !== order.id))
+      setTradeLines([])
+      setReviewSetup(null)
+      pushToast((activeProviderSelection?.providerId === 'ctrader' ? 'cTrader ' : 'SHAFX ') + order.type + ' trade opened on ' + (order.chartTimeframe ?? timeframe) + '.')
+    }} aiSetup={reviewSetup} /></div></aside>}
+      <aside className={showBot ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><SignalDeskPanel symbol={selectedSymbol} timeframe={timeframe} candles={liveCandles} currentPrice={currentPrice} analysis={marketAnalysis} setup={reviewSetup} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} connected={Boolean(derivOrderConnection)} onReviewSetup={handleReviewSetup} onPaperRoundClosed={handleBotPaperRoundClosed} /></aside>
+      <aside className={showHistory ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="h-[calc(100svh-92px)] min-h-[520px]"><TradesPanel defaultTab="history" openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={currentPrice} selectedSymbol={selectedSymbol} onClosePosition={(id) => { void handleClosePosition(id) }} onBulkClose={handleBulkClose} currency={resolvedAccountData.currency} botPaperHistory={botPaperHistory} /></div></aside>
       <aside className={showFunds ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><DerivCashierLinks /></div></aside>
       <aside className={showAccount ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><AccountPanel account={resolvedAccountData} activeProviderSelection={activeProviderSelection} /></div></aside>
 
-      <aside className="hidden w-[clamp(300px,28vw,420px)] min-w-0 flex-shrink-0 flex-col overflow-hidden border-l border-shafx-border bg-shafx-surface/50 lg:flex">
-        <div className="flex h-12 flex-shrink-0 items-center justify-between border-b border-shafx-border px-3"><div><div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Workspace panel</div><div className="text-sm font-semibold">{dock === 'insights' ? 'Market intelligence' : dock === 'chat' ? 'Chat & Order Ticket' : dock === 'bot' ? 'SHAFX Bot' : dock === 'liquidity' ? 'Liquidity & depth' : 'Deriv account'}</div></div><PanelRight className="h-4 w-4 text-shafx-textMuted" /></div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-3">{dockContent[dock === 'agent' || dock === 'research' ? 'insights' : dock]}</div>
-      </aside>
+       {!isCompactViewport && <aside className="shafx-desktop-right-panel hidden w-[320px] min-w-[300px] max-w-[340px] flex-shrink-0 flex-col overflow-hidden border-l border-shafx-border bg-[#090D13] lg:flex xl:w-[340px] 2xl:w-[360px]">
+        <div className="shafx-right-panel-header flex h-12 flex-shrink-0 items-center justify-between border-b border-shafx-border px-4"><div><div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">{dock === 'orders' ? 'TRADE' : 'WORKSPACE'}</div><div className="text-xs font-semibold">{dock === 'insights' ? 'Market intelligence' : dock === 'chat' ? 'Chat & Order Ticket' : dock === 'bot' ? 'SHAFX Signal Desk' : dock === 'liquidity' ? 'Liquidity & depth' : 'Trade ticket'}</div></div></div>
+        <div className="shafx-right-panel-content min-h-0 flex-1 overflow-y-auto p-4">{dockContent[dock === 'agent' || dock === 'research' ? 'insights' : dock]}</div>
+      </aside>}
     </main>
     <MobileNav activeTab={mobileTab} onChange={setMobileTab} />
-    <footer className="hidden h-7 items-center justify-between border-t border-shafx-border bg-[#080B10] px-4 text-[9px] text-shafx-textMuted lg:flex"><span>SHAFX • Deriv workspace • {accountModeLabel}</span><span>{liveMarketActive ? 'Deriv market stream active' : 'Connecting to Deriv'}</span></footer>
+    <footer className="hidden h-7 items-center justify-between border-t border-shafx-border bg-[#080B10] px-4 text-[9px] text-shafx-textMuted lg:flex"><span>SHAFX • {activeProviderName} workspace • {accountModeLabel}</span><span>{liveMarketActive ? (activeProviderSelection?.providerId === 'ctrader' ? 'cTrader market stream active' : 'Deriv market stream active') : 'Connecting to market'}</span></footer>
     <Toast toast={toast} onDismiss={dismissToast} />
   </div>
 }

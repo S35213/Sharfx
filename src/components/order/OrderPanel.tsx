@@ -1,132 +1,831 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertCircle, ArrowDownCircle, ArrowUpCircle, Sparkles } from 'lucide-react'
-import type { RiskCalculationResult, SimulatedOrderDraft, SymbolSpec } from '../../types'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  AlertCircle,
+  ArrowDownRight,
+  ArrowUpRight,
+  CheckCircle2,
+  Clock3,
+  LoaderCircle,
+  XCircle,
+} from 'lucide-react'
+import type { SymbolSpec, Timeframe, TradeOrder, TradePlanDraft, TradeSide } from '../../types'
 import type { SetupCandidate } from '../../engine/setup/types'
-import { calculateRisk } from '../../engine/risk/riskCalculator'
+import { calculateTradePlan } from '../../lib/tradePlanCalculator'
+import { calculateMultiplierEquivalentLots, calculateMultiplierPnl, calculateMultiplierPnlPerPip, calculateMultiplierProtectionPrice, calculateMultiplierRequiredMovePercent, multiplierNotional } from '../../lib/derivMultiplierAccounting'
 import { formatCurrency, formatPrice } from '../../lib/format'
+import { buyDerivProposal, getDerivQuote, type DerivOrderConnection, type DerivProposalQuote } from '../../data/deriv/derivTrading'
+import type { ChartAnnotation } from '../chart/CandlestickChart'
+import { CTraderManualTicket } from './CTraderManualTicket'
+import { getQuoteTickDirection, getTradeButtonDirection, type QuoteTickDirection } from './quoteTickDirection'
+import type { ActiveProviderSelection } from '../../data/provider/providerConnections'
 
+interface Props {
+  symbol: string
+  currentPrice: number
+  bidPrice?: number
+  askPrice?: number
+  accountBalance: number
+  accountFreeMargin?: number
+  accountCurrency: string
+  symbolSpec: SymbolSpec
+  timeframe: Timeframe
+  connection: DerivOrderConnection | null
+  providerSelection?: ActiveProviderSelection | null
+  activePosition?: TradeOrder | null
+  onTradeOpened: (order: TradeOrder) => void
+  onTradeClosed?: (id: string) => void | Promise<void>
+  onTradeLinesChange?: (lines: ChartAnnotation[]) => void
+  aiSetup?: SetupCandidate | null
+}
 
-interface Props { symbol: string; currentPrice: number; bidPrice?: number; askPrice?: number; accountBalance: number; accountCurrency: string; symbolSpec: SymbolSpec; conversionRate?: number; onSubmitOrder: (draft: SimulatedOrderDraft) => void; aiSetup?: SetupCandidate | null; autoApplyAISetup?: boolean }
-const emptyResult: RiskCalculationResult = { isValid: false, riskAmount: 0, stopDistancePips: 0, rewardDistancePips: 0, riskRewardRatio: 0, suggestedLotSize: 0, pipValuePerLot: 0, estimatedLossAtStop: 0 }
+type TicketState = 'planning' | 'quoting' | 'quoted' | 'buying' | 'error'
 
-export const OrderPanel: React.FC<Props> = ({ symbol, currentPrice, bidPrice = currentPrice, askPrice = currentPrice, accountBalance, accountCurrency, symbolSpec, conversionRate, onSubmitOrder, aiSetup, autoApplyAISetup = false }) => {
-  const [orderType, setOrderType] = useState<'BUY' | 'SELL'>('BUY')
-  const readStoredLotSize = (): string => typeof window !== 'undefined' ? window.sessionStorage.getItem('shafx-lot-size') || '0.10' : '0.10'
-  const [lotSize, setLotSize] = useState(readStoredLotSize)
-  const [entryPrice, setEntryPrice] = useState(formatPrice(currentPrice, symbolSpec.pricePrecision))
-  const [stopLoss, setStopLoss] = useState('')
-  const [takeProfit, setTakeProfit] = useState('')
-  const [riskPercent, setRiskPercent] = useState('1.0')
+const MIN_STAKE = 10
+const MAX_STAKE = 2000
+const QUICK_STAKES = ['10.00', '20.00', '50.00', '100.00', '250.00', '500.00', '1000.00', '2000.00']
+const QUICK_MULTIPLIERS = ['100', '200', '300', '500', '800']
+const STOP_LOSS_RATIOS = [0.1, 0.2, 0.4, 0.8]
+const TAKE_PROFIT_MULTIPLES = [0.5, 1, 2, 5, 10]
+const DEFAULT_STOP_LOSS_RATIO = 0.4
+const DEFAULT_TAKE_PROFIT_MULTIPLE = 0.5
+
+const roundMoney = (value: number): number => Number(value.toFixed(2))
+
+const formatLivePnl = (value: number, currency: string): string => {
+  const absolute = Math.abs(value)
+  const digits = absolute >= 1 ? 2 : absolute >= 0.1 ? 3 : 4
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(value)
+}
+
+const getTradeAge = (openTime?: string, now = Date.now()): string => {
+  if (!openTime) return '—'
+  const opened = new Date(openTime).getTime()
+  if (!Number.isFinite(opened)) return '—'
+  const totalSeconds = Math.max(0, Math.floor((now - opened) / 1000))
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  return [hours, minutes, seconds].map((value) => String(value).padStart(2, '0')).join(':')
+}
+
+const lineFor = (
+  id: string,
+  price: number | null | undefined,
+  label: string,
+  color: string,
+  lineWidth: 1 | 2 = 1,
+): ChartAnnotation | null => {
+  if (!Number.isFinite(price) || Number(price) <= 0) return null
+  return { id, price: Number(price), label, color, lineWidth }
+}
+
+const moneyLabel = (amount: number, currency: string): string => formatCurrency(roundMoney(amount), currency)
+
+const LegacyMultiplierOrderPanel: React.FC<Props> = ({
+  symbol,
+  currentPrice,
+  bidPrice = currentPrice,
+  askPrice = currentPrice,
+  accountBalance,
+  accountCurrency,
+  symbolSpec,
+  timeframe,
+  connection,
+  activePosition = null,
+  onTradeOpened,
+  onTradeClosed,
+  onTradeLinesChange,
+  aiSetup,
+}) => {
+  const [side, setSide] = useState<TradeSide>(aiSetup?.direction ?? 'BUY')
+  const [stake, setStake] = useState('10.00')
+  const [multiplier, setMultiplier] = useState('100')
+  const [stopLossEnabled, setStopLossEnabled] = useState(true)
+  const [takeProfitEnabled, setTakeProfitEnabled] = useState(true)
+  const [stopLossRatio, setStopLossRatio] = useState(DEFAULT_STOP_LOSS_RATIO)
+  const [takeProfitMultiple, setTakeProfitMultiple] = useState(DEFAULT_TAKE_PROFIT_MULTIPLE)
+  const [quote, setQuote] = useState<DerivProposalQuote | null>(null)
+  const [state, setState] = useState<TicketState>('planning')
+  const [error, setError] = useState('')
+  const [now, setNow] = useState(0)
+  const newTradeRef = useRef<HTMLDivElement | null>(null)
+  const previousBidRef = useRef<number | null>(null)
+  const quoteToneTimerRef = useRef<number | null>(null)
+  const [marketDirection, setMarketDirection] = useState<QuoteTickDirection>('neutral')
+
+  const buyButtonDirection = getTradeButtonDirection(marketDirection, 'BUY')
+  const sellButtonDirection = getTradeButtonDirection(marketDirection, 'SELL')
+  const tradeSideButtonTone = (direction: QuoteTickDirection): string => direction === 'up'
+    ? 'border-shafx-success bg-shafx-success/35'
+    : direction === 'down'
+      ? 'border-shafx-danger bg-shafx-danger/35'
+      : 'border-shafx-border bg-[#101720]'
 
   useEffect(() => {
-    setOrderType('BUY')
-    const storedLot = typeof window !== 'undefined' ? window.sessionStorage.getItem('shafx-lot-size') || '' : ''
-    const parsedStoredLot = Number(storedLot)
-    const storedLotIsValid = Number.isFinite(parsedStoredLot)
-      && parsedStoredLot >= symbolSpec.minLotSize
-      && parsedStoredLot <= symbolSpec.maxLotSize
-      && Math.abs((parsedStoredLot / symbolSpec.lotStep) - Math.round(parsedStoredLot / symbolSpec.lotStep)) < 1e-8
-    setLotSize(storedLotIsValid ? storedLot : symbolSpec.minLotSize.toFixed(2))
-    setEntryPrice(currentPrice.toFixed(symbolSpec.pricePrecision))
-    setStopLoss('')
-    setTakeProfit('')
-    setRiskPercent('1.0')
-  }, [symbol, symbolSpec])
+    setSide(aiSetup?.direction ?? 'BUY')
+    setQuote(null)
+    setState('planning')
+    setError('')
+  }, [symbol, aiSetup?.direction])
 
   useEffect(() => {
-    const onLotSize = (event: Event): void => {
-      const detail = (event as CustomEvent<string>).detail
-      if (detail) setLotSize(detail)
-    }
-    window.addEventListener('shafx-lot-size', onLotSize)
-    return () => window.removeEventListener('shafx-lot-size', onLotSize)
+    if (!activePosition) return
+    setQuote(null)
+    setState('planning')
+    setError('')
+  }, [activePosition?.providerOrderId])
+
+  useEffect(() => {
+    const bid = Number(bidPrice ?? currentPrice)
+    if (!Number.isFinite(bid) || bid <= 0) return
+
+    const previous = previousBidRef.current
+    previousBidRef.current = bid
+    if (previous === null) return
+
+    const nextDirection = getQuoteTickDirection(bid, previous)
+    if (nextDirection === 'neutral') return
+
+    setMarketDirection(nextDirection)
+    if (quoteToneTimerRef.current !== null) window.clearTimeout(quoteToneTimerRef.current)
+    quoteToneTimerRef.current = window.setTimeout(() => {
+      setMarketDirection('neutral')
+      quoteToneTimerRef.current = null
+    }, 15000)
+  }, [bidPrice, currentPrice])
+
+  useEffect(() => () => {
+    if (quoteToneTimerRef.current !== null) window.clearTimeout(quoteToneTimerRef.current)
   }, [])
 
   useEffect(() => {
-    if (typeof window === 'undefined' || !lotSize.trim()) return
-    window.sessionStorage.setItem('shafx-lot-size', lotSize)
-    window.dispatchEvent(new CustomEvent<string>('shafx-lot-size', { detail: lotSize }))
-  }, [lotSize])
+    if (!activePosition?.openTime) return
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [activePosition?.openTime])
 
-  const calculateAutoProtection = useCallback((side: 'BUY' | 'SELL', entry: number): { stopLoss: number; takeProfit: number } | null => {
-    const lot = Number(lotSize)
-    const risk = Number(riskPercent)
-    if (!aiSetup || !Number.isFinite(lot) || lot <= 0 || !Number.isFinite(risk) || risk <= 0 || !Number.isFinite(accountBalance) || accountBalance <= 0) return null
-    let rate = 1
-    if (symbolSpec.quoteCurrency !== accountCurrency) {
-      if (typeof conversionRate !== 'number' || !Number.isFinite(conversionRate) || conversionRate <= 0) return null
-      rate = conversionRate
+  const stakeValue = Number(stake)
+  const multiplierValue = Number(multiplier)
+  const stopLossAmount = stopLossEnabled && Number.isFinite(stakeValue) ? roundMoney(stakeValue * stopLossRatio) : 0
+  const takeProfitAmount = takeProfitEnabled && Number.isFinite(stakeValue) ? roundMoney(stakeValue * takeProfitMultiple) : 0
+
+  const entryPrice = side === 'BUY'
+    ? (askPrice > 0 ? askPrice : currentPrice)
+    : (bidPrice > 0 ? bidPrice : currentPrice)
+
+  const stopLossPrice = useMemo(
+    () => stopLossEnabled ? calculateMultiplierProtectionPrice(entryPrice, stopLossAmount, stakeValue, multiplierValue, side, 'sl') : null,
+    [entryPrice, multiplierValue, side, stakeValue, stopLossAmount, stopLossEnabled],
+  )
+  const takeProfitPrice = useMemo(
+    () => takeProfitEnabled ? calculateMultiplierProtectionPrice(entryPrice, takeProfitAmount, stakeValue, multiplierValue, side, 'tp') : null,
+    [entryPrice, multiplierValue, side, stakeValue, takeProfitAmount, takeProfitEnabled],
+  )
+
+  const plan = useMemo<TradePlanDraft>(() => calculateTradePlan({
+    accountBalance,
+    entryPrice,
+    slPrice: stopLossPrice,
+    tpPrice: takeProfitPrice,
+    stake: Number.isFinite(stakeValue) ? stakeValue : 0,
+    multiplier: Number.isFinite(multiplierValue) ? multiplierValue : 0,
+    symbolSpec,
+    side,
+  }), [accountBalance, entryPrice, multiplierValue, side, stakeValue, symbolSpec, takeProfitPrice, stopLossPrice])
+
+  const draftLines = useMemo<ChartAnnotation[]>(() => {
+    if (activePosition) {
+      const entryColor = activePosition.type === 'BUY' ? '#22D3A5' : '#FF5C75'
+      const entryLabel = activePosition.type === 'BUY' ? 'BUY ENTRY' : 'SELL ENTRY'
+      const currentExitPrice = activePosition.type === 'BUY' ? bidPrice : askPrice
+      const currentLine = lineFor(
+        activePosition.id + '-current',
+        currentExitPrice,
+        activePosition.type + ' CURRENT / EXIT',
+        Number(activePosition.profit ?? 0) >= 0 ? '#22D3A5' : '#FF5C75',
+        2,
+      )
+      return [
+        lineFor(activePosition.id + '-entry', activePosition.entryPrice, entryLabel, entryColor, 2),
+        currentLine,
+        lineFor(
+          activePosition.id + '-sl',
+          activePosition.plannedStopLossPrice,
+          activePosition.stopLossAmount ? 'SL ' + moneyLabel(activePosition.stopLossAmount, accountCurrency) : 'SL',
+          '#F6465D',
+          1,
+        ),
+        lineFor(
+          activePosition.id + '-tp',
+          activePosition.plannedTakeProfitPrice,
+          activePosition.takeProfitAmount ? 'TP ' + moneyLabel(activePosition.takeProfitAmount, accountCurrency) : 'TP',
+          '#0ECB81',
+          1,
+        ),
+      ].filter((line): line is ChartAnnotation => Boolean(line))
     }
-    const pipValuePerLot = symbolSpec.pipSize * symbolSpec.contractSize * rate
-    const riskAmount = accountBalance * (risk / 100)
-    if (!Number.isFinite(pipValuePerLot) || pipValuePerLot <= 0 || !Number.isFinite(riskAmount) || riskAmount <= 0) return null
-    const stopDistancePips = riskAmount / (lot * pipValuePerLot)
-    if (!Number.isFinite(stopDistancePips) || stopDistancePips <= 0) return null
-    const rewardDistancePips = stopDistancePips * 1.67
-    const stopDistance = stopDistancePips * symbolSpec.pipSize
-    const rewardDistance = rewardDistancePips * symbolSpec.pipSize
-    return {
-      stopLoss: Number((entry + (side === 'BUY' ? -stopDistance : stopDistance)).toFixed(symbolSpec.pricePrecision)),
-      takeProfit: Number((entry + (side === 'BUY' ? rewardDistance : -rewardDistance)).toFixed(symbolSpec.pricePrecision)),
-    }
-  }, [accountBalance, accountCurrency, aiSetup, conversionRate, lotSize, riskPercent, symbolSpec])
 
-  const applyAISetup = useCallback((): void => {
-    if (!aiSetup) return
-    const side = aiSetup.direction
-    const entry = side === 'BUY' ? askPrice : bidPrice
-    setOrderType(side)
-    setEntryPrice(entry.toFixed(symbolSpec.pricePrecision))
-    const protection = calculateAutoProtection(side, entry)
-    setStopLoss(protection?.stopLoss.toFixed(symbolSpec.pricePrecision) ?? aiSetup.stopLoss.toFixed(symbolSpec.pricePrecision))
-    setTakeProfit(protection?.takeProfit.toFixed(symbolSpec.pricePrecision) ?? aiSetup.takeProfit.toFixed(symbolSpec.pricePrecision))
-  }, [aiSetup, askPrice, bidPrice, calculateAutoProtection, symbolSpec.pricePrecision])
-
-  const quoteForSide = (side: 'BUY' | 'SELL'): number => side === 'BUY' ? askPrice : bidPrice
-  const chooseOrderSide = (side: 'BUY' | 'SELL'): void => {
-    setOrderType(side)
-    setEntryPrice(quoteForSide(side).toFixed(symbolSpec.pricePrecision))
-  }
+    return [
+      lineFor('plan-sl', plan.slPrice, 'SL ' + moneyLabel(stopLossAmount, accountCurrency), '#F6465D', 1),
+      lineFor('plan-tp', plan.tpPrice, 'TP ' + moneyLabel(takeProfitAmount, accountCurrency), '#0ECB81', 1),
+    ].filter((line): line is ChartAnnotation => Boolean(line))
+  }, [activePosition, accountCurrency, askPrice, bidPrice, plan.slPrice, plan.tpPrice, stopLossAmount, takeProfitAmount])
 
   useEffect(() => {
-    if (autoApplyAISetup && aiSetup?.status === 'candidate') applyAISetup()
-  }, [applyAISetup, autoApplyAISetup, aiSetup?.status, lotSize, riskPercent])
+    onTradeLinesChange?.(draftLines)
+  }, [draftLines, onTradeLinesChange])
 
-  const numEntry = Number(entryPrice)
-  const defaultStopDistance = symbolSpec.pipSize * 30
-  const defaultRewardDistance = symbolSpec.pipSize * 50
-  const numSL = stopLoss === '' ? Number((numEntry + (orderType === 'BUY' ? -defaultStopDistance : defaultStopDistance)).toFixed(symbolSpec.pricePrecision)) : Number(stopLoss)
-  const numTP = takeProfit === '' ? Number((numEntry + (orderType === 'BUY' ? defaultRewardDistance : -defaultRewardDistance)).toFixed(symbolSpec.pricePrecision)) : Number(takeProfit)
-  const numRisk = Number(riskPercent)
-  const riskCalc = useMemo(() => { if (![numEntry, numSL, numTP, numRisk].every(Number.isFinite)) return { ...emptyResult, errorMessage: 'Please fill in all fields with valid numbers.' }; return calculateRisk({ accountBalance, accountCurrency, riskPercent: numRisk, side: orderType, entryPrice: numEntry, stopLoss: numSL, takeProfit: numTP, symbolSpec, conversionRate }) }, [accountBalance, accountCurrency, conversionRate, numEntry, numRisk, numSL, numTP, orderType, symbolSpec])
-  const parsedLotSize = Number(lotSize)
-  const lotSizeIsValid = Number.isFinite(parsedLotSize) && parsedLotSize >= symbolSpec.minLotSize && parsedLotSize <= symbolSpec.maxLotSize && Math.abs((parsedLotSize / symbolSpec.lotStep) - Math.round(parsedLotSize / symbolSpec.lotStep)) < 1e-8
-  const lotFitsAccountMargin = Number.isFinite(accountBalance) && accountBalance > 0 && riskCalc.riskAmount <= accountBalance + 1e-8
-  const derivMinimumStake = 1
-  const accountCanFundMinimumStake = Number.isFinite(accountBalance) && accountBalance >= derivMinimumStake
-  const canSubmit = riskCalc.isValid && lotSizeIsValid && lotFitsAccountMargin && accountCanFundMinimumStake
+  const marketMetrics = useMemo(() => {
+    const validBid = Number.isFinite(bidPrice) && bidPrice > 0
+    const validAsk = Number.isFinite(askPrice) && askPrice > 0
+    const hasSpread = validBid && validAsk && Math.abs(askPrice - bidPrice) > 1e-12
+    return {
+      hasSpread,
+      spreadPips: hasSpread ? Math.abs(askPrice - bidPrice) / symbolSpec.pipSize : null,
+      bid: validBid ? bidPrice : null,
+      ask: validAsk ? askPrice : null,
+    }
+  }, [askPrice, bidPrice, symbolSpec.pipSize])
 
-  const handleSubmit = (e: React.FormEvent): void => { e.preventDefault(); if (!canSubmit) return; onSubmitOrder({ symbol, type: orderType, lotSize: parsedLotSize, entryPrice: numEntry, stopLoss: numSL, takeProfit: numTP, riskPercent: numRisk, riskAmount: riskCalc.riskAmount, rewardAmount: riskCalc.riskAmount * riskCalc.riskRewardRatio, riskRewardRatio: riskCalc.riskRewardRatio }); setStopLoss(''); setTakeProfit('') }
-  const applySuggestedLot = (): void => { if (riskCalc.isValid && riskCalc.suggestedLotSize > 0) setLotSize(riskCalc.suggestedLotSize.toFixed(2)) }
+  const resetQuote = (): void => {
+    setQuote(null)
+    setState('planning')
+    setError('')
+  }
 
-  const brokerStake = Math.max(derivMinimumStake, riskCalc.riskAmount)
+  const chooseSide = (nextSide: TradeSide): void => {
+    setSide(nextSide)
+    resetQuote()
+  }
 
-  return <div className="space-y-4 rounded-lg border border-shafx-border bg-shafx-surface p-4"><div className="flex items-center justify-between"><h3 className="text-sm font-semibold">Order Ticket</h3><span className="flex items-center gap-1 rounded border border-yellow-500/20 bg-yellow-500/10 px-2 py-0.5 text-xs text-yellow-500"><AlertCircle className="h-3 w-3" />LIVE • DERIV</span></div>{aiSetup && <div className="rounded border border-shafx-primary/30 bg-shafx-primary/10 p-3"><div className="flex items-center justify-between gap-2"><div><p className="flex items-center gap-1 text-xs font-semibold text-shafx-primary"><Sparkles className="h-3 w-3" />AI trade idea ready</p><p className="mt-1 text-[11px] text-shafx-textMuted">Selected setup loaded. Stop loss and take profit are automatically recalculated from your account balance and lot size.</p></div><button type="button" onClick={applyAISetup} className="min-h-11 shrink-0 rounded bg-shafx-primary px-3 py-2 text-xs font-semibold text-white">Review AI setup</button></div></div>}<div className="rounded border border-shafx-border bg-shafx-surfaceHover p-2 text-[11px] text-shafx-textMuted">
-      Deriv multiplier stake: <span className="font-mono text-shafx-text">{brokerStake.toFixed(2)} {accountCurrency}</span>
-      {riskCalc.isValid && riskCalc.riskAmount < derivMinimumStake ? <span> • Your planned stop-loss risk is {riskCalc.riskAmount.toFixed(2)} {accountCurrency}; the broker minimum opening stake is 1.00 {accountCurrency}.</span> : null}
-      {!accountCanFundMinimumStake ? <span> • Account balance must be at least 1.00 {accountCurrency}.</span> : null}
-    </div><form onSubmit={handleSubmit} className="space-y-3"><div className="grid grid-cols-2 gap-2">
-    <button type="button" onClick={() => chooseOrderSide('BUY')} aria-pressed={orderType === 'BUY'} className={`flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-xl text-sm font-semibold transition-colors ${orderType === 'BUY' ? 'bg-shafx-success text-white' : 'border border-shafx-success/30 bg-shafx-surfaceHover text-shafx-success'}`}>
-      <span className="flex items-center justify-between gap-2 w-full px-1"><span className="flex items-center gap-1.5"><ArrowUpCircle className="h-4 w-4" />BUY</span><span className="text-[8px] font-medium opacity-75">ASK</span></span>
-      <span className="font-mono text-sm tabular tracking-tight">{askPrice.toFixed(symbolSpec.pricePrecision)}</span>
-    </button>
-    <button type="button" onClick={() => chooseOrderSide('SELL')} aria-pressed={orderType === 'SELL'} className={`flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-xl text-sm font-semibold transition-colors ${orderType === 'SELL' ? 'bg-shafx-danger text-white' : 'border border-shafx-danger/30 bg-shafx-surfaceHover text-shafx-danger'}`}>
-      <span className="flex items-center justify-between gap-2 w-full px-1"><span className="flex items-center gap-1.5"><ArrowDownCircle className="h-4 w-4" />SELL</span><span className="text-[8px] font-medium opacity-75">BID</span></span>
-      <span className="font-mono text-sm tabular tracking-tight">{bidPrice.toFixed(symbolSpec.pricePrecision)}</span>
-    </button>
-  </div>
-  <div className="flex items-center justify-between gap-3 rounded-lg border border-shafx-border bg-shafx-bg px-3 py-2 text-[9px]">
-    <span className="text-shafx-textMuted">Live market</span>
-    <span className="font-mono tabular text-shafx-text">ASK {askPrice.toFixed(symbolSpec.pricePrecision)} · BID {bidPrice.toFixed(symbolSpec.pricePrecision)}</span>
-  </div><div className="grid grid-cols-2 gap-3"><div><label className="mb-1 block text-xs text-shafx-textMuted">Symbol</label><input value={symbol} disabled className="w-full rounded border border-shafx-border bg-shafx-bg px-2 py-2 font-mono text-sm" /></div><div><label className="mb-1 block text-xs text-shafx-textMuted">Lot size</label><input type="number" step={symbolSpec.lotStep} min={symbolSpec.minLotSize} max={symbolSpec.maxLotSize} value={lotSize} onChange={(e) => setLotSize(e.target.value)} className="w-full rounded border border-shafx-border bg-shafx-bg px-2 py-2 font-mono text-sm focus:border-shafx-primary focus:outline-none" /></div></div><div><label className="mb-1 block text-xs text-shafx-textMuted">Entry Price</label><input type="number" step={symbolSpec.pipSize} value={entryPrice} onChange={(e) => setEntryPrice(e.target.value)} className="w-full rounded border border-shafx-border bg-shafx-bg px-2 py-2 font-mono text-sm focus:border-shafx-primary focus:outline-none" /></div><div className="grid grid-cols-2 gap-3"><div><label className="mb-1 block text-xs text-shafx-textMuted">Stop Loss</label><input type="number" step={symbolSpec.pipSize} placeholder="Auto" value={stopLoss} onChange={(e) => setStopLoss(e.target.value)} className="w-full rounded border border-shafx-border bg-shafx-bg px-2 py-2 font-mono text-sm text-shafx-danger focus:border-shafx-primary focus:outline-none" /></div><div><label className="mb-1 block text-xs text-shafx-textMuted">Take Profit</label><input type="number" step={symbolSpec.pipSize} placeholder="Auto" value={takeProfit} onChange={(e) => setTakeProfit(e.target.value)} className="w-full rounded border border-shafx-border bg-shafx-bg px-2 py-2 font-mono text-sm text-shafx-success focus:border-shafx-primary focus:outline-none" /></div></div><div><label className="mb-1 block text-xs text-shafx-textMuted">Risk %</label><input type="number" step="0.1" min="0.1" max="100" value={riskPercent} onChange={(e) => setRiskPercent(e.target.value)} className="w-full rounded border border-shafx-border bg-shafx-bg px-2 py-2 font-mono text-sm focus:border-shafx-primary focus:outline-none" /></div>{riskCalc.isValid && <div className="space-y-1.5 rounded border border-shafx-border bg-shafx-bg p-3 text-xs"><div className="flex justify-between"><span className="text-shafx-textMuted">Risk Amount</span><span className="font-mono text-shafx-danger tabular">{formatCurrency(riskCalc.riskAmount, accountCurrency)}</span></div><div className="flex justify-between"><span className="text-shafx-textMuted">Stop Distance</span><span className="font-mono tabular">{riskCalc.stopDistancePips} pips</span></div><div className="flex justify-between"><span className="text-shafx-textMuted">Potential Reward</span><span className="font-mono text-shafx-success tabular">{formatCurrency(riskCalc.riskAmount * riskCalc.riskRewardRatio, accountCurrency)}</span></div><div className="flex items-center justify-between border-t border-shafx-border pt-1.5"><span className="text-shafx-textMuted">Suggested Lot Size</span><button type="button" onClick={applySuggestedLot} className="font-mono font-semibold text-shafx-primary tabular">{riskCalc.suggestedLotSize.toFixed(2)} lots</button></div><div className="flex justify-between"><span className="text-shafx-textMuted">Risk/Reward</span><span className="font-mono tabular">1 : {riskCalc.riskRewardRatio}</span></div></div>}{!riskCalc.isValid && riskCalc.errorMessage && <div className="rounded border border-shafx-danger/20 bg-shafx-danger/10 p-2 text-xs text-shafx-danger">{riskCalc.errorMessage}</div>}{riskCalc.isValid && !lotSizeIsValid && <div className="rounded border border-shafx-danger/20 bg-shafx-danger/10 p-2 text-xs text-shafx-danger">Lot size must be between {symbolSpec.minLotSize} and {symbolSpec.maxLotSize} and follow step {symbolSpec.lotStep}.</div>}{riskCalc.isValid && lotSizeIsValid && !lotFitsAccountMargin && <div className="rounded border border-shafx-danger/20 bg-shafx-danger/10 p-2 text-xs text-shafx-danger">This lot size exceeds the account's available account balance. Maximum trade size is constrained by the selected Deriv account balance.</div>}<button type="submit" disabled={!canSubmit} className={`min-h-11 w-full rounded text-sm font-semibold ${canSubmit ? (orderType === 'BUY' ? 'bg-shafx-success text-white' : 'bg-shafx-danger text-white') : 'cursor-not-allowed bg-shafx-border text-shafx-textMuted'}`}>Place {orderType} Order</button></form></div>
+  const chooseStake = (value: string): void => {
+    setStake(value)
+    resetQuote()
+  }
+
+  const chooseMultiplier = (value: string): void => {
+    setMultiplier(value)
+    resetQuote()
+  }
+
+  const requestQuote = async (): Promise<void> => {
+    if (!connection) {
+      setError('Connect a Deriv demo account before trading.')
+      setState('error')
+      return
+    }
+    if (plan.validationError) {
+      setError(plan.validationError)
+      setState('error')
+      return
+    }
+    if (!Number.isFinite(stakeValue) || stakeValue < MIN_STAKE || stakeValue > MAX_STAKE) {
+      setError('SHAFX stake must be between ' + formatCurrency(MIN_STAKE, accountCurrency) + ' and ' + formatCurrency(MAX_STAKE, accountCurrency) + '.')
+      setState('error')
+      return
+    }
+
+    setState('quoting')
+    setQuote(null)
+    setError('')
+    try {
+      const nextQuote = await getDerivQuote({
+        connection,
+        symbol,
+        side,
+        stake: stakeValue,
+        currency: accountCurrency,
+        multiplier: multiplierValue,
+        stopLossAmount: stopLossAmount > 0 ? stopLossAmount : undefined,
+        takeProfitAmount: takeProfitAmount > 0 ? takeProfitAmount : undefined,
+      })
+      setQuote(nextQuote)
+      setState('quoted')
+    } catch (err) {
+      setState('error')
+      setError(err instanceof Error ? err.message : 'Unable to get a live Deriv proposal.')
+    }
+  }
+
+  const confirmBuy = async (): Promise<void> => {
+    if (!connection || !quote) return
+    setState('buying')
+    setError('')
+    try {
+      const order = await buyDerivProposal({ connection, quote })
+      onTradeOpened({
+        ...order,
+        chartTimeframe: timeframe,
+        plannedStopLossPrice: plan.slPrice,
+        plannedTakeProfitPrice: plan.tpPrice,
+      })
+      setState('planning')
+    } catch (err) {
+      setState('error')
+      setError(err instanceof Error ? err.message : 'Unable to place the Deriv contract.')
+    }
+  }
+
+  const startOppositeTrade = (): void => {
+    if (!activePosition) return
+    const opposite: TradeSide = activePosition.type === 'BUY' ? 'SELL' : 'BUY'
+    chooseSide(opposite)
+    window.setTimeout(() => newTradeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 0)
+  }
+
+  const handleClose = async (): Promise<void> => {
+    if (!activePosition?.id || !onTradeClosed) return
+    try {
+      await onTradeClosed(activePosition.id)
+      onTradeLinesChange?.([])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to close the position.')
+    }
+  }
+
+  if (activePosition) {
+    const brokerProfit = Number(activePosition.profit)
+    const liveSpot = Number.isFinite(currentPrice) && currentPrice > 0 ? currentPrice : Number(activePosition.currentPrice ?? 0)
+    const liveStake = Number(activePosition.stake ?? 0)
+    const liveMultiplier = Number(activePosition.multiplier ?? 0)
+    const liveEntry = Number(activePosition.entryPrice ?? 0)
+    const derivedProfit = liveEntry > 0 && liveSpot > 0 && liveStake > 0 && liveMultiplier > 0
+      ? calculateMultiplierPnl({
+          direction: activePosition.type,
+          entryPrice: liveEntry,
+          currentPrice: liveSpot,
+          stake: liveStake,
+          multiplier: liveMultiplier,
+          commission: Number(activePosition.commission ?? 0),
+        })
+      : Number.NaN
+    // Deriv's contract/account stream is authoritative. The local calculation is
+    // only a fallback while broker P/L has not arrived yet.
+    const profit = Number.isFinite(brokerProfit) ? brokerProfit : derivedProfit
+    const isProfit = profit >= 0
+    const positionPrice = Number(activePosition.currentPrice ?? currentPrice)
+    const slAmount = Number(activePosition.stopLossAmount ?? 0)
+    const tpAmount = Number(activePosition.takeProfitAmount ?? 0)
+
+    return (
+      <div className="overflow-hidden border border-shafx-border bg-shafx-surface">
+        <section className="overflow-hidden">
+        <header className="flex items-center justify-between gap-3 border-b border-shafx-border px-3 py-2.5 sm:px-4">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.14em]">Position</span>
+              <span className="font-mono text-[8px] text-shafx-success">LIVE</span>
+            </div>
+            <div className="mt-0.5 flex items-center gap-2 font-mono text-[8px] text-shafx-textMuted">
+              <span>{symbol}</span>
+              <span>•</span>
+              <span>{activePosition.type === 'BUY' ? 'BUY UP' : 'SELL DOWN'}</span>
+              <span>•</span>
+              <span>{activePosition.providerOrderId || activePosition.id}</span>
+            </div>
+          </div>
+          <div className={'text-right font-mono text-lg font-semibold tabular-nums ' + (isProfit ? 'text-shafx-success' : 'text-shafx-danger')}>
+            {formatLivePnl(profit, accountCurrency)}
+          </div>
+        </header>
+
+        <div className="divide-y divide-shafx-border">
+          <div className="grid grid-cols-2 gap-x-4 px-3 py-2.5 sm:px-4">
+            <div>
+              <div className="text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted">Entry</div>
+              <div className="mt-0.5 font-mono text-sm tabular-nums">{formatPrice(activePosition.entryPrice, symbolSpec.pricePrecision)}</div>
+            </div>
+            <div className="text-right">
+              <div className="text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted">Current</div>
+              <div className="mt-0.5 font-mono text-sm tabular-nums">{formatPrice(positionPrice, symbolSpec.pricePrecision)}</div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3 px-3 py-2.5 text-[9px] sm:px-4">
+            <div>
+              <span className="text-shafx-textMuted">Stake</span>
+              <div className="mt-0.5 font-mono font-semibold">{formatCurrency(activePosition.stake ?? 0, accountCurrency)}</div>
+            </div>
+            <div>
+              <span className="text-shafx-textMuted">Multiplier</span>
+              <div className="mt-0.5 font-mono">{activePosition.multiplier ?? '—'}×</div>
+            </div>
+            <div>
+              <span className="text-shafx-textMuted">Age</span>
+              <div className="mt-0.5 flex items-center gap-1 font-mono"><Clock3 className="h-3 w-3 text-shafx-textMuted" />{getTradeAge(activePosition.openTime, now)}</div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 px-3 py-2.5 text-[9px] sm:px-4">
+            <div>
+              <span className="text-shafx-danger">Stop Loss</span>
+              <div className="mt-0.5 font-mono">{slAmount > 0 ? formatCurrency(slAmount, accountCurrency) : 'None'}</div>
+              {activePosition.plannedStopLossPrice && <div className="mt-0.5 font-mono text-[8px] text-shafx-textMuted">chart ≈ {formatPrice(activePosition.plannedStopLossPrice, symbolSpec.pricePrecision)}</div>}
+            </div>
+            <div className="text-right">
+              <span className="text-shafx-success">Take Profit</span>
+              <div className="mt-0.5 font-mono">{tpAmount > 0 ? formatCurrency(tpAmount, accountCurrency) : 'None'}</div>
+              {activePosition.plannedTakeProfitPrice && <div className="mt-0.5 font-mono text-[8px] text-shafx-textMuted">chart ≈ {formatPrice(activePosition.plannedTakeProfitPrice, symbolSpec.pricePrecision)}</div>}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-3 px-3 py-2.5 sm:px-4">
+            <div className="max-w-[68%] text-[8px] leading-4 text-shafx-textMuted">
+              Broker-managed protection stays active if you close SHAFX.
+              <span className="ml-1 font-mono text-shafx-text">#{activePosition.providerOrderId || activePosition.id}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={startOppositeTrade} className="min-h-9 border border-shafx-accent/35 bg-shafx-accent/[0.06] px-2.5 text-[8px] font-semibold text-shafx-accent transition hover:bg-shafx-accent/[0.1]">
+                TRADE AGAINST • {activePosition.type === 'BUY' ? 'SELL DOWN' : 'BUY UP'}
+              </button>
+              <button type="button" onClick={() => void handleClose()} className="inline-flex min-h-9 items-center gap-1.5 border border-shafx-danger/40 bg-shafx-danger/10 px-3 text-[8px] font-semibold text-shafx-danger transition hover:bg-shafx-danger/20">
+                <XCircle className="h-3.5 w-3.5" /> CLOSE
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div ref={newTradeRef} className="border-t border-shafx-border bg-[#080D13]">
+        <div className="border-b border-shafx-border px-3 py-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted">New trade</span>
+            <span className="font-mono text-[8px] text-shafx-textMuted">{symbol} • {timeframe}</span>
+          </div>
+          {activePosition && side !== activePosition.type && (
+            <div className="mt-2 border border-shafx-accent/25 bg-shafx-accent/[0.05] px-2.5 py-2 text-[8px] text-shafx-accent">
+              <strong className="font-semibold">TRADE AGAINST READY.</strong> Current {activePosition.type} remains open; this ticket is set to {side === 'BUY' ? 'BUY UP' : 'SELL DOWN'}.
+            </div>
+          )}
+          <div className="mt-2 grid grid-cols-2 gap-1.5">
+            <button type="button" onClick={() => chooseSide('BUY')} disabled={state === 'quoting' || state === 'buying'} aria-pressed={side === 'BUY'} className={'min-h-11 border px-2.5 text-left ' + (side === 'BUY' ? 'border-shafx-success bg-shafx-success/[0.12]' : 'border-shafx-border bg-shafx-surface')}>
+              <span className={'text-[9px] font-bold ' + (side === 'BUY' ? 'text-shafx-success' : 'text-shafx-textMuted')}>BUY</span>
+              <span className="ml-1.5 text-[7px] text-shafx-textMuted">ASK {marketMetrics.ask ? formatPrice(marketMetrics.ask, symbolSpec.pricePrecision) : '—'}</span>
+            </button>
+            <button type="button" onClick={() => chooseSide('SELL')} disabled={state === 'quoting' || state === 'buying'} aria-pressed={side === 'SELL'} className={'min-h-11 border px-2.5 text-left ' + (side === 'SELL' ? 'border-shafx-danger bg-shafx-danger/[0.12]' : 'border-shafx-border bg-shafx-surface')}>
+              <span className={'text-[9px] font-bold ' + (side === 'SELL' ? 'text-shafx-danger' : 'text-shafx-textMuted')}>SELL</span>
+              <span className="ml-1.5 text-[7px] text-shafx-textMuted">BID {marketMetrics.bid ? formatPrice(marketMetrics.bid, symbolSpec.pricePrecision) : '—'}</span>
+            </button>
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <label className="border border-shafx-border bg-shafx-surface px-2 py-2">
+              <span className="block text-[7px] uppercase tracking-[0.12em] text-shafx-textMuted">Stake</span>
+              <span className="mt-1 flex items-center gap-1"><span className="font-mono text-[7px] text-shafx-textMuted">{accountCurrency}</span><input aria-label="Stake" type="number" min={MIN_STAKE} step="1" value={stake} onChange={(e) => chooseStake(e.target.value)} className="min-w-0 flex-1 bg-transparent font-mono text-[10px] outline-none" /></span>
+            </label>
+            <label className="border border-shafx-border bg-shafx-surface px-2 py-2">
+              <span className="block text-[7px] uppercase tracking-[0.12em] text-shafx-textMuted">Multiplier</span>
+              <select aria-label="Multiplier" value={multiplier} onChange={(e) => chooseMultiplier(e.target.value)} className="mt-1 w-full bg-transparent font-mono text-[10px] outline-none">
+                {QUICK_MULTIPLIERS.map((value) => <option key={value} value={value}>{value}×</option>)}
+              </select>
+            </label>
+          </div>
+        </div>
+
+        {quote ? (
+          <div className="px-3 py-2.5">
+            <div className="flex items-center justify-between border border-shafx-border bg-shafx-surface px-2.5 py-2 text-[8px]">
+              <span className="font-semibold">LIVE {side} QUOTE</span>
+              <span className="font-mono text-shafx-textMuted">{formatCurrency(Number(quote.stake), accountCurrency)} • {quote.multiplier}×</span>
+            </div>
+            <div className="mt-2 grid grid-cols-2 gap-2 text-[8px]">
+              <div><span className="text-shafx-textMuted">Protection SL</span><div className="mt-0.5 font-mono text-shafx-danger">{quote.stopLossAmount ? formatCurrency(quote.stopLossAmount, accountCurrency) : 'None'}</div></div>
+              <div className="text-right"><span className="text-shafx-textMuted">Protection TP</span><div className="mt-0.5 font-mono text-shafx-success">{quote.takeProfitAmount ? formatCurrency(quote.takeProfitAmount, accountCurrency) : 'None'}</div></div>
+            </div>
+            <div className="mt-2 flex gap-2">
+              <button type="button" onClick={() => void confirmBuy()} disabled={state === 'quoting' || state === 'buying'} className={'flex min-h-10 flex-1 items-center justify-center text-[9px] font-bold ' + (side === 'BUY' ? 'bg-shafx-success text-[#07110E]' : 'bg-shafx-danger text-white')}>{side}</button>
+              <button type="button" onClick={resetQuote} disabled={false} className="min-h-10 border border-shafx-border px-3 text-[8px] text-shafx-textMuted">Cancel</button>
+            </div>
+          </div>
+        ) : (
+          <div className="px-3 py-2.5">
+            <button type="button" onClick={() => void requestQuote()} disabled={state === 'quoting' || state === 'buying' || !connection || Boolean(plan.validationError)} className={'flex min-h-11 w-full items-center justify-center gap-2 text-[9px] font-bold ' + (side === 'BUY' ? 'bg-shafx-success text-[#07110E]' : 'bg-shafx-danger text-white')}>
+              {state === 'buying' ? 'PLACING ' + side + '…' : 'GET LIVE ' + side + ' QUOTE'} <ArrowUpRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+        </div>
+      </div>
+    )
+  }
+
+  const quotePotentialProfit = quote?.potentialProfit
+  const quoteCommission = Number(quote?.commission ?? 0)
+  const quoteProtectionSL = Number(quote?.stopLossAmount ?? (stopLossEnabled ? stopLossAmount : 0))
+  const quoteProtectionTP = Number(quote?.takeProfitAmount ?? (takeProfitEnabled ? takeProfitAmount : 0))
+  const busy = state === 'quoting' || state === 'buying'
+
+  return (
+    <section className="overflow-hidden border border-shafx-border bg-shafx-surface">
+      <header className="border-b border-shafx-border px-3 py-2.5 sm:px-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.14em]">Trade Ticket</div>
+            <div className="mt-0.5 font-mono text-[8px] text-shafx-textMuted">{symbol} · {timeframe} · DERIV MULTIPLIER</div>
+          </div>
+          <div className="text-right">
+            <div className={'font-mono text-[8px] font-semibold ' + (connection ? 'text-shafx-success' : 'text-shafx-danger')}>{connection ? 'DEMO CONNECTED' : 'OFFLINE'}</div>
+            <div className="font-mono text-[8px] text-shafx-textMuted">{accountCurrency} {Number.isFinite(accountBalance) ? accountBalance.toFixed(2) : '0.00'}</div>
+          </div>
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-1.5">
+          <button
+            type="button"
+            data-market-direction={marketDirection}
+            data-button-tone={buyButtonDirection}
+            onClick={() => chooseSide('BUY')}
+            disabled={busy}
+            aria-pressed={side === 'BUY'}
+            aria-label="Select BUY at Ask price"
+            className={'shafx-trade-side-button min-h-14 border px-3 py-2 text-left text-shafx-text transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ' + tradeSideButtonTone(buyButtonDirection) + (side === 'BUY' ? ' ring-2 ring-white/90 ring-offset-1 ring-offset-[#080D13]' : ' hover:brightness-110')}
+          >
+            <span className="flex items-center justify-between gap-2 text-[10px] font-bold">
+              <span><ArrowUpRight className="mr-1 inline h-3.5 w-3.5" />BUY</span>
+              {side === 'BUY' && <span className="text-[7px] font-semibold uppercase tracking-[0.12em]">Selected</span>}
+            </span>
+            <span style={{ color: '#E7EAF0' }} className="mt-1 block font-mono text-[10px] tabular-nums">ASK {marketMetrics.ask ? formatPrice(marketMetrics.ask, symbolSpec.pricePrecision) : '—'}</span>
+          </button>
+          <button
+            type="button"
+            data-market-direction={marketDirection}
+            data-button-tone={sellButtonDirection}
+            onClick={() => chooseSide('SELL')}
+            disabled={busy}
+            aria-pressed={side === 'SELL'}
+            aria-label="Select SELL at Bid price"
+            className={'shafx-trade-side-button min-h-14 border px-3 py-2 text-left text-shafx-text transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ' + tradeSideButtonTone(sellButtonDirection) + (side === 'SELL' ? ' ring-2 ring-white/90 ring-offset-1 ring-offset-[#080D13]' : ' hover:brightness-110')}
+          >
+            <span className="flex items-center justify-between gap-2 text-[10px] font-bold">
+              <span><ArrowDownRight className="mr-1 inline h-3.5 w-3.5" />SELL</span>
+              {side === 'SELL' && <span className="text-[7px] font-semibold uppercase tracking-[0.12em]">Selected</span>}
+            </span>
+            <span style={{ color: '#E7EAF0' }} className="mt-1 block font-mono text-[10px] tabular-nums">BID {marketMetrics.bid ? formatPrice(marketMetrics.bid, symbolSpec.pricePrecision) : '—'}</span>
+          </button>
+        </div>
+
+        <div className="mt-2 grid grid-cols-3 gap-2 border-t border-shafx-border pt-2 font-mono text-[8px]">
+          <div><span className="text-shafx-textMuted">ENTRY</span><span className={'ml-1.5 font-semibold ' + (side === 'BUY' ? 'text-shafx-success' : 'text-shafx-danger')}>{formatPrice(entryPrice, symbolSpec.pricePrecision)}</span></div>
+          <div className="text-center"><span className="text-shafx-textMuted">BID</span><span className="ml-1.5 text-shafx-danger">{marketMetrics.bid ? formatPrice(marketMetrics.bid, symbolSpec.pricePrecision) : '—'}</span></div>
+          <div className="text-right"><span className="text-shafx-textMuted">ASK</span><span className="ml-1.5 text-shafx-success">{marketMetrics.ask ? formatPrice(marketMetrics.ask, symbolSpec.pricePrecision) : '—'}</span></div>
+        </div>
+        <div className="mt-1 flex items-center justify-between gap-2 font-mono text-[8px] text-shafx-textMuted">
+          <span>MARKET {formatPrice(currentPrice, symbolSpec.pricePrecision)}</span>
+          {marketMetrics.hasSpread ? <span>{marketMetrics.spreadPips?.toFixed(1)} pips spread</span> : <span>Deriv market price</span>}
+        </div>
+        <div className="mt-2 rounded-lg border border-shafx-accent/20 bg-shafx-accent/[0.04] p-2">
+          <div className="grid grid-cols-2 gap-2 font-mono text-[8px]">
+            <div>
+              <span className="block text-shafx-textMuted">Multiplier × stake</span>
+              <span className="mt-0.5 block text-shafx-text">{(() => { const value = multiplierNotional(stakeValue, multiplierValue); return value === null ? '—' : formatCurrency(value, accountCurrency) })()}</span>
+            </div>
+            <div>
+              <span className="block text-shafx-textMuted">P/L per pip</span>
+              <span className="mt-0.5 block text-shafx-accent">{(() => { const value = calculateMultiplierPnlPerPip(entryPrice, symbolSpec.pipSize, stakeValue, multiplierValue); return value === null ? '—' : '≈ ' + formatCurrency(value, accountCurrency) })()}</span>
+            </div>
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-2 font-mono text-[8px]">
+            <div>
+              <span className="block text-shafx-textMuted">FX lot reference</span>
+              <span className="mt-0.5 block text-shafx-text">{(() => {
+                const value = symbolSpec.quoteCurrency === accountCurrency
+                  ? calculateMultiplierEquivalentLots(entryPrice, stakeValue, multiplierValue, symbolSpec.contractSize)
+                  : null
+                return value === null ? '—' : '≈ ' + value.toFixed(2) + ' lots'
+              })()}</span>
+            </div>
+            <div>
+              <span className="block text-shafx-textMuted">+$25 target move</span>
+              <span className="mt-0.5 block text-shafx-text">{(() => {
+                const value = calculateMultiplierRequiredMovePercent(25, stakeValue, multiplierValue)
+                return value === null ? '—' : value.toFixed(4) + '%'
+              })()}</span>
+            </div>
+          </div>
+          <div className="mt-1 text-[7px] leading-3.5 text-shafx-textMuted">
+            Sizing check: $50 × 800 is not automatically larger than 1 MT5 EUR/USD lot. Near 1.17 it is roughly 0.34 standard-lot equivalent for price sensitivity before commission. MT5's exact result still depends on the broker's contract specification.
+          </div>
+        </div>
+      </header>
+
+      <div className="divide-y divide-shafx-border">
+        <div className="grid grid-cols-2 gap-px bg-shafx-border">
+          <label className="bg-shafx-surface px-3 py-2.5">
+            <span className="block text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted">Stake</span>
+            <div className="mt-1 flex items-center gap-1">
+              <span className="font-mono text-[8px] text-shafx-textMuted">{accountCurrency}</span>
+              <input
+                aria-label="Stake"
+                type="number"
+                min={MIN_STAKE}
+                max={MAX_STAKE}
+                step="1"
+                value={stake}
+                onChange={(e) => chooseStake(e.target.value)}
+                onBlur={() => { const value = Number(stake); if (!Number.isFinite(value) || value < MIN_STAKE) chooseStake(MIN_STAKE.toFixed(2)); else if (value > MAX_STAKE) chooseStake(MAX_STAKE.toFixed(2)) }}
+                className="min-w-0 flex-1 bg-transparent font-mono text-sm outline-none"
+              />
+            </div>
+            <div className="mt-1 text-[7px] text-shafx-textMuted">Range 10 – 2,000 {accountCurrency}</div>
+            <div className="mt-1 flex gap-1 overflow-x-auto">
+              {QUICK_STAKES.map((value) => (
+                <button key={value} type="button" onClick={() => chooseStake(value)} disabled={Number(value) > accountBalance} className={'flex-1 border px-1.5 py-1 font-mono text-[7px] ' + (stake === value ? 'border-shafx-primary/40 bg-shafx-primary/10 text-shafx-primary' : 'border-shafx-border text-shafx-textMuted disabled:opacity-40')}>
+                  {value}
+                </button>
+              ))}
+            </div>
+          </label>
+
+          <label className="bg-shafx-surface px-3 py-2.5">
+            <span className="block text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted">Multiplier</span>
+            <div className="mt-1 flex items-center">
+              <input aria-label="Multiplier" type="number" min="1" max="4000" step="1" value={multiplier} onChange={(e) => chooseMultiplier(e.target.value)} className="min-w-0 flex-1 bg-transparent font-mono text-sm outline-none" />
+              <span className="font-mono text-[10px] text-shafx-textMuted">×</span>
+            </div>
+            <div className="mt-1 flex gap-1 overflow-x-auto">
+              {QUICK_MULTIPLIERS.map((value) => (
+                <button key={value} type="button" onClick={() => chooseMultiplier(value)} className={'flex-1 border px-1.5 py-1 font-mono text-[7px] ' + (multiplier === value ? 'border-shafx-primary/40 bg-shafx-primary/10 text-shafx-primary' : 'border-shafx-border text-shafx-textMuted')}>
+                  {value}
+                </button>
+              ))}
+            </div>
+          </label>
+        </div>
+
+        <div className="px-3 py-2.5 sm:px-4">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div>
+              <span className="text-[9px] font-semibold uppercase tracking-[0.14em]">Auto Exits</span>
+              <span className="ml-2 font-mono text-[7px] text-shafx-textMuted">OPTIONAL · RECOMMENDED</span>
+            </div>
+            <span className="font-mono text-[7px] text-shafx-textMuted">{stopLossEnabled ? moneyLabel(stopLossAmount, accountCurrency) + ' SL' : 'SL OFF'} · {takeProfitEnabled ? moneyLabel(takeProfitAmount, accountCurrency) + ' TP' : 'TP OFF'}</span>
+          </div>
+
+          <div className="mb-2 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => { setStopLossEnabled((value) => !value); resetQuote() }}
+              className={'flex min-h-8 items-center justify-between border px-2 font-mono text-[8px] ' + (stopLossEnabled ? 'border-shafx-danger/40 bg-shafx-danger/10 text-shafx-danger' : 'border-shafx-border text-shafx-textMuted')}
+            >
+              <span>STOP LOSS</span><span>{stopLossEnabled ? 'ON' : 'OFF'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setTakeProfitEnabled((value) => !value); resetQuote() }}
+              className={'flex min-h-8 items-center justify-between border px-2 font-mono text-[8px] ' + (takeProfitEnabled ? 'border-shafx-success/40 bg-shafx-success/10 text-shafx-success' : 'border-shafx-border text-shafx-textMuted')}
+            >
+              <span>TAKE PROFIT</span><span>{takeProfitEnabled ? 'ON' : 'OFF'}</span>
+            </button>
+          </div>
+
+          <div className="space-y-3 text-[8px]">
+            <div>
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <span className="font-semibold text-shafx-danger">Stop Loss</span>
+                <span className="font-mono text-shafx-danger">{stopLossEnabled ? moneyLabel(stopLossAmount, accountCurrency) : 'None'}</span>
+              </div>
+              <div className="grid grid-cols-4 gap-1">
+                {STOP_LOSS_RATIOS.map((ratio) => {
+                  const amount = roundMoney(stakeValue * ratio)
+                  return (
+                    <button key={ratio} type="button" onClick={() => { setStopLossEnabled(true); setStopLossRatio(ratio); resetQuote() }} disabled={!stopLossEnabled || !Number.isFinite(stakeValue) || stakeValue <= 0} className={'border px-1.5 py-1.5 font-mono text-[7px] ' + (stopLossRatio === ratio && stopLossEnabled ? 'border-shafx-danger/45 bg-shafx-danger/10 text-shafx-danger' : 'border-shafx-border text-shafx-textMuted') + ' disabled:opacity-40'}>
+                      {Math.round(ratio * 100)}% · {moneyLabel(amount, accountCurrency)}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <span className="font-semibold text-shafx-success">Take Profit</span>
+                <span className="font-mono text-shafx-success">{takeProfitEnabled ? moneyLabel(takeProfitAmount, accountCurrency) : 'None'}</span>
+              </div>
+              <div className="grid grid-cols-4 gap-1">
+                {TAKE_PROFIT_MULTIPLES.map((multiple) => {
+                  const amount = roundMoney(stakeValue * multiple)
+                  return (
+                    <button key={multiple} type="button" onClick={() => { setTakeProfitEnabled(true); setTakeProfitMultiple(multiple); resetQuote() }} disabled={!takeProfitEnabled || !Number.isFinite(stakeValue) || stakeValue <= 0} className={'border px-1.5 py-1.5 font-mono text-[7px] ' + (takeProfitMultiple === multiple && takeProfitEnabled ? 'border-shafx-success/45 bg-shafx-success/10 text-shafx-success' : 'border-shafx-border text-shafx-textMuted') + ' disabled:opacity-40'}>
+                      {multiple}× · {moneyLabel(amount, accountCurrency)}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-2 grid grid-cols-2 gap-2 text-[8px]">
+            <div className="border-t border-shafx-border pt-2">
+              <div className="text-shafx-textMuted">Chart SL ≈</div>
+              <div className="mt-0.5 font-mono text-shafx-danger">{plan.slPrice !== null ? formatPrice(plan.slPrice, symbolSpec.pricePrecision) : '—'} <span className="text-[7px] text-shafx-textMuted">· {plan.slDistancePips !== null ? plan.slDistancePips.toFixed(1) + ' pips' : '—'}</span></div>
+            </div>
+            <div className="border-t border-shafx-border pt-2 text-right">
+              <div className="text-shafx-textMuted">Chart TP ≈</div>
+              <div className="mt-0.5 font-mono text-shafx-success">{plan.tpPrice !== null ? formatPrice(plan.tpPrice, symbolSpec.pricePrecision) : '—'} <span className="text-[7px] text-shafx-textMuted">· {plan.tpDistancePips !== null ? plan.tpDistancePips.toFixed(1) + ' pips' : '—'}</span></div>
+            </div>
+          </div>
+
+          <div className="mt-2 flex items-center justify-between border-t border-shafx-border pt-2 text-[8px]">
+            <span className="text-shafx-textMuted">Risk / Reward</span>
+            <span className="font-mono font-semibold">{plan.estimatedRiskRewardRatio !== null ? '1:' + plan.estimatedRiskRewardRatio.toFixed(2) : '—'}</span>
+          </div>
+
+          <div className="mt-2 text-[7px] leading-4 text-shafx-textMuted">
+            SL and TP are optional. When enabled they are monetary targets that scale with the stake. When disabled, SHAFX sends no corresponding limit_order protection to Deriv; the contract remains open until you close it or Deriv stops it automatically.
+          </div>
+        </div>
+
+        {(plan.validationError || state === 'error') && (
+          <div className="px-3 py-2.5">
+            <div className="flex items-start gap-2 border border-shafx-danger/25 bg-shafx-danger/10 px-2.5 py-2 text-[8px] leading-4 text-shafx-danger">
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+              <span>{error || plan.validationError}</span>
+            </div>
+          </div>
+        )}
+
+        {state === 'quoting' && (
+          <div className="flex items-center gap-2 px-3 py-2.5 text-[8px] text-shafx-textMuted">
+            <LoaderCircle className="h-3.5 w-3.5 animate-spin text-shafx-primary" /> Requesting live Deriv proposal…
+          </div>
+        )}
+
+        {quote && state === 'quoted' && (
+          <div className="px-3 py-2.5">
+            <div className="border border-shafx-primary/25 bg-shafx-primary/[.04] p-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <div className="text-[8px] font-semibold uppercase tracking-[0.14em]">Deriv proposal</div>
+                  <div className="mt-0.5 font-mono text-[7px] text-shafx-textMuted">{quote.contractType} · {quote.multiplier}× · {formatCurrency(quote.stake, accountCurrency)}</div>
+                </div>
+                <div className="font-mono text-[8px] text-shafx-textMuted">Price refreshes on confirm</div>
+              </div>
+
+              <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[8px]">
+                <span className="text-shafx-textMuted">Stake</span><span className="text-right font-mono">{formatCurrency(quote.stake, accountCurrency)}</span>
+                <span className="text-shafx-textMuted">Multiplier</span><span className="text-right font-mono">{quote.multiplier}×</span>
+                <span className="font-semibold text-shafx-danger">Stop Loss</span><span className="text-right font-mono font-semibold text-shafx-danger">{quoteProtectionSL > 0 ? formatCurrency(quoteProtectionSL, accountCurrency) : 'None'}</span>
+                <span className="font-semibold text-shafx-success">Take Profit</span><span className="text-right font-mono font-semibold text-shafx-success">{quoteProtectionTP > 0 ? formatCurrency(quoteProtectionTP, accountCurrency) : 'None'}</span>
+                <span className="text-shafx-textMuted">Commission</span><span className="text-right font-mono">{quoteCommission > 0 ? formatCurrency(quoteCommission, accountCurrency) : '—'}</span>
+                <span className="text-shafx-textMuted">Potential result*</span><span className="text-right font-mono text-shafx-success">{quotePotentialProfit !== undefined ? (quotePotentialProfit >= 0 ? '+' : '') + formatCurrency(quotePotentialProfit, accountCurrency) : '—'}</span>
+              </div>
+
+              <div className="mt-2 text-[7px] leading-4 text-shafx-textMuted">
+                Protection is attached to the Deriv contract. *Potential result is the proposal payout result, not the selected TP target.
+              </div>
+
+              <div className="mt-2 flex gap-2">
+                <button type="button" onClick={() => void confirmBuy()} disabled={false} className={'flex min-h-11 flex-1 items-center justify-center gap-2 px-3 text-[9px] font-semibold disabled:opacity-60 ' + (side === 'BUY' ? 'bg-shafx-success text-[#07110E] hover:bg-shafx-success/90' : 'bg-shafx-danger text-white hover:bg-shafx-danger/90')}>
+                  <CheckCircle2 className="h-3.5 w-3.5" /> {side === 'BUY' ? 'BUY' : 'SELL'}
+                </button>
+                <button type="button" onClick={resetQuote} disabled={busy} className="min-h-10 border border-shafx-border px-3 text-[8px] font-semibold text-shafx-textMuted disabled:opacity-50">Cancel</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {state !== 'quoted' && (
+          <div className="px-3 py-2.5">
+            <button type="button" onClick={() => void requestQuote()} disabled={state === 'quoting' || state === 'buying' || !connection || Boolean(plan.validationError)} className={'flex min-h-11 w-full items-center justify-center gap-2 text-[9px] font-bold disabled:opacity-50 ' + (side === 'BUY' ? 'bg-shafx-success text-[#07110E] hover:bg-shafx-success/90' : 'bg-shafx-danger text-white hover:bg-shafx-danger/90')}>
+              {state === 'buying' ? <><LoaderCircle className="h-3.5 w-3.5 animate-spin" /> PLACING {side}…</> : <>GET LIVE {side} QUOTE <ArrowUpRight className="h-3.5 w-3.5" /></>}
+            </button>
+          </div>
+        )}
+
+        <div className="border-t border-shafx-border px-3 py-2 text-[7px] leading-4 text-shafx-textMuted sm:px-4">
+          Broker-managed SL/TP remains active even if you close SHAFX. The contract continues at Deriv until it reaches an automatic exit or you close it manually.
+        </div>
+      </div>
+    </section>
+  )
+}
+
+
+export const OrderPanel: React.FC<Props> = (props) => {
+  if (props.activePosition?.brokerProduct === 'DERIV_MULTIPLIER') {
+    return <LegacyMultiplierOrderPanel {...props} />
+  }
+
+  return <CTraderManualTicket
+    symbol={props.symbol}
+    currentPrice={props.currentPrice}
+    bidPrice={props.bidPrice ?? props.currentPrice}
+    askPrice={props.askPrice ?? props.currentPrice}
+    accountBalance={props.accountBalance}
+    accountFreeMargin={props.accountFreeMargin}
+    accountCurrency={props.accountCurrency}
+    symbolSpec={props.symbolSpec}
+    timeframe={props.timeframe}
+    connection={props.providerSelection?.providerId === 'ctrader' ? props.connection : null}
+    providerSelection={props.providerSelection ?? null}
+    activePosition={props.activePosition}
+    onTradeOpened={props.onTradeOpened}
+    onTradeClosed={props.onTradeClosed}
+    onTradeLinesChange={props.onTradeLinesChange}
+    aiSetup={props.aiSetup}
+  />
 }

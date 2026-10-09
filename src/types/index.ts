@@ -64,6 +64,45 @@ export interface RiskCalculationResult {
   estimatedLossAtStop: number
 }
 
+export interface TradePlanDraft {
+  side: TradeSide
+  entryPrice: number
+  slPrice: number | null
+  tpPrice: number | null
+  stake: number
+  multiplier: number
+  slDistancePips: number | null
+  tpDistancePips: number | null
+  estimatedSlAmount: number | null
+  estimatedTpAmount: number | null
+  estimatedRiskPercent: number
+  estimatedRewardAmount: number | null
+  estimatedRiskRewardRatio: number | null
+  estimatedMaxStakePercent: number
+  validationError: string | null
+}
+
+export interface BotPaperTrade {
+  id: string
+  symbol: string
+  round: number
+  direction: TradeSide | null
+  signalTimeframe: Timeframe | null
+  entryTimeframe: Timeframe | null
+  entry: number | null
+  exit: number | null
+  stake: number
+  multiplier: number
+  paperMode?: 'SHAFX_STANDARD' | 'DERIV_MULTIPLIER'
+  lotSize?: number
+  expectedProfit?: number
+  expectedLoss?: number
+  pnl: number
+  status: 'win' | 'loss' | 'timeout' | 'wait'
+  openTime: string
+  closeTime: string
+}
+
 export interface TradeOrder {
   id: string
   symbol: string
@@ -81,6 +120,27 @@ export interface TradeOrder {
   closeTime?: string
   exitPrice?: number
   profit?: number
+  currentPrice?: number
+  plannedStopLossPrice?: number | null
+  plannedTakeProfitPrice?: number | null
+  commission?: number
+  payout?: number
+  providerOrderId?: string
+  brokerProduct?: 'SHAFX_CFD_CTRADER' | 'DERIV_MULTIPLIER'
+  providerId?: string
+  providerConnectionId?: string
+  providerAccountId?: string
+  volumeLots?: number
+  pipValuePerLot?: number
+  notionalValue?: number
+  usedMargin?: number
+  stopLossPips?: number
+  takeProfitPips?: number
+  stake?: number
+  multiplier?: number
+  chartTimeframe?: Timeframe
+  stopLossAmount?: number
+  takeProfitAmount?: number
 }
 
 export type SimulatedOrderDraft = Omit<TradeOrder, 'id' | 'openTime' | 'status'>

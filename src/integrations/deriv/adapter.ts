@@ -257,8 +257,13 @@ export const DERIV_PROVIDER_ADAPTER: ProviderAdapter = {
           environment: connection.environment,
           currency: snapshot.currency,
           balance: snapshot.balance,
+          equity: snapshot.equity,
+          usedMargin: snapshot.usedMargin,
+          freeMargin: snapshot.freeMargin,
+          floatingPL: snapshot.floatingPL,
         },
       }),
+      onEvent: (event) => onEvent(event),
       onStatus: (status) => {
         if (status === 'error') onEvent({ type: 'error', error: asNetworkError('Deriv account stream failed.') })
       },
