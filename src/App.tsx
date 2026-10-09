@@ -874,20 +874,22 @@ const TerminalContent: React.FC = () => {
       },
     ]
 
-    if (Number.isFinite(position.stopLoss) && Number(position.stopLoss) > 0) {
+    const stopLossPrice = Number(position.plannedStopLossPrice)
+    if (Number.isFinite(stopLossPrice) && stopLossPrice > 0) {
       lines.push({
-        id: position.id + '-stop',
-        price: Number(position.stopLoss),
+        id: position.id + '-sl',
+        price: stopLossPrice,
         label: 'STOP LOSS',
         color: '#FF5C75',
         lineWidth: 2,
       })
     }
 
-    if (Number.isFinite(position.takeProfit) && Number(position.takeProfit) > 0) {
+    const takeProfitPrice = Number(position.plannedTakeProfitPrice)
+    if (Number.isFinite(takeProfitPrice) && takeProfitPrice > 0) {
       lines.push({
-        id: position.id + '-target',
-        price: Number(position.takeProfit),
+        id: position.id + '-tp',
+        price: takeProfitPrice,
         label: 'TAKE PROFIT',
         color: '#22D3A5',
         lineWidth: 2,
