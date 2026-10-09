@@ -34,6 +34,17 @@
 8. **Do not claim a real broker flow is working unless it has actually been exercised against the provider.**
 9. **Every meaningful milestone must leave a note in this file and/or the implementation tree, including failures and why a direction changed.**
 
+## Chart clutter and HP/laptop desktop redesign — 2026-10-09
+
+- **Scope guard:** only `sharfx-deriv-render` on `test/rebuild-deriv-native-manual-20260930`. Keep `main`, Cloudflare production, sibling Render projects, provider credentials, and trading execution unchanged.
+- **Visual problem:** structural support/resistance/liquidity had been rendered as price-line objects spanning the chart, then position Entry/SL/TP were also rendered as full-width lines. On smaller laptop widths, a fixed watchlist and right rail consumed too much of the horizontal space.
+- **Chart redesign:** `src/components/chart/CandlestickChart.tsx` turns support/resistance/liquidity into faint supply/demand ribbons on the right side of the plotted range. Structural levels that land within 14 pixels are combined into one band/tag, retaining the contributing labels and price range. Entry, stop loss and take profit now use shorter right-side segments with compact `ENTRY`, `SL`, and `TP` price tags. The live BUY/ASK and SELL/BID rails remain distinct broker quote rails; user-drawn levels and alerts remain user-controlled.
+- **Desktop redesign:** `src/App.tsx` and `src/index.css` use a full-height laptop workspace, a more usable central chart, adjusted watchlist/right-rail widths, clearer market/timeframe header sizing, and a shorter bottom trades dock on low-height screens. On a 1000–1179px desktop viewport the optional watchlist rail hides so chart space is not squeezed between fixed sidebars; it returns at wider sizes. Overlay widths and label placement also adapt to narrower screens.
+- **Code commit:** `d9d5493d84bf786229e481f41df6038b2df0f855` (`fix: type chart zone and trade overlay layouts`). Render deploy `dep-db4ili8ae00c73eepqng` reached **LIVE** after the TypeScript correction.
+- **Automated checks:** GitHub Actions run `37969797680` reports build, Render static-server check and lint passed. Test result: 311 passed, 2 failed of 313. The same unrelated failures remain: `server/ctrader.test.js` order-status expectation (got `filled`, expected `rejected`) and `src/lib/cfdRiskEngine.test.ts` quote-currency conversion expectation (got `10`, expected `null`). The cTrader live/history tests pass (12/12).
+- **Visual acceptance still pending:** no saved SHAFX sign-in has been recorded in the TinyFish browser profile yet, so this turn could not enter the authenticated trading workspace and inspect the redesign at laptop dimensions. Do not claim the new bands, risk tags, or HP layout have passed visual QA until the user saves the browser profile and a fresh browser run inspects the live chart at desktop and narrower widths.
+- **Trade safety:** no trades were placed/confirmed and no account/provider settings or credentials were changed.
+
 ## Candle-load continuity and responsive cTrader quotes — 2026-10-09
 
 - **Scope:** only `sharfx-deriv-render` and `test/rebuild-deriv-native-manual-20260930`. No production/main, sibling Render projects, credentials, or order/execution changes.
