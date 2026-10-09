@@ -34,6 +34,17 @@
 8. **Do not claim a real broker flow is working unless it has actually been exercised against the provider.**
 9. **Every meaningful milestone must leave a note in this file and/or the implementation tree, including failures and why a direction changed.**
 
+## Candle-load continuity and responsive cTrader quotes — 2026-10-09
+
+- **Scope:** only `sharfx-deriv-render` and `test/rebuild-deriv-native-manual-20260930`. No production/main, sibling Render projects, credentials, or order/execution changes.
+- **Findings:** the browser checks live cTrader quotes through an HTTP poll at 350 ms while the Node server maintains the actual cTrader WebSocket spot stream. That poll could make quote motion feel stop-start. Separately, the cTrader history loader cleared the visible candle array before every history fetch, and a late history response could replace candles updated by newer live ticks.
+- **Code changes:** `src/data/ctrader/CTraderLiveQuote.ts` now checks the quote endpoint every 150 ms (in-flight requests remain deduplicated). New `mergeCTraderHistoricalAndLiveCandles` merges broker history with accepted live candles, preserving history's candle open while keeping live high/low/close and newer live buckets. `src/App.tsx` keeps a provider/account/symbol/timeframe-scoped cTrader cache during same-target refreshes and timeframe revisits, and merges the history response rather than rewinding the live candle.
+- **Tests:** two regressions were added for merging live candles while the history response is delayed and rejecting stale live bars that are absent from newer broker history. GitHub Actions run `37968208237`: build passed, Node static-server verification passed, lint passed, 311 tests passed and 2 failed of 313. The only failures are the existing unrelated `server/ctrader.test.js` order-status expectation (`filled` vs expected `rejected`) and `src/lib/cfdRiskEngine.test.ts` quote-currency conversion expectation (`10` vs expected `null`). New cTrader history/quote tests passed.
+- **Render:** code commit `258ce6d7ff308d19aa7cbc34513e6be88c3debed` deployed LIVE as `dep-db4ies7pr9vc73c854og`; Render production build succeeded.
+- **Browser gate:** authenticated live-chart inspection remains pending. The TinyFish profile setup was opened for the user, but the profile had not recorded a SHAFX sign-in at the last check. Do not claim the live visual review of candle gaps, tick cadence, or BID/ASK position is complete until the user saves the profile and the browser recheck passes.
+- **Truthful performance boundary:** 150 ms is the browser's quote-check cadence, not a promise of 150 ms market ticks. SHAFX must show real provider ticks only; do not animate/invent prices to imitate MT5.
+- **Order safety:** no trades were placed/confirmed; no provider/account settings or credentials were changed.
+
 ## MT5-style live quote rails and forming-candle behaviour — 2026-10-09
 
 - **Scope:** only `sharfx-deriv-render` and `test/rebuild-deriv-native-manual-20260930`. Keep sibling Render services, `main`, Cloudflare production, credentials, and trade execution paths untouched.
