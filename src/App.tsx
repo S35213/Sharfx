@@ -36,7 +36,7 @@ import { normalizeProviderSymbol } from './lib/normalizeProviderSymbol'
 import type { SetupCandidate } from './engine/setup/types'
 import { mockWatchlist } from './data/mock/watchlist'
 import { fetchDerivActiveForexSymbols, fetchDerivMultiTimeframeCandles, subscribeDerivForexQuotes } from './data/deriv/DerivPublicMarketFeed'
-import { applyCTraderQuoteToCandles, cTraderQuoteBucket, fetchCTraderHistoricalCandles, isCTraderQuoteBucketCurrent, mergeCTraderHistoricalAndLiveCandles, subscribeCTraderLiveQuote } from './data/ctrader/CTraderLiveQuote'
+import { applyCTraderQuoteToCandles, cTraderQuoteBucket, fetchCTraderHistoricalCandles, isCTraderQuoteBucketCurrent, mergeCTraderHistoricalAndLiveCandles, shouldRepairCTraderHistoryForGap, subscribeCTraderLiveQuote } from './data/ctrader/CTraderLiveQuote'
 
 const providerPositionToTrade = (position: ProviderPosition): TradeOrder => {
   const metadata = position.metadata || {}
@@ -697,8 +697,66 @@ const TerminalContent: React.FC = () => {
     // Old quote requests can finish after cleanup. Capture identity and reject
     // callbacks that no longer belong to the active symbol/timeframe.
     let cancelled = false
+    let historyRepairInFlight = false
+    let lastHistoryRepairAt = 0
     const subscriptionSymbol = selectedSymbol
     const subscriptionTimeframe = timeframe
+    const historyRepairKey = [
+      String(selection.connectionId),
+      String(selection.accountId),
+      selection.environment,
+      subscriptionSymbol,
+      subscriptionTimeframe,
+    ].join(':')
+
+    const repairSkippedCandles = async (): Promise<void> => {
+      // Backfill actual cTrader bars after a quote jumps over a candle bucket.
+      // Never synthesize flat candles to hide a gap: the broker's OHLC history
+      // is the only source allowed to fill those missing timestamps.
+      if (cancelled || historyRepairInFlight || Date.now() - lastHistoryRepairAt < 15_000) return
+      historyRepairInFlight = true
+      lastHistoryRepairAt = Date.now()
+      try {
+        const history = await fetchCTraderHistoricalCandles({
+          connectionId: String(selection.connectionId),
+          accountId: String(selection.accountId),
+          environment: selection.environment === 'live' ? 'live' : 'demo',
+          symbol: subscriptionSymbol,
+          timeframe: subscriptionTimeframe,
+          count: 300,
+        })
+        if (
+          cancelled ||
+          selectedSymbolRef.current !== subscriptionSymbol ||
+          timeframeRef.current !== subscriptionTimeframe
+        ) return
+
+        const latestLive = cTraderCandleCacheRef.current[historyRepairKey] ?? liveCandlesRef.current
+        const repaired = mergeCTraderHistoricalAndLiveCandles(history, latestLive)
+        const unchanged = repaired.length === latestLive.length && repaired.every((bar, index) => {
+          const previous = latestLive[index]
+          return previous &&
+            previous.time === bar.time &&
+            previous.open === bar.open &&
+            previous.high === bar.high &&
+            previous.low === bar.low &&
+            previous.close === bar.close
+        })
+        if (unchanged) return
+
+        cTraderCandleCacheRef.current[historyRepairKey] = repaired
+        candleCacheRef.current[subscriptionSymbol + ':' + subscriptionTimeframe] = repaired
+        liveCandlesRef.current = repaired
+        setLiveCandles(repaired)
+        // Keep the quote/header time from the live stream; this request repairs
+        // candle history only and must never make the visible price jump backward.
+      } catch {
+        // A later genuine gap can retry; do not replace good live candles with a failed refresh.
+      } finally {
+        historyRepairInFlight = false
+      }
+    }
+
     const unsubscribe = subscribeCTraderLiveQuote({
       connectionId: selection.connectionId,
       accountId: selection.accountId,
@@ -729,6 +787,7 @@ const TerminalContent: React.FC = () => {
       const currentCandles = normalizeMarketCandles(liveCandlesRef.current)
       const last = currentCandles[currentCandles.length - 1]
       if (!isCTraderQuoteBucketCurrent(bucket, last?.time)) return
+      const skippedCandleBucket = shouldRepairCTraderHistoryForGap(last?.time, bucket, subscriptionTimeframe)
 
       // Candle OHLC is bid-based. This shared helper preserves the candle open,
       // extends its wick, and updates close on every accepted tick so Lightweight
@@ -748,6 +807,7 @@ const TerminalContent: React.FC = () => {
         candleCacheRef.current[subscriptionSymbol + ':' + subscriptionTimeframe] = nextCandles
         setLiveCandles(nextCandles)
       }
+      if (skippedCandleBucket) void repairSkippedCandles()
 
       latestCTraderPriceRef.current = price
       const quoteIdentity = [
