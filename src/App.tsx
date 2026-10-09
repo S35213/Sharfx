@@ -628,7 +628,7 @@ const TerminalContent: React.FC = () => {
         const last = candles[candles.length - 1]
         if (last) {
           setCurrentPrice(last.close)
-          setMarketTimestamp(Math.floor(last.time / 1000))
+          setMarketTimestamp(Math.floor(last.time))
         }
       } catch (error) {
         if (!cancelled) pushStreamToast(error instanceof Error ? error.message : 'cTrader chart history could not be loaded.')
@@ -642,12 +642,24 @@ const TerminalContent: React.FC = () => {
   useEffect(() => {
     const selection = activeProviderSelection
     if (selection?.providerId !== 'ctrader' || !selection.connectionId || !selection.accountId) return
+
+    // Old quote requests can finish after cleanup. Capture identity and reject
+    // callbacks that no longer belong to the active symbol/timeframe.
+    let cancelled = false
+    const subscriptionSymbol = selectedSymbol
+    const subscriptionTimeframe = timeframe
     const unsubscribe = subscribeCTraderLiveQuote({
       connectionId: selection.connectionId,
       accountId: selection.accountId,
       environment: selection.environment === 'live' ? 'live' : 'demo',
-      symbol: selectedSymbol,
+      symbol: subscriptionSymbol,
     }, (nextQuote) => {
+      if (
+        cancelled ||
+        selectedSymbolRef.current !== subscriptionSymbol ||
+        timeframeRef.current !== subscriptionTimeframe
+      ) return
+
       const bid = Number(nextQuote.bid)
       const ask = Number(nextQuote.ask)
       const price = Number.isFinite(bid) && bid > 0
@@ -665,21 +677,39 @@ const TerminalContent: React.FC = () => {
       setMarketTimestamp(Math.floor(timestamp / 1000))
       setLiveMarketActive(true)
       setLiveCandles((current) => {
-        if (!current.length) return current
-        const bucket = cTraderQuoteBucket(timestamp, timeframe)
-        const last = current[current.length - 1]
-        if (last.time === bucket) {
-          return [...current.slice(0, -1), {
+        if (
+          cancelled ||
+          selectedSymbolRef.current !== subscriptionSymbol ||
+          timeframeRef.current !== subscriptionTimeframe ||
+          !current.length
+        ) return current
+
+        const ordered = normalizeMarketCandles(current)
+        const last = ordered[ordered.length - 1]
+        if (!last) return current
+
+        // All chart candles use Unix seconds. Never append an older bucket at
+        // the right edge: historical/out-of-order quotes must not distort scale.
+        const bucket = cTraderQuoteBucket(timestamp, subscriptionTimeframe)
+        if (bucket < last.time) return current
+        if (bucket === last.time) {
+          return [...ordered.slice(0, -1), {
             ...last,
             high: Math.max(last.high, price),
             low: Math.min(last.low, price),
             close: price,
           }]
         }
-        return [...current, { time: bucket, open: price, high: price, low: price, close: price }].slice(-1000)
+        return normalizeMarketCandles([
+          ...ordered,
+          { time: bucket, open: price, high: price, low: price, close: price },
+        ]).slice(-1000)
       })
     })
-    return unsubscribe
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
   }, [activeProviderSelection?.accountId, activeProviderSelection?.connectionId, activeProviderSelection?.environment, activeProviderSelection?.providerId, selectedSymbol, timeframe])
 
   const handleLiveActiveChange = useCallback((active: boolean): void => {

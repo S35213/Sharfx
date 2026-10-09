@@ -326,3 +326,16 @@ Chart patch deployed on Render: `653de2d6c7a9c6acfa1d93d87ba422dc18786dde`, depl
 Full CI remains failed only at `npm test` with two baseline failures that also existed at commit `099026a927e0873c7b56b7ce9be3eb3ce547bd9a`: cTrader order-status normalization and missing conversion in the CFD risk engine. Keep these tracked separately and do not change unrelated execution/risk logic as part of the chart task.
 
 No authenticated chart interaction has been verified. TinyFish without a user-authorized sign-in sees only the public login page. Next required step: authorized browser session, then explicitly test timeframe cycling M1/M5/M15/M30/H1/H4/D1/W1 at desktop width, resize/zoom, and check candles plus structural/trade levels after each switch. This branch remains experimental; no merge to `main`/Cloudflare.
+
+
+## Confirmed cTrader chart timestamp mismatch — 2026-10-09
+
+A deeper provider-boundary inspection identified a concrete chart-collapse cause: the cTrader server converts `utcTimestampInMinutes` to Unix **milliseconds** (`minutes × 60 × 1000`), while SHAFX's Lightweight Charts component and all Deriv chart data use Unix **seconds**. The cTrader live quote bucketer also returned milliseconds, so live updates did not share the historical/chart time unit. Mixing these values can make the visible timeline span an enormous range and bunch candles together.
+
+Repair committed on the experimental branch:
+- Normalize cTrader historical candle timestamps to Unix seconds immediately after the provider response; validate, sort and deduplicate the bars before caching/charting.
+- Return live timeframe buckets in Unix seconds (including W1's Monday-UTC start).
+- Reject stale quote callbacks after a symbol/timeframe switch and prevent older buckets from being appended to the right edge.
+- Add focused regression tests for milliseconds-to-seconds normalization, already-normalized timestamps, duplicate bars, and all timeframe bucket units.
+
+Verification state: these source changes are awaiting branch CI and a fresh Render deployment check. Authenticated visual timeframe testing is still required before saying the chart is user-visibly fixed. TinyFish can currently see only the sign-in page; do not merge to `main` or deploy Cloudflare production.

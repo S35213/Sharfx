@@ -1,4 +1,5 @@
 import type { OHLCV, Timeframe } from '../../types'
+import { normalizeMarketCandles } from '../../lib/marketCandles'
 
 export interface CTraderLiveQuote {
   symbol: string
@@ -68,6 +69,23 @@ const requestQuote = async (args: SubscribeArgs): Promise<{ quote: CTraderLiveQu
   }
   return { quote, instrument }
 }
+/**
+ * cTrader trendbars are delivered by the server in epoch milliseconds, while
+ * Lightweight Charts and the rest of SHAFX use Unix seconds. Normalize this
+ * once at the provider boundary before candles enter any chart/cache/analysis.
+ * The magnitude check also accepts already-normalized seconds.
+ */
+export const normalizeCTraderHistoricalCandles = (candles: readonly OHLCV[]): OHLCV[] =>
+  normalizeMarketCandles(candles.map((candle) => {
+    const timestamp = Number(candle.time)
+    return {
+      ...candle,
+      time: Number.isFinite(timestamp)
+        ? Math.trunc(timestamp > 100_000_000_000 ? timestamp / 1000 : timestamp)
+        : Number.NaN,
+    }
+  }))
+
 export const fetchCTraderHistoricalCandles = async (args: SubscribeArgs & { timeframe: Timeframe; count?: number }): Promise<OHLCV[]> => {
   const response = await fetch('/api/providers/ctrader', {
     method: 'POST',
@@ -89,13 +107,7 @@ export const fetchCTraderHistoricalCandles = async (args: SubscribeArgs & { time
   if (!response.ok || !payload?.ok || !Array.isArray(payload.candles)) {
     throw new Error(typeof payload?.error === 'string' ? payload.error : 'SHAFX cTrader historical candles request failed.')
   }
-  return (payload.candles as OHLCV[]).filter((candle) =>
-    Number.isFinite(Number(candle.time)) &&
-    Number.isFinite(Number(candle.open)) &&
-    Number.isFinite(Number(candle.high)) &&
-    Number.isFinite(Number(candle.low)) &&
-    Number.isFinite(Number(candle.close)),
-  )
+  return normalizeCTraderHistoricalCandles(payload.candles as OHLCV[])
 }
 
 
@@ -154,6 +166,10 @@ export const subscribeCTraderLiveQuote = (args: SubscribeArgs, listener: (quote:
   }
 }
 
+/**
+ * Return the candle-open time in Unix seconds to match cTrader history after
+ * normalizeCTraderHistoricalCandles and Lightweight Charts' UTCTimestamp.
+ */
 export const cTraderQuoteBucket = (epochMs: number, timeframe: Timeframe): number => {
   const seconds: Record<Timeframe, number> = { M1: 60, M5: 300, M15: 900, M30: 1800, H1: 3600, H4: 14400, D1: 86400, W1: 604800 }
   const epochSeconds = Math.floor(epochMs / 1000)
@@ -162,7 +178,7 @@ export const cTraderQuoteBucket = (epochMs: number, timeframe: Timeframe): numbe
     const dayOffset = (date.getUTCDay() + 6) % 7
     date.setUTCDate(date.getUTCDate() - dayOffset)
     date.setUTCHours(0, 0, 0, 0)
-    return Math.floor(date.getTime() / 1000) * 1000
+    return Math.floor(date.getTime() / 1000)
   }
-  return Math.floor(epochSeconds / seconds[timeframe]) * seconds[timeframe] * 1000
+  return Math.floor(epochSeconds / seconds[timeframe]) * seconds[timeframe]
 }
