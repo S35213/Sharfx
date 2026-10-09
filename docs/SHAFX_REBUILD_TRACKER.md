@@ -5,6 +5,16 @@
 > **Rule:** A checkbox is marked `[x]` only after the corresponding action is actually verified. A deployment being "started" is never recorded as passed.
 
 
+## Candle-load continuity and responsive cTrader quotes — 2026-10-09
+
+- **Scope:** only `sharfx-deriv-render` and `test/rebuild-deriv-native-manual-20260930`. No production/main, sibling Render projects, credentials, or order/execution changes.
+- **Findings:** SHAFX's browser polls the quote API every 350 ms even though the Render server maintains a continuous cTrader WebSocket spot stream. The chart-history effect also cleared candles before fetching and could replace newer tick-updated candles when history returned.
+- **Code:** the quote check interval is now 150 ms with in-flight deduplication; `mergeCTraderHistoricalAndLiveCandles` combines history with live updates without rewinding the current candle; `src/App.tsx` retains exact cTrader account/symbol/timeframe candle caches during refresh/revisits and merges asynchronous history instead of overwriting the live bar.
+- **Verification:** latest code commit `258ce6d7ff308d19aa7cbc34513e6be88c3debed`, Render deploy `dep-db4ies7pr9vc73c854og` LIVE. CI run `37968208237`: build, Node static-server verification, and lint passed; 311/313 tests passed. The two failures remain the already-known cTrader order-status expectation and CFD quote-currency conversion expectation. Both new cTrader history/live merge tests passed.
+- **Not yet visually certified:** TinyFish could only reach the public landing page because the browser profile had no saved SHAFX login at last check. The user has been given the secure profile-setup link and needs to save it before checking live candles, quote cadence, and exact BID/ASK placement.
+- **Do not fake ticks:** 150 ms is polling cadence only. Price and candle changes must continue to come from real cTrader quote events, not synthetic animation.
+- **Trade safety:** no orders placed/confirmed; no provider/account settings or credentials changed.
+
 ## MT5-style live quote rails and forming-candle behaviour — 2026-10-09
 
 - **Scope:** only `sharfx-deriv-render` and `test/rebuild-deriv-native-manual-20260930`. Keep sibling Render services, `main`, Cloudflare production, credentials, and trade execution paths untouched.
