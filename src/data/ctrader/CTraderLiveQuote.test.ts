@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Timeframe } from '../../types'
 import {
   cTraderQuoteBucket,
+  isCTraderQuoteBucketCurrent,
   normalizeCTraderHistoricalCandles,
 } from './CTraderLiveQuote'
 
@@ -14,6 +15,21 @@ const candle = (time: number, open = 1.1, high = 1.12, low = 1.09, close = 1.11)
 })
 
 describe('cTrader chart timestamps', () => {
+  it('rejects a stale quote before it can move BUY/SELL markers beyond the chart candles', () => {
+    expect(isCTraderQuoteBucketCurrent(1_791_547_200, 1_791_547_260)).toBe(false)
+  })
+
+  it('accepts quotes in the current/newer candle bucket and when candle history is not ready', () => {
+    expect(isCTraderQuoteBucketCurrent(1_791_547_260, 1_791_547_260)).toBe(true)
+    expect(isCTraderQuoteBucketCurrent(1_791_547_320, 1_791_547_260)).toBe(true)
+    expect(isCTraderQuoteBucketCurrent(1_791_547_260, null)).toBe(true)
+  })
+
+  it('rejects invalid quote buckets', () => {
+    expect(isCTraderQuoteBucketCurrent(Number.NaN, 1_791_547_260)).toBe(false)
+    expect(isCTraderQuoteBucketCurrent(0, 1_791_547_260)).toBe(false)
+  })
+
   it('converts cTrader historical epoch milliseconds to SHAFX epoch seconds', () => {
     const seconds = Math.floor(Date.UTC(2026, 9, 9, 11, 59) / 1000)
     const normalized = normalizeCTraderHistoricalCandles([

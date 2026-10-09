@@ -35,7 +35,7 @@ import { normalizeMarketCandles } from './lib/marketCandles'
 import type { SetupCandidate } from './engine/setup/types'
 import { mockWatchlist } from './data/mock/watchlist'
 import { fetchDerivActiveForexSymbols, fetchDerivMultiTimeframeCandles, subscribeDerivForexQuotes } from './data/deriv/DerivPublicMarketFeed'
-import { cTraderQuoteBucket, fetchCTraderHistoricalCandles, subscribeCTraderLiveQuote } from './data/ctrader/CTraderLiveQuote'
+import { cTraderQuoteBucket, fetchCTraderHistoricalCandles, isCTraderQuoteBucketCurrent, subscribeCTraderLiveQuote } from './data/ctrader/CTraderLiveQuote'
 
 const normalizeProviderSymbol = (value: string): string => {
   if (/^frx[A-Z0-9]{6}$/i.test(value)) {
@@ -221,11 +221,25 @@ const TerminalContent: React.FC = () => {
   const timeframeRef = useRef(timeframe)
   const watchlistReferencePricesRef = useRef<Record<string, number>>({})
   const candleCacheRef = useRef<Record<string, OHLCV[]>>({})
+  const liveCandlesRef = useRef<OHLCV[]>([])
   const historyWarmInFlightRef = useRef<Record<string, Promise<Partial<Record<(typeof TIMEFRAMES)[number], OHLCV[]>>>>>({})
   const latestCTraderPriceRef = useRef<number | null>(null)
   const toastId = useRef(0)
   const lastStreamToastAt = useRef(0)
   const lastStreamToastText = useRef('')
+
+  // Keep the newest rendered candle synchronously available to the broker
+  // quote callback, so it can reject an old quote before moving the price tags.
+  useLayoutEffect(() => {
+    liveCandlesRef.current = liveCandles
+  }, [liveCandles])
+
+  useEffect(() => {
+    // Never carry a previous instrument/timeframe's bid/ask onto a new chart.
+    setLiveBidPrice(0)
+    setLiveAskPrice(0)
+    latestCTraderPriceRef.current = null
+  }, [selectedSymbol, timeframe, activeProviderSelection?.providerId])
 
   const pushToast = useCallback((text: string) => {
     toastId.current += 1
@@ -254,7 +268,11 @@ const TerminalContent: React.FC = () => {
       ? []
       : candleCacheRef.current[`${selectedSymbolRef.current}:${nextTimeframe}`] ?? []
     const nextCandles = cached.length > 1 ? cached : []
+    liveCandlesRef.current = nextCandles
     setLiveCandles(nextCandles)
+    setLiveBidPrice(0)
+    setLiveAskPrice(0)
+    latestCTraderPriceRef.current = null
     const last = nextCandles[nextCandles.length - 1]
     setCurrentPrice(last?.close ?? 0)
     setMarketTimestamp(last ? Math.floor(last.time / 1000) : 0)
@@ -624,6 +642,7 @@ const TerminalContent: React.FC = () => {
         })
         if (cancelled || !candles.length) return
         candleCacheRef.current[selectedSymbol + ':' + timeframe] = candles
+        liveCandlesRef.current = candles
         setLiveCandles(candles)
         const last = candles[candles.length - 1]
         if (last) {
@@ -670,41 +689,43 @@ const TerminalContent: React.FC = () => {
       if (!price) return
       const epochMs = Date.parse(nextQuote.timestamp)
       const timestamp = Number.isFinite(epochMs) ? epochMs : Date.now()
+      const bucket = cTraderQuoteBucket(timestamp, subscriptionTimeframe)
+
+      // Validate the quote against the displayed timeframe's latest candle BEFORE
+      // changing currentPrice or BUY/SELL. Previously a stale bucket moved those
+      // labels, while the candle updater below discarded the same tick.
+      const currentCandles = normalizeMarketCandles(liveCandlesRef.current)
+      const last = currentCandles[currentCandles.length - 1]
+      if (!isCTraderQuoteBucketCurrent(bucket, last?.time)) return
+
+      if (last) {
+        const nextCandles = bucket === last.time
+          ? [
+              ...currentCandles.slice(0, -1),
+              {
+                ...last,
+                high: Math.max(last.high, price),
+                low: Math.min(last.low, price),
+                close: price,
+              },
+            ]
+          : normalizeMarketCandles([
+              ...currentCandles,
+              { time: bucket, open: price, high: price, low: price, close: price },
+            ]).slice(-1000)
+
+        // Commit candles and quote markers from the same accepted tick.
+        liveCandlesRef.current = nextCandles
+        candleCacheRef.current[subscriptionSymbol + ':' + subscriptionTimeframe] = nextCandles
+        setLiveCandles(nextCandles)
+      }
+
       latestCTraderPriceRef.current = price
       setLiveBidPrice(Number.isFinite(bid) && bid > 0 ? bid : price)
       setLiveAskPrice(Number.isFinite(ask) && ask > 0 ? ask : price)
       setCurrentPrice(price)
       setMarketTimestamp(Math.floor(timestamp / 1000))
       setLiveMarketActive(true)
-      setLiveCandles((current) => {
-        if (
-          cancelled ||
-          selectedSymbolRef.current !== subscriptionSymbol ||
-          timeframeRef.current !== subscriptionTimeframe ||
-          !current.length
-        ) return current
-
-        const ordered = normalizeMarketCandles(current)
-        const last = ordered[ordered.length - 1]
-        if (!last) return current
-
-        // All chart candles use Unix seconds. Never append an older bucket at
-        // the right edge: historical/out-of-order quotes must not distort scale.
-        const bucket = cTraderQuoteBucket(timestamp, subscriptionTimeframe)
-        if (bucket < last.time) return current
-        if (bucket === last.time) {
-          return [...ordered.slice(0, -1), {
-            ...last,
-            high: Math.max(last.high, price),
-            low: Math.min(last.low, price),
-            close: price,
-          }]
-        }
-        return normalizeMarketCandles([
-          ...ordered,
-          { time: bucket, open: price, high: price, low: price, close: price },
-        ]).slice(-1000)
-      })
     })
     return () => {
       cancelled = true

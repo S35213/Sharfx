@@ -170,6 +170,20 @@ export const subscribeCTraderLiveQuote = (args: SubscribeArgs, listener: (quote:
  * Return the candle-open time in Unix seconds to match cTrader history after
  * normalizeCTraderHistoricalCandles and Lightweight Charts' UTCTimestamp.
  */
+/**
+ * Reject a quote if its candle bucket is older than the latest candle already on
+ * the chart. Call this before publishing the quote to BUY/SELL markers; otherwise
+ * markers can move while the candle update is discarded.
+ */
+export const isCTraderQuoteBucketCurrent = (
+  quoteBucket: number,
+  latestCandleTime: number | null | undefined,
+): boolean => {
+  if (!Number.isFinite(quoteBucket) || quoteBucket <= 0) return false
+  if (latestCandleTime == null || !Number.isFinite(latestCandleTime)) return true
+  return quoteBucket >= latestCandleTime
+}
+
 export const cTraderQuoteBucket = (epochMs: number, timeframe: Timeframe): number => {
   const seconds: Record<Timeframe, number> = { M1: 60, M5: 300, M15: 900, M30: 1800, H1: 3600, H4: 14400, D1: 86400, W1: 604800 }
   const epochSeconds = Math.floor(epochMs / 1000)
