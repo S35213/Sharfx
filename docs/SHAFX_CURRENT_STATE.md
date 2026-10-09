@@ -295,3 +295,15 @@ Verification still required: `npm run build`, `npm run lint`, `npm test`, live R
 A deeper source pass found two chart effects reconciling the same shared `priceLinesRef`. The first maintained structural Support/Resistance and liquidity alongside user levels, alerts, and trade levels. The second repeated much of that work but did not add structural annotations to its `desired` set, so its cleanup loop removed the Support/Resistance and liquidity price lines which the first effect had just maintained. This could make those lines disappear on updates and produce unstable overlays.
 
 Correction: removed the redundant second reconciler so one effect now owns the full structural + user + alert + trade line set. The earlier lifecycle/timeframe fixes and this correction are in the experimental branch. Build and automated verification are still pending for the latest combined commit; authenticated visual chart testing remains outstanding.
+
+
+## 18. Verification checkpoint — 2026-10-09
+
+Latest chart patch on this branch: `653de2d6c7a9c6acfa1d93d87ba422dc18786dde`.
+
+- Render service `sharfx-deriv-render` deployed this commit successfully; deployment `dep-db4aneuq1p3s739rtdng` is `live`.
+- Render smoke workflow `37907856663` passed. It verified the public home/assets/health endpoints and its responsive landing/signup checks; it does **not** authenticate or open the trading chart.
+- GitHub CI for this commit: dependency install, `npm run build`, `scripts/render-static-smoke.mjs`, and `npm run lint` passed. The new `src/lib/marketCandles.test.ts` tests passed (2/2).
+- The full `npm test` suite still fails two tests: `server/ctrader.test.js > normalizes cTrader order status conservatively` and `src/lib/cfdRiskEngine.test.ts > requires explicit conversion when quote currency differs from account currency`. Both same failures also appeared on the earlier commit `099026a927e0873c7b56b7ce9be3eb3ce547bd9a` before the chart patch. These are pre-existing non-chart failures; do not change unrelated trade/risk logic merely to make the chart check green.
+- **Chart visual behavior remains unverified in an authenticated browser.** TinyFish could only reach the login screen without a saved SHAFX session. Obtain user authorization for an interactive sign-in session and test M1/M5/M15/M30/H1/H4/D1/W1, chart resizing, candle visibility, and persistence of BUY/SELL, support/resistance, liquidity, and trade levels.
+- Do not claim “fully fixed” until that visual pass is completed and the unrelated baseline test failures have been tracked separately. Do not merge to `main` or deploy Cloudflare production.

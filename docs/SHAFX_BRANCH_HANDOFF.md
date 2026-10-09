@@ -317,3 +317,12 @@ Continue only on `test/rebuild-deriv-native-manual-20260930` / Render service `s
 ### Chart-line cleanup correction — 2026-10-09
 
 The chart component had two effects using the same price-line map and cleanup loop. The first reconciled structural annotations, user levels, alerts and trade levels; the second duplicated user/alert/trade handling but omitted structural annotations from its keep-set and therefore deleted support/resistance and liquidity after they were created. The redundant second reconciler has been removed. Verify the new commit through build/lint/tests and Render deployment, then test authenticated timeframe switches and line persistence before claiming the user-visible issue is fixed.
+
+
+## Latest verification record — 2026-10-09
+
+Chart patch deployed on Render: `653de2d6c7a9c6acfa1d93d87ba422dc18786dde`, deployment `dep-db4aneuq1p3s739rtdng` is live; Render smoke run `37907856663` passed. Build, static-server smoke and lint passed on CI. New candle-normalization test file passed 2/2.
+
+Full CI remains failed only at `npm test` with two baseline failures that also existed at commit `099026a927e0873c7b56b7ce9be3eb3ce547bd9a`: cTrader order-status normalization and missing conversion in the CFD risk engine. Keep these tracked separately and do not change unrelated execution/risk logic as part of the chart task.
+
+No authenticated chart interaction has been verified. TinyFish without a user-authorized sign-in sees only the public login page. Next required step: authorized browser session, then explicitly test timeframe cycling M1/M5/M15/M30/H1/H4/D1/W1 at desktop width, resize/zoom, and check candles plus structural/trade levels after each switch. This branch remains experimental; no merge to `main`/Cloudflare.
