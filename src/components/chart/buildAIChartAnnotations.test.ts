@@ -72,4 +72,22 @@ describe('buildStructuralChartAnnotations', () => {
     expect(annotations.every((item) => Number.isFinite(item.price) && item.price > 0)).toBe(true)
     expect(annotations.every((item) => item.id.includes('support') || item.id.includes('resistance') || item.id.includes('liquidity'))).toBe(true)
   })
+
+  it('keeps a single confirmed swing high visible when no repeated-touch resistance cluster exists', () => {
+    const sparseSwings = [
+      [1.03, 0.94], [1.04, 0.95], [1.10, 0.96], [1.04, 0.95],
+      [1.03, 0.96], [1.20, 0.94], [1.04, 0.95], [1.05, 0.96],
+      [1.13, 0.97], [1.04, 0.95], [1.03, 0.94], [1.25, 0.93],
+    ].map(([high, low], index) => ({
+      time: (index + 1) * 60,
+      open: 1.00,
+      high,
+      low,
+      close: 1.00,
+    }))
+
+    const annotations = buildStructuralChartAnnotations('EUR/USD', sparseSwings, 'W1')
+    expect(annotations.some((item) => item.id.includes('resistance'))).toBe(true)
+    expect(annotations.some((item) => item.id.includes('liquidity-buy'))).toBe(true)
+  })
 })
