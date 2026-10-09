@@ -12,6 +12,7 @@ import { DerivCashierLinks } from './components/market/DerivCashierLinks'
 import { LiquidityPanel } from './components/market/LiquidityPanel'
 import { FXMoveMatrix } from './components/market/FXMoveMatrix'
 import { CandlestickChart, type ChartAnnotation, type ChartToolMode } from './components/chart/CandlestickChart'
+import type { TradeChartMarker } from './components/chart/buildTradeChartMarkers'
 import { buildStructuralChartAnnotations } from './components/chart/buildAIChartAnnotations'
 import { Watchlist } from './components/watchlist/Watchlist'
 import { MarketAnalysisPanel } from './components/analysis/MarketAnalysis'
@@ -964,6 +965,32 @@ const TerminalContent: React.FC = () => {
     ]
   }, [brokerPositionTradeLines, selectedOpenPosition, tradeLines])
 
+  // The chart's trade map includes entries and exits for this symbol only.
+  // Marker coordinates resolve against historical candle timestamps; no prices
+  // are invented and trades outside the loaded history simply remain in the blotter.
+  const chartTradeMarkers = useMemo<TradeChartMarker[]>(() => {
+    const seen = new Set<string>()
+    const trades = [...openPositions, ...tradeHistory.slice(0, 40)]
+    return trades
+      .filter((trade) => normalizeProviderSymbol(trade.symbol) === selectedSymbol)
+      .filter((trade) => {
+        if (!trade.id || seen.has(trade.id)) return false
+        seen.add(trade.id)
+        return Number.isFinite(trade.entryPrice) && trade.entryPrice > 0 && Boolean(trade.openTime)
+      })
+      .map((trade) => ({
+        id: trade.id,
+        side: trade.type,
+        openTime: trade.openTime,
+        closeTime: trade.closeTime,
+        entryPrice: trade.entryPrice,
+        exitPrice: trade.exitPrice,
+        volume: Number(trade.volumeLots ?? trade.lotSize ?? 0),
+        status: trade.status,
+        profit: Number(trade.profit ?? 0),
+      }))
+  }, [openPositions, selectedSymbol, tradeHistory])
+
   // Deriv public market data requires no authenticated account. Keep chart startup
   // independent from the slower OAuth/account synchronization path.
   const activeMarketConnection = useMemo(() => ({
@@ -1182,7 +1209,7 @@ const TerminalContent: React.FC = () => {
            </div>
            <MobileChartTools tool={chartTool} onToolChange={setChartTool} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} />
            <div className="shafx-chart-stage relative min-h-0 p-1 sm:p-2 lg:flex-1">
-             <CandlestickChart data={liveCandles} symbol={selectedSymbol} timeframe={timeframe} annotations={chartAnnotations} tradeLines={combinedTradeLines} bidPrice={chartBidPrice} askPrice={chartAskPrice} toolMode={chartToolMode} pipSize={symbolSpec.pipSize} onToolNotice={pushToast} showGrid={chartSettings.showGrid} showPriceLabels={chartSettings.showPriceLabels} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} marketTimestamp={marketTimestamp} onTimeframeChange={handleTimeframeChange} replayMode={false} />
+             <CandlestickChart data={liveCandles} symbol={selectedSymbol} timeframe={timeframe} annotations={chartAnnotations} tradeLines={combinedTradeLines} tradeMarkers={chartTradeMarkers} bidPrice={chartBidPrice} askPrice={chartAskPrice} toolMode={chartToolMode} pipSize={symbolSpec.pipSize} onToolNotice={pushToast} showGrid={chartSettings.showGrid} showPriceLabels={chartSettings.showPriceLabels} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} marketTimestamp={marketTimestamp} onTimeframeChange={handleTimeframeChange} replayMode={false} />
              {liveCandles.length === 0 && <div role="status" aria-live="polite" className="pointer-events-none absolute inset-0 z-40 flex min-h-[320px] items-center justify-center bg-shafx-bg/80 text-sm text-shafx-textMuted">Waiting for the live market stream…</div>}
            </div>
           <div className="shafx-landscape-secondary grid grid-cols-2 gap-2 border-t border-shafx-border bg-shafx-surface/55 p-2 sm:grid-cols-4">
