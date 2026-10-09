@@ -606,7 +606,11 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       if (id.includes('ai-entry')) return 'AI ENTRY'
       if (id.includes('ai-stop')) return 'AI STOP'
       if (id.includes('ai-target')) return 'AI TARGET'
-      if (id.includes('entry')) return 'ENTRY'
+      if (id.includes('current')) return annotation.label.toUpperCase() || 'CURRENT EXIT PRICE'
+      if (id.includes('entry')) {
+        const explicit = annotation.label.trim().toUpperCase()
+        return /^(BUY|SELL)\s+ENTRY/.test(explicit) ? explicit : 'TRADE ENTRY'
+      }
       if (id.includes('stop') || /(?:^|[-_])sl(?:$|[-_])/.test(id)) return 'STOP LOSS'
       if (id.includes('target') || /(?:^|[-_])tp(?:$|[-_])/.test(id)) return 'TAKE PROFIT'
       if (id.includes('alert')) return 'PRICE ALERT'
@@ -663,14 +667,29 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       labelCandidates.push(annotation)
     })
 
-    // Trade Entry/SL/TP, user levels and alerts remain separate from structure.
+    // Trade entry/exit/SL/TP, user levels and alerts remain separate from structure.
     tradeLines.forEach((line) => {
       const id = line.id.toLowerCase()
-      const lineStyle: 0 | 1 | 2 = isStop(id) ? 2 : isTarget(id) ? 0 : 0
+      const lineStyle: 0 | 1 | 2 = isStop(id) ? 2 : isTarget(id) ? 0 : id.includes('entry') ? 1 : 0
       const title = shortTitle(line) + ' ' + line.price.toFixed(pricePrecision)
-      upsertLine(line, lineStyle, false, title)
+      upsertLine(line, lineStyle, id.endsWith('-current') && showPriceLabels, title)
       labelCandidates.push(line)
     })
+
+    const activePositionCurrentLine = tradeLines.find((line) => line.id.toLowerCase().endsWith('-current'))
+    const activePositionSide = activePositionCurrentLine?.label.toUpperCase().startsWith('BUY')
+      ? 'BUY'
+      : activePositionCurrentLine?.label.toUpperCase().startsWith('SELL')
+        ? 'SELL'
+        : null
+    const labelBid = Number.isFinite(bidPrice) && Number(bidPrice) > 0 ? Number(bidPrice) : lastClose
+    const labelAsk = Number.isFinite(askPrice) && Number(askPrice) > 0 ? Number(askPrice) : labelBid
+    if (Number.isFinite(labelBid) && labelBid > 0 && activePositionSide !== 'BUY') {
+      labelCandidates.push({ id: 'shafx-live-bid-label', price: labelBid, label: 'CURRENT BID / SELL', color: '#FF5C75', lineWidth: 1 })
+    }
+    if (Number.isFinite(labelAsk) && labelAsk > 0 && activePositionSide !== 'SELL') {
+      labelCandidates.push({ id: 'shafx-live-ask-label', price: labelAsk, label: 'CURRENT ASK / BUY', color: '#22D3A5', lineWidth: 1 })
+    }
 
     userLevels.forEach((level) => {
       upsertLine(level, level.dashed ? 2 : 1, false, level.label + ' ' + level.price.toFixed(pricePrecision))
@@ -807,14 +826,22 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     const series = seriesRef.current
     if (!series) return
 
+    const positionCurrentLine = tradeLines.find((line) => line.id.toLowerCase().endsWith('-current'))
+    const positionSide = positionCurrentLine?.label.toUpperCase().startsWith('BUY')
+      ? 'BUY'
+      : positionCurrentLine?.label.toUpperCase().startsWith('SELL')
+        ? 'SELL'
+        : null
+
     const updateQuoteLine = (
       ref: React.MutableRefObject<IPriceLine | null>,
       price: number,
       color: string,
       title: string,
+      hiddenByPosition = false,
     ): void => {
       const valid = Number.isFinite(price) && price > 0
-      if (!valid) {
+      if (!valid || hiddenByPosition) {
         if (ref.current) {
           try { series.removePriceLine(ref.current) } catch { /* stale series */ }
           ref.current = null
@@ -850,13 +877,15 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       ? Number(askPrice)
       : bid
 
-    updateQuoteLine(marketBidLineRef, bid, '#FF5C75', 'SELL / BID')
-    updateQuoteLine(marketAskLineRef, ask, '#22D3A5', 'BUY / ASK')
+    // A position's actual exit line replaces the generic quote rail on the
+    // same side, so the user sees one clearly named current-price line.
+    updateQuoteLine(marketBidLineRef, bid, '#FF5C75', 'SELL / BID', positionSide === 'BUY')
+    updateQuoteLine(marketAskLineRef, ask, '#22D3A5', 'BUY / ASK', positionSide === 'SELL')
 
     return () => {
       // Price-line objects are intentionally retained between quote ticks.
     }
-  }, [askPrice, bidPrice, chartMode, lastClose, showPriceLabels])
+  }, [askPrice, bidPrice, chartMode, lastClose, showPriceLabels, tradeLines])
 
 
   useEffect(() => {
@@ -1198,7 +1227,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
 
   return <div ref={containerRef} onPointerDownCapture={handleChartPointerDown} onPointerMoveCapture={handleChartPointerMove} onPointerUpCapture={handleChartPointerUp} onPointerCancel={handleChartPointerCancel} onPointerDown={placeTool} className={`shafx-chart-shell relative w-full overflow-hidden border border-shafx-border bg-shafx-bg touch-pan-y ${['level', 'alert', 'measure'].includes(toolMode) ? 'cursor-crosshair' : ''} ${chartFullscreen ? 'fixed inset-0 z-[200] h-[100svh] w-screen' : ''}`} style={{ height: chartFullscreen ? '100svh' : height, minHeight: 280 }}>
     <div ref={chartHostRef} className="absolute inset-0 z-0" aria-hidden="true" />
-    <div ref={lineLabelsHostRef} aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-[82px] z-20 overflow-hidden sm:right-[96px]" />
+    <div ref={lineLabelsHostRef} aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 right-[82px] z-20 overflow-hidden sm:right-[96px]" />
     <div className="pointer-events-none absolute left-3 top-3 z-30 flex items-center gap-2 rounded-xl border border-shafx-border/70 bg-shafx-surface/88 px-2.5 py-1.5 shadow-md backdrop-blur">
       {!replayMode && countdown !== null && <span className="font-mono text-[8px] font-semibold tabular text-shafx-accent">CLOSE {formatCountdown(countdown)}</span>}
       {replayMode && <span className="font-mono text-[8px] font-semibold tabular text-shafx-accent">HISTORICAL</span>}

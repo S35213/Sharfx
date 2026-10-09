@@ -13,6 +13,7 @@ import { LiquidityPanel } from './components/market/LiquidityPanel'
 import { FXMoveMatrix } from './components/market/FXMoveMatrix'
 import { CandlestickChart, type ChartAnnotation, type ChartToolMode } from './components/chart/CandlestickChart'
 import type { TradeChartMarker } from './components/chart/buildTradeChartMarkers'
+import { buildOpenPositionChartLines } from './components/chart/buildPositionChartLines'
 import { buildStructuralChartAnnotations } from './components/chart/buildAIChartAnnotations'
 import { Watchlist } from './components/watchlist/Watchlist'
 import { MarketAnalysisPanel } from './components/analysis/MarketAnalysis'
@@ -909,49 +910,16 @@ const TerminalContent: React.FC = () => {
     .map((annotation) => ({ ...annotation, id: 'live-' + timeframe + '-' + annotation.id })), [selectedSymbol, timeframe, structureBarTime])
 
   const selectedOpenPosition = useMemo(
-    () => openPositions.find((position) => position.symbol === selectedSymbol) ?? null,
+    () => openPositions.find((position) =>
+      normalizeProviderSymbol(position.symbol) === normalizeProviderSymbol(selectedSymbol),
+    ) ?? null,
     [openPositions, selectedSymbol],
   )
 
-  const brokerPositionTradeLines = useMemo<ChartAnnotation[]>(() => {
-    const position = selectedOpenPosition
-    if (!position || !Number.isFinite(position.entryPrice) || position.entryPrice <= 0) return []
-
-    const entryColor = position.type === 'BUY' ? '#22D3A5' : '#FF5C75'
-    const lines: ChartAnnotation[] = [
-      {
-        id: position.id + '-entry',
-        price: position.entryPrice,
-        label: position.type + ' ENTRY',
-        color: entryColor,
-        lineWidth: 2,
-      },
-    ]
-
-    const stopLossPrice = Number(position.plannedStopLossPrice)
-    if (Number.isFinite(stopLossPrice) && stopLossPrice > 0) {
-      lines.push({
-        id: position.id + '-sl',
-        price: stopLossPrice,
-        label: 'STOP LOSS',
-        color: '#FF5C75',
-        lineWidth: 2,
-      })
-    }
-
-    const takeProfitPrice = Number(position.plannedTakeProfitPrice)
-    if (Number.isFinite(takeProfitPrice) && takeProfitPrice > 0) {
-      lines.push({
-        id: position.id + '-tp',
-        price: takeProfitPrice,
-        label: 'TAKE PROFIT',
-        color: '#22D3A5',
-        lineWidth: 2,
-      })
-    }
-
-    return lines
-  }, [selectedOpenPosition])
+  const brokerPositionTradeLines = useMemo<ChartAnnotation[]>(
+    () => buildOpenPositionChartLines(selectedOpenPosition, chartBidPrice, chartAskPrice),
+    [selectedOpenPosition, chartBidPrice, chartAskPrice],
+  )
 
   const combinedTradeLines = useMemo(() => {
     const draftLevelIds = new Set(['shafx-cfd-sl', 'shafx-cfd-tp', 'plan-sl', 'plan-tp'])

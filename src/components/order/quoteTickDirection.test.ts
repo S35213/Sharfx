@@ -15,3 +15,23 @@ describe('getQuoteTickDirection', () => {
     expect(getQuoteTickDirection(Number.NaN, 1.12)).toBe('neutral')
   })
 })
+
+describe('getTradeButtonDirection', () => {
+  it('colors BUY up and SELL down when price rises', async () => {
+    const { getTradeButtonDirection } = await import('./quoteTickDirection')
+    expect(getTradeButtonDirection('up', 'BUY')).toBe('up')
+    expect(getTradeButtonDirection('up', 'SELL')).toBe('down')
+  })
+
+  it('colors BUY down and SELL up when price falls', async () => {
+    const { getTradeButtonDirection } = await import('./quoteTickDirection')
+    expect(getTradeButtonDirection('down', 'BUY')).toBe('down')
+    expect(getTradeButtonDirection('down', 'SELL')).toBe('up')
+  })
+
+  it('returns neutral for both buttons when the market price is unchanged', async () => {
+    const { getTradeButtonDirection } = await import('./quoteTickDirection')
+    expect(getTradeButtonDirection('neutral', 'BUY')).toBe('neutral')
+    expect(getTradeButtonDirection('neutral', 'SELL')).toBe('neutral')
+  })
+})
