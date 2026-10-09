@@ -35,7 +35,7 @@ import { normalizeMarketCandles } from './lib/marketCandles'
 import type { SetupCandidate } from './engine/setup/types'
 import { mockWatchlist } from './data/mock/watchlist'
 import { fetchDerivActiveForexSymbols, fetchDerivMultiTimeframeCandles, subscribeDerivForexQuotes } from './data/deriv/DerivPublicMarketFeed'
-import { applyCTraderQuoteToCandles, cTraderQuoteBucket, fetchCTraderHistoricalCandles, isCTraderQuoteBucketCurrent, subscribeCTraderLiveQuote } from './data/ctrader/CTraderLiveQuote'
+import { applyCTraderQuoteToCandles, cTraderQuoteBucket, fetchCTraderHistoricalCandles, isCTraderQuoteBucketCurrent, mergeCTraderHistoricalAndLiveCandles, subscribeCTraderLiveQuote } from './data/ctrader/CTraderLiveQuote'
 
 const normalizeProviderSymbol = (value: string): string => {
   if (/^frx[A-Z0-9]{6}$/i.test(value)) {
@@ -222,6 +222,10 @@ const TerminalContent: React.FC = () => {
   const timeframeRef = useRef(timeframe)
   const watchlistReferencePricesRef = useRef<Record<string, number>>({})
   const candleCacheRef = useRef<Record<string, OHLCV[]>>({})
+  // cTrader chart history is kept separately from other providers so switching
+  // back to an already-viewed symbol/timeframe can paint immediately without
+  // briefly showing bars sourced from a different provider.
+  const cTraderCandleCacheRef = useRef<Record<string, OHLCV[]>>({})
   const liveCandlesRef = useRef<OHLCV[]>([])
   const historyWarmInFlightRef = useRef<Record<string, Promise<Partial<Record<(typeof TIMEFRAMES)[number], OHLCV[]>>>>>({})
   const latestCTraderPriceRef = useRef<number | null>(null)
@@ -265,10 +269,19 @@ const TerminalContent: React.FC = () => {
     timeframeRef.current = nextTimeframe
     setTimeframe(nextTimeframe)
 
-    // cTrader candles are scoped to the selected provider account. Its history
-    // effect will load the new interval; never paint the previous interval here.
+    // Reuse only the exact target timeframe's cache. Never keep rendering the
+    // previous interval while the selected cTrader history request is in flight.
+    const cTraderKey = activeProviderSelection?.providerId === 'ctrader'
+      ? [
+          String(activeProviderSelection.connectionId ?? ''),
+          String(activeProviderSelection.accountId ?? ''),
+          activeProviderSelection.environment,
+          selectedSymbolRef.current,
+          nextTimeframe,
+        ].join(':')
+      : ''
     const cached = activeProviderSelection?.providerId === 'ctrader'
-      ? []
+      ? cTraderCandleCacheRef.current[cTraderKey] ?? []
       : candleCacheRef.current[`${selectedSymbolRef.current}:${nextTimeframe}`] ?? []
     const nextCandles = cached.length > 1 ? cached : []
     liveCandlesRef.current = nextCandles
@@ -632,8 +645,24 @@ const TerminalContent: React.FC = () => {
     if (selection?.providerId !== 'ctrader' || !selection.connectionId || !selection.accountId) return
 
     let cancelled = false
-    setLiveCandles([])
+    const cacheKey = [
+      String(selection.connectionId),
+      String(selection.accountId),
+      selection.environment,
+      selectedSymbol,
+      timeframe,
+    ].join(':')
+    const cachedCandles = cTraderCandleCacheRef.current[cacheKey] ?? []
+    // Keep the exact symbol/timeframe's previously loaded bars visible during
+    // refresh. This avoids a blank chart while the broker history request waits.
+    liveCandlesRef.current = cachedCandles
+    setLiveCandles(cachedCandles)
     setLiveMarketActive(false)
+    const cachedLast = cachedCandles[cachedCandles.length - 1]
+    if (cachedLast) {
+      setCurrentPrice(cachedLast.close)
+      setMarketTimestamp(Math.floor(cachedLast.time))
+    }
 
     const load = async (): Promise<void> => {
       try {
@@ -646,11 +675,16 @@ const TerminalContent: React.FC = () => {
           count: 300,
         })
         if (cancelled || !candles.length) return
-        candleCacheRef.current[selectedSymbol + ':' + timeframe] = candles
-        liveCandlesRef.current = candles
-        setLiveCandles(candles)
-        const last = candles[candles.length - 1]
-        if (last) {
+        // A quote may arrive before the slower historical snapshot. Merge the
+        // two so the history response cannot rewind or erase current live ticks.
+        const liveDuringLoad = cTraderCandleCacheRef.current[cacheKey] ?? liveCandlesRef.current
+        const mergedCandles = mergeCTraderHistoricalAndLiveCandles(candles, liveDuringLoad)
+        cTraderCandleCacheRef.current[cacheKey] = mergedCandles
+        candleCacheRef.current[selectedSymbol + ':' + timeframe] = mergedCandles
+        liveCandlesRef.current = mergedCandles
+        setLiveCandles(mergedCandles)
+        const last = mergedCandles[mergedCandles.length - 1]
+        if (last && !(latestCTraderPriceRef.current && latestCTraderPriceRef.current > 0)) {
           setCurrentPrice(last.close)
           setMarketTimestamp(Math.floor(last.time))
         }
@@ -709,7 +743,15 @@ const TerminalContent: React.FC = () => {
       const nextCandles = applyCTraderQuoteToCandles(currentCandles, bucket, price)
       if (nextCandles.length > 0) {
         // Commit the candle and the quote markers from the same accepted tick.
+        const cTraderKey = [
+          String(selection.connectionId),
+          String(selection.accountId),
+          selection.environment,
+          subscriptionSymbol,
+          subscriptionTimeframe,
+        ].join(':')
         liveCandlesRef.current = nextCandles
+        cTraderCandleCacheRef.current[cTraderKey] = nextCandles
         candleCacheRef.current[subscriptionSymbol + ':' + subscriptionTimeframe] = nextCandles
         setLiveCandles(nextCandles)
       }
