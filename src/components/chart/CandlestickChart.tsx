@@ -3,6 +3,7 @@ import { ColorType, createChart, type CandlestickData, type IChartApi, type IPri
 import { Crosshair, Eraser, Maximize2, Minimize2, Ruler, RotateCcw } from 'lucide-react'
 import type { CandleTheme, ChartMode } from '../../app/chartSettings'
 import { TIMEFRAMES, type OHLCV, type Timeframe } from '../../types'
+import { buildTradeChartMarkers, type TradeChartMarker } from './buildTradeChartMarkers'
 
 export interface ChartAnnotation { id: string; price: number; label: string; color: string; lineWidth?: 1 | 2 | 3 | 4 }
 export type ChartToolMode = 'cursor' | 'crosshair' | 'level' | 'measure' | 'alert'
@@ -21,6 +22,7 @@ interface CandlestickChartProps {
   bidPrice?: number
   askPrice?: number
   tradeLines?: ChartAnnotation[]
+  tradeMarkers?: TradeChartMarker[]
   candleTheme?: CandleTheme
   chartMode?: ChartMode
   marketTimestamp?: number
@@ -76,7 +78,7 @@ const structuralOverlayKind = (annotation: ChartAnnotation): OverlayKind | null 
   return null
 }
 
-export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, symbol, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [], candleTheme = 'shafx', chartMode = 'candles', marketTimestamp, onTimeframeChange, replayMode = false }) => {
+export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, symbol, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [], tradeMarkers = [], candleTheme = 'shafx', chartMode = 'candles', marketTimestamp, onTimeframeChange, replayMode = false }) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartHostRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<IChartApi | null>(null)
@@ -111,6 +113,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const [timelineMarks, setTimelineMarks] = useState<Array<{ x: number; label: string; time: number }>>([])
   const priceLinesRef = useRef<Map<string, IPriceLine>>(new Map())
   const priceLinesSeriesRef = useRef<ShafxSeries | null>(null)
+  const tradeMarkerSignatureRef = useRef('')
   const marketBidLineRef = useRef<IPriceLine | null>(null)
   const marketAskLineRef = useRef<IPriceLine | null>(null)
   // Fullscreen is an explicit user action only. Device rotation must never pin the chart.
@@ -273,6 +276,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       }
       priceLinesRef.current.clear()
       priceLinesSeriesRef.current = null
+      tradeMarkerSignatureRef.current = ''
       marketBidLineRef.current = null
       marketAskLineRef.current = null
 
@@ -606,7 +610,10 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         : structuralKind || isStop(id) ? 2
         : isTarget(id) ? 0
         : 0
-      upsertLine(annotation, lineStyle, showPriceLabels, shortTitle(annotation))
+      // Keep structural labels on their own price lines; reserve the price-axis
+      // labels for the live SELL/BID and BUY/ASK rails so their tags cannot merge.
+      const title = shortTitle(annotation) + ' ' + annotation.price.toFixed(pricePrecision)
+      upsertLine(annotation, lineStyle, false, title)
     })
 
     // The active trade ticket provides one canonical set of entry/SL/TP levels.
@@ -615,15 +622,15 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       const id = line.id.toLowerCase()
       const lineStyle: 0 | 1 | 2 = isStop(id) ? 2 : isTarget(id) ? 0 : 0
       const title = isStop(id) ? 'SL' : isTarget(id) ? 'TP' : id.includes('entry') ? 'ENTRY' : line.label.toUpperCase()
-      upsertLine(line, lineStyle, showPriceLabels, title)
+      upsertLine(line, lineStyle, false, title + ' ' + line.price.toFixed(pricePrecision))
     })
 
     userLevels.forEach((level) => {
-      upsertLine(level, level.dashed ? 2 : 1, showPriceLabels && !compact, compact ? '' : level.label)
+      upsertLine(level, level.dashed ? 2 : 1, false, level.label + ' ' + level.price.toFixed(pricePrecision))
     })
 
     armedAlerts.forEach((alert) => {
-      upsertLine(alert, 2, showPriceLabels && !compact, compact ? '' : alert.label)
+      upsertLine(alert, 2, false, alert.label + ' ' + alert.price.toFixed(pricePrecision))
     })
 
     for (const [id, line] of priceLinesRef.current) {
@@ -690,6 +697,25 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       // Price-line objects are intentionally retained between quote ticks.
     }
   }, [askPrice, bidPrice, chartMode, lastClose, showPriceLabels])
+
+
+  useEffect(() => {
+    const series = seriesRef.current
+    if (!series) return
+
+    const markers = (chartMode === 'candles' || chartMode === 'bars') && timeframe
+      ? buildTradeChartMarkers(chartData, tradeMarkers, timeframe)
+      : []
+    const signature = JSON.stringify(markers.map((marker) => [
+      Number(marker.time), marker.position, marker.shape, marker.color, marker.text ?? '', marker.size ?? 1,
+    ]))
+    if (signature === tradeMarkerSignatureRef.current) return
+
+    // Trade entry/exit arrows are native series markers; their timestamps map
+    // to real candles and remain in SHAFX's own visual language.
+    series.setMarkers(markers)
+    tradeMarkerSignatureRef.current = signature
+  }, [chartData, chartMode, timeframe, tradeMarkers])
 
   useEffect(() => {
     const chart = chartRef.current
@@ -1025,9 +1051,9 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     )}
     <div className="absolute right-3 top-3 z-20 flex items-center gap-1">
       <div className="pointer-events-none flex items-center gap-1 rounded-xl border border-shafx-border/70 bg-shafx-surface/85 px-1 py-0.5 shadow-md backdrop-blur">
-        <span className="rounded-lg px-1.5 py-0.5 text-[8px] font-bold tabular text-shafx-success"><span className="mr-1 text-[8px] uppercase tracking-[0.12em]">SELL</span>{Number.isFinite(displayBid) ? displayBid.toFixed(quotePrecision) : '—'}</span>
+        <span className="rounded-lg px-1.5 py-0.5 text-[8px] font-bold tabular text-shafx-danger"><span className="mr-1 text-[8px] uppercase tracking-[0.12em]">SELL</span>{Number.isFinite(displayBid) ? displayBid.toFixed(quotePrecision) : '—'}</span>
         <span className="h-3.5 w-px bg-shafx-border" />
-        <span className="rounded-lg px-2 py-1 text-[9px] font-bold tabular text-shafx-danger"><span className="mr-1 text-[8px] uppercase tracking-[0.12em]">BUY</span>{Number.isFinite(displayAsk) ? displayAsk.toFixed(quotePrecision) : '—'}</span>
+        <span className="rounded-lg px-2 py-1 text-[9px] font-bold tabular text-shafx-success"><span className="mr-1 text-[8px] uppercase tracking-[0.12em]">BUY</span>{Number.isFinite(displayAsk) ? displayAsk.toFixed(quotePrecision) : '—'}</span>
         <span className="hidden border-l border-shafx-border pl-2 text-[8px] font-semibold tabular text-shafx-textMuted sm:inline">SP {spreadPips.toFixed(1)}p</span>
       </div>
       <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => void toggleFullscreen()} aria-label={chartFullscreen ? 'Exit fullscreen chart' : 'Open fullscreen chart'} className="flex h-9 w-9 items-center justify-center rounded-xl border border-shafx-border bg-shafx-surface/92 text-shafx-textMuted shadow-md backdrop-blur hover:border-shafx-accent/40 hover:text-shafx-text">
