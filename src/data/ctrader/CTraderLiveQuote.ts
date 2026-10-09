@@ -37,6 +37,7 @@ interface StreamState {
   instrument: CTraderLiveInstrument | null
   lastBid: number | null
   lastAsk: number | null
+  lastMinuteBucket: number | null
 }
 
 const streams = new Map<string, StreamState>()
@@ -122,10 +123,24 @@ const poll = async (key: string, args: SubscribeArgs, state: StreamState): Promi
       if (state.stopped) return
       const bid = Number(result.quote.bid)
       const ask = Number(result.quote.ask)
-      if (state.lastBid === bid && state.lastAsk === ask) return
+      const quoteTimestampMs = Date.parse(result.quote.timestamp)
+      const quoteMinuteBucket = Number.isFinite(quoteTimestampMs) ? Math.floor(quoteTimestampMs / 60_000) : null
+      const pricesChanged = state.lastBid !== bid || state.lastAsk !== ask
+      const quoteClockAdvanced = quoteMinuteBucket !== null &&
+        state.lastMinuteBucket !== null &&
+        quoteMinuteBucket > state.lastMinuteBucket
+
+      if (quoteMinuteBucket !== null && (state.lastMinuteBucket === null || quoteMinuteBucket > state.lastMinuteBucket)) {
+        state.lastMinuteBucket = quoteMinuteBucket
+      }
       state.lastBid = bid
       state.lastAsk = ask
       state.instrument = result.instrument
+
+      // Even when Bid/Ask repeat, a fresh provider timestamp crossing a minute
+      // boundary must reach the chart. Otherwise a quiet minute produces no bar,
+      // and the next moving quote can jump directly to a later candle bucket.
+      if (!pricesChanged && !quoteClockAdvanced) return
       for (const listener of state.listeners) listener(result.quote, result.instrument)
     } catch {
       // Keep the stream alive. The next 250ms poll retries without spamming UI errors.
@@ -149,6 +164,7 @@ export const subscribeCTraderLiveQuote = (args: SubscribeArgs, listener: (quote:
       instrument: null,
       lastBid: null,
       lastAsk: null,
+      lastMinuteBucket: null,
     }
     streams.set(key, state)
     void poll(key, args, state)
@@ -184,6 +200,32 @@ export const isCTraderQuoteBucketCurrent = (
   if (!Number.isFinite(quoteBucket) || quoteBucket <= 0) return false
   if (latestCandleTime == null || !Number.isFinite(latestCandleTime)) return true
   return quoteBucket >= latestCandleTime
+}
+
+const CTRADER_TIMEFRAME_SECONDS: Record<Timeframe, number> = {
+  M1: 60,
+  M5: 300,
+  M15: 900,
+  M30: 1800,
+  H1: 3600,
+  H4: 14400,
+  D1: 86400,
+  W1: 604800,
+}
+
+/**
+ * Detect a skipped bar bucket without fabricating OHLC data. If the next real
+ * provider quote is more than one timeframe after the last plotted bar, refresh
+ * broker history and merge its actual candles back into the live series.
+ */
+export const shouldRepairCTraderHistoryForGap = (
+  previousCandleTime: number | null | undefined,
+  nextQuoteBucket: number,
+  timeframe: Timeframe,
+): boolean => {
+  if (previousCandleTime == null || !Number.isFinite(previousCandleTime)) return false
+  if (!Number.isFinite(nextQuoteBucket) || nextQuoteBucket <= previousCandleTime) return false
+  return nextQuoteBucket - previousCandleTime > CTRADER_TIMEFRAME_SECONDS[timeframe]
 }
 
 /**
