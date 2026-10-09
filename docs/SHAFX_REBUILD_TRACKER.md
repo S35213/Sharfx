@@ -5,6 +5,14 @@
 > **Rule:** A checkbox is marked `[x]` only after the corresponding action is actually verified. A deployment being "started" is never recorded as passed.
 
 
+## React/Lightweight Charts DOM isolation and D1 crash repair — 2026-10-09 (verification pending)
+
+- **Authenticated reproduction:** TinyFish run `84aeb150-0763-42b5-aac1-a23b0db98d66` inspected the exact `sharfx-deriv-render` deployment after waiting over 20 seconds. The page mostly rendered correctly, but switching to D1 triggered the ErrorBoundary with `Failed to execute 'insertBefore' on 'Node'`; a full reload was needed to recover.
+- **Root cause identified from source:** `src/components/chart/CandlestickChart.tsx` passed the React-managed chart shell directly to `createChart()`, even though that shell also contained React-rendered hover/status overlays and buttons. Lightweight Charts mutates its container DOM, so its canvas/layout nodes became siblings in a DOM tree React also reconciled. That creates an unsafe ownership boundary and matches the `insertBefore` failure during chart state changes. Separately, `src/App.tsx` unmounted the chart whenever cTrader candles were cleared during a timeframe switch, forcing the chart DOM to be destroyed/recreated and causing a visible loading gap.
+- **Patch in this change:** put all Lightweight Charts DOM under a dedicated empty child host; keep the chart component mounted and clear the series while historical data loads; display the loading state as an overlay; correct the hover tooltip's timestamp conversion because candle times are already Unix seconds.
+- **Scope:** only `test/rebuild-deriv-native-manual-20260930` / Render `sharfx-deriv-render`. No changes to `main`, Cloudflare production, credentials, Supabase data, or broker execution behavior.
+- **Verification gate:** pending branch CI/build/lint/tests, Render deployment, and authenticated TinyFish retest across M1/M5/M15/M30/H1/H4/D1/W1 plus zoom/resize. Do not mark the user-visible issue fixed until these checks pass.
+
 ## Chart stability repair — 2026-10-08
 
 - **Root cause found:** the chart was drawing live BUY/SELL bid/ask values as full-width Lightweight Charts price lines. Official Lightweight Charts documents price lines as horizontal lines across the chart; this matched the user's screenshot and was visually cluttering the candle pane.

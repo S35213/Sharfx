@@ -69,6 +69,7 @@ const timeframeSecondsFor = (nextTimeframe: Timeframe): number => TIMEFRAME_SECO
 
 export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, symbol, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [], candleTheme = 'shafx', chartMode = 'candles', marketTimestamp, onTimeframeChange, replayMode = false }) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
+  const chartHostRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ShafxSeries | null>(null)
   const seriesConfigRef = useRef<{ chartMode: ChartMode; pipSize: number } | null>(null)
@@ -150,16 +151,17 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const pricePrecision = Math.max(2, Math.round(Math.log10(1 / priceStep)))
 
   useLayoutEffect(() => {
-    const el = containerRef.current
-    if (!el) return
+    const shell = containerRef.current
+    const el = chartHostRef.current
+    if (!shell || !el) return
 
     const chart = createChart(el, {
       layout: { background: { type: ColorType.Solid, color: '#070A0F' }, textColor: '#8A96A8', attributionLogo: false },
       grid: showGrid ? { vertLines: { color: '#131A23' }, horzLines: { color: '#131A23' } } : { vertLines: { color: 'transparent' }, horzLines: { color: 'transparent' } },
-      width: el.clientWidth,
-      height: Math.max(280, el.clientHeight),
+      width: shell.clientWidth,
+      height: Math.max(280, shell.clientHeight),
       crosshair: { mode: 0, vertLine: { color: '#667285', width: 1, style: 2, labelBackgroundColor: '#202A38' }, horzLine: { color: '#667285', width: 1, style: 2, labelBackgroundColor: '#202A38' } },
-      rightPriceScale: { borderColor: '#202A38', minimumWidth: el.clientWidth < 640 ? 78 : 94, alignLabels: true, ticksVisible: true, scaleMargins: { top: 0.08, bottom: 0.08 } },
+      rightPriceScale: { borderColor: '#202A38', minimumWidth: shell.clientWidth < 640 ? 78 : 94, alignLabels: true, ticksVisible: true, scaleMargins: { top: 0.08, bottom: 0.08 } },
       timeScale: {
         visible: true,
         borderVisible: true,
@@ -231,7 +233,20 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
 
   useLayoutEffect(() => {
     const chart = chartRef.current
-    if (!chart || !visualData.length) return
+    if (!chart) return
+
+    if (!visualData.length) {
+      // Keep the chart instance mounted while the next timeframe's history loads.
+      // Clearing the series avoids showing stale bars without recreating the DOM.
+      if (seriesRef.current) seriesRef.current.setData([])
+      latestIndexRef.current = -1
+      renderedFirstTimeRef.current = null
+      renderedLastTimeRef.current = null
+      renderedDataLengthRef.current = 0
+      viewInitializedRef.current = false
+      followRealtimeRef.current = true
+      return
+    }
 
     const colors = candleColors[candleTheme]
     const precision = pricePrecision
@@ -677,7 +692,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         return
       }
       setHoverCandle({
-        time: Math.floor(Number(closest.time) / 1000),
+        time: Math.floor(Number(closest.time)),
         open: closest.open,
         high: closest.high,
         low: closest.low,
@@ -972,6 +987,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const chartFullscreen = isFullscreen;
 
   return <div ref={containerRef} onPointerDownCapture={handleChartPointerDown} onPointerMoveCapture={handleChartPointerMove} onPointerUpCapture={handleChartPointerUp} onPointerCancel={handleChartPointerCancel} onPointerDown={placeTool} className={`shafx-chart-shell relative w-full overflow-hidden border border-shafx-border bg-shafx-bg touch-pan-y ${['level', 'alert', 'measure'].includes(toolMode) ? 'cursor-crosshair' : ''} ${chartFullscreen ? 'fixed inset-0 z-[200] h-[100svh] w-screen' : ''}`} style={{ height: chartFullscreen ? '100svh' : height, minHeight: 280 }}>
+    <div ref={chartHostRef} className="absolute inset-0 z-0" aria-hidden="true" />
     <div className="pointer-events-none absolute left-3 top-3 z-30 flex items-center gap-2 rounded-xl border border-shafx-border/70 bg-shafx-surface/88 px-2.5 py-1.5 shadow-md backdrop-blur">
       {!replayMode && countdown !== null && <span className="font-mono text-[8px] font-semibold tabular text-shafx-accent">CLOSE {formatCountdown(countdown)}</span>}
       {replayMode && <span className="font-mono text-[8px] font-semibold tabular text-shafx-accent">HISTORICAL</span>}
