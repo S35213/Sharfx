@@ -269,3 +269,22 @@ The durable five-round database state has been created in staging so the archite
 - Latest Render deployment: `dep-db1vj167bikc73ddd1c0` — LIVE.
 - GitHub CI run #1573 for this commit is externally queued; Render's production build and start verification already passed.
 - Autonomous unattended broker execution remains disabled. The five-round UI is currently a safe paper-test/rebuild phase, while broker-native manual trading remains the execution path.
+
+
+## 17. Chart lifecycle and timeframe-race investigation — 2026-10-09
+
+**Status: source patch committed for CI/Render verification; the chart is not yet declared fixed.**
+
+Root causes identified:
+- `src/components/chart/CandlestickChart.tsx` created Lightweight Charts in a passive `useEffect`, while initial series setup runs in a later-declared `useLayoutEffect`. The initial layout effect could run before `chartRef` exists and exit without applying candles. Price-line setup could similarly run before the initial series exists.
+- Timeframe selection changed separately from the cached candle snapshot. A render could therefore pair a new timeframe with the previous timeframe's candles and restore/scale the chart against the wrong interval.
+- A prior live-feed subscription could send a late candle snapshot after a timeframe switch, and incoming candles were filtered as if they were already ascending.
+
+Patch in this checkpoint:
+- Initialize Lightweight Charts during the earlier layout phase before initial series/data effects.
+- Change timeframe and cached candles together to remove the transient old/new interval mismatch.
+- Reject stale symbol/timeframe callbacks; retain last-good candles on transient empty or invalid snapshots.
+- Normalize OHLC snapshots by timestamp, validate OHLC shape, and keep the last valid duplicate timestamp.
+- Add unit tests for out-of-order candles, repeated forming candles, and malformed market data.
+
+Verification still required: `npm run build`, `npm run lint`, `npm test`, live Render deployment/health, and an authenticated browser pass across M1/M5/M15/M30/H1/H4/D1/W1 at laptop resolution. Anonymous TinyFish browser access reaches only the login page and is not chart verification.

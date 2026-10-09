@@ -149,7 +149,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const priceStep = Math.max(pipSize / 10, 0.000001)
   const pricePrecision = Math.max(2, Math.round(Math.log10(1 / priceStep)))
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = containerRef.current
     if (!el) return
 

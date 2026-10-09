@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 import { TerminalProvider, useTerminal } from './app/TerminalContext'
 import { ErrorBoundary } from './app/ErrorBoundary'
@@ -30,7 +30,8 @@ import type { ProviderOrderResult, ProviderPosition, ProviderStreamEvent } from 
 import { analyzeLiquidity } from './engine/liquidity'
 import { analyzeMarketStructure, findSwingPoints } from './engine/marketStructure'
 import { analyzeSupportResistance } from './engine/supportResistance'
-import { TIMEFRAMES, type AccountData, type BotPaperTrade, type MarketAnalysis, type MarketPair, type OHLCV, type SymbolSpec, type TradeOrder } from './types'
+import { TIMEFRAMES, type AccountData, type BotPaperTrade, type MarketAnalysis, type MarketPair, type OHLCV, type SymbolSpec, type Timeframe, type TradeOrder } from './types'
+import { normalizeMarketCandles } from './lib/marketCandles'
 import type { SetupCandidate } from './engine/setup/types'
 import { mockWatchlist } from './data/mock/watchlist'
 import { fetchDerivActiveForexSymbols, fetchDerivMultiTimeframeCandles, subscribeDerivForexQuotes } from './data/deriv/DerivPublicMarketFeed'
@@ -239,6 +240,26 @@ const TerminalContent: React.FC = () => {
     pushToast(text)
   }, [pushToast])
 
+  // Change timeframe and candle snapshot together. A passive cache effect can
+  // otherwise render the new timeframe with the previous timeframe's candles.
+  const handleTimeframeChange = useCallback((nextTimeframe: Timeframe): void => {
+    if (timeframeRef.current === nextTimeframe) return
+
+    timeframeRef.current = nextTimeframe
+    setTimeframe(nextTimeframe)
+
+    // cTrader candles are scoped to the selected provider account. Its history
+    // effect will load the new interval; never paint the previous interval here.
+    const cached = activeProviderSelection?.providerId === 'ctrader'
+      ? []
+      : candleCacheRef.current[`${selectedSymbolRef.current}:${nextTimeframe}`] ?? []
+    const nextCandles = cached.length > 1 ? cached : []
+    setLiveCandles(nextCandles)
+    const last = nextCandles[nextCandles.length - 1]
+    setCurrentPrice(last?.close ?? 0)
+    setMarketTimestamp(last ? Math.floor(last.time / 1000) : 0)
+  }, [activeProviderSelection?.providerId, setTimeframe])
+
   const handleBotPaperRoundClosed = useCallback((trade: BotPaperTrade): void => {
     setBotPaperHistory((current) => [trade, ...current.filter((item) => item.id !== trade.id)].slice(0, 200))
   }, [])
@@ -249,7 +270,7 @@ const TerminalContent: React.FC = () => {
   }, [botPaperHistory])
   const dismissToast = useCallback(() => setToast(null), [])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     selectedSymbolRef.current = selectedSymbol
     timeframeRef.current = timeframe
   }, [selectedSymbol, timeframe])
@@ -564,15 +585,15 @@ const TerminalContent: React.FC = () => {
   }, [activeProviderSelection?.providerId, activeProviderSelection?.connectionId, activeProviderSelection?.accountId, activeProviderSelection?.environment, pushStreamToast])
 
   const handleLiveUpdate = useCallback((candles: OHLCV[], price: number, epoch: number): void => {
-    const valid = candles.filter((candle, index) =>
-      Number.isFinite(candle.time) &&
-      Number.isFinite(candle.open) &&
-      Number.isFinite(candle.high) &&
-      Number.isFinite(candle.low) &&
-      Number.isFinite(candle.close) &&
-      (index === 0 || candle.time > candles[index - 1].time)
-    )
-    const cacheKey = selectedSymbolRef.current + ':' + timeframe
+    // A prior symbol/timeframe subscription can deliver a final callback after
+    // a switch. Do not let that stale snapshot overwrite the active chart.
+    if (selectedSymbolRef.current !== selectedSymbol || timeframeRef.current !== timeframe) return
+
+    const valid = normalizeMarketCandles(candles)
+    // Keep the last good chart mounted during transient invalid/empty snapshots.
+    if (!valid.length) return
+
+    const cacheKey = selectedSymbol + ':' + timeframe
     const cTraderActive = activeProviderSelection?.providerId === 'ctrader'
     const livePrice = cTraderActive && latestCTraderPriceRef.current && latestCTraderPriceRef.current > 0
       ? latestCTraderPriceRef.current
@@ -581,7 +602,7 @@ const TerminalContent: React.FC = () => {
     setLiveCandles(valid)
     setCurrentPrice(livePrice)
     setMarketTimestamp(Math.floor(epoch / 1000))
-  }, [activeProviderSelection?.providerId, timeframe])
+  }, [activeProviderSelection?.providerId, selectedSymbol, timeframe])
 
   useEffect(() => {
     const selection = activeProviderSelection
@@ -977,7 +998,7 @@ const TerminalContent: React.FC = () => {
            <div className="flex min-h-10 flex-shrink-0 items-center gap-1 overflow-x-auto border-b border-shafx-border bg-[#0C1118] px-3 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:px-4">
              <span className="mr-1 hidden text-[8px] font-bold uppercase tracking-[0.16em] text-shafx-textMuted sm:inline">TIMEFRAME</span>
              {TIMEFRAMES.map((tf) => (
-               <button key={tf} type="button" onClick={() => setTimeframe(tf)} aria-pressed={timeframe === tf} className={'min-h-8 flex-shrink-0 rounded-md px-2.5 text-[8px] font-bold tracking-wide transition ' + (timeframe === tf ? 'bg-shafx-accent text-white shadow-md' : 'text-shafx-textMuted hover:bg-shafx-bg hover:text-shafx-text')}>
+               <button key={tf} type="button" onClick={() => handleTimeframeChange(tf)} aria-pressed={timeframe === tf} className={'min-h-8 flex-shrink-0 rounded-md px-2.5 text-[8px] font-bold tracking-wide transition ' + (timeframe === tf ? 'bg-shafx-accent text-white shadow-md' : 'text-shafx-textMuted hover:bg-shafx-bg hover:text-shafx-text')}>
                  {tf}
                </button>
              ))}
@@ -985,7 +1006,7 @@ const TerminalContent: React.FC = () => {
            </div>
            <MobileChartTools tool={chartTool} onToolChange={setChartTool} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} />
            <div className="shafx-chart-stage relative min-h-0 p-1 sm:p-2 lg:flex-1">
-             {liveCandles.length > 0 ? <CandlestickChart data={liveCandles} symbol={selectedSymbol} timeframe={timeframe} annotations={chartAnnotations} tradeLines={combinedTradeLines} bidPrice={chartBidPrice} askPrice={chartAskPrice} toolMode={chartToolMode} pipSize={symbolSpec.pipSize} onToolNotice={pushToast} showGrid={chartSettings.showGrid} showPriceLabels={chartSettings.showPriceLabels} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} marketTimestamp={marketTimestamp} onTimeframeChange={setTimeframe} replayMode={false} /> : <div className="flex h-full min-h-[320px] items-center justify-center text-sm text-shafx-textMuted">Waiting for the live market stream…</div>}
+             {liveCandles.length > 0 ? <CandlestickChart data={liveCandles} symbol={selectedSymbol} timeframe={timeframe} annotations={chartAnnotations} tradeLines={combinedTradeLines} bidPrice={chartBidPrice} askPrice={chartAskPrice} toolMode={chartToolMode} pipSize={symbolSpec.pipSize} onToolNotice={pushToast} showGrid={chartSettings.showGrid} showPriceLabels={chartSettings.showPriceLabels} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} marketTimestamp={marketTimestamp} onTimeframeChange={handleTimeframeChange} replayMode={false} /> : <div className="flex h-full min-h-[320px] items-center justify-center text-sm text-shafx-textMuted">Waiting for the live market stream…</div>}
            </div>
           <div className="shafx-landscape-secondary grid grid-cols-2 gap-2 border-t border-shafx-border bg-shafx-surface/55 p-2 sm:grid-cols-4">
             <button type="button" onClick={() => openMobileDock('insights')} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Structure</span><div className="mt-1 text-xs font-semibold">{marketAnalysis.bias} • {marketAnalysis.structure.type}</div></button>

@@ -296,3 +296,19 @@ This has now been corrected:
 
 **Do not merge to main.**
 
+
+
+## Chart stability checkpoint — 2026-10-09
+
+The reported problem remains chart/timeframe instability: candles and BUY/SELL, support/resistance, and liquidity levels can appear collapsed or disappear while changing intervals. Do not assume earlier price-line styling commits solved it.
+
+Source-level issues identified:
+1. Chart creation ran in passive `useEffect`, but initial series/data setup ran earlier in `useLayoutEffect`, so mount/remount could initialize an empty chart until another prop/data update.
+2. Timeframe state changed separately from the selected cache snapshot, briefly allowing the previous interval's candles to be interpreted as the new interval.
+3. Late live-feed callbacks were not rejected by timeframe/symbol identity, and candle snapshots were filtered before sorting.
+
+A corrective patch is now on this experimental branch: layout-phase chart initialization, atomic timeframe/candle selection, stale callback rejection, OHLC snapshot normalization, and regression tests. It must not be reported fixed until CI, Render deployment/health, and authenticated visual timeframe testing pass.
+
+TinyFish confirmed the public Render URL only shows the sign-in page without authentication; it could not test the chart. The existing TinyFish profile has no recorded SHAFX sign-in. Ask the user to authorize a sign-in setup session before performing authenticated browser QA; never request a password in chat.
+
+Continue only on `test/rebuild-deriv-native-manual-20260930` / Render service `sharfx-deriv-render`. Do not merge to `main`, and do not deploy Cloudflare production.
