@@ -108,7 +108,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const [hoverCandle, setHoverCandle] = useState<{ time: number; open?: number; high?: number; low?: number; close: number } | null>(null)
   const chartDataSourceRef = useRef<OHLCV[]>(data)
   useEffect(() => { chartDataSourceRef.current = data }, [data])
-  const [timelineMarks, setTimelineMarks] = useState<Array<{ x: number; label: string }>>([])
+  const [timelineMarks, setTimelineMarks] = useState<Array<{ x: number; label: string; time: number }>>([])
   const priceLinesRef = useRef<Map<string, IPriceLine>>(new Map())
   const priceLinesSeriesRef = useRef<ShafxSeries | null>(null)
   const marketBidLineRef = useRef<IPriceLine | null>(null)
@@ -487,7 +487,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       const candidates = [1, 2, 4, 6, 12, 24, 48, 96, 192]
       const step = candidates.find((candidate) => candidate * pxPerBar >= minimumLabelSpacing) ?? 192
       const interval = timeframeSecondsFor(timeframe) * step
-      const marks: Array<{ x: number; label: string }> = []
+      const marks: Array<{ x: number; label: string; time: number }> = []
 
       for (let index = from; index <= to; index += 1) {
         const candle = chartData[index]
@@ -507,15 +507,24 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
           ? String(date.getDate()).padStart(2, '0') + ' ' + date.toLocaleString('en-GB', { month: 'short' })
           : date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })
 
-        marks.push({ x: Number(x), label })
+        marks.push({ x: Number(x), label, time: timestamp })
       }
 
-      const selected: Array<{ x: number; label: string }> = []
+      const selected: Array<{ x: number; label: string; time: number }> = []
       for (const mark of marks.sort((a, b) => a.x - b.x)) {
         const previous = selected[selected.length - 1]
         if (!previous || mark.x - previous.x >= minimumLabelSpacing) selected.push(mark)
       }
-      setTimelineMarks(selected)
+      setTimelineMarks((current) => {
+        // Live quotes can move timeline coordinates by fractions of a pixel.
+        // Keep the existing React nodes when the visible time boundaries and
+        // positions are effectively unchanged, rather than churning child DOM.
+        const unchanged = current.length === selected.length && current.every((mark, index) => {
+          const next = selected[index]
+          return mark.time === next.time && mark.label === next.label && Math.abs(mark.x - next.x) < 0.5
+        })
+        return unchanged ? current : selected
+      })
     }
 
     updateTimeline()
@@ -1049,7 +1058,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     <div className="pointer-events-none absolute bottom-0 left-0 right-[82px] z-30 h-8 border-t border-shafx-border/70 bg-shafx-bg/95 sm:right-[96px]">
       {timelineMarks.map((mark, index) => (
         <span
-          key={`${mark.label}-${index}-${Math.round(mark.x)}`}
+          key={mark.time}
           className="absolute top-1 -translate-x-1/2 whitespace-nowrap font-mono text-[8px] tabular text-shafx-textMuted sm:text-[9px]"
           style={{ left: mark.x }}
         >
