@@ -8,8 +8,6 @@ import type { ChartAnnotation } from './CandlestickChart'
 
 const toleranceFor = (symbol: string): number => symbol.includes('JPY') ? 0.1 : 0.001
 
-const annotationPriceTolerance = (symbol: string): number => Math.max(toleranceFor(symbol) * 0.05, Number.EPSILON)
-
 export const analyzeCurrentSetup = (symbol: string, candles: OHLCV[]): SetupResult | null => {
   if (candles.length === 0) return null
   const currentPrice = candles[candles.length - 1]?.close ?? Number.NaN

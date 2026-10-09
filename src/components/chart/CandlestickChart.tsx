@@ -575,7 +575,6 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       .filter((price): price is number => Number.isFinite(price) && Number(price) > 0)
       .map((price) => series.priceToCoordinate(Number(price)))
 
-    const hiddenStructuralIds = new Set<string>()
     const desired = new Set<string>()
     const labelCandidates: Array<ChartAnnotation | UserLevel> = []
 
@@ -652,7 +651,6 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     annotations.forEach((annotation) => {
       const structuralKind = structuralOverlayKind(annotation)
       if (structuralKind && isStructuralOccluded(annotation)) {
-        hiddenStructuralIds.add(annotation.id)
         return
       }
       const id = annotation.id.toLowerCase()
