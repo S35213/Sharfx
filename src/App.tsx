@@ -34,7 +34,7 @@ import { analyzeMarketStructure, findSwingPoints } from './engine/marketStructur
 import { analyzeSupportResistance } from './engine/supportResistance'
 import { TIMEFRAMES, type AccountData, type BotPaperTrade, type MarketAnalysis, type MarketPair, type OHLCV, type SymbolSpec, type Timeframe, type TradeOrder } from './types'
 import { normalizeMarketCandles } from './lib/marketCandles'
-import { normalizeProviderSymbol } from './lib/normalizeProviderSymbol'
+import { normalizeProviderSymbol, providerSymbolsMatch } from './lib/normalizeProviderSymbol'
 import type { SetupCandidate } from './engine/setup/types'
 import { mockWatchlist } from './data/mock/watchlist'
 import { fetchDerivActiveForexSymbols, fetchDerivMultiTimeframeCandles, subscribeDerivForexQuotes } from './data/deriv/DerivPublicMarketFeed'
@@ -910,9 +910,7 @@ const TerminalContent: React.FC = () => {
     .map((annotation) => ({ ...annotation, id: 'live-' + timeframe + '-' + annotation.id })), [selectedSymbol, timeframe, structureBarTime])
 
   const selectedOpenPosition = useMemo(
-    () => openPositions.find((position) =>
-      normalizeProviderSymbol(position.symbol) === normalizeProviderSymbol(selectedSymbol),
-    ) ?? null,
+    () => openPositions.find((position) => providerSymbolsMatch(position.symbol, selectedSymbol)) ?? null,
     [openPositions, selectedSymbol],
   )
 
@@ -940,7 +938,7 @@ const TerminalContent: React.FC = () => {
     const seen = new Set<string>()
     const trades = [...openPositions, ...tradeHistory.slice(0, 40)]
     return trades
-      .filter((trade) => normalizeProviderSymbol(trade.symbol) === selectedSymbol)
+      .filter((trade) => providerSymbolsMatch(trade.symbol, selectedSymbol))
       .filter((trade) => {
         if (!trade.id || seen.has(trade.id)) return false
         seen.add(trade.id)

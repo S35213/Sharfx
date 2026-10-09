@@ -13,3 +13,23 @@ export const normalizeProviderSymbol = (value: string): string => {
   }
   return original
 }
+
+
+/**
+ * Compare chart and broker instruments without changing the provider's stored
+ * identifier. FX/CFD brokers may suffix otherwise-identical six-letter symbols
+ * (for example EURUSD.r), while the SHAFX watchlist displays EUR/USD.
+ */
+export const providerSymbolsMatch = (left: string, right: string): boolean => {
+  if (normalizeProviderSymbol(left) === normalizeProviderSymbol(right)) return true
+
+  const toComparableFxPair = (value: string): string => {
+    const compact = value.trim().toUpperCase().replace(/^FRX/, '').replace(/[^A-Z0-9]/g, '')
+    const prefix = compact.match(/^([A-Z]{6})/)
+    if (!prefix) return normalizeProviderSymbol(value)
+    const pair = prefix[1]
+    return pair.slice(0, 3) + '/' + pair.slice(3)
+  }
+
+  return toComparableFxPair(left) === toComparableFxPair(right)
+}
