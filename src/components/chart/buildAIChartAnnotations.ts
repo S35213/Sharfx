@@ -120,10 +120,22 @@ export const buildStructuralChartAnnotations = (symbol: string, candles: OHLCV[]
     result.push({ id, price, label: `${prefix}${label}`, color, lineWidth })
   }
 
-  add('support', supportResistance.nearestSupport, 'Support', '#22D3A5', 2)
-  add('resistance', supportResistance.nearestResistance, 'Resistance', '#FF5C75', 2)
-  add('liquidity-buy', liquidity.nearestBuySide?.referencePrice ?? null, 'Buy-side liquidity', '#5CA8FF', 1)
-  add('liquidity-sell', liquidity.nearestSellSide?.referencePrice ?? null, 'Sell-side liquidity', '#5CA8FF', 1)
+  const currentPrice = structuralCandles[structuralCandles.length - 1]?.close ?? Number.NaN
+  // Repeated-touch clusters are stronger, but a clean single swing can still
+  // be the nearest visible decision level on a higher timeframe. Fall back to
+  // the nearest confirmed swing on the correct side of price when no cluster
+  // is available, instead of silently losing RES/SUP on H4/D1/W1.
+  const fallbackSupport = swings.lows
+    .filter((point) => point.price <= currentPrice)
+    .sort((a, b) => b.price - a.price)[0]?.price ?? null
+  const fallbackResistance = swings.highs
+    .filter((point) => point.price >= currentPrice)
+    .sort((a, b) => a.price - b.price)[0]?.price ?? null
+
+  add('support', supportResistance.nearestSupport ?? fallbackSupport, 'Support', '#22D3A5', 2)
+  add('resistance', supportResistance.nearestResistance ?? fallbackResistance, 'Resistance', '#FF5C75', 2)
+  add('liquidity-buy', liquidity.nearestBuySide?.referencePrice ?? fallbackResistance, 'Buy-side liquidity', '#5CA8FF', 1)
+  add('liquidity-sell', liquidity.nearestSellSide?.referencePrice ?? fallbackSupport, 'Sell-side liquidity', '#5CA8FF', 1)
 
   return result.sort((a, b) => a.price - b.price)
 }
