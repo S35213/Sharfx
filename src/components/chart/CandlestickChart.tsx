@@ -29,6 +29,8 @@ interface CandlestickChartProps {
 }
 
 interface UserLevel { id: string; price: number; label: string; color: string; lineWidth?: 1 | 2 | 3 | 4; dashed?: boolean; armed?: boolean }
+type OverlayKind = 'support' | 'resistance' | 'liquidity' | 'entry' | 'stop' | 'target' | 'trade'
+interface PositionedOverlay { id: string; kind: OverlayKind | 'zone'; price: number; priceLow: number; priceHigh: number; y: number; top: number; height: number; tagTop: number; label: string; color: string; fill: string; border: string }
 type ShafxSeries = ISeriesApi<'Candlestick'> | ISeriesApi<'Bar'> | ISeriesApi<'Line'> | ISeriesApi<'Area'>
 
 const prepareData = (data: OHLCV[]): CandlestickData[] => {
@@ -67,6 +69,35 @@ const TIMEFRAME_SECONDS: Record<Timeframe, number> = {
 }
 const timeframeSecondsFor = (nextTimeframe: Timeframe): number => TIMEFRAME_SECONDS[nextTimeframe]
 
+const structuralOverlayLabel = (annotation: ChartAnnotation): string => {
+  const ids = annotation.id.toLowerCase().split('+')
+  const labels: string[] = []
+  if (ids.some((id) => id.includes('support'))) labels.push('SUP')
+  if (ids.some((id) => id.includes('resistance'))) labels.push('RES')
+  if (ids.some((id) => id.includes('liquidity-buy'))) labels.push('BSL')
+  if (ids.some((id) => id.includes('liquidity-sell'))) labels.push('SSL')
+  if (ids.some((id) => id.includes('liquidity') && !id.includes('liquidity-buy') && !id.includes('liquidity-sell'))) labels.push('LIQ')
+  return labels.length ? [...new Set(labels)].join(' · ') : annotation.label.toUpperCase()
+}
+
+const structuralOverlayKind = (annotation: ChartAnnotation): OverlayKind | null => {
+  const id = annotation.id.toLowerCase()
+  if (id.includes('support')) return 'support'
+  if (id.includes('resistance')) return 'resistance'
+  if (id.includes('liquidity')) return 'liquidity'
+  return null
+}
+
+const overlayColours = (kind: OverlayKind | 'zone'): { color: string; fill: string; border: string } => {
+  if (kind === 'support') return { color: '#22D3A5', fill: 'rgba(34, 211, 165, 0.09)', border: 'rgba(34, 211, 165, 0.30)' }
+  if (kind === 'resistance') return { color: '#FF5C75', fill: 'rgba(255, 92, 117, 0.09)', border: 'rgba(255, 92, 117, 0.30)' }
+  if (kind === 'liquidity') return { color: '#73B7FF', fill: 'rgba(92, 168, 255, 0.10)', border: 'rgba(92, 168, 255, 0.30)' }
+  if (kind === 'stop') return { color: '#FF5C75', fill: 'rgba(255, 92, 117, 0.06)', border: 'rgba(255, 92, 117, 0.40)' }
+  if (kind === 'target') return { color: '#22D3A5', fill: 'rgba(34, 211, 165, 0.06)', border: 'rgba(34, 211, 165, 0.40)' }
+  if (kind === 'entry') return { color: '#5CA8FF', fill: 'rgba(92, 168, 255, 0.05)', border: 'rgba(92, 168, 255, 0.40)' }
+  return { color: '#A6B4C7', fill: 'rgba(166, 180, 199, 0.08)', border: 'rgba(166, 180, 199, 0.30)' }
+}
+
 export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, symbol, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [], candleTheme = 'shafx', chartMode = 'candles', marketTimestamp, onTimeframeChange, replayMode = false }) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartHostRef = useRef<HTMLDivElement | null>(null)
@@ -100,6 +131,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const chartDataSourceRef = useRef<OHLCV[]>(data)
   useEffect(() => { chartDataSourceRef.current = data }, [data])
   const [timelineMarks, setTimelineMarks] = useState<Array<{ x: number; label: string }>>([])
+  const [overlayLayoutRevision, setOverlayLayoutRevision] = useState(0)
+  const [positionedOverlays, setPositionedOverlays] = useState<PositionedOverlay[]>([])
   const priceLinesRef = useRef<Map<string, IPriceLine>>(new Map())
   const priceLinesSeriesRef = useRef<ShafxSeries | null>(null)
   const marketBidLineRef = useRef<IPriceLine | null>(null)
@@ -574,6 +607,9 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     }
 
     annotations.forEach((annotation) => {
+      // Market structure is rendered as soft, compact zones near the right edge
+      // rather than a stack of full-width price lines.
+      if (structuralOverlayKind(annotation)) return
       const liquidity = annotation.id.includes('liquidity')
       upsertLine(
         annotation,
@@ -591,20 +627,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       upsertLine(annotation, 2, showPriceLabels && !compact, compact ? '' : annotation.label)
     })
 
-    tradeLines.forEach((annotation) => {
-      if (!Number.isFinite(annotation.price) || annotation.price <= 0) return
-      upsertLine(
-        annotation,
-        0,
-        showPriceLabels,
-        compact ? (
-          annotation.id.endsWith('-entry') ? 'ENTRY' :
-          annotation.id.endsWith('-stop') ? 'SL' :
-          annotation.id.endsWith('-target') ? 'TP' :
-          ''
-        ) : annotation.label,
-      )
-    })
+    // Entry / SL / TP are drawn as short chart-native segments with compact
+    // price tags. Do not also create full-width price lines for them.
 
     for (const [id, line] of priceLinesRef.current) {
       if (desired.has(id)) continue
@@ -613,7 +637,154 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     }
   }, [annotations, armedAlerts, chartMode, pipSize, showPriceLabels, tradeLines, userLevels])
 
-  // Live broker quote rails behave like MT5's optional Bid/Ask lines. The
+  // Structural analysis and position protection are shown as compact zones/markers
+  // on the chart's right edge. Only actual broker Bid/Ask rails span the full chart.
+  useEffect(() => {
+    const series = seriesRef.current
+    const shell = containerRef.current
+    if (!series || !shell) {
+      setPositionedOverlays([])
+      return
+    }
+
+    const structure = annotations.flatMap((annotation) => {
+      const kind = structuralOverlayKind(annotation)
+      if (!kind || !Number.isFinite(annotation.price) || annotation.price <= 0) return []
+      const palette = overlayColours(kind)
+      return [{
+        id: annotation.id,
+        kind,
+        price: annotation.price,
+        label: structuralOverlayLabel(annotation),
+        color: palette.color,
+        fill: palette.fill,
+        border: palette.border,
+      }]
+    })
+    const risk = tradeLines.flatMap((line) => {
+      if (!Number.isFinite(line.price) || line.price <= 0) return []
+      const id = line.id.toLowerCase()
+      const kind: OverlayKind = id.includes('stop') ? 'stop'
+        : id.includes('target') ? 'target'
+        : id.includes('entry') ? 'entry'
+        : 'trade'
+      const palette = overlayColours(kind)
+      const label = kind === 'stop' ? 'SL'
+        : kind === 'target' ? 'TP'
+        : kind === 'entry' ? 'ENTRY'
+        : line.label.toUpperCase()
+      return [{
+        id: line.id,
+        kind,
+        price: line.price,
+        label,
+        color: palette.color,
+        fill: palette.fill,
+        border: palette.border,
+      }]
+    })
+
+    const updatePositions = (): void => {
+      const height = shell.clientHeight
+      if (height <= 0) return
+      const visible = [...structure, ...risk].flatMap((item) => {
+        const center = series.priceToCoordinate(item.price)
+        if (center === null || center < -20 || center > height + 20) return []
+        const isStructure = item.kind === 'support' || item.kind === 'resistance' || item.kind === 'liquidity'
+        if (!isStructure) {
+          return [{
+            ...item,
+            priceLow: item.price,
+            priceHigh: item.price,
+            y: Number(center),
+            top: Number(center) - 1,
+            height: 2,
+            tagTop: Math.max(0, Math.min(height - 20, Number(center) - 10)),
+          } satisfies PositionedOverlay]
+        }
+
+        const halfBand = Math.max(pipSize * 3, item.price * 0.000001)
+        const upper = series.priceToCoordinate(item.price + halfBand)
+        const lower = series.priceToCoordinate(Math.max(Number.EPSILON, item.price - halfBand))
+        const actualTop = upper === null || lower === null ? Number(center) - 5 : Math.min(Number(upper), Number(lower))
+        const actualBottom = upper === null || lower === null ? Number(center) + 5 : Math.max(Number(upper), Number(lower))
+        const bandHeight = Math.max(10, actualBottom - actualTop)
+        return [{
+          ...item,
+          kind: 'zone' as const,
+          priceLow: item.price,
+          priceHigh: item.price,
+          y: Number(center),
+          top: Number(center) - bandHeight / 2,
+          height: bandHeight,
+          tagTop: Math.max(0, Math.min(height - 20, Number(center) - 10)),
+          fill: overlayColours('zone').fill,
+          border: overlayColours('zone').border,
+        }]
+      })
+
+      // Merge structural levels that land on the same few chart pixels. The
+      // band carries all market concepts, so labels do not collide into a pile.
+      const sortedStructure = visible
+        .filter((item) => item.kind === 'zone')
+        .sort((a, b) => a.y - b.y)
+      const zones: PositionedOverlay[] = []
+      for (const item of sortedStructure) {
+        const previous = zones[zones.length - 1]
+        if (previous && Math.abs(previous.y - item.y) < 14) {
+          previous.id += '+' + item.id
+          previous.label = [...new Set((previous.label + ' · ' + item.label).split(' · '))].join(' · ')
+          previous.priceLow = Math.min(previous.priceLow, item.price)
+          previous.priceHigh = Math.max(previous.priceHigh, item.price)
+          previous.top = Math.min(previous.top, item.top)
+          previous.height = Math.max(previous.top + previous.height, item.top + item.height) - previous.top
+          previous.y = (previous.y + item.y) / 2
+          previous.tagTop = Math.max(0, Math.min(height - 20, previous.y - 10))
+          previous.fill = 'rgba(113, 153, 190, 0.10)'
+          previous.border = 'rgba(145, 175, 205, 0.34)'
+          previous.color = '#B8CBDD'
+        } else {
+          zones.push({ ...item })
+        }
+      }
+
+      const trades = visible.filter((item) => item.kind !== 'zone').sort((a, b) => a.y - b.y)
+      const laidOut: PositionedOverlay[] = [...zones, ...trades].sort((a, b) => a.y - b.y)
+      let lastTagBottom = -Infinity
+      for (const item of laidOut) {
+        const desiredTagTop = item.y - 10
+        item.tagTop = Math.max(Math.max(0, desiredTagTop), lastTagBottom + 2)
+        item.tagTop = Math.min(height - 20, item.tagTop)
+        lastTagBottom = item.tagTop + 20
+      }
+
+      setPositionedOverlays((previous) => {
+        if (previous.length === laidOut.length && previous.every((item, index) => {
+          const next = laidOut[index]
+          return item.id === next.id && item.label === next.label &&
+            Math.round(item.top) === Math.round(next.top) &&
+            Math.round(item.height) === Math.round(next.height) &&
+            Math.round(item.tagTop) === Math.round(next.tagTop) &&
+            item.priceLow === next.priceLow && item.priceHigh === next.priceHigh
+        })) return previous
+        return laidOut
+      })
+    }
+
+    updatePositions()
+    const chart = chartRef.current
+    const scale = chart?.timeScale()
+    scale?.subscribeVisibleLogicalRangeChange(updatePositions)
+    scale?.subscribeVisibleTimeRangeChange(updatePositions)
+    window.addEventListener('resize', updatePositions)
+    return () => {
+      scale?.unsubscribeVisibleLogicalRangeChange(updatePositions)
+      scale?.unsubscribeVisibleTimeRangeChange(updatePositions)
+      window.removeEventListener('resize', updatePositions)
+    }
+  }, [annotations, tradeLines, chartData, chartMode, pipSize, overlayLayoutRevision, isFullscreen])
+
+    // Live broker quote rails behave like MT5's optional Bid/Ask lines. The
   // SELL/BID rail meets the bid-based candle close; BUY/ASK stays spread-width
   // above it. The labels can be hidden independently without hiding the rails.
   useEffect(() => {
@@ -992,6 +1163,45 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
 
   return <div ref={containerRef} onPointerDownCapture={handleChartPointerDown} onPointerMoveCapture={handleChartPointerMove} onPointerUpCapture={handleChartPointerUp} onPointerCancel={handleChartPointerCancel} onPointerDown={placeTool} className={`shafx-chart-shell relative w-full overflow-hidden border border-shafx-border bg-shafx-bg touch-pan-y ${['level', 'alert', 'measure'].includes(toolMode) ? 'cursor-crosshair' : ''} ${chartFullscreen ? 'fixed inset-0 z-[200] h-[100svh] w-screen' : ''}`} style={{ height: chartFullscreen ? '100svh' : height, minHeight: 280 }}>
     <div ref={chartHostRef} className="absolute inset-0 z-0" aria-hidden="true" />
+    <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-[8] overflow-hidden">
+      {positionedOverlays.map((overlay) => {
+        const zone = overlay.kind === 'zone'
+        const left = zone ? '65%' : '48%'
+        return <React.Fragment key={overlay.id}>
+          <div
+            className="absolute"
+            style={{
+              top: overlay.top,
+              height: overlay.height,
+              left,
+              right: 98,
+              background: zone ? overlay.fill : 'transparent',
+              borderTop: zone ? '1px solid ' + overlay.border : 'none',
+              borderBottom: zone ? '1px solid ' + overlay.border : 'none',
+              borderLeft: zone ? '2px solid ' + overlay.color : 'none',
+              borderRadius: zone ? '5px 0 0 5px' : 0,
+            }}
+          />
+          {!zone && <div className="absolute h-px" style={{ top: overlay.y, left, right: 98, background: overlay.color, opacity: 0.85 }} />}
+          <div
+            className="absolute z-20 flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-1 font-mono shadow-sm"
+            style={{
+              top: overlay.tagTop,
+              right: 100,
+              maxWidth: '34%',
+              background: 'rgba(7, 10, 15, 0.94)',
+              borderColor: overlay.border,
+              color: overlay.color,
+            }}
+          >
+            <span className="text-[8px] font-bold uppercase tracking-[0.08em]">{overlay.label}</span>
+            <span className="text-[8px] tabular">{overlay.priceLow === overlay.priceHigh
+              ? overlay.priceLow.toFixed(quotePrecision)
+              : overlay.priceLow.toFixed(quotePrecision) + '–' + overlay.priceHigh.toFixed(quotePrecision)}</span>
+          </div>
+        </React.Fragment>
+      })}
+    </div>
     <div className="pointer-events-none absolute left-3 top-3 z-30 flex items-center gap-2 rounded-xl border border-shafx-border/70 bg-shafx-surface/88 px-2.5 py-1.5 shadow-md backdrop-blur">
       {!replayMode && countdown !== null && <span className="font-mono text-[8px] font-semibold tabular text-shafx-accent">CLOSE {formatCountdown(countdown)}</span>}
       {replayMode && <span className="font-mono text-[8px] font-semibold tabular text-shafx-accent">HISTORICAL</span>}
