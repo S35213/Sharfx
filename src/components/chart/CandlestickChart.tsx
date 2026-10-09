@@ -110,7 +110,9 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const [hoverCandle, setHoverCandle] = useState<{ time: number; open?: number; high?: number; low?: number; close: number } | null>(null)
   const chartDataSourceRef = useRef<OHLCV[]>(data)
   useEffect(() => { chartDataSourceRef.current = data }, [data])
-  const [timelineMarks, setTimelineMarks] = useState<Array<{ x: number; label: string; time: number }>>([])
+  const timelineHostRef = useRef<HTMLDivElement | null>(null)
+  const timelineNodesRef = useRef<Map<number, HTMLSpanElement>>(new Map())
+  const chartTimeSignature = chartData.map((candle) => Number(candle.time)).join(',')
   const priceLinesRef = useRef<Map<string, IPriceLine>>(new Map())
   const priceLinesSeriesRef = useRef<ShafxSeries | null>(null)
   const tradeMarkerSignatureRef = useRef('')
@@ -464,9 +466,37 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     }
   }, [chartMode, candleTheme, pipSize])
   useEffect(() => {
+    const host = timelineHostRef.current
+    const nodes = timelineNodesRef.current
+    const syncTimelineDom = (marks: Array<{ x: number; label: string; time: number }>): void => {
+      if (!host) return
+      const desired = new Set<number>()
+      for (const mark of marks) {
+        desired.add(mark.time)
+        let node = nodes.get(mark.time)
+        if (!node) {
+          node = document.createElement('span')
+          node.className = 'absolute top-1 -translate-x-1/2 whitespace-nowrap font-mono text-[8px] tabular text-shafx-textMuted sm:text-[9px]'
+          node.setAttribute('data-shafx-timeline-time', String(mark.time))
+          nodes.set(mark.time, node)
+          host.appendChild(node)
+        }
+        node.textContent = mark.label
+        node.style.left = mark.x + 'px'
+      }
+      for (const [time, node] of nodes) {
+        if (desired.has(time)) continue
+        if (node.parentNode === host) host.removeChild(node)
+        nodes.delete(time)
+      }
+    }
+
     const chart = chartRef.current
-    if (!chart || !chartData.length || !timeframe) {
-      setTimelineMarks([])
+    const chartTimes = chartTimeSignature
+      ? chartTimeSignature.split(',').map(Number).filter(Number.isFinite)
+      : []
+    if (!chart || chartTimes.length === 0 || !timeframe) {
+      syncTimelineDom([])
       return
     }
 
@@ -475,60 +505,45 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       const range = timeScale.getVisibleLogicalRange()
       const width = timeScale.width()
       if (!range || width <= 0) {
-        setTimelineMarks([])
+        syncTimelineDom([])
         return
       }
 
       const from = Math.max(0, Math.floor(range.from))
-      const to = Math.min(chartData.length - 1, Math.ceil(range.to))
+      const to = Math.min(chartTimes.length - 1, Math.ceil(range.to))
       const visibleCount = Math.max(1, to - from + 1)
       const pxPerBar = width / visibleCount
       const minimumLabelSpacing = width < 640 ? 62 : 74
 
-      // Adaptive density: when zoomed in enough, show every timeframe boundary;
-      // when zoomed out, progressively group bars while keeping all marks on
-      // exact timeframe boundaries. This mirrors the way MT5 avoids collisions.
+      // Adaptive density: show timeframe boundaries at a readable spacing,
+      // as in a trading terminal, without rerendering React children on every tick.
       const candidates = [1, 2, 4, 6, 12, 24, 48, 96, 192]
       const step = candidates.find((candidate) => candidate * pxPerBar >= minimumLabelSpacing) ?? 192
       const interval = timeframeSecondsFor(timeframe) * step
       const marks: Array<{ x: number; label: string; time: number }> = []
 
       for (let index = from; index <= to; index += 1) {
-        const candle = chartData[index]
-        if (!candle) continue
-        const timestamp = Number(candle.time)
+        const timestamp = chartTimes[index]
         if (!Number.isFinite(timestamp)) continue
-
-        // Keep marks on exact timeframe boundaries. For grouped labels, use
-        // the larger interval's boundary (e.g. M30+2 => every 60 minutes).
         if (Math.floor(timestamp / interval) * interval !== timestamp) continue
 
-        const x = timeScale.timeToCoordinate(candle.time as UTCTimestamp)
+        const x = timeScale.timeToCoordinate(timestamp as UTCTimestamp)
         if (x === null || x < -40 || x > width + 40) continue
 
         const date = new Date(timestamp * 1000)
         const label = timeframe === 'D1' || timeframe === 'W1'
-          ? String(date.getDate()).padStart(2, '0') + ' ' + date.toLocaleString('en-GB', { month: 'short' })
-          : date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })
+          ? String(date.getUTCDate()).padStart(2, '0') + ' ' + date.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' })
+          : date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' })
 
         marks.push({ x: Number(x), label, time: timestamp })
       }
 
       const selected: Array<{ x: number; label: string; time: number }> = []
-      for (const mark of marks.sort((a, b) => a.x - b.x)) {
+      for (const mark of marks.sort((left, right) => left.x - right.x)) {
         const previous = selected[selected.length - 1]
         if (!previous || mark.x - previous.x >= minimumLabelSpacing) selected.push(mark)
       }
-      setTimelineMarks((current) => {
-        // Live quotes can move timeline coordinates by fractions of a pixel.
-        // Keep the existing React nodes when the visible time boundaries and
-        // positions are effectively unchanged, rather than churning child DOM.
-        const unchanged = current.length === selected.length && current.every((mark, index) => {
-          const next = selected[index]
-          return mark.time === next.time && mark.label === next.label && Math.abs(mark.x - next.x) < 0.5
-        })
-        return unchanged ? current : selected
-      })
+      syncTimelineDom(selected)
     }
 
     updateTimeline()
@@ -538,8 +553,9 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     return () => {
       timeScale.unsubscribeVisibleLogicalRangeChange(updateTimeline)
       window.removeEventListener('resize', onResize)
+      syncTimelineDom([])
     }
-  }, [chartData, timeframe, isFullscreen])
+  }, [chartTimeSignature, timeframe, isFullscreen])
 
 
   // All price-sensitive levels use Lightweight Charts' native price-line
@@ -1080,17 +1096,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       </div>
     </div>}
 
-    <div className="pointer-events-none absolute bottom-0 left-0 right-[82px] z-30 h-8 border-t border-shafx-border/70 bg-shafx-bg/95 sm:right-[96px]">
-      {timelineMarks.map((mark) => (
-        <span
-          key={mark.time}
-          className="absolute top-1 -translate-x-1/2 whitespace-nowrap font-mono text-[8px] tabular text-shafx-textMuted sm:text-[9px]"
-          style={{ left: mark.x }}
-        >
-          {mark.label}
-        </span>
-      ))}
-    </div>
+    <div ref={timelineHostRef} aria-hidden="true" className="pointer-events-none absolute bottom-0 left-0 right-[82px] z-30 h-8 border-t border-shafx-border/70 bg-shafx-bg/95 sm:right-[96px]" />
     <div
       aria-label="Price scale"
       className="absolute right-0 top-10 bottom-8 z-20 w-[82px] touch-none cursor-ns-resize sm:w-[96px]"
