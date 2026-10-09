@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type { Timeframe } from '../../types'
 import {
   cTraderQuoteBucket,
   normalizeCTraderHistoricalCandles,
@@ -37,18 +38,18 @@ describe('cTrader chart timestamps', () => {
 
   it('buckets quotes into Unix seconds for every supported timeframe', () => {
     const timestamp = Date.UTC(2026, 9, 9, 11, 59, 32)
-    const expected: Record<string, number> = {
-      M1: 60,
-      M5: 300,
-      M15: 900,
-      M30: 1800,
-      H1: 3600,
-      H4: 14400,
-      D1: 86400,
-    }
+    const expected: Array<{ timeframe: Timeframe; seconds: number }> = [
+      { timeframe: 'M1', seconds: 60 },
+      { timeframe: 'M5', seconds: 300 },
+      { timeframe: 'M15', seconds: 900 },
+      { timeframe: 'M30', seconds: 1800 },
+      { timeframe: 'H1', seconds: 3600 },
+      { timeframe: 'H4', seconds: 14400 },
+      { timeframe: 'D1', seconds: 86400 },
+    ]
 
-    for (const [timeframe, seconds] of Object.entries(expected)) {
-      const bucket = cTraderQuoteBucket(timestamp, timeframe as keyof typeof expected)
+    for (const { timeframe, seconds } of expected) {
+      const bucket = cTraderQuoteBucket(timestamp, timeframe)
       expect(bucket).toBe(Math.floor(timestamp / 1000 / seconds) * seconds)
       expect(bucket).toBeLessThan(2_000_000_000)
     }
