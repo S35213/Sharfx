@@ -16,6 +16,7 @@ import { formatCurrency, formatPrice } from '../../lib/format'
 import { buyDerivProposal, getDerivQuote, type DerivOrderConnection, type DerivProposalQuote } from '../../data/deriv/derivTrading'
 import type { ChartAnnotation } from '../chart/CandlestickChart'
 import { CTraderManualTicket } from './CTraderManualTicket'
+import { getQuoteTickDirection, getTradeButtonDirection, type QuoteTickDirection } from './quoteTickDirection'
 import type { ActiveProviderSelection } from '../../data/provider/providerConnections'
 
 interface Props {
@@ -113,6 +114,17 @@ const LegacyMultiplierOrderPanel: React.FC<Props> = ({
   const [error, setError] = useState('')
   const [now, setNow] = useState(0)
   const newTradeRef = useRef<HTMLDivElement | null>(null)
+  const previousBidRef = useRef<number | null>(null)
+  const quoteToneTimerRef = useRef<number | null>(null)
+  const [marketDirection, setMarketDirection] = useState<QuoteTickDirection>('neutral')
+
+  const buyButtonDirection = getTradeButtonDirection(marketDirection, 'BUY')
+  const sellButtonDirection = getTradeButtonDirection(marketDirection, 'SELL')
+  const tradeSideButtonTone = (direction: QuoteTickDirection): string => direction === 'up'
+    ? 'border-shafx-success bg-shafx-success/35'
+    : direction === 'down'
+      ? 'border-shafx-danger bg-shafx-danger/35'
+      : 'border-shafx-border bg-[#101720]'
 
   useEffect(() => {
     setSide(aiSetup?.direction ?? 'BUY')
@@ -127,6 +139,29 @@ const LegacyMultiplierOrderPanel: React.FC<Props> = ({
     setState('planning')
     setError('')
   }, [activePosition?.providerOrderId])
+
+  useEffect(() => {
+    const bid = Number(bidPrice ?? currentPrice)
+    if (!Number.isFinite(bid) || bid <= 0) return
+
+    const previous = previousBidRef.current
+    previousBidRef.current = bid
+    if (previous === null) return
+
+    const nextDirection = getQuoteTickDirection(bid, previous)
+    if (nextDirection === 'neutral') return
+
+    setMarketDirection(nextDirection)
+    if (quoteToneTimerRef.current !== null) window.clearTimeout(quoteToneTimerRef.current)
+    quoteToneTimerRef.current = window.setTimeout(() => {
+      setMarketDirection('neutral')
+      quoteToneTimerRef.current = null
+    }, 15000)
+  }, [bidPrice, currentPrice])
+
+  useEffect(() => () => {
+    if (quoteToneTimerRef.current !== null) window.clearTimeout(quoteToneTimerRef.current)
+  }, [])
 
   useEffect(() => {
     if (!activePosition?.openTime) return
@@ -167,8 +202,17 @@ const LegacyMultiplierOrderPanel: React.FC<Props> = ({
     if (activePosition) {
       const entryColor = activePosition.type === 'BUY' ? '#22D3A5' : '#FF5C75'
       const entryLabel = activePosition.type === 'BUY' ? 'BUY ENTRY' : 'SELL ENTRY'
+      const currentExitPrice = activePosition.type === 'BUY' ? bidPrice : askPrice
+      const currentLine = lineFor(
+        activePosition.id + '-current',
+        currentExitPrice,
+        activePosition.type + ' CURRENT / EXIT',
+        Number(activePosition.profit ?? 0) >= 0 ? '#22D3A5' : '#FF5C75',
+        2,
+      )
       return [
         lineFor(activePosition.id + '-entry', activePosition.entryPrice, entryLabel, entryColor, 2),
+        currentLine,
         lineFor(
           activePosition.id + '-sl',
           activePosition.plannedStopLossPrice,
@@ -190,7 +234,7 @@ const LegacyMultiplierOrderPanel: React.FC<Props> = ({
       lineFor('plan-sl', plan.slPrice, 'SL ' + moneyLabel(stopLossAmount, accountCurrency), '#F6465D', 1),
       lineFor('plan-tp', plan.tpPrice, 'TP ' + moneyLabel(takeProfitAmount, accountCurrency), '#0ECB81', 1),
     ].filter((line): line is ChartAnnotation => Boolean(line))
-  }, [activePosition, accountCurrency, plan.slPrice, plan.tpPrice, stopLossAmount, takeProfitAmount])
+  }, [activePosition, accountCurrency, askPrice, bidPrice, plan.slPrice, plan.tpPrice, stopLossAmount, takeProfitAmount])
 
   useEffect(() => {
     onTradeLinesChange?.(draftLines)
@@ -492,33 +536,35 @@ const LegacyMultiplierOrderPanel: React.FC<Props> = ({
         <div className="mt-3 grid grid-cols-2 gap-1.5">
           <button
             type="button"
+            data-market-direction={marketDirection}
+            data-button-tone={buyButtonDirection}
             onClick={() => chooseSide('BUY')}
             disabled={busy}
             aria-pressed={side === 'BUY'}
-            className={'min-h-14 border px-3 py-2 text-left transition ' + (side === 'BUY'
-              ? 'border-shafx-success bg-shafx-success/[0.12] shadow-[inset_0_0_0_1px_rgba(34,211,165,.18)]'
-              : 'border-shafx-border bg-shafx-surface hover:border-shafx-success/40 hover:bg-shafx-bg')}
+            aria-label="Select BUY at Ask price"
+            className={'shafx-trade-side-button min-h-14 border px-3 py-2 text-left text-shafx-text transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ' + tradeSideButtonTone(buyButtonDirection) + (side === 'BUY' ? ' ring-2 ring-white/90 ring-offset-1 ring-offset-[#080D13]' : ' hover:brightness-110')}
           >
-            <span className="flex items-center justify-between gap-2">
-              <span className={'flex items-center gap-1.5 text-[10px] font-bold tracking-wide ' + (side === 'BUY' ? 'text-shafx-success' : 'text-shafx-textMuted')}><ArrowUpRight className="h-3.5 w-3.5" />BUY</span>
-              {side === 'BUY' && <span className="text-[7px] font-semibold uppercase tracking-[0.12em] text-shafx-success">Selected</span>}
+            <span className="flex items-center justify-between gap-2 text-[10px] font-bold">
+              <span><ArrowUpRight className="mr-1 inline h-3.5 w-3.5" />BUY</span>
+              {side === 'BUY' && <span className="text-[7px] font-semibold uppercase tracking-[0.12em]">Selected</span>}
             </span>
-            <span className="mt-1 block text-[8px] text-shafx-textMuted">UP • ASK {marketMetrics.ask ? formatPrice(marketMetrics.ask, symbolSpec.pricePrecision) : '—'}</span>
+            <span style={{ color: '#E7EAF0' }} className="mt-1 block font-mono text-[10px] tabular-nums">ASK {marketMetrics.ask ? formatPrice(marketMetrics.ask, symbolSpec.pricePrecision) : '—'}</span>
           </button>
           <button
             type="button"
+            data-market-direction={marketDirection}
+            data-button-tone={sellButtonDirection}
             onClick={() => chooseSide('SELL')}
             disabled={busy}
             aria-pressed={side === 'SELL'}
-            className={'min-h-14 border px-3 py-2 text-left transition ' + (side === 'SELL'
-              ? 'border-shafx-danger bg-shafx-danger/[0.12] shadow-[inset_0_0_0_1px_rgba(255,92,117,.18)]'
-              : 'border-shafx-border bg-shafx-surface hover:border-shafx-danger/40 hover:bg-shafx-bg')}
+            aria-label="Select SELL at Bid price"
+            className={'shafx-trade-side-button min-h-14 border px-3 py-2 text-left text-shafx-text transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ' + tradeSideButtonTone(sellButtonDirection) + (side === 'SELL' ? ' ring-2 ring-white/90 ring-offset-1 ring-offset-[#080D13]' : ' hover:brightness-110')}
           >
-            <span className="flex items-center justify-between gap-2">
-              <span className={'flex items-center gap-1.5 text-[10px] font-bold tracking-wide ' + (side === 'SELL' ? 'text-shafx-danger' : 'text-shafx-textMuted')}><ArrowDownRight className="h-3.5 w-3.5" />SELL</span>
-              {side === 'SELL' && <span className="text-[7px] font-semibold uppercase tracking-[0.12em] text-shafx-danger">Selected</span>}
+            <span className="flex items-center justify-between gap-2 text-[10px] font-bold">
+              <span><ArrowDownRight className="mr-1 inline h-3.5 w-3.5" />SELL</span>
+              {side === 'SELL' && <span className="text-[7px] font-semibold uppercase tracking-[0.12em]">Selected</span>}
             </span>
-            <span className="mt-1 block text-[8px] text-shafx-textMuted">DOWN • BID {marketMetrics.bid ? formatPrice(marketMetrics.bid, symbolSpec.pricePrecision) : '—'}</span>
+            <span style={{ color: '#E7EAF0' }} className="mt-1 block font-mono text-[10px] tabular-nums">BID {marketMetrics.bid ? formatPrice(marketMetrics.bid, symbolSpec.pricePrecision) : '—'}</span>
           </button>
         </div>
 
