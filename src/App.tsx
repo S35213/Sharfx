@@ -32,18 +32,11 @@ import { analyzeMarketStructure, findSwingPoints } from './engine/marketStructur
 import { analyzeSupportResistance } from './engine/supportResistance'
 import { TIMEFRAMES, type AccountData, type BotPaperTrade, type MarketAnalysis, type MarketPair, type OHLCV, type SymbolSpec, type Timeframe, type TradeOrder } from './types'
 import { normalizeMarketCandles } from './lib/marketCandles'
+import { normalizeProviderSymbol } from './lib/normalizeProviderSymbol'
 import type { SetupCandidate } from './engine/setup/types'
 import { mockWatchlist } from './data/mock/watchlist'
 import { fetchDerivActiveForexSymbols, fetchDerivMultiTimeframeCandles, subscribeDerivForexQuotes } from './data/deriv/DerivPublicMarketFeed'
 import { applyCTraderQuoteToCandles, cTraderQuoteBucket, fetchCTraderHistoricalCandles, isCTraderQuoteBucketCurrent, mergeCTraderHistoricalAndLiveCandles, subscribeCTraderLiveQuote } from './data/ctrader/CTraderLiveQuote'
-
-const normalizeProviderSymbol = (value: string): string => {
-  if (/^frx[A-Z0-9]{6}$/i.test(value)) {
-    const pair = value.slice(3).toUpperCase()
-    return pair.slice(0, 3) + '/' + pair.slice(3)
-  }
-  return value
-}
 
 const providerPositionToTrade = (position: ProviderPosition): TradeOrder => {
   const metadata = position.metadata || {}
