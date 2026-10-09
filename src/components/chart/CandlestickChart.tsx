@@ -1075,6 +1075,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       autoScale: false,
       scaleMargins: { top: margin, bottom: margin },
     })
+    setOverlayLayoutRevision((revision) => revision + 1)
   }
 
   const handlePriceAxisPointerUp = (event: React.PointerEvent<HTMLDivElement>): void => {
@@ -1161,7 +1162,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
 
   const chartFullscreen = isFullscreen;
 
-  return <div ref={containerRef} onPointerDownCapture={handleChartPointerDown} onPointerMoveCapture={handleChartPointerMove} onPointerUpCapture={handleChartPointerUp} onPointerCancel={handleChartPointerCancel} onPointerDown={placeTool} className={`shafx-chart-shell relative w-full overflow-hidden border border-shafx-border bg-shafx-bg touch-pan-y ${['level', 'alert', 'measure'].includes(toolMode) ? 'cursor-crosshair' : ''} ${chartFullscreen ? 'fixed inset-0 z-[200] h-[100svh] w-screen' : ''}`} style={{ height: chartFullscreen ? '100svh' : height, minHeight: 280 }}>
+  return <div ref={containerRef} onPointerDownCapture={handleChartPointerDown} onPointerMoveCapture={handleChartPointerMove} onPointerUpCapture={handleChartPointerUp} onPointerCancel={handleChartPointerCancel} onPointerDown={placeTool} onWheel={() => setOverlayLayoutRevision((revision) => revision + 1)} className={`shafx-chart-shell relative w-full overflow-hidden border border-shafx-border bg-shafx-bg touch-pan-y ${['level', 'alert', 'measure'].includes(toolMode) ? 'cursor-crosshair' : ''} ${chartFullscreen ? 'fixed inset-0 z-[200] h-[100svh] w-screen' : ''}`} style={{ height: chartFullscreen ? '100svh' : height, minHeight: 280 }}>
     <div ref={chartHostRef} className="absolute inset-0 z-0" aria-hidden="true" />
     <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-[8] overflow-hidden">
       {positionedOverlays.map((overlay) => {
@@ -1169,7 +1170,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         const left = zone ? '65%' : '48%'
         return <React.Fragment key={overlay.id}>
           <div
-            className="absolute"
+            className={zone ? 'shafx-market-zone-band absolute' : 'shafx-trade-level-segment absolute'}
             style={{
               top: overlay.top,
               height: overlay.height,
@@ -1182,9 +1183,9 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
               borderRadius: zone ? '5px 0 0 5px' : 0,
             }}
           />
-          {!zone && <div className="absolute h-px" style={{ top: overlay.y, left, right: 98, background: overlay.color, opacity: 0.85 }} />}
+          {!zone && <div className="shafx-trade-level-segment absolute h-px" style={{ top: overlay.y, left, right: 98, background: overlay.color, opacity: 0.85 }} />}
           <div
-            className="absolute z-20 flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-1 font-mono shadow-sm"
+            className="shafx-chart-overlay-tag absolute z-20 flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-1 font-mono shadow-sm"
             style={{
               top: overlay.tagTop,
               right: 100,
