@@ -669,7 +669,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     return () => {
       // Price-line objects are intentionally retained between quote ticks.
     }
-  }, [askPrice, bidPrice, lastClose, showPriceLabels])
+  }, [askPrice, bidPrice, chartMode, lastClose, showPriceLabels])
 
   useEffect(() => {
     const chart = chartRef.current
