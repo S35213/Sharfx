@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Timeframe } from '../../types'
 import {
   applyCTraderQuoteToCandles,
+  mergeCTraderHistoricalAndLiveCandles,
   cTraderQuoteBucket,
   isCTraderQuoteBucketCurrent,
   normalizeCTraderHistoricalCandles,
@@ -62,6 +63,50 @@ describe('cTrader live candle updates', () => {
     expect(applyCTraderQuoteToCandles(initial, 1_791_547_260, Number.NaN)).toEqual(initial)
   })
 })
+
+  it('preserves quote-updated candles when the slower history request completes', () => {
+    const firstTime = 1_791_547_200
+    const currentTime = firstTime + 60
+    const nextTime = currentTime + 60
+    const historical = [
+      candle(firstTime, 1.09990, 1.10020, 1.09980, 1.10010),
+      candle(currentTime, 1.10010, 1.10030, 1.10000, 1.10020),
+    ]
+    const live = [
+      candle(currentTime, 1.10010, 1.10050, 1.09995, 1.10045),
+      candle(nextTime, 1.10045, 1.10045, 1.10045, 1.10045),
+    ]
+
+    const merged = mergeCTraderHistoricalAndLiveCandles(historical, live)
+
+    expect(merged.map((item) => item.time)).toEqual([firstTime, currentTime, nextTime])
+    expect(merged[1]).toMatchObject({
+      open: 1.10010,
+      high: 1.10050,
+      low: 1.09995,
+      close: 1.10045,
+    })
+    expect(merged[2]).toMatchObject({
+      time: nextTime,
+      open: 1.10045,
+      high: 1.10045,
+      low: 1.10045,
+      close: 1.10045,
+    })
+  })
+
+  it('does not reinsert stale live candles missing from newer broker history', () => {
+    const firstTime = 1_791_547_200
+    const historical = [
+      candle(firstTime, 1.10000, 1.10020, 1.09980, 1.10010),
+      candle(firstTime + 120, 1.10010, 1.10030, 1.10000, 1.10020),
+    ]
+    const staleLive = [candle(firstTime + 60, 1.10010, 1.10040, 1.10000, 1.10030)]
+
+    const merged = mergeCTraderHistoricalAndLiveCandles(historical, staleLive)
+
+    expect(merged.map((item) => item.time)).toEqual([firstTime, firstTime + 120])
+  })
 
 describe('cTrader chart timestamps', () => {
   it('rejects a stale quote before it can move BUY/SELL markers beyond the chart candles', () => {
