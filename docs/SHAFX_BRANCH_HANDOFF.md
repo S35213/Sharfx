@@ -34,6 +34,17 @@
 8. **Do not claim a real broker flow is working unless it has actually been exercised against the provider.**
 9. **Every meaningful milestone must leave a note in this file and/or the implementation tree, including failures and why a direction changed.**
 
+## Chart regression repair — 2026-10-09
+
+Current chart work is isolated to `test/rebuild-deriv-native-manual-20260930` and Render service `sharfx-deriv-render`.
+
+- Code commit `e175b48dff11adb0901f556422d5743d163e4911`: chart library DOM is isolated in an empty child host; chart stays mounted while timeframe history reloads; hover timestamp uses Unix seconds correctly.
+- Code commit `41a2157ec89c3c7be8752663851a5cfe0e9df98a`: clustered structural/liquidity price levels preserve their constituent labels; added regressions for support + buy-side liquidity and coincident BSL + SSL.
+- Live Render deploy at verification: `dep-db4bljoae00c739ta5j0`. Build and lint passed.
+- TinyFish repeated UI-only timeframe tests did not reproduce the earlier D1 `insertBefore` crash. M1/M5/H1/D1/W1 plus other runs covering M15/M30/H4 were exercised; axes/candles and bid/ask remained visible, and combined BSL/SSL/structure labels appeared where levels clustered.
+- Caveats: full suite is 302/304 because of two unrelated existing failures (`server/ctrader.test.js` order status and `src/lib/cfdRiskEngine.test.ts` quote-currency conversion). Browser tooling could not perform wheel zoom, price-axis drag, or responsive resize, so those exact gestures remain unverified. One post-patch inspector-associated crash was seen directly after a page-description action, but not in follow-up UI-only timeframe clicks; its cause is not proven.
+- Do not merge to `main` or deploy to Cloudflare production. Do not touch the other Render projects. Do not call the full chart issue completely verified until the zoom/axis-drag/resize gestures can be checked manually.
+
 ## Destination change
 
 ### Old destination — cancelled as the primary direction
