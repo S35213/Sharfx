@@ -224,6 +224,7 @@ const TerminalContent: React.FC = () => {
   const liveCandlesRef = useRef<OHLCV[]>([])
   const historyWarmInFlightRef = useRef<Record<string, Promise<Partial<Record<(typeof TIMEFRAMES)[number], OHLCV[]>>>>>({})
   const latestCTraderPriceRef = useRef<number | null>(null)
+  const liveQuoteIdentityRef = useRef<string | null>(null)
   const toastId = useRef(0)
   const lastStreamToastAt = useRef(0)
   const lastStreamToastText = useRef('')
@@ -235,9 +236,10 @@ const TerminalContent: React.FC = () => {
   }, [liveCandles])
 
   useEffect(() => {
-    // Never carry a previous instrument/timeframe's bid/ask onto a new chart.
-    setLiveBidPrice(0)
-    setLiveAskPrice(0)
+    // Invalidate the last quote when the chart identity changes. The rendered
+    // values are gated by this identity, avoiding stale tags without an extra
+    // setState render from inside an effect.
+    liveQuoteIdentityRef.current = null
     latestCTraderPriceRef.current = null
   }, [selectedSymbol, timeframe, activeProviderSelection?.providerId])
 
@@ -273,6 +275,7 @@ const TerminalContent: React.FC = () => {
     setLiveBidPrice(0)
     setLiveAskPrice(0)
     latestCTraderPriceRef.current = null
+    liveQuoteIdentityRef.current = null
     const last = nextCandles[nextCandles.length - 1]
     setCurrentPrice(last?.close ?? 0)
     setMarketTimestamp(last ? Math.floor(last.time / 1000) : 0)
@@ -721,6 +724,7 @@ const TerminalContent: React.FC = () => {
       }
 
       latestCTraderPriceRef.current = price
+      liveQuoteIdentityRef.current = subscriptionSymbol + ':' + subscriptionTimeframe + ':ctrader'
       setLiveBidPrice(Number.isFinite(bid) && bid > 0 ? bid : price)
       setLiveAskPrice(Number.isFinite(ask) && ask > 0 ? ask : price)
       setCurrentPrice(price)
@@ -770,13 +774,25 @@ const TerminalContent: React.FC = () => {
   // away the final price digit on each tick. The spread remains a display estimate until
   // a broker-side bid/ask feed is available.
   const usingCTrader = activeProviderSelection?.providerId === 'ctrader'
-  const chartBidRaw = usingCTrader && liveBidPrice > 0
-    ? liveBidPrice
-    : Number.isFinite(currentPrice) && currentPrice > 0 ? currentPrice : (liveCandles[liveCandles.length - 1]?.close ?? 0)
+  const cTraderQuoteMatchesChart = usingCTrader &&
+    liveQuoteIdentityRef.current === selectedSymbol + ':' + timeframe + ':ctrader'
+  const latestCandleClose = Number(liveCandles[liveCandles.length - 1]?.close ?? 0)
+  const chartBidRaw = usingCTrader
+    ? cTraderQuoteMatchesChart && liveBidPrice > 0 ? liveBidPrice : latestCandleClose
+    : Number.isFinite(currentPrice) && currentPrice > 0 ? currentPrice : latestCandleClose
   const chartBidPrice = Number(chartBidRaw.toFixed(symbolSpec.pricePrecision))
   const chartSpread = Math.max(symbolSpec.pipSize * 0.2, symbolSpec.pipSize / 10)
-  const chartAskPrice = usingCTrader && liveAskPrice > 0
-    ? Number(liveAskPrice.toFixed(symbolSpec.pricePrecision))
+  const chartAskPrice = usingCTrader
+    ? cTraderQuoteMatchesChart && liveAskPrice > 0
+      ? Number(liveAskPrice.toFixed(symbolSpec.pricePrecision))
+      : chartBidPrice > 0
+        ? (() => {
+          const chartAskCandidate = Number((chartBidPrice + chartSpread).toFixed(symbolSpec.pricePrecision))
+          return chartAskCandidate > chartBidPrice
+            ? chartAskCandidate
+            : Number((chartBidPrice + symbolSpec.pipSize).toFixed(symbolSpec.pricePrecision))
+        })()
+        : 0
     : (() => {
       const chartAskCandidate = Number((chartBidPrice + chartSpread).toFixed(symbolSpec.pricePrecision))
       return chartAskCandidate > chartBidPrice
