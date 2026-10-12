@@ -163,7 +163,8 @@ export const CTraderManualTicket: React.FC<Props> = ({
   const effectiveSymbol = useMemo(() => providerSymbolSpec(symbolSpec, instrument), [instrument, symbolSpec])
   // Use the actual receipt clock. The one-second UI clock can be behind a freshly
   // delivered quote, so comparing the two creates a brief false "waiting" state.
-  const quoteFresh = quoteReceivedAtMs > 0 && Date.now() - quoteReceivedAtMs <= 15_000
+  const quoteAgeMs = Date.now() - quoteReceivedAtMs
+  const quoteFresh = quoteReceivedAtMs > 0 && quoteAgeMs >= 0 && quoteAgeMs <= 15_000
 
   const stopPips = Number(stopPipsInput)
   const targetPips = Number(targetPipsInput)
@@ -226,7 +227,7 @@ export const CTraderManualTicket: React.FC<Props> = ({
     const direction = getQuoteTickDirection(marketBid, previous)
     if (direction !== 'neutral') {
       setSellMarketDirection(direction)
-      lastBidTickAtRef.current = now
+      lastBidTickAtRef.current = Date.now()
     } else if (!lastBidTickAtRef.current || now - lastBidTickAtRef.current >= 15_000) {
       setSellMarketDirection('neutral')
     }
@@ -246,7 +247,7 @@ export const CTraderManualTicket: React.FC<Props> = ({
     const direction = getQuoteTickDirection(marketAsk, previous)
     if (direction !== 'neutral') {
       setBuyMarketDirection(direction)
-      lastAskTickAtRef.current = now
+      lastAskTickAtRef.current = Date.now()
     } else if (!lastAskTickAtRef.current || now - lastAskTickAtRef.current >= 15_000) {
       setBuyMarketDirection('neutral')
     }
