@@ -45,7 +45,7 @@ export const buildOpenPositionChartLines = (
     result.push({
       id: position.id + '-sl',
       price: stopLossPrice,
-      label: 'STOP LOSS',
+      label: position.brokerProtectionConfirmed === false ? 'STOP LOSS — UNCONFIRMED' : 'STOP LOSS',
       color: '#FF5C75',
       lineWidth: 2,
     })
@@ -59,7 +59,7 @@ export const buildOpenPositionChartLines = (
     result.push({
       id: position.id + '-tp',
       price: takeProfitPrice,
-      label: 'TAKE PROFIT',
+      label: position.brokerProtectionConfirmed === false ? 'TAKE PROFIT — UNCONFIRMED' : 'TAKE PROFIT',
       color: '#22D3A5',
       lineWidth: 2,
     })
