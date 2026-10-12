@@ -125,6 +125,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const lineLabelSyncRef = useRef<(() => void) | null>(null)
   const [bidTickDirection, setBidTickDirection] = useState<QuoteTickDirection>('neutral')
   const [askTickDirection, setAskTickDirection] = useState<QuoteTickDirection>('neutral')
+  const [isViewingHistory, setIsViewingHistory] = useState(false)
   const previousBidQuoteRef = useRef<number | null>(null)
   const previousAskQuoteRef = useRef<number | null>(null)
   const lastBidTickAtRef = useRef(0)
@@ -226,6 +227,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       const lastIndex = latestIndexRef.current
       if (lastIndex < 0) {
         followRealtimeRef.current = true
+        setIsViewingHistory(false)
         return
       }
 
@@ -233,11 +235,16 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       // the user is actively dragging/zooming. Pointer-up evaluates the final
       // range once the gesture is complete.
       if (chartInteractionRef.current) {
-        if (range.to < lastIndex - 1) followRealtimeRef.current = false
+        if (range.to < lastIndex - 1) {
+          followRealtimeRef.current = false
+          setIsViewingHistory(true)
+        }
         return
       }
 
-      followRealtimeRef.current = range.to >= lastIndex - 1
+      const followingLiveEdge = range.to >= lastIndex - 1
+      followRealtimeRef.current = followingLiveEdge
+      setIsViewingHistory(!followingLiveEdge)
     }
     chart.timeScale().subscribeVisibleLogicalRangeChange(onVisibleRangeChange)
     ro.observe(el)
@@ -271,6 +278,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       // Clearing the series avoids showing stale bars without recreating the DOM.
       if (seriesRef.current) seriesRef.current.setData([])
       latestIndexRef.current = -1
+      setIsViewingHistory(false)
       renderedFirstTimeRef.current = null
       renderedLastTimeRef.current = null
       renderedDataLengthRef.current = 0
@@ -555,9 +563,11 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     const host = lineLabelsHostRef.current
     if (!series) return
 
-    const quoteYs = [bidPrice, askPrice]
-      .filter((price): price is number => Number.isFinite(price) && Number(price) > 0)
-      .map((price) => series.priceToCoordinate(Number(price)))
+    const quoteYs = quoteReady && !isViewingHistory
+      ? [bidPrice, askPrice]
+          .filter((price): price is number => Number.isFinite(price) && Number(price) > 0)
+          .map((price) => series.priceToCoordinate(Number(price)))
+      : []
     const tradeLineYs = tradeLines
       .filter((line) => Number.isFinite(line.price) && line.price > 0)
       .map((line) => series.priceToCoordinate(line.price))
@@ -670,8 +680,9 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       : activePositionCurrentLine?.label.toUpperCase().startsWith('SELL')
         ? 'SELL'
         : null
-    const labelBid = quoteReady && Number.isFinite(bidPrice) && Number(bidPrice) > 0 ? Number(bidPrice) : 0
-    const labelAsk = quoteReady && Number.isFinite(askPrice) && Number(askPrice) > 0 ? Number(askPrice) : 0
+    const quoteTagsReady = quoteReady && !isViewingHistory
+    const labelBid = quoteTagsReady && Number.isFinite(bidPrice) && Number(bidPrice) > 0 ? Number(bidPrice) : 0
+    const labelAsk = quoteTagsReady && Number.isFinite(askPrice) && Number(askPrice) > 0 ? Number(askPrice) : 0
     if (labelBid > 0 && activePositionSide !== 'BUY') {
       labelCandidates.push({ id: 'shafx-live-bid-label', price: labelBid, label: 'BID', color: bidQuoteTone, lineWidth: 1 })
     }
@@ -787,7 +798,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       }
       lineLabelSyncRef.current()
     }
-  }, [annotations, armedAlerts, askPrice, bidPrice, bidQuoteTone, chartMode, lastClose, pipSize, quoteReady, askQuoteTone, showPriceLabels, tradeLines, userLevels])
+  }, [annotations, armedAlerts, askPrice, bidPrice, bidQuoteTone, chartMode, isViewingHistory, lastClose, pipSize, quoteReady, askQuoteTone, showPriceLabels, tradeLines, userLevels])
 
   useEffect(() => {
     const chart = chartRef.current
@@ -859,8 +870,9 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       }
     }
 
-    const bid = quoteReady && Number.isFinite(bidPrice) && Number(bidPrice) > 0 ? Number(bidPrice) : 0
-    const ask = quoteReady && Number.isFinite(askPrice) && Number(askPrice) > 0 ? Number(askPrice) : 0
+    const quotesVisible = quoteReady && !isViewingHistory
+    const bid = quotesVisible && Number.isFinite(bidPrice) && Number(bidPrice) > 0 ? Number(bidPrice) : 0
+    const ask = quotesVisible && Number.isFinite(askPrice) && Number(askPrice) > 0 ? Number(askPrice) : 0
 
     // Actual positions replace a same-side quote rail. No historical close is
     // passed off as a current quote while the live feed is unavailable.
@@ -870,7 +882,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     return () => {
       // Price-line objects are intentionally retained between quote ticks.
     }
-  }, [askPrice, bidPrice, bidQuoteTone, chartMode, quoteReady, askQuoteTone, showPriceLabels, tradeLines])
+  }, [askPrice, bidPrice, bidQuoteTone, chartMode, quoteReady, askQuoteTone, showPriceLabels, tradeLines, isViewingHistory])
 
 
   useEffect(() => {
@@ -1024,7 +1036,9 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       const range = chartRef.current?.timeScale().getVisibleLogicalRange()
       const lastIndex = latestIndexRef.current
       if (range && lastIndex >= 0) {
-        followRealtimeRef.current = range.to >= lastIndex - 1
+        const followingLiveEdge = range.to >= lastIndex - 1
+        followRealtimeRef.current = followingLiveEdge
+        setIsViewingHistory(!followingLiveEdge)
       }
     }
 
