@@ -14,3 +14,10 @@ export const getTradeButtonDirection = (
   if (side !== 'BUY' && side !== 'SELL') return 'neutral'
   return marketDirection
 }
+
+/** MetaTrader-style quote text: blue uptick, red downtick, neutral when stale/unavailable. */
+export const getQuoteTickColor = (direction: QuoteTickDirection): string => {
+  if (direction === 'up') return '#2F80FF'
+  if (direction === 'down') return '#F04452'
+  return '#DDE4EC'
+}

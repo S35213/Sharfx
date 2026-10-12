@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { getQuoteTickDirection } from './quoteTickDirection'
+import { getQuoteTickColor, getQuoteTickDirection } from './quoteTickDirection'
 
 describe('getQuoteTickDirection', () => {
-  it('marks an actual upward quote move green/up', () => {
+  it('marks an actual upward quote move blue/up', () => {
     expect(getQuoteTickDirection(1.12001, 1.12)).toBe('up')
   })
 
@@ -33,5 +33,14 @@ describe('getTradeButtonDirection', () => {
     const { getTradeButtonDirection } = await import('./quoteTickDirection')
     expect(getTradeButtonDirection('neutral', 'BUY')).toBe('neutral')
     expect(getTradeButtonDirection('neutral', 'SELL')).toBe('neutral')
+  })
+})
+
+
+describe('getQuoteTickColor', () => {
+  it('uses blue for upticks, red for downticks, and neutral for unavailable prices', () => {
+    expect(getQuoteTickColor('up')).toBe('#2F80FF')
+    expect(getQuoteTickColor('down')).toBe('#F04452')
+    expect(getQuoteTickColor('neutral')).toBe('#DDE4EC')
   })
 })

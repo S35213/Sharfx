@@ -7,6 +7,7 @@ import { buildTradeChartMarkers, type TradeChartMarker } from './buildTradeChart
 import { isPriceLevelOccludedByQuote } from './priceLineVisibility'
 import { resolvePriceLabelY } from './priceLineLabelLayout'
 import { getCandleCloseCountdown } from './candleCountdown'
+import { getQuoteTickColor, getQuoteTickDirection, type QuoteTickDirection } from '../order/quoteTickDirection'
 
 export interface ChartAnnotation { id: string; price: number; label: string; color: string; lineWidth?: 1 | 2 | 3 | 4 }
 export type ChartToolMode = 'cursor' | 'crosshair' | 'level' | 'measure' | 'alert'
@@ -28,6 +29,7 @@ interface CandlestickChartProps {
   tradeMarkers?: TradeChartMarker[]
   candleTheme?: CandleTheme
   chartMode?: ChartMode
+  quoteReady?: boolean
   marketTimestamp?: number
   onTimeframeChange?: (timeframe: Timeframe) => void
   replayMode?: boolean
@@ -81,7 +83,7 @@ const structuralOverlayKind = (annotation: ChartAnnotation): OverlayKind | null 
   return null
 }
 
-export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, symbol, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [], tradeMarkers = [], candleTheme = 'shafx', chartMode = 'candles', onTimeframeChange, replayMode = false }) => {
+export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, symbol, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [], tradeMarkers = [], candleTheme = 'shafx', chartMode = 'candles', quoteReady = false, onTimeframeChange, replayMode = false }) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartHostRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<IChartApi | null>(null)
@@ -121,6 +123,12 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const lineLabelsHostRef = useRef<HTMLDivElement | null>(null)
   const [lineLabels, setLineLabels] = useState<Array<{ id: string; price: number; name: string; color: string; y: number }>>([])
   const lineLabelSyncRef = useRef<(() => void) | null>(null)
+  const [bidTickDirection, setBidTickDirection] = useState<QuoteTickDirection>('neutral')
+  const [askTickDirection, setAskTickDirection] = useState<QuoteTickDirection>('neutral')
+  const previousBidQuoteRef = useRef<number | null>(null)
+  const previousAskQuoteRef = useRef<number | null>(null)
+  const lastBidTickAtRef = useRef(0)
+  const lastAskTickAtRef = useRef(0)
   const structuralOcclusionRef = useRef<Map<string, boolean>>(new Map())
   const tradeMarkerSignatureRef = useRef('')
   const marketBidLineRef = useRef<IPriceLine | null>(null)
@@ -650,7 +658,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       const id = line.id.toLowerCase()
       const lineStyle: 0 | 1 | 2 = isStop(id) ? 2 : isTarget(id) ? 0 : id.includes('entry') ? 1 : 0
       const title = shortTitle(line) + ' ' + line.price.toFixed(pricePrecision)
-      upsertLine(line, lineStyle, id.endsWith('-current') && showPriceLabels, title)
+      upsertLine(line, lineStyle, false, title)
       labelCandidates.push(line)
     })
 
@@ -660,13 +668,13 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       : activePositionCurrentLine?.label.toUpperCase().startsWith('SELL')
         ? 'SELL'
         : null
-    const labelBid = Number.isFinite(bidPrice) && Number(bidPrice) > 0 ? Number(bidPrice) : lastClose
-    const labelAsk = Number.isFinite(askPrice) && Number(askPrice) > 0 ? Number(askPrice) : labelBid
-    if (Number.isFinite(labelBid) && labelBid > 0 && activePositionSide !== 'BUY') {
-      labelCandidates.push({ id: 'shafx-live-bid-label', price: labelBid, label: 'CURRENT BID / SELL', color: '#FF5C75', lineWidth: 1 })
+    const labelBid = quoteReady && Number.isFinite(bidPrice) && Number(bidPrice) > 0 ? Number(bidPrice) : 0
+    const labelAsk = quoteReady && Number.isFinite(askPrice) && Number(askPrice) > 0 ? Number(askPrice) : 0
+    if (labelBid > 0 && activePositionSide !== 'BUY') {
+      labelCandidates.push({ id: 'shafx-live-bid-label', price: labelBid, label: 'BID', color: bidQuoteTone, lineWidth: 1 })
     }
-    if (Number.isFinite(labelAsk) && labelAsk > 0 && activePositionSide !== 'SELL') {
-      labelCandidates.push({ id: 'shafx-live-ask-label', price: labelAsk, label: 'CURRENT ASK / BUY', color: '#22D3A5', lineWidth: 1 })
+    if (labelAsk > 0 && activePositionSide !== 'SELL') {
+      labelCandidates.push({ id: 'shafx-live-ask-label', price: labelAsk, label: 'ASK', color: askQuoteTone, lineWidth: 1 })
     }
 
     userLevels.forEach((level) => {
@@ -825,17 +833,20 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         return
       }
 
-      const railColor = color === '#FF5C75'
-        ? 'rgba(255, 92, 117, 0.78)'
-        : 'rgba(34, 211, 165, 0.78)'
+      const railColor = color === '#F04452'
+        ? 'rgba(240, 68, 82, 0.82)'
+        : color === '#2F80FF'
+          ? 'rgba(47, 128, 255, 0.82)'
+          : 'rgba(157, 169, 184, 0.58)'
       const options = {
         price,
         color: railColor,
         lineWidth: 1 as const,
         lineStyle: 2 as const,
-        axisLabelVisible: showPriceLabels,
+        // Custom BID/ASK tags are rendered once in the chart overlay below.
+        axisLabelVisible: false,
         axisLabelColor: color,
-        axisLabelTextColor: color === '#22D3A5' ? '#07110E' : '#19070B',
+        axisLabelTextColor: '#F3F6FA',
         title,
       }
 
@@ -846,22 +857,18 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       }
     }
 
-    const bid = Number.isFinite(bidPrice) && Number(bidPrice) > 0
-      ? Number(bidPrice)
-      : lastClose
-    const ask = Number.isFinite(askPrice) && Number(askPrice) > 0
-      ? Number(askPrice)
-      : bid
+    const bid = quoteReady && Number.isFinite(bidPrice) && Number(bidPrice) > 0 ? Number(bidPrice) : 0
+    const ask = quoteReady && Number.isFinite(askPrice) && Number(askPrice) > 0 ? Number(askPrice) : 0
 
-    // A position's actual exit line replaces the generic quote rail on the
-    // same side, so the user sees one clearly named current-price line.
-    updateQuoteLine(marketBidLineRef, bid, '#FF5C75', 'SELL / BID', positionSide === 'BUY')
-    updateQuoteLine(marketAskLineRef, ask, '#22D3A5', 'BUY / ASK', positionSide === 'SELL')
+    // Actual positions replace a same-side quote rail. No historical close is
+    // passed off as a current quote while the live feed is unavailable.
+    updateQuoteLine(marketBidLineRef, bid, bidQuoteTone, 'BID', positionSide === 'BUY')
+    updateQuoteLine(marketAskLineRef, ask, askQuoteTone, 'ASK', positionSide === 'SELL')
 
     return () => {
       // Price-line objects are intentionally retained between quote ticks.
     }
-  }, [askPrice, bidPrice, chartMode, lastClose, showPriceLabels, tradeLines])
+  }, [askPrice, bidPrice, bidQuoteTone, chartMode, quoteReady, askQuoteTone, showPriceLabels, tradeLines])
 
 
   useEffect(() => {
@@ -1155,9 +1162,6 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
 
   const measureDelta = measureStart !== null && measureEnd !== null ? Math.abs(measureEnd - measureStart) / Math.max(pipSize, Number.EPSILON) : null
   const quotePrecision = pricePrecision
-  const displayBid = Number.isFinite(bidPrice) && Number(bidPrice) > 0 ? Number(bidPrice) : lastClose
-  const displayAsk = Number.isFinite(askPrice) && Number(askPrice) > 0 ? Number(askPrice) : displayBid
-  const spreadPips = Number.isFinite(displayBid) && Number.isFinite(displayAsk) && pipSize > 0 ? (displayAsk - displayBid) / pipSize : 0
   const [countdownNowSeconds, setCountdownNowSeconds] = useState(0)
 
   // Candle boundaries follow UTC market time. Drive the display from a local
@@ -1172,6 +1176,49 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const countdown = timeframe && countdownNowSeconds > 0
     ? getCandleCloseCountdown(countdownNowSeconds, timeframe)
     : null
+
+  const bidQuoteTone = getQuoteTickColor(bidTickDirection)
+  const askQuoteTone = getQuoteTickColor(askTickDirection)
+
+  useEffect(() => {
+    const bid = Number(bidPrice)
+    if (!quoteReady || !Number.isFinite(bid) || bid <= 0) {
+      previousBidQuoteRef.current = null
+      lastBidTickAtRef.current = 0
+      setBidTickDirection('neutral')
+      return
+    }
+    const previous = previousBidQuoteRef.current
+    previousBidQuoteRef.current = bid
+    if (previous === null) { setBidTickDirection('neutral'); return }
+    const direction = getQuoteTickDirection(bid, previous)
+    if (direction !== 'neutral') {
+      setBidTickDirection(direction)
+      lastBidTickAtRef.current = countdownNowSeconds * 1000
+    } else if (!lastBidTickAtRef.current || countdownNowSeconds * 1000 - lastBidTickAtRef.current >= 15_000) {
+      setBidTickDirection('neutral')
+    }
+  }, [bidPrice, quoteReady, countdownNowSeconds])
+
+  useEffect(() => {
+    const ask = Number(askPrice)
+    if (!quoteReady || !Number.isFinite(ask) || ask <= 0) {
+      previousAskQuoteRef.current = null
+      lastAskTickAtRef.current = 0
+      setAskTickDirection('neutral')
+      return
+    }
+    const previous = previousAskQuoteRef.current
+    previousAskQuoteRef.current = ask
+    if (previous === null) { setAskTickDirection('neutral'); return }
+    const direction = getQuoteTickDirection(ask, previous)
+    if (direction !== 'neutral') {
+      setAskTickDirection(direction)
+      lastAskTickAtRef.current = countdownNowSeconds * 1000
+    } else if (!lastAskTickAtRef.current || countdownNowSeconds * 1000 - lastAskTickAtRef.current >= 15_000) {
+      setAskTickDirection('neutral')
+    }
+  }, [askPrice, quoteReady, countdownNowSeconds])
   const formatCountdown = (seconds: number): string => {
     if (seconds >= 86400) return `${Math.floor(seconds / 86400)}d ${Math.floor((seconds % 86400) / 3600)}h`
     if (seconds >= 3600) return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`
@@ -1238,13 +1285,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       </div>
     )}
     <div className="absolute right-3 top-3 z-20 flex items-center gap-1">
-      <div className="pointer-events-none flex items-center gap-1 rounded-xl border border-shafx-border/70 bg-shafx-surface/85 px-1 py-0.5 shadow-md backdrop-blur">
-        <span className="rounded-lg px-1.5 py-0.5 text-[8px] font-bold tabular text-shafx-danger"><span className="mr-1 text-[8px] uppercase tracking-[0.12em]">SELL</span>{Number.isFinite(displayBid) ? displayBid.toFixed(quotePrecision) : '—'}</span>
-        <span className="h-3.5 w-px bg-shafx-border" />
-        <span className="rounded-lg px-2 py-1 text-[9px] font-bold tabular text-shafx-success"><span className="mr-1 text-[8px] uppercase tracking-[0.12em]">BUY</span>{Number.isFinite(displayAsk) ? displayAsk.toFixed(quotePrecision) : '—'}</span>
-        <span className="hidden border-l border-shafx-border pl-2 text-[8px] font-semibold tabular text-shafx-textMuted sm:inline">SP {spreadPips.toFixed(1)}p</span>
-      </div>
-      <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => void toggleFullscreen()} aria-label={chartFullscreen ? 'Exit fullscreen chart' : 'Open fullscreen chart'} className="flex h-9 w-9 items-center justify-center rounded-xl border border-shafx-border bg-shafx-surface/92 text-shafx-textMuted shadow-md backdrop-blur hover:border-shafx-accent/40 hover:text-shafx-text">
+      <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => void toggleFullscreen()} aria-label={chartFullscreen ? 'Exit fullscreen chart' : 'Open fullscreen chart'} className="flex h-9 w-9 items-center justify-center border border-shafx-border bg-shafx-surface/92 text-shafx-textMuted shadow-md hover:border-shafx-accent/40 hover:text-shafx-text">
         {chartFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
       </button>
     </div>

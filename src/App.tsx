@@ -225,6 +225,7 @@ const TerminalContent: React.FC = () => {
   const historyWarmInFlightRef = useRef<Record<string, Promise<Partial<Record<(typeof TIMEFRAMES)[number], OHLCV[]>>>>>({})
   const latestCTraderPriceRef = useRef<number | null>(null)
   const liveQuoteIdentityRef = useRef<string | null>(null)
+  const cTraderQuoteStaleTimerRef = useRef<number | null>(null)
   const toastId = useRef(0)
   const lastStreamToastAt = useRef(0)
   const lastStreamToastText = useRef('')
@@ -236,12 +237,19 @@ const TerminalContent: React.FC = () => {
   }, [liveCandles])
 
   useEffect(() => {
-    // Invalidate the last quote when the chart identity changes. The rendered
-    // values are gated by this identity, avoiding stale tags without an extra
-    // setState render from inside an effect.
+    // Quote identity belongs to one exact symbol/timeframe/account stream.
+    // Clear stale prices on identity changes so the UI cannot keep saying LIVE.
     liveQuoteIdentityRef.current = null
     latestCTraderPriceRef.current = null
-  }, [selectedSymbol, timeframe, activeProviderSelection?.providerId])
+    if (cTraderQuoteStaleTimerRef.current !== null) {
+      window.clearTimeout(cTraderQuoteStaleTimerRef.current)
+      cTraderQuoteStaleTimerRef.current = null
+    }
+    setLiveQuoteIdentity(null)
+    setLiveBidPrice(0)
+    setLiveAskPrice(0)
+    setLiveMarketActive(false)
+  }, [selectedSymbol, timeframe, activeProviderSelection?.providerId, activeProviderSelection?.accountId, activeProviderSelection?.connectionId, activeProviderSelection?.environment])
 
   const pushToast = useCallback((text: string) => {
     toastId.current += 1
@@ -284,6 +292,11 @@ const TerminalContent: React.FC = () => {
     setLiveBidPrice(0)
     setLiveAskPrice(0)
     setLiveQuoteIdentity(null)
+    setLiveMarketActive(false)
+    if (cTraderQuoteStaleTimerRef.current !== null) {
+      window.clearTimeout(cTraderQuoteStaleTimerRef.current)
+      cTraderQuoteStaleTimerRef.current = null
+    }
     latestCTraderPriceRef.current = null
     liveQuoteIdentityRef.current = null
     const last = nextCandles[nextCandles.length - 1]
@@ -827,10 +840,25 @@ const TerminalContent: React.FC = () => {
       setCurrentPrice(price)
       setMarketTimestamp(Math.floor(timestamp / 1000))
       setLiveMarketActive(true)
+      if (cTraderQuoteStaleTimerRef.current !== null) window.clearTimeout(cTraderQuoteStaleTimerRef.current)
+      cTraderQuoteStaleTimerRef.current = window.setTimeout(() => {
+        if (cancelled) return
+        liveQuoteIdentityRef.current = null
+        latestCTraderPriceRef.current = null
+        setLiveQuoteIdentity(null)
+        setLiveBidPrice(0)
+        setLiveAskPrice(0)
+        setLiveMarketActive(false)
+        cTraderQuoteStaleTimerRef.current = null
+      }, 15_000)
     })
     return () => {
       cancelled = true
       unsubscribe()
+      if (cTraderQuoteStaleTimerRef.current !== null) {
+        window.clearTimeout(cTraderQuoteStaleTimerRef.current)
+        cTraderQuoteStaleTimerRef.current = null
+      }
     }
   }, [activeProviderSelection?.accountId, activeProviderSelection?.connectionId, activeProviderSelection?.environment, activeProviderSelection?.providerId, selectedSymbol, timeframe])
 
@@ -881,29 +909,22 @@ const TerminalContent: React.FC = () => {
   ].join(':')
   const cTraderQuoteMatchesChart = usingCTrader &&
     liveQuoteIdentity === selectedCTraderQuoteIdentity
-  const latestCandleClose = Number(liveCandles[liveCandles.length - 1]?.close ?? 0)
   const chartBidRaw = usingCTrader
-    ? cTraderQuoteMatchesChart && liveBidPrice > 0 ? liveBidPrice : latestCandleClose
-    : Number.isFinite(currentPrice) && currentPrice > 0 ? currentPrice : latestCandleClose
-  const chartBidPrice = Number(chartBidRaw.toFixed(symbolSpec.pricePrecision))
+    ? cTraderQuoteMatchesChart && liveMarketActive && liveBidPrice > 0 ? liveBidPrice : 0
+    : liveMarketActive && Number.isFinite(currentPrice) && currentPrice > 0 ? currentPrice : 0
+  const chartBidPrice = chartBidRaw > 0 ? Number(chartBidRaw.toFixed(symbolSpec.pricePrecision)) : 0
   const chartSpread = Math.max(symbolSpec.pipSize * 0.2, symbolSpec.pipSize / 10)
   const chartAskPrice = usingCTrader
-    ? cTraderQuoteMatchesChart && liveAskPrice > 0
-      ? Number(liveAskPrice.toFixed(symbolSpec.pricePrecision))
-      : chartBidPrice > 0
-        ? (() => {
-          const chartAskCandidate = Number((chartBidPrice + chartSpread).toFixed(symbolSpec.pricePrecision))
-          return chartAskCandidate > chartBidPrice
-            ? chartAskCandidate
-            : Number((chartBidPrice + symbolSpec.pipSize).toFixed(symbolSpec.pricePrecision))
-        })()
-        : 0
-    : (() => {
-      const chartAskCandidate = Number((chartBidPrice + chartSpread).toFixed(symbolSpec.pricePrecision))
-      return chartAskCandidate > chartBidPrice
-        ? chartAskCandidate
-        : Number((chartBidPrice + symbolSpec.pipSize).toFixed(symbolSpec.pricePrecision))
-    })()
+    ? cTraderQuoteMatchesChart && liveMarketActive && liveAskPrice > 0 ? Number(liveAskPrice.toFixed(symbolSpec.pricePrecision)) : 0
+    : chartBidPrice > 0
+      ? (() => {
+        const chartAskCandidate = Number((chartBidPrice + chartSpread).toFixed(symbolSpec.pricePrecision))
+        return chartAskCandidate > chartBidPrice
+          ? chartAskCandidate
+          : Number((chartBidPrice + symbolSpec.pipSize).toFixed(symbolSpec.pricePrecision))
+      })()
+      : 0
+  const chartQuoteReady = liveMarketActive && (!usingCTrader || cTraderQuoteMatchesChart) && chartBidPrice > 0 && chartAskPrice > 0
 
   const structureBarTime = liveCandles.length ? Number(liveCandles[liveCandles.length - 1]?.time ?? 0) : 0
   const chartAnnotations = useMemo(() => buildStructuralChartAnnotations(selectedSymbol, liveCandles, timeframe)
@@ -920,16 +941,16 @@ const TerminalContent: React.FC = () => {
   )
 
   const combinedTradeLines = useMemo(() => {
+    // Draft ticket SL/TP are sizing previews, not active chart levels.
     const draftLevelIds = new Set(['shafx-cfd-sl', 'shafx-cfd-tp', 'plan-sl', 'plan-tp'])
-    const hasOpenPositionForChart = Boolean(selectedOpenPosition)
     return [
       ...tradeLines.filter((line) =>
-        !(hasOpenPositionForChart && draftLevelIds.has(line.id)) &&
+        !draftLevelIds.has(line.id) &&
         !brokerPositionTradeLines.some((broker) => broker.id === line.id),
       ),
       ...brokerPositionTradeLines,
     ]
-  }, [brokerPositionTradeLines, selectedOpenPosition, tradeLines])
+  }, [brokerPositionTradeLines, tradeLines])
 
   // The chart's trade map includes entries and exits for this symbol only.
   // Marker coordinates resolve against historical candle timestamps; no prices
@@ -1153,15 +1174,15 @@ const TerminalContent: React.FC = () => {
         <div className="lg:hidden"><WorkspaceStatus provider={activeProviderName} mode="broker" symbol={selectedSymbol} price={currentPrice} precision={symbolSpec.pricePrecision} live={liveMarketActive} /></div>
         <div className="lg:hidden border-b border-shafx-border bg-shafx-surface/70 px-2 py-2 sm:px-3">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <div className="rounded-xl border border-shafx-border bg-shafx-bg/80 px-3 py-2"><div className="flex items-center justify-between gap-2"><span className="text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted">Account</span><span className={accountModeTone + " font-mono text-[8px] font-bold"}>{accountModeLabel}</span></div><div className="mt-1 font-mono text-sm font-bold tabular-nums">{resolvedAccountData.currency} {resolvedAccountData.balance.toFixed(2)}</div></div>
-            <div className="rounded-xl border border-shafx-border bg-shafx-bg/80 px-3 py-2"><div className="text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted">Equity</div><div className="mt-1 font-mono text-sm font-bold tabular-nums">{resolvedAccountData.currency} {resolvedAccountData.equity.toFixed(4)}</div><div className={resolvedAccountData.floatingPL >= 0 ? 'text-[8px] text-shafx-success' : 'text-[8px] text-shafx-danger'}>{resolvedAccountData.floatingPL >= 0 ? '+' : ''}{resolvedAccountData.floatingPL.toFixed(4)} floating</div></div>
-            <div className="rounded-xl border border-shafx-border bg-shafx-bg/80 px-3 py-2"><div className="text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted">{activeProviderSelection?.providerId === 'ctrader' ? 'cTrader connection' : 'Deriv connection'}</div><div className="mt-1 text-xs font-semibold">{liveMarketActive ? 'Live market stream' : 'Connecting'}</div><div className="text-[8px] text-shafx-textMuted">Auto reconnect enabled</div></div>
-            <div className="rounded-xl border border-shafx-border bg-shafx-bg/80 px-3 py-2"><div className="text-[8px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted">Free margin</div><div className="mt-1 font-mono text-sm font-bold tabular-nums">{resolvedAccountData.currency} {resolvedAccountData.freeMargin.toFixed(4)}</div></div>
+            <div className="rounded-xl border border-shafx-border bg-shafx-bg/80 px-3 py-3"><div className="flex items-center justify-between gap-2"><span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-shafx-textMuted">Account</span><span className={accountModeTone + " font-mono text-[8px] font-bold"}>{accountModeLabel}</span></div><div className="mt-1.5 font-mono text-base font-bold tabular-nums">{resolvedAccountData.currency} {resolvedAccountData.balance.toFixed(2)}</div></div>
+            <div className="rounded-xl border border-shafx-border bg-shafx-bg/80 px-3 py-3"><div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-shafx-textMuted">Equity</div><div className="mt-1.5 font-mono text-base font-bold tabular-nums">{resolvedAccountData.currency} {resolvedAccountData.equity.toFixed(2)}</div><div className="mt-2 flex items-center justify-between gap-2 border-t border-shafx-border/80 pt-1.5"><span className="text-[9px] font-semibold uppercase tracking-[0.08em] text-shafx-textMuted">Floating P/L</span><span className={'font-mono text-xs font-bold tabular-nums ' + (resolvedAccountData.floatingPL >= 0 ? 'text-shafx-success' : 'text-shafx-danger')}>{resolvedAccountData.floatingPL >= 0 ? '+' : ''}{resolvedAccountData.currency} {resolvedAccountData.floatingPL.toFixed(2)}</span></div></div>
+            <div className="rounded-xl border border-shafx-border bg-shafx-bg/80 px-3 py-3"><div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-shafx-textMuted">{activeProviderSelection?.providerId === 'ctrader' ? 'cTrader connection' : 'Deriv connection'}</div><div className="mt-1.5 text-sm font-semibold">{liveMarketActive ? 'Live market stream' : 'Waiting for market'}</div><div className="text-[9px] text-shafx-textMuted">Auto reconnect enabled</div></div>
+            <div className="rounded-xl border border-shafx-border bg-shafx-bg/80 px-3 py-3"><div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-shafx-textMuted">Free margin</div><div className="mt-1.5 font-mono text-base font-bold tabular-nums">{resolvedAccountData.currency} {resolvedAccountData.freeMargin.toFixed(2)}</div></div>
           </div>
         </div>
         <div className="flex min-h-0 flex-1 flex-col overflow-visible">
           <div className="shafx-market-header flex min-h-10 flex-shrink-0 items-center justify-between gap-3 border-b border-shafx-border bg-[#0A0E14] px-3 sm:px-4 lg:min-h-12">
-            <div className="flex min-w-0 items-center gap-2"><span className="truncate text-sm font-semibold">{selectedSymbol}</span><span className="font-mono text-xs font-semibold tabular-nums text-shafx-textMuted">{Number.isFinite(currentPrice) && currentPrice > 0 ? currentPrice.toFixed(symbolSpec.pricePrecision) : '—'}</span><span className={'rounded-full border px-2 py-0.5 text-[8px] font-semibold ' + (liveMarketActive ? 'border-shafx-success/25 bg-shafx-success/5 text-shafx-success' : 'border-shafx-warning/25 bg-shafx-warning/5 text-shafx-warning')}>{liveMarketActive ? 'LIVE' : 'CONNECTING'}</span></div>
+            <div className="flex min-w-0 items-center gap-2"><span className="truncate text-sm font-semibold">{selectedSymbol}</span><span className="font-mono text-xs font-semibold tabular-nums text-shafx-textMuted">{chartQuoteReady ? chartBidPrice.toFixed(symbolSpec.pricePrecision) : '—'}</span><span className={'rounded-full border px-2 py-0.5 text-[8px] font-semibold ' + (chartQuoteReady ? 'border-[#2F80FF]/30 bg-[#2F80FF]/10 text-[#9AC2FF]' : 'border-[#59616D] bg-[#151A21] text-[#AAB2BD]')}>{chartQuoteReady ? 'LIVE' : 'WAITING'}</span></div>
             <div className="flex items-center gap-1.5">{liveControl}</div>
           </div>
            <div className="shafx-timeframe-bar flex min-h-11 flex-shrink-0 items-center gap-1 overflow-x-auto border-b border-shafx-border bg-[#0C1118] px-3 py-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:px-4">
@@ -1175,7 +1196,7 @@ const TerminalContent: React.FC = () => {
            </div>
            <MobileChartTools tool={chartTool} onToolChange={setChartTool} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} />
            <div className="shafx-chart-stage relative min-h-0 p-1 sm:p-2 lg:flex-1">
-             <CandlestickChart data={liveCandles} symbol={selectedSymbol} timeframe={timeframe} annotations={chartAnnotations} tradeLines={combinedTradeLines} tradeMarkers={chartTradeMarkers} bidPrice={chartBidPrice} askPrice={chartAskPrice} toolMode={chartToolMode} pipSize={symbolSpec.pipSize} onToolNotice={pushToast} showGrid={chartSettings.showGrid} showPriceLabels={chartSettings.showPriceLabels} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} marketTimestamp={marketTimestamp} onTimeframeChange={handleTimeframeChange} replayMode={false} />
+             <CandlestickChart data={liveCandles} symbol={selectedSymbol} timeframe={timeframe} annotations={chartAnnotations} tradeLines={combinedTradeLines} tradeMarkers={chartTradeMarkers} bidPrice={chartBidPrice} askPrice={chartAskPrice} quoteReady={chartQuoteReady} toolMode={chartToolMode} pipSize={symbolSpec.pipSize} onToolNotice={pushToast} showGrid={chartSettings.showGrid} showPriceLabels={chartSettings.showPriceLabels} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} marketTimestamp={marketTimestamp} onTimeframeChange={handleTimeframeChange} replayMode={false} />
              {liveCandles.length === 0 && <div role="status" aria-live="polite" className="pointer-events-none absolute inset-0 z-40 flex min-h-[320px] items-center justify-center bg-shafx-bg/80 text-sm text-shafx-textMuted">Waiting for the live market stream…</div>}
            </div>
           <div className="shafx-landscape-secondary grid grid-cols-2 gap-2 border-t border-shafx-border bg-shafx-surface/55 p-2 sm:grid-cols-4">
