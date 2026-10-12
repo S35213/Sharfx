@@ -696,8 +696,10 @@ export const placeCtraderOrder = async ({ environment, accountId, accessToken, f
     volume,
     ...(order.limitPrice !== undefined ? { limitPrice: Number(order.limitPrice) } : {}),
     ...(order.stopPrice !== undefined ? { stopPrice: Number(order.stopPrice) } : {}),
-    ...(order.stopLoss !== undefined ? { stopLoss: Number(order.stopLoss) } : {}),
-    ...(order.takeProfit !== undefined ? { takeProfit: Number(order.takeProfit) } : {}),
+    // cTrader does not support absolute SL/TP on a MARKET new-order request.
+    // The API route amends the filled position using ProtoOAAmendPositionSLTPReq.
+    ...(order.type !== 'MARKET' && order.stopLoss !== undefined ? { stopLoss: Number(order.stopLoss) } : {}),
+    ...(order.type !== 'MARKET' && order.takeProfit !== undefined ? { takeProfit: Number(order.takeProfit) } : {}),
     ...(order.clientOrderId ? { clientOrderId: order.clientOrderId } : {}),
     label: 'SHAFX',
     comment: 'SHAFX manual CFD',
