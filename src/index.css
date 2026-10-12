@@ -439,13 +439,36 @@ input::placeholder { color: #667285; }
 }
 
 
-/* Square terminal-style quote tiles: only current quote digits carry direction color. */
+/* SHAFX market tiles: opaque emerald/coral action surfaces with fast quote-direction response. */
 .shafx-terminal-root .shafx-trade-side-button {
   position: relative;
-  border-radius: 0 !important;
+  min-width: 0;
+  border-radius: 2px !important;
   background: #11161E;
   border-color: #343C48;
+  color: #DDE4EC;
   box-shadow: none;
+  transition: background-color 80ms linear, border-color 80ms linear;
+}
+.shafx-terminal-root .shafx-trade-side-button[data-quote-ready="true"][data-side="BUY"][data-button-tone="neutral"] {
+  background: #063D2A;
+  border-color: #00B979;
+  color: #FFFFFF;
+}
+.shafx-terminal-root .shafx-trade-side-button[data-quote-ready="true"][data-side="SELL"][data-button-tone="neutral"] {
+  background: #421821;
+  border-color: #FF5364;
+  color: #FFFFFF;
+}
+.shafx-terminal-root .shafx-trade-side-button[data-quote-ready="true"][data-button-tone="up"] {
+  background: #087A49;
+  border-color: #25E597;
+  color: #FFFFFF;
+}
+.shafx-terminal-root .shafx-trade-side-button[data-quote-ready="true"][data-button-tone="down"] {
+  background: #B42335;
+  border-color: #FF6575;
+  color: #FFFFFF;
 }
 .shafx-terminal-root .shafx-trade-side-button[aria-pressed="true"]::after {
   content: "";
@@ -454,19 +477,32 @@ input::placeholder { color: #667285; }
   right: 0;
   bottom: 0;
   height: 2px;
-  background: #DDE4EC;
+  background: #FFFFFF;
   pointer-events: none;
 }
 .shafx-terminal-root .shafx-trade-side-price {
+  display: block;
   color: #DDE4EC;
+  font-size: clamp(15px, 1.35vw, 19px);
+  font-weight: 750;
+  line-height: 1.05;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.01em;
+  letter-spacing: -0.035em;
+  white-space: nowrap;
 }
-.shafx-terminal-root .shafx-trade-side-button[data-button-tone="up"] .shafx-trade-side-price { color: #2F80FF; }
-.shafx-terminal-root .shafx-trade-side-button[data-button-tone="down"] .shafx-trade-side-price { color: #F04452; }
-.shafx-terminal-root .shafx-trade-side-button[data-button-tone="neutral"] .shafx-trade-side-price { color: #DDE4EC; }
+.shafx-terminal-root .shafx-trade-side-button[data-quote-ready="true"] .shafx-trade-side-price {
+  color: #FFFFFF;
+}
+.shafx-terminal-root .shafx-trade-side-button[data-quote-ready="false"] .shafx-trade-side-price {
+  color: #DDE4EC;
+}
 .shafx-terminal-root .shafx-trade-side-button:focus-visible {
   outline: 2px solid #2962FF;
   outline-offset: 2px;
   box-shadow: none;
+}
+@media (max-width: 639px) {
+  .shafx-terminal-root .shafx-trade-side-price {
+    font-size: clamp(15px, 4.5vw, 18px);
+  }
 }
