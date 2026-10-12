@@ -47,6 +47,7 @@ const STOP_LOSS_RATIOS = [0.1, 0.2, 0.4, 0.8]
 const TAKE_PROFIT_MULTIPLES = [0.5, 1, 2, 5, 10]
 const DEFAULT_STOP_LOSS_RATIO = 0.4
 const DEFAULT_TAKE_PROFIT_MULTIPLE = 0.5
+const QUOTE_TICK_COLOR_HOLD_MS = 1300
 
 const roundMoney = (value: number): number => Number(value.toFixed(2))
 
@@ -115,8 +116,8 @@ const LegacyMultiplierOrderPanel: React.FC<Props> = ({
   const newTradeRef = useRef<HTMLDivElement | null>(null)
   const previousBidRef = useRef<number | null>(null)
   const previousAskRef = useRef<number | null>(null)
-  const lastBidTickAtRef = useRef(0)
-  const lastAskTickAtRef = useRef(0)
+  const bidDirectionResetTimerRef = useRef<number | null>(null)
+  const askDirectionResetTimerRef = useRef<number | null>(null)
   const [buyMarketDirection, setBuyMarketDirection] = useState<QuoteTickDirection>('neutral')
   const [sellMarketDirection, setSellMarketDirection] = useState<QuoteTickDirection>('neutral')
 
@@ -133,6 +134,14 @@ const LegacyMultiplierOrderPanel: React.FC<Props> = ({
     setQuote(null)
     setState('planning')
     setError('')
+    previousBidRef.current = null
+    previousAskRef.current = null
+    if (bidDirectionResetTimerRef.current !== null) window.clearTimeout(bidDirectionResetTimerRef.current)
+    if (askDirectionResetTimerRef.current !== null) window.clearTimeout(askDirectionResetTimerRef.current)
+    bidDirectionResetTimerRef.current = null
+    askDirectionResetTimerRef.current = null
+    setBuyMarketDirection('neutral')
+    setSellMarketDirection('neutral')
   }, [symbol, aiSetup?.direction])
 
   useEffect(() => {
@@ -144,43 +153,58 @@ const LegacyMultiplierOrderPanel: React.FC<Props> = ({
 
   useEffect(() => {
     const bid = Number(bidPrice)
+    const clearBidReset = (): void => {
+      if (bidDirectionResetTimerRef.current !== null) window.clearTimeout(bidDirectionResetTimerRef.current)
+      bidDirectionResetTimerRef.current = null
+    }
     if (!Number.isFinite(bid) || bid <= 0) {
+      clearBidReset()
       previousBidRef.current = null
-      lastBidTickAtRef.current = 0
       setSellMarketDirection('neutral')
       return
     }
     const previous = previousBidRef.current
     previousBidRef.current = bid
-    if (previous === null) { setSellMarketDirection('neutral'); return }
+    if (previous === null) { clearBidReset(); setSellMarketDirection('neutral'); return }
     const direction = getQuoteTickDirection(bid, previous)
-    if (direction !== 'neutral') {
-      setSellMarketDirection(direction)
-      lastBidTickAtRef.current = Date.now()
-    } else if (!lastBidTickAtRef.current || now - lastBidTickAtRef.current >= 15_000) {
+    if (direction === 'neutral') return
+    clearBidReset()
+    setSellMarketDirection(direction)
+    bidDirectionResetTimerRef.current = window.setTimeout(() => {
       setSellMarketDirection('neutral')
-    }
-  }, [bidPrice, now])
+      bidDirectionResetTimerRef.current = null
+    }, QUOTE_TICK_COLOR_HOLD_MS)
+  }, [bidPrice])
 
   useEffect(() => {
     const ask = Number(askPrice)
+    const clearAskReset = (): void => {
+      if (askDirectionResetTimerRef.current !== null) window.clearTimeout(askDirectionResetTimerRef.current)
+      askDirectionResetTimerRef.current = null
+    }
     if (!Number.isFinite(ask) || ask <= 0) {
+      clearAskReset()
       previousAskRef.current = null
-      lastAskTickAtRef.current = 0
       setBuyMarketDirection('neutral')
       return
     }
     const previous = previousAskRef.current
     previousAskRef.current = ask
-    if (previous === null) { setBuyMarketDirection('neutral'); return }
+    if (previous === null) { clearAskReset(); setBuyMarketDirection('neutral'); return }
     const direction = getQuoteTickDirection(ask, previous)
-    if (direction !== 'neutral') {
-      setBuyMarketDirection(direction)
-      lastAskTickAtRef.current = Date.now()
-    } else if (!lastAskTickAtRef.current || now - lastAskTickAtRef.current >= 15_000) {
+    if (direction === 'neutral') return
+    clearAskReset()
+    setBuyMarketDirection(direction)
+    askDirectionResetTimerRef.current = window.setTimeout(() => {
       setBuyMarketDirection('neutral')
-    }
-  }, [askPrice, now])
+      askDirectionResetTimerRef.current = null
+    }, QUOTE_TICK_COLOR_HOLD_MS)
+  }, [askPrice])
+
+  useEffect(() => () => {
+    if (bidDirectionResetTimerRef.current !== null) window.clearTimeout(bidDirectionResetTimerRef.current)
+    if (askDirectionResetTimerRef.current !== null) window.clearTimeout(askDirectionResetTimerRef.current)
+  }, [])
 
   useEffect(() => {
     const updateNow = (): void => setNow(Date.now())
@@ -564,7 +588,7 @@ const LegacyMultiplierOrderPanel: React.FC<Props> = ({
             disabled={busy}
             aria-pressed={side === 'BUY'}
             aria-label="Select BUY at Ask price"
-            className={'shafx-trade-side-button relative min-h-[66px] border px-3 py-2 text-left text-shafx-text transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-accent ' + tradeSideButtonTone(buyButtonDirection) + ' hover:bg-[#171E28]'}
+            className={'shafx-trade-side-button relative min-h-[66px] border px-3 py-2 text-left text-shafx-text transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-accent ' + tradeSideButtonTone(buyButtonDirection) + '}
           >
             <span className="flex items-center justify-between gap-2 text-[11px] font-bold tracking-[0.08em]">
               <span>BUY</span><span className="text-[8px] uppercase tracking-[0.14em] text-[#AAB2BD]">ASK</span>
@@ -581,7 +605,7 @@ const LegacyMultiplierOrderPanel: React.FC<Props> = ({
             disabled={busy}
             aria-pressed={side === 'SELL'}
             aria-label="Select SELL at Bid price"
-            className={'shafx-trade-side-button relative min-h-[66px] border px-3 py-2 text-left text-shafx-text transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-accent ' + tradeSideButtonTone(sellButtonDirection) + ' hover:bg-[#171E28]'}
+            className={'shafx-trade-side-button relative min-h-[66px] border px-3 py-2 text-left text-shafx-text transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-accent ' + tradeSideButtonTone(sellButtonDirection) + '}
           >
             <span className="flex items-center justify-between gap-2 text-[11px] font-bold tracking-[0.08em]">
               <span>SELL</span><span className="text-[8px] uppercase tracking-[0.14em] text-[#AAB2BD]">BID</span>
