@@ -122,9 +122,11 @@ const LegacyMultiplierOrderPanel: React.FC<Props> = ({
 
   const buyButtonDirection = getTradeButtonDirection(buyMarketDirection, 'BUY')
   const sellButtonDirection = getTradeButtonDirection(sellMarketDirection, 'SELL')
-  const tradeSideButtonTone = (direction: QuoteTickDirection): string => direction === 'neutral'
-    ? 'border-[#343C48] bg-[#11161E]'
-    : 'border-[#343C48] bg-[#11161E]'
+  const tradeSideButtonTone = (direction: QuoteTickDirection): string => direction === 'up'
+    ? 'border-[#00D084] bg-[#087A49]'
+    : direction === 'down'
+      ? 'border-[#FF5364] bg-[#B42335]'
+      : 'border-[#343C48] bg-[#11161E]'
 
   useEffect(() => {
     setSide(aiSetup?.direction ?? 'BUY')
@@ -557,32 +559,34 @@ const LegacyMultiplierOrderPanel: React.FC<Props> = ({
             data-side="BUY"
             data-market-direction={buyMarketDirection}
             data-button-tone={buyButtonDirection}
+            data-quote-ready={marketMetrics.ask !== null ? 'true' : 'false'}
             onClick={() => chooseSide('BUY')}
             disabled={busy}
             aria-pressed={side === 'BUY'}
             aria-label="Select BUY at Ask price"
-            className={'shafx-trade-side-button relative min-h-[70px] border px-3 py-3 text-left text-shafx-text transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-accent ' + tradeSideButtonTone(buyButtonDirection) + ' hover:bg-[#171E28]'}
+            className={'shafx-trade-side-button relative min-h-[66px] border px-3 py-2 text-left text-shafx-text transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-accent ' + tradeSideButtonTone(buyButtonDirection) + ' hover:bg-[#171E28]'}
           >
-            <span className="flex items-center justify-between gap-2 text-[10px] font-bold tracking-[0.08em]">
+            <span className="flex items-center justify-between gap-2 text-[11px] font-bold tracking-[0.08em]">
               <span>BUY</span><span className="text-[8px] uppercase tracking-[0.14em] text-[#AAB2BD]">ASK</span>
             </span>
-            <span className="shafx-trade-side-price mt-2 block font-mono text-[10px] font-semibold tabular-nums">{Number.isFinite(askPrice) && askPrice > 0 && marketMetrics.ask !== null ? formatPrice(marketMetrics.ask, symbolSpec.pricePrecision) : '—'}</span>
+            <span className="shafx-trade-side-price mt-1 block font-mono text-base font-semibold tabular-nums sm:text-lg tracking-tight">{Number.isFinite(askPrice) && askPrice > 0 && marketMetrics.ask !== null ? formatPrice(marketMetrics.ask, symbolSpec.pricePrecision) : '—'}</span>
           </button>
           <button
             type="button"
             data-side="SELL"
             data-market-direction={sellMarketDirection}
             data-button-tone={sellButtonDirection}
+            data-quote-ready={marketMetrics.bid !== null ? 'true' : 'false'}
             onClick={() => chooseSide('SELL')}
             disabled={busy}
             aria-pressed={side === 'SELL'}
             aria-label="Select SELL at Bid price"
-            className={'shafx-trade-side-button relative min-h-[70px] border px-3 py-3 text-left text-shafx-text transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-accent ' + tradeSideButtonTone(sellButtonDirection) + ' hover:bg-[#171E28]'}
+            className={'shafx-trade-side-button relative min-h-[66px] border px-3 py-2 text-left text-shafx-text transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-accent ' + tradeSideButtonTone(sellButtonDirection) + ' hover:bg-[#171E28]'}
           >
-            <span className="flex items-center justify-between gap-2 text-[10px] font-bold tracking-[0.08em]">
+            <span className="flex items-center justify-between gap-2 text-[11px] font-bold tracking-[0.08em]">
               <span>SELL</span><span className="text-[8px] uppercase tracking-[0.14em] text-[#AAB2BD]">BID</span>
             </span>
-            <span className="shafx-trade-side-price mt-2 block font-mono text-[10px] font-semibold tabular-nums">{Number.isFinite(bidPrice) && bidPrice > 0 && marketMetrics.bid !== null ? formatPrice(marketMetrics.bid, symbolSpec.pricePrecision) : '—'}</span>
+            <span className="shafx-trade-side-price mt-1 block font-mono text-base font-semibold tabular-nums sm:text-lg tracking-tight">{Number.isFinite(bidPrice) && bidPrice > 0 && marketMetrics.bid !== null ? formatPrice(marketMetrics.bid, symbolSpec.pricePrecision) : '—'}</span>
           </button>
         </div>
 
