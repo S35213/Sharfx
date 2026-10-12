@@ -132,6 +132,10 @@ export interface TradeOrder {
   providerAccountId?: string
   volumeLots?: number
   pipValuePerLot?: number
+  /** Broker P/L and close-price anchor for responsive tick-by-tick P/L estimates. */
+  pnlReferencePrice?: number
+  pnlReferenceProfit?: number
+  pnlPipSize?: number
   notionalValue?: number
   usedMargin?: number
   stopLossPips?: number
