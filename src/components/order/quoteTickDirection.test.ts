@@ -29,6 +29,14 @@ describe('getTradeButtonDirection', () => {
     expect(getTradeButtonDirection('down', 'SELL')).toBe('down')
   })
 
+  it('keeps BUY Ask and SELL Bid colors independent when their actual ticks differ', async () => {
+    const { getTradeButtonDirection } = await import('./quoteTickDirection')
+    const askDirection = getQuoteTickDirection(1.12000, 1.12001)
+    const bidDirection = getQuoteTickDirection(1.12002, 1.12001)
+    expect(getTradeButtonDirection(askDirection, 'BUY')).toBe('down')
+    expect(getTradeButtonDirection(bidDirection, 'SELL')).toBe('up')
+  })
+
   it('keeps both buttons neutral until a quote direction is known', async () => {
     const { getTradeButtonDirection } = await import('./quoteTickDirection')
     expect(getTradeButtonDirection('neutral', 'BUY')).toBe('neutral')
