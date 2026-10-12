@@ -1083,6 +1083,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       autoScale: true,
       scaleMargins: { top: 0.08, bottom: 0.08 },
     })
+    // A price-axis resize does not emit a timeScale range event.
+    lineLabelSyncRef.current?.()
   }
 
   const resetChartView = (): void => {
@@ -1138,6 +1140,9 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       autoScale: false,
       scaleMargins: { top: margin, bottom: margin },
     })
+    // Recalculate every overlay Y coordinate on every price-axis move, not
+    // after the drag completes or after a delayed logical-range notification.
+    lineLabelSyncRef.current?.()
   }
 
   const handlePriceAxisPointerUp = (event: React.PointerEvent<HTMLDivElement>): void => {
@@ -1145,6 +1150,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     event.preventDefault()
     verticalScaleDragRef.current = null
     event.currentTarget.releasePointerCapture?.(event.pointerId)
+    lineLabelSyncRef.current?.()
   }
 
   const toggleFullscreen = async (): Promise<void> => {
