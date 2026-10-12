@@ -148,6 +148,7 @@ export const CTraderManualTicket: React.FC<Props> = ({
   const [quoteLoading, setQuoteLoading] = useState(false)
   const [state, setState] = useState<TicketState>('ready')
   const [error, setError] = useState('')
+  const [protectionWarning, setProtectionWarning] = useState('')
   const [now, setNow] = useState(0)
   const previousBidRef = useRef<number | null>(null)
   const previousAskRef = useRef<number | null>(null)
@@ -346,6 +347,7 @@ export const CTraderManualTicket: React.FC<Props> = ({
     }
     setState('placing')
     setError('')
+    setProtectionWarning('')
     try {
       let marginToUse: MarginResult | null = null
       if (instrument?.providerSymbol) {
@@ -410,6 +412,10 @@ export const CTraderManualTicket: React.FC<Props> = ({
       })
       const order = (payload.order || {}) as Record<string, unknown>
       const rawOrder = (order.raw && typeof order.raw === 'object' && order.raw) ? order.raw as Record<string, unknown> : {}
+      const protectionApplied = order.protectionApplied === true
+        ? true
+        : order.protectionApplied === false ? false : undefined
+      const protectionError = String(order.protectionError || '')
       const rawPosition = (rawOrder.position && typeof rawOrder.position === 'object' && rawOrder.position) ? rawOrder.position as Record<string, unknown> : {}
       const providerOrderId = String(order.providerOrderId || rawOrder.orderId || crypto.randomUUID())
       const positionId = String(order.positionId || rawPosition.positionId || '')
@@ -449,8 +455,17 @@ export const CTraderManualTicket: React.FC<Props> = ({
         usedMargin: (side === 'BUY' ? marginToUse?.buyMargin ?? null : marginToUse?.sellMargin ?? null) ?? undefined,
         stopLossPips: plan.stopDistancePips,
         takeProfitPips: plan.targetDistancePips,
+        brokerProtectionConfirmed: protectionApplied,
       }
       onTradeOpened(trade)
+      if (protectionApplied === false) {
+        setProtectionWarning(
+          'Trade opened, but cTrader did not confirm broker-side SL/TP. Treat the chart levels as unconfirmed and check this position in cTrader. ' +
+          (protectionError || ''),
+        )
+      } else {
+        setProtectionWarning('')
+      }
       setState('ready')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to place the cTrader practice order.')
@@ -487,9 +502,10 @@ export const CTraderManualTicket: React.FC<Props> = ({
             <div className="px-2 py-2"><div className="text-[9px] uppercase tracking-[0.12em] text-shafx-textMuted">Age</div><div className="mt-1 flex items-center gap-1 font-mono text-xs font-semibold"><Clock3 className="h-3 w-3 text-shafx-textMuted" />{getTradeAge(activePosition.openTime, now)}</div></div>
           </div>
         </header>
+        {protectionWarning && <div role="alert" className="border-b border-shafx-warning/30 bg-shafx-warning/[0.08] px-3 py-2 text-[8px] leading-4 text-shafx-warning">{protectionWarning}</div>}
         <div className="grid grid-cols-2 gap-px bg-shafx-border">
-          <div className="bg-shafx-surface p-3"><div className="text-[8px] uppercase tracking-[0.12em] text-shafx-danger">Stop loss</div><div className="mt-1 font-mono text-sm">{activePosition.plannedStopLossPrice ? formatPrice(activePosition.plannedStopLossPrice, symbolSpec.pricePrecision) : '—'}</div><div className="mt-1 font-mono text-[8px] text-shafx-textMuted">{activePosition.stopLossPips ? activePosition.stopLossPips.toFixed(1) + ' pips' : '—'}</div></div>
-          <div className="bg-shafx-surface p-3 text-right"><div className="text-[8px] uppercase tracking-[0.12em] text-shafx-success">Take profit</div><div className="mt-1 font-mono text-sm">{activePosition.plannedTakeProfitPrice ? formatPrice(activePosition.plannedTakeProfitPrice, symbolSpec.pricePrecision) : '—'}</div><div className="mt-1 font-mono text-[8px] text-shafx-textMuted">{activePosition.takeProfitPips ? activePosition.takeProfitPips.toFixed(1) + ' pips' : '—'}</div></div>
+          <div className="bg-shafx-surface p-3"><div className="text-[8px] uppercase tracking-[0.12em] text-shafx-danger">Stop loss{activePosition.brokerProtectionConfirmed === false ? ' · UNCONFIRMED' : ''}</div><div className="mt-1 font-mono text-sm">{activePosition.plannedStopLossPrice ? formatPrice(activePosition.plannedStopLossPrice, symbolSpec.pricePrecision) : '—'}</div><div className="mt-1 font-mono text-[8px] text-shafx-textMuted">{activePosition.stopLossPips ? activePosition.stopLossPips.toFixed(1) + ' pips' : '—'}</div></div>
+          <div className="bg-shafx-surface p-3 text-right"><div className="text-[8px] uppercase tracking-[0.12em] text-shafx-success">Take profit{activePosition.brokerProtectionConfirmed === false ? ' · UNCONFIRMED' : ''}</div><div className="mt-1 font-mono text-sm">{activePosition.plannedTakeProfitPrice ? formatPrice(activePosition.plannedTakeProfitPrice, symbolSpec.pricePrecision) : '—'}</div><div className="mt-1 font-mono text-[8px] text-shafx-textMuted">{activePosition.takeProfitPips ? activePosition.takeProfitPips.toFixed(1) + ' pips' : '—'}</div></div>
         </div>
         <div className="flex items-center justify-between gap-3 border-t border-shafx-border px-3 py-2.5">
           <div className="text-[8px] leading-4 text-shafx-textMuted"><ShieldCheck className="mr-1 inline h-3.5 w-3.5 text-shafx-accent" />Broker-managed SL/TP stays with cTrader.</div>
