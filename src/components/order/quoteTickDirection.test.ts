@@ -17,19 +17,19 @@ describe('getQuoteTickDirection', () => {
 })
 
 describe('getTradeButtonDirection', () => {
-  it('colors BUY up and SELL down when price rises', async () => {
+  it('lets BUY and SELL both show green when their quotes rise', async () => {
     const { getTradeButtonDirection } = await import('./quoteTickDirection')
     expect(getTradeButtonDirection('up', 'BUY')).toBe('up')
-    expect(getTradeButtonDirection('up', 'SELL')).toBe('down')
+    expect(getTradeButtonDirection('up', 'SELL')).toBe('up')
   })
 
-  it('colors BUY down and SELL up when price falls', async () => {
+  it('lets BUY and SELL both show red when their quotes fall', async () => {
     const { getTradeButtonDirection } = await import('./quoteTickDirection')
     expect(getTradeButtonDirection('down', 'BUY')).toBe('down')
-    expect(getTradeButtonDirection('down', 'SELL')).toBe('up')
+    expect(getTradeButtonDirection('down', 'SELL')).toBe('down')
   })
 
-  it('returns neutral for both buttons when the market price is unchanged', async () => {
+  it('keeps both buttons neutral until a quote direction is known', async () => {
     const { getTradeButtonDirection } = await import('./quoteTickDirection')
     expect(getTradeButtonDirection('neutral', 'BUY')).toBe('neutral')
     expect(getTradeButtonDirection('neutral', 'SELL')).toBe('neutral')

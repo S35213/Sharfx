@@ -6,12 +6,11 @@ export const getQuoteTickDirection = (next: number, previous: number): QuoteTick
   return next > previous ? 'up' : 'down'
 }
 
-/** Opposite trade sides react to the same market move with opposite tones. */
+/** Apply each tile's own live quote direction. BUY uses Ask; SELL uses Bid. */
 export const getTradeButtonDirection = (
   marketDirection: QuoteTickDirection,
   side: TradeButtonSide,
 ): QuoteTickDirection => {
-  if (marketDirection === 'neutral') return 'neutral'
-  if (side === 'BUY') return marketDirection
-  return marketDirection === 'up' ? 'down' : 'up'
+  if (side !== 'BUY' && side !== 'SELL') return 'neutral'
+  return marketDirection
 }

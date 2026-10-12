@@ -115,11 +115,12 @@ const LegacyMultiplierOrderPanel: React.FC<Props> = ({
   const [now, setNow] = useState(0)
   const newTradeRef = useRef<HTMLDivElement | null>(null)
   const previousBidRef = useRef<number | null>(null)
-  const quoteToneTimerRef = useRef<number | null>(null)
-  const [marketDirection, setMarketDirection] = useState<QuoteTickDirection>('neutral')
+  const previousAskRef = useRef<number | null>(null)
+  const [buyMarketDirection, setBuyMarketDirection] = useState<QuoteTickDirection>('neutral')
+  const [sellMarketDirection, setSellMarketDirection] = useState<QuoteTickDirection>('neutral')
 
-  const buyButtonDirection = getTradeButtonDirection(marketDirection, 'BUY')
-  const sellButtonDirection = getTradeButtonDirection(marketDirection, 'SELL')
+  const buyButtonDirection = getTradeButtonDirection(buyMarketDirection, 'BUY')
+  const sellButtonDirection = getTradeButtonDirection(sellMarketDirection, 'SELL')
   const tradeSideButtonTone = (direction: QuoteTickDirection): string => direction === 'up'
     ? 'border-shafx-success bg-shafx-success/35'
     : direction === 'down'
@@ -141,27 +142,24 @@ const LegacyMultiplierOrderPanel: React.FC<Props> = ({
   }, [activePosition?.providerOrderId])
 
   useEffect(() => {
-    const bid = Number(bidPrice ?? currentPrice)
+    const bid = Number.isFinite(bidPrice) && bidPrice > 0 ? bidPrice : currentPrice
     if (!Number.isFinite(bid) || bid <= 0) return
-
     const previous = previousBidRef.current
     previousBidRef.current = bid
     if (previous === null) return
-
     const nextDirection = getQuoteTickDirection(bid, previous)
-    if (nextDirection === 'neutral') return
-
-    setMarketDirection(nextDirection)
-    if (quoteToneTimerRef.current !== null) window.clearTimeout(quoteToneTimerRef.current)
-    quoteToneTimerRef.current = window.setTimeout(() => {
-      setMarketDirection('neutral')
-      quoteToneTimerRef.current = null
-    }, 15000)
+    if (nextDirection !== 'neutral') setSellMarketDirection(nextDirection)
   }, [bidPrice, currentPrice])
 
-  useEffect(() => () => {
-    if (quoteToneTimerRef.current !== null) window.clearTimeout(quoteToneTimerRef.current)
-  }, [])
+  useEffect(() => {
+    const ask = Number.isFinite(askPrice) && askPrice > 0 ? askPrice : currentPrice
+    if (!Number.isFinite(ask) || ask <= 0) return
+    const previous = previousAskRef.current
+    previousAskRef.current = ask
+    if (previous === null) return
+    const nextDirection = getQuoteTickDirection(ask, previous)
+    if (nextDirection !== 'neutral') setBuyMarketDirection(nextDirection)
+  }, [askPrice, currentPrice])
 
   useEffect(() => {
     if (!activePosition?.openTime) return
@@ -536,33 +534,33 @@ const LegacyMultiplierOrderPanel: React.FC<Props> = ({
         <div className="mt-3 grid grid-cols-2 gap-1.5">
           <button
             type="button"
-            data-market-direction={marketDirection}
+            data-side="BUY"
+            data-market-direction={buyMarketDirection}
             data-button-tone={buyButtonDirection}
             onClick={() => chooseSide('BUY')}
             disabled={busy}
             aria-pressed={side === 'BUY'}
             aria-label="Select BUY at Ask price"
-            className={'shafx-trade-side-button min-h-14 border px-3 py-2 text-left text-shafx-text transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ' + tradeSideButtonTone(buyButtonDirection) + (side === 'BUY' ? ' ring-2 ring-white/90 ring-offset-1 ring-offset-[#080D13]' : ' hover:brightness-110')}
+            className={'shafx-trade-side-button relative min-h-14 border px-3 py-2 text-left text-shafx-text transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-accent ' + tradeSideButtonTone(buyButtonDirection) + ' hover:brightness-110'}
           >
             <span className="flex items-center justify-between gap-2 text-[10px] font-bold">
-              <span><ArrowUpRight className="mr-1 inline h-3.5 w-3.5" />BUY</span>
-              {side === 'BUY' && <span className="text-[7px] font-semibold uppercase tracking-[0.12em]">Selected</span>}
+              <span>BUY</span>
             </span>
             <span style={{ color: '#E7EAF0' }} className="mt-1 block font-mono text-[10px] tabular-nums">ASK {marketMetrics.ask ? formatPrice(marketMetrics.ask, symbolSpec.pricePrecision) : '—'}</span>
           </button>
           <button
             type="button"
-            data-market-direction={marketDirection}
+            data-side="SELL"
+            data-market-direction={sellMarketDirection}
             data-button-tone={sellButtonDirection}
             onClick={() => chooseSide('SELL')}
             disabled={busy}
             aria-pressed={side === 'SELL'}
             aria-label="Select SELL at Bid price"
-            className={'shafx-trade-side-button min-h-14 border px-3 py-2 text-left text-shafx-text transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ' + tradeSideButtonTone(sellButtonDirection) + (side === 'SELL' ? ' ring-2 ring-white/90 ring-offset-1 ring-offset-[#080D13]' : ' hover:brightness-110')}
+            className={'shafx-trade-side-button relative min-h-14 border px-3 py-2 text-left text-shafx-text transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-accent ' + tradeSideButtonTone(sellButtonDirection) + ' hover:brightness-110'}
           >
             <span className="flex items-center justify-between gap-2 text-[10px] font-bold">
-              <span><ArrowDownRight className="mr-1 inline h-3.5 w-3.5" />SELL</span>
-              {side === 'SELL' && <span className="text-[7px] font-semibold uppercase tracking-[0.12em]">Selected</span>}
+              <span>SELL</span>
             </span>
             <span style={{ color: '#E7EAF0' }} className="mt-1 block font-mono text-[10px] tabular-nums">BID {marketMetrics.bid ? formatPrice(marketMetrics.bid, symbolSpec.pricePrecision) : '—'}</span>
           </button>

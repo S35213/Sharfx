@@ -575,6 +575,10 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     const quoteYs = [bidPrice, askPrice]
       .filter((price): price is number => Number.isFinite(price) && Number(price) > 0)
       .map((price) => series.priceToCoordinate(Number(price)))
+    const tradeLineYs = tradeLines
+      .filter((line) => Number.isFinite(line.price) && line.price > 0)
+      .map((line) => series.priceToCoordinate(line.price))
+    const occludingLevelYs = [...quoteYs, ...tradeLineYs]
 
     const desired = new Set<string>()
     const labelCandidates: Array<ChartAnnotation | UserLevel> = []
@@ -583,7 +587,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       const levelY = series.priceToCoordinate(annotation.price)
       const wasHidden = structuralOcclusionRef.current.get(annotation.id) === true
       // A wider restore threshold avoids flicker if the quote taps the same level.
-      const isHidden = isPriceLevelOccludedByQuote(levelY, quoteYs, wasHidden ? 12 : 7)
+      const isHidden = isPriceLevelOccludedByQuote(levelY, occludingLevelYs, wasHidden ? 12 : 7)
       structuralOcclusionRef.current.set(annotation.id, isHidden)
       return isHidden
     }
@@ -1191,10 +1195,30 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     date.setUTCHours(0, 0, 0, 0)
     return Math.floor(date.getTime() / 1000)
   }
-  const countdown = timeframe && Number.isFinite(marketTimestamp)
+  const [clockNowMs, setClockNowMs] = useState(() => Date.now())
+  const marketTimestampAnchorRef = useRef({
+    timestamp: Number.isFinite(marketTimestamp) && Number(marketTimestamp) > 0 ? Number(marketTimestamp) : 0,
+    observedAtMs: Date.now(),
+  })
+
+  useEffect(() => {
+    if (!Number.isFinite(marketTimestamp) || Number(marketTimestamp) <= 0) return
+    marketTimestampAnchorRef.current = { timestamp: Number(marketTimestamp), observedAtMs: Date.now() }
+    setClockNowMs(Date.now())
+  }, [marketTimestamp])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setClockNowMs(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  const countdownTimestamp = marketTimestampAnchorRef.current.timestamp > 0
+    ? Math.floor(marketTimestampAnchorRef.current.timestamp + Math.max(0, (clockNowMs - marketTimestampAnchorRef.current.observedAtMs) / 1000))
+    : Number.NaN
+  const countdown = timeframe && Number.isFinite(countdownTimestamp)
     ? timeframe === 'W1'
-      ? Math.max(0, weekStart(Number(marketTimestamp)) + timeframeSeconds.W1 - Math.floor(Number(marketTimestamp)))
-      : Math.max(0, timeframeSeconds[timeframe] - (Math.floor(Number(marketTimestamp)) % timeframeSeconds[timeframe]))
+      ? Math.max(0, weekStart(countdownTimestamp) + timeframeSeconds.W1 - countdownTimestamp)
+      : Math.max(0, timeframeSeconds[timeframe] - (countdownTimestamp % timeframeSeconds[timeframe]))
     : null
   const formatCountdown = (seconds: number): string => {
     if (seconds >= 86400) return `${Math.floor(seconds / 86400)}d ${Math.floor((seconds % 86400) / 3600)}h`
