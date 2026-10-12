@@ -112,13 +112,13 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const [hoverCandle, setHoverCandle] = useState<{ time: number; open?: number; high?: number; low?: number; close: number } | null>(null)
   const chartDataSourceRef = useRef<OHLCV[]>(data)
   useEffect(() => { chartDataSourceRef.current = data }, [data])
-  const timelineHostRef = useRef<HTMLDivElement | null>(null)
-  const timelineNodesRef = useRef<Map<number, HTMLSpanElement>>(new Map())
+  const [timelineMarks, setTimelineMarks] = useState<Array<{ x: number; label: string; time: number }>>([])
+  const timelineSignatureRef = useRef('')
   const chartTimeSignature = chartData.map((candle) => Number(candle.time)).join(',')
   const priceLinesRef = useRef<Map<string, IPriceLine>>(new Map())
   const priceLinesSeriesRef = useRef<ShafxSeries | null>(null)
   const lineLabelsHostRef = useRef<HTMLDivElement | null>(null)
-  const lineLabelNodesRef = useRef<Map<string, HTMLSpanElement>>(new Map())
+  const [lineLabels, setLineLabels] = useState<Array<{ id: string; price: number; name: string; color: string; y: number }>>([])
   const lineLabelSyncRef = useRef<(() => void) | null>(null)
   const structuralOcclusionRef = useRef<Map<string, boolean>>(new Map())
   const tradeMarkerSignatureRef = useRef('')
@@ -472,29 +472,11 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     }
   }, [chartMode, candleTheme, pipSize])
   useEffect(() => {
-    const host = timelineHostRef.current
-    const nodes = timelineNodesRef.current
-    const syncTimelineDom = (marks: Array<{ x: number; label: string; time: number }>): void => {
-      if (!host) return
-      const desired = new Set<number>()
-      for (const mark of marks) {
-        desired.add(mark.time)
-        let node = nodes.get(mark.time)
-        if (!node) {
-          node = document.createElement('span')
-          node.className = 'absolute top-1 -translate-x-1/2 whitespace-nowrap font-mono text-[8px] tabular text-shafx-textMuted sm:text-[9px]'
-          node.setAttribute('data-shafx-timeline-time', String(mark.time))
-          nodes.set(mark.time, node)
-          host.appendChild(node)
-        }
-        node.textContent = mark.label
-        node.style.left = mark.x + 'px'
-      }
-      for (const [time, node] of nodes) {
-        if (desired.has(time)) continue
-        if (node.parentNode === host) host.removeChild(node)
-        nodes.delete(time)
-      }
+    const publishMarks = (next: Array<{ x: number; label: string; time: number }>): void => {
+      const signature = next.map((mark) => `${mark.time}:${Math.round(mark.x)}:${mark.label}`).join('|')
+      if (timelineSignatureRef.current === signature) return
+      timelineSignatureRef.current = signature
+      setTimelineMarks(next)
     }
 
     const chart = chartRef.current
@@ -502,7 +484,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       ? chartTimeSignature.split(',').map(Number).filter(Number.isFinite)
       : []
     if (!chart || chartTimes.length === 0 || !timeframe) {
-      syncTimelineDom([])
+      publishMarks([])
       return
     }
 
@@ -511,18 +493,14 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       const range = timeScale.getVisibleLogicalRange()
       const width = timeScale.width()
       if (!range || width <= 0) {
-        syncTimelineDom([])
+        publishMarks([])
         return
       }
-
       const from = Math.max(0, Math.floor(range.from))
       const to = Math.min(chartTimes.length - 1, Math.ceil(range.to))
       const visibleCount = Math.max(1, to - from + 1)
       const pxPerBar = width / visibleCount
       const minimumLabelSpacing = width < 640 ? 62 : 74
-
-      // Adaptive density: show timeframe boundaries at a readable spacing,
-      // as in a trading terminal, without rerendering React children on every tick.
       const candidates = [1, 2, 4, 6, 12, 24, 48, 96, 192]
       const step = candidates.find((candidate) => candidate * pxPerBar >= minimumLabelSpacing) ?? 192
       const interval = timeframeSecondsFor(timeframe) * step
@@ -532,15 +510,12 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         const timestamp = chartTimes[index]
         if (!Number.isFinite(timestamp)) continue
         if (Math.floor(timestamp / interval) * interval !== timestamp) continue
-
         const x = timeScale.timeToCoordinate(timestamp as UTCTimestamp)
         if (x === null || x < -40 || x > width + 40) continue
-
         const date = new Date(timestamp * 1000)
         const label = timeframe === 'D1' || timeframe === 'W1'
           ? String(date.getUTCDate()).padStart(2, '0') + ' ' + date.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' })
           : date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' })
-
         marks.push({ x: Number(x), label, time: timestamp })
       }
 
@@ -549,20 +524,17 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         const previous = selected[selected.length - 1]
         if (!previous || mark.x - previous.x >= minimumLabelSpacing) selected.push(mark)
       }
-      syncTimelineDom(selected)
+      publishMarks(selected)
     }
 
     updateTimeline()
     timeScale.subscribeVisibleLogicalRangeChange(updateTimeline)
-    const onResize = (): void => updateTimeline()
-    window.addEventListener('resize', onResize)
+    window.addEventListener('resize', updateTimeline)
     return () => {
       timeScale.unsubscribeVisibleLogicalRangeChange(updateTimeline)
-      window.removeEventListener('resize', onResize)
-      syncTimelineDom([])
+      window.removeEventListener('resize', updateTimeline)
     }
   }, [chartTimeSignature, timeframe, isFullscreen])
-
 
   // Keep true-price lines independent and label each one directly inside the chart.
   // When a structural level occupies the same pixel row as a live Bid/Ask quote,
@@ -743,32 +715,23 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         for (let index = 0; index < positions.length; index += 1) positions[index] += shift
       }
 
-      const activeLabelIds = new Set<string>()
-      entries.forEach((entry, index) => {
-        activeLabelIds.add(entry.id)
-        let node = lineLabelNodesRef.current.get(entry.id)
-        if (!node) {
-          node = document.createElement('span')
-          node.className = 'shafx-price-line-label'
-          node.setAttribute('data-shafx-price-line-label', entry.id)
-          node.setAttribute('role', 'img')
-          lineLabelNodesRef.current.set(entry.id, node)
-          host.appendChild(node)
-        }
-        const text = entry.name + '  ' + entry.price.toFixed(pricePrecision)
-        node.textContent = text
-        node.title = text
-        node.setAttribute('aria-label', text)
-        node.style.top = positions[index] + 'px'
-        node.style.borderLeftColor = entry.color
-        node.style.color = entry.color
+      const initialLabels = entries.map((entry, index) => ({
+        id: entry.id,
+        price: entry.price,
+        name: entry.name,
+        color: entry.color,
+        y: positions[index],
+      }))
+      setLineLabels((current) => {
+        if (current.length === initialLabels.length && current.every((item, index) =>
+          item.id === initialLabels[index].id &&
+          item.price === initialLabels[index].price &&
+          item.name === initialLabels[index].name &&
+          item.color === initialLabels[index].color &&
+          item.y === initialLabels[index].y
+        )) return current
+        return initialLabels
       })
-
-      for (const [id, node] of lineLabelNodesRef.current) {
-        if (activeLabelIds.has(id)) continue
-        node.remove()
-        lineLabelNodesRef.current.delete(id)
-      }
 
       lineLabelSyncRef.current = () => {
         const liveHost = lineLabelsHostRef.current
@@ -779,9 +742,12 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         const visible = entries
           .map((entry) => ({
             id: entry.id,
+            price: entry.price,
+            name: entry.name,
+            color: entry.color,
             y: resolvePriceLabelY(liveSeries.priceToCoordinate(entry.price), entry.price, lastClose, currentMinY, currentMaxY),
           }))
-          .sort((a, b) => a.y - b.y)
+          .sort((left, right) => left.y - right.y || left.id.localeCompare(right.id))
         const currentPositions = visible.map((entry) => Math.max(currentMinY, Math.min(currentMaxY, entry.y)))
         for (let index = 1; index < currentPositions.length; index += 1) {
           currentPositions[index] = Math.max(currentPositions[index], currentPositions[index - 1] + rowGap)
@@ -796,9 +762,16 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
           const shift = currentMinY - currentPositions[0]
           for (let index = 0; index < currentPositions.length; index += 1) currentPositions[index] += shift
         }
-        visible.forEach((entry, index) => {
-          const node = lineLabelNodesRef.current.get(entry.id)
-          if (node) node.style.top = currentPositions[index] + 'px'
+        const nextLabels = visible.map((entry, index) => ({ ...entry, y: currentPositions[index] }))
+        setLineLabels((current) => {
+          if (current.length === nextLabels.length && current.every((item, index) =>
+            item.id === nextLabels[index].id &&
+            item.price === nextLabels[index].price &&
+            item.name === nextLabels[index].name &&
+            item.color === nextLabels[index].color &&
+            item.y === nextLabels[index].y
+          )) return current
+          return nextLabels
         })
       }
       lineLabelSyncRef.current()
@@ -810,14 +783,12 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     if (!chart) return
     const syncLabels = (): void => lineLabelSyncRef.current?.()
     chart.timeScale().subscribeVisibleLogicalRangeChange(syncLabels)
-    chart.subscribeCrosshairMove(syncLabels)
     const shell = containerRef.current
     const observer = shell && typeof ResizeObserver !== 'undefined' ? new ResizeObserver(syncLabels) : null
     if (shell && observer) observer.observe(shell)
     window.addEventListener('resize', syncLabels)
     return () => {
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(syncLabels)
-      chart.unsubscribeCrosshairMove(syncLabels)
       observer?.disconnect()
       window.removeEventListener('resize', syncLabels)
     }
@@ -1258,7 +1229,16 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     style={{ height: chartFullscreen ? '100svh' : height, minHeight: 280 }}
   >
     <div ref={chartHostRef} className="absolute inset-0 z-0" aria-hidden="true" />
-    <div ref={lineLabelsHostRef} aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 right-[82px] z-20 overflow-hidden sm:right-[96px]" />
+    <div ref={lineLabelsHostRef} aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 right-[82px] z-20 overflow-hidden sm:right-[96px]">
+      {lineLabels.map((label) => {
+        const text = label.name + '  ' + label.price.toFixed(pricePrecision)
+        return (
+          <span key={label.id} className="shafx-price-line-label" data-shafx-price-line-label={label.id} role="img" aria-label={text} title={text} style={{ top: label.y + 'px', borderLeftColor: label.color, color: label.color }}>
+            {text}
+          </span>
+        )
+      })}
+    </div>
     <div className="pointer-events-none absolute left-3 top-3 z-30 flex items-center gap-2 rounded-xl border border-shafx-border/70 bg-shafx-surface/88 px-2.5 py-1.5 shadow-md backdrop-blur">
       {!replayMode && countdown !== null && <span className="font-mono text-[8px] font-semibold tabular text-shafx-accent">CLOSE {formatCountdown(countdown)}</span>}
       {replayMode && <span className="font-mono text-[8px] font-semibold tabular text-shafx-accent">HISTORICAL</span>}
@@ -1302,7 +1282,13 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       </div>
     </div>}
 
-    <div ref={timelineHostRef} aria-hidden="true" className="pointer-events-none absolute bottom-0 left-0 right-[82px] z-30 h-8 border-t border-shafx-border/70 bg-shafx-bg/95 sm:right-[96px]" />
+    <div aria-hidden="true" className="pointer-events-none absolute bottom-0 left-0 right-[82px] z-30 h-8 border-t border-shafx-border/70 bg-shafx-bg/95 sm:right-[96px]">
+      {timelineMarks.map((mark) => (
+        <span key={mark.time} data-shafx-timeline-time={mark.time} className="absolute top-1 -translate-x-1/2 whitespace-nowrap font-mono text-[8px] tabular text-shafx-textMuted sm:text-[9px]" style={{ left: mark.x + 'px' }}>
+          {mark.label}
+        </span>
+      ))}
+    </div>
     <div
       aria-label="Price scale"
       className="absolute right-0 top-10 bottom-8 z-20 w-[82px] touch-none cursor-ns-resize sm:w-[96px]"
