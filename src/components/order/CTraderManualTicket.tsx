@@ -192,7 +192,9 @@ export const CTraderManualTicket: React.FC<Props> = ({
   const riskRatio = plan.valid ? plan.riskRewardRatio : 0
   const buyButtonDirection = quoteFresh ? getTradeButtonDirection(buyMarketDirection, 'BUY') : 'neutral'
   const sellButtonDirection = quoteFresh ? getTradeButtonDirection(sellMarketDirection, 'SELL') : 'neutral'
-  const tradeSideButtonTone = (_direction: QuoteTickDirection): string => 'border-[#343C48] bg-[#11161E]'
+  const tradeSideButtonTone = (direction: QuoteTickDirection): string => direction === 'neutral'
+    ? 'border-[#343C48] bg-[#11161E]'
+    : 'border-[#343C48] bg-[#11161E]'
 
   useEffect(() => {
     setSide(aiSetup?.direction ?? 'BUY')

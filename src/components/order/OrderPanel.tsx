@@ -122,7 +122,9 @@ const LegacyMultiplierOrderPanel: React.FC<Props> = ({
 
   const buyButtonDirection = getTradeButtonDirection(buyMarketDirection, 'BUY')
   const sellButtonDirection = getTradeButtonDirection(sellMarketDirection, 'SELL')
-  const tradeSideButtonTone = (_direction: QuoteTickDirection): string => 'border-[#343C48] bg-[#11161E]'
+  const tradeSideButtonTone = (direction: QuoteTickDirection): string => direction === 'neutral'
+    ? 'border-[#343C48] bg-[#11161E]'
+    : 'border-[#343C48] bg-[#11161E]'
 
   useEffect(() => {
     setSide(aiSetup?.direction ?? 'BUY')
