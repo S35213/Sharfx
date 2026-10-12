@@ -6,6 +6,7 @@ import {
   cTraderQuoteBucket,
   isCTraderQuoteBucketCurrent,
   normalizeCTraderHistoricalCandles,
+  shouldNotifyCTraderQuoteListener,
   shouldRepairCTraderHistoryForGap,
 } from './CTraderLiveQuote'
 
@@ -214,5 +215,30 @@ describe('cTrader history gap recovery', () => {
     const repaired = mergeCTraderHistoricalAndLiveCandles(historical, live)
     expect(repaired.map((item) => item.time)).toEqual([firstTime, firstTime + 60, firstTime + 120])
     expect(repaired[1]).toMatchObject({ open: 1.11980, close: 1.11995 })
+  })
+})
+
+
+describe('cTrader quote feed heartbeat', () => {
+  it('publishes the first quote and every price change immediately', () => {
+    expect(shouldNotifyCTraderQuoteListener(
+      { pricesChanged: true, quoteClockAdvanced: false },
+      10_000,
+      10_050,
+    )).toBe(true)
+  })
+
+  it('publishes minute-boundary updates immediately even if prices repeat', () => {
+    expect(shouldNotifyCTraderQuoteListener(
+      { pricesChanged: false, quoteClockAdvanced: true },
+      10_000,
+      10_050,
+    )).toBe(true)
+  })
+
+  it('sends a one-second heartbeat during a quiet market, not every poll', () => {
+    const unchanged = { pricesChanged: false, quoteClockAdvanced: false }
+    expect(shouldNotifyCTraderQuoteListener(unchanged, 10_000, 10_999)).toBe(false)
+    expect(shouldNotifyCTraderQuoteListener(unchanged, 10_000, 11_000)).toBe(true)
   })
 })
