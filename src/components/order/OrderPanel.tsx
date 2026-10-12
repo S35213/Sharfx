@@ -47,7 +47,7 @@ const STOP_LOSS_RATIOS = [0.1, 0.2, 0.4, 0.8]
 const TAKE_PROFIT_MULTIPLES = [0.5, 1, 2, 5, 10]
 const DEFAULT_STOP_LOSS_RATIO = 0.4
 const DEFAULT_TAKE_PROFIT_MULTIPLE = 0.5
-const QUOTE_TICK_COLOR_HOLD_MS = 1300
+const QUOTE_TICK_COLOR_HOLD_MS = 650
 
 const roundMoney = (value: number): number => Number(value.toFixed(2))
 

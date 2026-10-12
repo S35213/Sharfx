@@ -60,7 +60,7 @@ interface MarginResult {
 const sharedCTraderMarginCache = new Map<string, { margin: MarginResult; expiresAt: number }>()
 const sharedCTraderMarginInflight = new Map<string, Promise<MarginResult>>()
 const SHARED_CTRADER_MARGIN_CACHE_MS = 10000
-const QUOTE_TICK_COLOR_HOLD_MS = 350
+const QUOTE_TICK_COLOR_HOLD_MS = 650
 
 const postCTrader = async (body: Record<string, unknown>): Promise<Record<string, unknown>> => {
   const response = await fetch('/api/providers/ctrader', {
