@@ -221,3 +221,23 @@
 
 **Persistence rule:** update this tree and `docs/SHAFX_BRANCH_HANDOFF.md` whenever the direction changes, a build fails, a blocker is found, or a gate passes. Future agents must continue from the latest checkpoint rather than restarting the project.
 
+
+
+## Experimental chart/ticket checkpoint — 2026-10-12
+
+**Current branch:** `test/rebuild-deriv-native-manual-20260930`  
+**Target service:** Render `sharfx-deriv-render`, ID `srv-dav8hrt9fdbs73d690s0`  
+**Current head:** `58ee1c945f6c537ea13caa2d62bfe3de63fe65f9`  
+**Current deployment:** `dep-db6a93gae00c73aejea0` — **LIVE** at https://sharfx-deriv-render.onrender.com
+
+- [x] The diagnostic component stack for the intermittent `insertBefore` error pointed to the left Watchlist button/span during live quote rerenders.
+- [x] Watchlist quote direction/percentage now renders as a single stable text child; TinyFish watched the build with this change for ~130 seconds, observed live Watchlist updates and an M5 → H1 → M5 roundtrip, and did not reproduce the error during that window. Continue monitoring; this is not an absolute guarantee.
+- [x] Chart time-axis and price-line label hosts use stable keyed React children instead of manual insert/remove calls.
+- [x] The countdown calculation is isolated in `src/components/chart/candleCountdown.ts`, driven by a 1-second UTC clock; 4 new helper tests passed.
+- [x] Latest Render build, GitHub build, static-server check and lint pass.
+- [!] Last post-Watchlist TinyFish test found the countdown frozen at the same display for six sequential readings. The UTC-clock fix is now deployed, but it has **not** been visually verified on the newest deployment because TinyFish credit was depleted. Do not claim live countdown acceptance yet.
+- [~] Square BUY/SELL tiles remove the white selection ring, keep quote text neutral, allow each side to follow its own Ask/Bid direction, and use higher-specificity square CSS. White-ring removal and quote direction were seen in prior browser checks; final square-corner appearance after the latest CSS override remains unverified.
+- [!] Current test suite is 360 passed, 2 failed of 362. Only the same existing unrelated failures remain: cTrader order-status normalization (expected `rejected`, got `filled`) and CFD quote-currency conversion (expected `null`, got `10`). Do not alter those paths as part of the chart task.
+- [x] No trade placement/closure, provider settings, credentials, or account settings were changed during this work.
+
+**Next step:** when TinyFish browser automation credit is available, repeat the M5 countdown readout at one-second intervals on this exact deployment, confirm square BUY/SELL corners/selection underline, then watch M5 for at least 100 seconds with live quotes and switch M5 → H1 → M5. Keep PR #58 in draft; do not merge or promote without all required gates and explicit user approval.
