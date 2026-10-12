@@ -777,7 +777,7 @@ const TerminalContent: React.FC = () => {
       accountId: selection.accountId,
       environment: selection.environment === 'live' ? 'live' : 'demo',
       symbol: subscriptionSymbol,
-    }, (nextQuote) => {
+    }, (nextQuote, _nextInstrument, update) => {
       if (
         cancelled ||
         selectedSymbolRef.current !== subscriptionSymbol ||
@@ -796,31 +796,35 @@ const TerminalContent: React.FC = () => {
       const timestamp = Number.isFinite(epochMs) ? epochMs : Date.now()
       const bucket = cTraderQuoteBucket(timestamp, subscriptionTimeframe)
 
-      // Validate the quote against the displayed timeframe's latest candle BEFORE
-      // changing currentPrice or BUY/SELL. Previously a stale bucket moved those
-      // labels, while the candle updater below discarded the same tick.
+      // Quote freshness and candle timestamp validity are separate concerns.
+      // A successful current quote should always feed the Bid/Ask rails, even if
+      // the provider timestamp sits behind this timeframe's latest cached candle.
+      // Only update OHLC when its candle bucket is valid and the quote actually
+      // changed (or crossed a provider-minute boundary); heartbeat-only packets
+      // keep the live status fresh without repainting identical candles.
       const currentCandles = normalizeMarketCandles(liveCandlesRef.current)
       const last = currentCandles[currentCandles.length - 1]
-      if (!isCTraderQuoteBucketCurrent(bucket, last?.time)) return
-      const skippedCandleBucket = shouldRepairCTraderHistoryForGap(last?.time, bucket, subscriptionTimeframe)
+      const candleBucketIsCurrent = isCTraderQuoteBucketCurrent(bucket, last?.time)
+      const skippedCandleBucket = candleBucketIsCurrent &&
+        shouldRepairCTraderHistoryForGap(last?.time, bucket, subscriptionTimeframe)
 
-      // Candle OHLC is bid-based. This shared helper preserves the candle open,
-      // extends its wick, and updates close on every accepted tick so Lightweight
-      // Charts can switch the forming body between up/down colors when close crosses open.
-      const nextCandles = applyCTraderQuoteToCandles(currentCandles, bucket, price)
-      if (nextCandles.length > 0) {
-        // Commit the candle and the quote markers from the same accepted tick.
-        const cTraderKey = [
-          String(selection.connectionId),
-          String(selection.accountId),
-          selection.environment,
-          subscriptionSymbol,
-          subscriptionTimeframe,
-        ].join(':')
-        liveCandlesRef.current = nextCandles
-        cTraderCandleCacheRef.current[cTraderKey] = nextCandles
-        candleCacheRef.current[subscriptionSymbol + ':' + subscriptionTimeframe] = nextCandles
-        setLiveCandles(nextCandles)
+      if (candleBucketIsCurrent && (update.pricesChanged || update.quoteClockAdvanced)) {
+        // Candle OHLC is bid-based. Preserve the forming candle's open and use
+        // actual Ask/Bid quote changes to update its range and close.
+        const nextCandles = applyCTraderQuoteToCandles(currentCandles, bucket, price)
+        if (nextCandles.length > 0) {
+          const cTraderKey = [
+            String(selection.connectionId),
+            String(selection.accountId),
+            selection.environment,
+            subscriptionSymbol,
+            subscriptionTimeframe,
+          ].join(':')
+          liveCandlesRef.current = nextCandles
+          cTraderCandleCacheRef.current[cTraderKey] = nextCandles
+          candleCacheRef.current[subscriptionSymbol + ':' + subscriptionTimeframe] = nextCandles
+          setLiveCandles(nextCandles)
+        }
       }
       if (skippedCandleBucket) void repairSkippedCandles()
 
