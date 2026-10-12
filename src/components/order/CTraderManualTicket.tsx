@@ -502,7 +502,7 @@ export const CTraderManualTicket: React.FC<Props> = ({
           </button>
           <button type="button" data-side="SELL" data-market-direction={sellButtonDirection} data-button-tone={sellButtonDirection} aria-label="Select SELL at Bid price" aria-pressed={side === 'SELL'} onClick={() => chooseSide('SELL')} className={'shafx-trade-side-button relative min-h-[70px] border px-3 py-3 text-left text-shafx-text transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-accent ' + tradeSideButtonTone(sellButtonDirection) + ' hover:bg-[#171E28]'}>
             <span className="flex items-center justify-between gap-1 text-[10px] font-bold tracking-[0.08em]"><span>SELL</span><span className="text-[8px] uppercase tracking-[0.14em] text-[#AAB2BD]">BID</span></span>
-            <span className="shafx-trade-side-price mt-2 block font-mono text-[11px] font-semibold tabular-nums">{brokerQuoteReady ? formatPrice(Number(quote?.bid), effectiveSymbol.pricePrecision) : '—'}</span>
+            <span className="shafx-trade-side-price mt-2 block font-mono text-[10px] font-semibold tabular-nums">{brokerQuoteReady ? formatPrice(Number(quote?.bid), effectiveSymbol.pricePrecision) : '—'}</span>
           </button>
         </div>
 

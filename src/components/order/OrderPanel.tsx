@@ -582,7 +582,7 @@ const LegacyMultiplierOrderPanel: React.FC<Props> = ({
             <span className="flex items-center justify-between gap-2 text-[10px] font-bold tracking-[0.08em]">
               <span>SELL</span><span className="text-[8px] uppercase tracking-[0.14em] text-[#AAB2BD]">BID</span>
             </span>
-            <span className="shafx-trade-side-price mt-2 block font-mono text-[11px] font-semibold tabular-nums">{Number.isFinite(bidPrice) && bidPrice > 0 && marketMetrics.bid !== null ? formatPrice(marketMetrics.bid, symbolSpec.pricePrecision) : '—'}</span>
+            <span className="shafx-trade-side-price mt-2 block font-mono text-[10px] font-semibold tabular-nums">{Number.isFinite(bidPrice) && bidPrice > 0 && marketMetrics.bid !== null ? formatPrice(marketMetrics.bid, symbolSpec.pricePrecision) : '—'}</span>
           </button>
         </div>
 
