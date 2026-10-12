@@ -780,9 +780,11 @@ const TerminalContent: React.FC = () => {
         if (unchanged) return
 
         cTraderCandleCacheRef.current[historyRepairKey] = repaired
-        candleCacheRef.current[subscriptionSymbol + ':' + subscriptionTimeframe] = repaired
-        liveCandlesRef.current = repaired
-        setLiveCandles(repaired)
+        candleCacheRef.current[subscriptionSymbol + ':' + targetTimeframe] = repaired
+        if (timeframeRef.current === targetTimeframe) {
+          liveCandlesRef.current = repaired
+          setLiveCandles(repaired)
+        }
         // Keep the quote/header time from the live stream; this request repairs
         // candle history only and must never make the visible price jump backward.
       } catch {
