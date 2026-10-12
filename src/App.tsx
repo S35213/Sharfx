@@ -74,6 +74,7 @@ const providerPositionToTrade = (position: ProviderPosition): TradeOrder => {
       takeProfit,
       plannedStopLossPrice: stopLoss,
       plannedTakeProfitPrice: takeProfit,
+      brokerProtectionConfirmed: stopLoss !== null && takeProfit !== null,
       riskPercent: 0,
       riskAmount: 0,
       rewardAmount: 0,
@@ -735,6 +736,7 @@ const TerminalContent: React.FC = () => {
               stopLossPips: trade.stopLossPips ?? previous?.stopLossPips,
               takeProfitPips: trade.takeProfitPips ?? previous?.takeProfitPips,
               commission: trade.commission ?? previous?.commission, payout: previous?.payout,
+              brokerProtectionConfirmed: positivePrice(trade.stopLoss) !== null && positivePrice(trade.takeProfit) !== null,
             }
           })
           const recentLocal = current.filter((item) => !consumed.has(item.id) && item.providerId === 'ctrader' &&
@@ -1309,7 +1311,9 @@ const TerminalContent: React.FC = () => {
       setTradeHistory((current) => current.filter((item) => item.id !== order.id))
       setTradeLines([])
       setReviewSetup(null)
-      pushToast((activeProviderSelection?.providerId === 'ctrader' ? 'cTrader ' : 'Deriv ') + order.type + ' trade opened on ' + (order.chartTimeframe ?? timeframe) + '.')
+      pushToast(order.providerId === 'ctrader' && order.brokerProtectionConfirmed === false
+         ? 'Trade opened, but cTrader did not confirm broker SL/TP. Verify protection in cTrader before relying on it.'
+         : (activeProviderSelection?.providerId === 'ctrader' ? 'cTrader ' : 'Deriv ') + order.type + ' trade opened on ' + (order.chartTimeframe ?? timeframe) + '.')
     }} aiSetup={reviewSetup} />
     </div>,
     bot: <SignalDeskPanel
@@ -1331,7 +1335,9 @@ const TerminalContent: React.FC = () => {
       setTradeHistory((current) => current.filter((item) => item.id !== order.id))
       setTradeLines([])
       setReviewSetup(null)
-      pushToast((activeProviderSelection?.providerId === 'ctrader' ? 'cTrader ' : 'SHAFX ') + order.type + ' trade opened on ' + (order.chartTimeframe ?? timeframe) + '.')
+      pushToast(order.providerId === 'ctrader' && order.brokerProtectionConfirmed === false
+         ? 'Trade opened, but cTrader did not confirm broker SL/TP. Verify protection in cTrader before relying on it.'
+         : (activeProviderSelection?.providerId === 'ctrader' ? 'cTrader ' : 'SHAFX ') + order.type + ' trade opened on ' + (order.chartTimeframe ?? timeframe) + '.')
     }} aiSetup={reviewSetup} />,
 
   }
@@ -1392,7 +1398,9 @@ const TerminalContent: React.FC = () => {
       setTradeHistory((current) => current.filter((item) => item.id !== order.id))
       setTradeLines([])
       setReviewSetup(null)
-      pushToast((activeProviderSelection?.providerId === 'ctrader' ? 'cTrader ' : 'SHAFX ') + order.type + ' trade opened on ' + (order.chartTimeframe ?? timeframe) + '.')
+      pushToast(order.providerId === 'ctrader' && order.brokerProtectionConfirmed === false
+         ? 'Trade opened, but cTrader did not confirm broker SL/TP. Verify protection in cTrader before relying on it.'
+         : (activeProviderSelection?.providerId === 'ctrader' ? 'cTrader ' : 'SHAFX ') + order.type + ' trade opened on ' + (order.chartTimeframe ?? timeframe) + '.')
     }} aiSetup={reviewSetup} /></div></aside>}
       <aside className={showBot ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><SignalDeskPanel symbol={selectedSymbol} timeframe={timeframe} candles={liveCandles} currentPrice={currentPrice} analysis={marketAnalysis} setup={reviewSetup} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} connected={Boolean(derivOrderConnection)} onReviewSetup={handleReviewSetup} onPaperRoundClosed={handleBotPaperRoundClosed} /></aside>
       <aside className={showHistory ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="h-[calc(100svh-92px)] min-h-[520px]"><TradesPanel defaultTab="history" openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={currentPrice} selectedSymbol={selectedSymbol} onClosePosition={(id) => { void handleClosePosition(id) }} onBulkClose={handleBulkClose} currency={resolvedAccountData.currency} botPaperHistory={botPaperHistory} /></div></aside>
