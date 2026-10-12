@@ -672,6 +672,85 @@ const TerminalContent: React.FC = () => {
     return () => { cancelled = true; void manager.stopAll() }
   }, [activeProviderSelection?.providerId, activeProviderSelection?.connectionId, activeProviderSelection?.accountId, activeProviderSelection?.environment, pushStreamToast])
 
+  // Reconcile cTrader positions on startup so the chart can recover confirmed broker SL/TP.
+  useEffect(() => {
+    const selection = activeProviderSelection
+    if (selection?.providerId !== 'ctrader' || !selection.connectionId || !selection.accountId) return
+    let cancelled = false
+    const refreshPositions = async (): Promise<void> => {
+      try {
+        const response = await fetch('/api/providers/ctrader', {
+          method: 'POST', credentials: 'include', cache: 'no-store',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            providerId: 'ctrader', connectionId: selection.connectionId,
+            accountId: selection.accountId, environment: selection.environment, action: 'reconcile',
+          }),
+        })
+        const payload = await response.json().catch(() => ({})) as { ok?: boolean; positions?: unknown[] }
+        if (cancelled || !response.ok || !payload.ok || !Array.isArray(payload.positions)) return
+        const reconciled: TradeOrder[] = []
+        for (const item of payload.positions) {
+          if (!item || typeof item !== 'object') continue
+          const value = item as Record<string, unknown>
+          const metadata = value.metadata && typeof value.metadata === 'object' ? value.metadata as Record<string, unknown> : {}
+          const id = String(value.id ?? value.positionId ?? '')
+          const symbol = String(value.symbol ?? '')
+          const side = value.side === 'SELL' ? 'SELL' : value.side === 'BUY' ? 'BUY' : null
+          const entryPrice = Number(value.entryPrice ?? 0)
+          if (!id || !symbol || !side || !Number.isFinite(entryPrice) || entryPrice <= 0) continue
+          const position: ProviderPosition = {
+            id, symbol, side,
+            quantity: Number(value.quantity ?? value.lots ?? value.volumeLots ?? 0),
+            entryPrice, currentPrice: positivePrice(value.currentPrice) ?? undefined,
+            stopLoss: positivePrice(value.stopLoss), takeProfit: positivePrice(value.takeProfit),
+            unrealizedPL: Number(value.unrealizedPL ?? 0),
+            metadata: { ...metadata, provider: 'ctrader', connectionId: String(selection.connectionId), accountId: String(selection.accountId) },
+          }
+          reconciled.push(providerPositionToTrade(position))
+        }
+        if (reconciled.length === 0) return
+        setOpenPositions((current) => {
+          const consumed = new Set<string>()
+          const merged = reconciled.map((trade) => {
+            let previous = current.find((item) => !consumed.has(item.id) && (
+              item.id === trade.id || item.providerOrderId === trade.id || trade.providerOrderId === item.id ||
+              (Boolean(item.providerOrderId) && item.providerOrderId === trade.providerOrderId)
+            ))
+            if (!previous) {
+              const tolerance = trade.symbol.includes('JPY') ? 0.05 : 0.0005
+              const similar = current.filter((item) => !consumed.has(item.id) && item.providerId === 'ctrader' &&
+                item.providerConnectionId === String(selection.connectionId) && item.providerAccountId === String(selection.accountId) &&
+                item.type === trade.type && providerSymbolsMatch(item.symbol, trade.symbol) &&
+                Math.abs(item.entryPrice - trade.entryPrice) <= tolerance)
+              if (similar.length === 1) previous = similar[0]
+            }
+            if (previous) consumed.add(previous.id)
+            const sl = positivePrice(trade.stopLoss, trade.plannedStopLossPrice, previous?.stopLoss, previous?.plannedStopLossPrice)
+            const tp = positivePrice(trade.takeProfit, trade.plannedTakeProfitPrice, previous?.takeProfit, previous?.plannedTakeProfitPrice)
+            return {
+              ...previous, ...trade, stopLoss: sl, takeProfit: tp,
+              plannedStopLossPrice: sl, plannedTakeProfitPrice: tp,
+              chartTimeframe: previous?.chartTimeframe ?? timeframeRef.current,
+              stopLossPips: trade.stopLossPips ?? previous?.stopLossPips,
+              takeProfitPips: trade.takeProfitPips ?? previous?.takeProfitPips,
+              commission: trade.commission ?? previous?.commission, payout: previous?.payout,
+            }
+          })
+          const recentLocal = current.filter((item) => !consumed.has(item.id) && item.providerId === 'ctrader' &&
+            item.providerConnectionId === String(selection.connectionId) && item.providerAccountId === String(selection.accountId) &&
+            Date.now() - Date.parse(item.openTime) < 120_000)
+          return [...merged, ...recentLocal].sort((a, b) => b.openTime.localeCompare(a.openTime))
+        })
+      } catch {
+        // Keep the last good position data if the broker is temporarily unavailable.
+      }
+    }
+    void refreshPositions()
+    const timer = window.setInterval(() => { void refreshPositions() }, 30_000)
+    return () => { cancelled = true; window.clearInterval(timer) }
+  }, [activeProviderSelection?.accountId, activeProviderSelection?.connectionId, activeProviderSelection?.environment, activeProviderSelection?.providerId])
+
   const handleLiveUpdate = useCallback((candles: OHLCV[], price: number, epoch: number): void => {
     // A prior symbol/timeframe subscription can deliver a final callback after
     // a switch. Do not let that stale snapshot overwrite the active chart.
