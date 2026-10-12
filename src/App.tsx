@@ -316,8 +316,8 @@ const TerminalContent: React.FC = () => {
     const currentCTraderPrice = activeProviderSelection?.providerId === 'ctrader'
       ? latestCTraderPriceRef.current
       : null
-    if (Number.isFinite(currentCTraderPrice) && Number(currentCTraderPrice) > 0) {
-      setCurrentPrice(Number(currentCTraderPrice))
+    if (currentCTraderPrice !== null && Number.isFinite(currentCTraderPrice) && currentCTraderPrice > 0) {
+      setCurrentPrice(currentCTraderPrice)
       // Keep the timestamp of the latest actual quote unchanged until a new
       // broker tick arrives; never replace the live header with an old candle.
     } else {
