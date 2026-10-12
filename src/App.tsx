@@ -952,18 +952,29 @@ const TerminalContent: React.FC = () => {
       : 0
   const chartQuoteReady = liveMarketActive && (!usingCTrader || cTraderQuoteMatchesChart) && chartBidPrice > 0 && chartAskPrice > 0
 
-  const structureBarTime = liveCandles.length ? Number(liveCandles[liveCandles.length - 1]?.time ?? 0) : 0
+  // Recompute levels when completed history changes, including a backfill that preserves the last candle time.
+  const structuralCandleSignature = useMemo(() => liveCandles.slice(0, -1)
+    .map((candle) => [candle.time, candle.open, candle.high, candle.low, candle.close].join(':'))
+    .join('|'), [liveCandles])
   const chartAnnotations = useMemo(() => buildStructuralChartAnnotations(selectedSymbol, liveCandles, timeframe)
-    .map((annotation) => ({ ...annotation, id: 'live-' + timeframe + '-' + annotation.id })), [selectedSymbol, timeframe, structureBarTime])
+    .map((annotation) => ({ ...annotation, id: 'live-' + timeframe + '-' + annotation.id })),
+    [selectedSymbol, timeframe, structuralCandleSignature])
 
   const selectedOpenPosition = useMemo(
     () => openPositions.find((position) => providerSymbolsMatch(position.symbol, selectedSymbol)) ?? null,
     [openPositions, selectedSymbol],
   )
 
+  // Render entry, current/exit, SL, and TP for every open position on this symbol.
+  const chartOpenPositions = useMemo(
+    () => openPositions.filter((position) =>
+      position.status === 'open' && providerSymbolsMatch(position.symbol, selectedSymbol)),
+    [openPositions, selectedSymbol],
+  )
   const brokerPositionTradeLines = useMemo<ChartAnnotation[]>(
-    () => buildOpenPositionChartLines(selectedOpenPosition, chartBidPrice, chartAskPrice),
-    [selectedOpenPosition, chartBidPrice, chartAskPrice],
+    () => chartOpenPositions.flatMap((position) =>
+      buildOpenPositionChartLines(position, chartBidPrice, chartAskPrice)),
+    [chartOpenPositions, chartBidPrice, chartAskPrice],
   )
 
   const combinedTradeLines = useMemo(() => {
