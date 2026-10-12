@@ -490,3 +490,26 @@ Verification:
 - **Final browser visual acceptance is pending.** TinyFish credit was depleted after a previous ~130-second Watchlist stability check. Do not claim the newest colors, final digit sizing, no-duplicate tags, quote timeout or history-scrub behavior is visually verified until a fresh read-only browser check is possible. That prior timed run did show live quotes and M5→H1→M5 without reproducing the React insertBefore crash, but it was on an earlier visual revision.
 
 Next: verify the final code build/lint/tests and Render status. When browser automation credit is available, confirm the fresh quote color sequence and neutral state; exactly one BID and ASK tag; live quote values go to WAITING after feed silence; current tags disappear when browsing history; no draft SL/TP lines appear without a position; and the Equity/Floating P/L layout is readable. Do not click trade controls during verification.
+
+
+## Final verification status — 2026-10-12
+
+This checkpoint is for the isolated experiment only. The latest application-code commit 48124ac477062fe361549c970e408274a85c1b3f is LIVE on Render deployment dep-db6arf7gfhjc73f86tl0 at https://sharfx-deriv-render.onrender.com.
+
+Verification performed:
+- Render production TypeScript/Vite build: PASSED.
+- Render static-server startup/reference check: PASSED.
+- GitHub Actions build, static-server verification and lint: PASSED.
+- Full suite: 361 passed, 2 failed of 363. The two same existing unrelated failures are server/ctrader.test.js expecting rejected but getting filled, and src/lib/cfdRiskEngine.test.ts expecting null for quote-currency conversion but receiving 10. Four countdown helper tests passed; quote-color tests are included in the passing run.
+
+Code state at the verified app commit:
+- MT5-inspired quote numbers: blue on uptick, red on downtick, neutral when no movement for 15 seconds or when live quotes are not available; BUY tracks Ask and SELL tracks Bid.
+- Dark square 70px BUY/SELL cards with 10px monospace digits; washed-out background fills removed.
+- Duplicate top-right BUY/SELL banner removed; a single custom BID and ASK tag renders at the live quote rails, native duplicate quote/trade axis labels disabled.
+- Live quote tags/rails are hidden while viewing historical candles and reappear near the latest candles, giving historical support/resistance/liquidity levels space.
+- Chart/header price is gated by current matching stream identity and freshness; after 15 seconds without a quote packet, current values are cleared to WAITING rather than reusing a historical close.
+- Unused ticket draft SL/TP lines hidden when no actual position is open; Account equity/balance/free margin display two decimals and Floating P/L is labeled/enlarged.
+
+Important limitation: no fresh visual browser acceptance run was possible after this exact revision because TinyFish browser automation credit was depleted during the earlier 130-second Watchlist stability test. Therefore the final on-screen colors, number sizing, single BID/ASK tags, history-scroll behavior, 15-second stale state and account card layout are NOT marked visually verified. The earlier Watchlist stability test on a prior build ran about 130 seconds with active quote updates and M5-to-H1-to-M5 switching without reproducing the React insertBefore error; that is time-bounded prior-build evidence only.
+
+Do not merge draft PR #58 or promote to main/Cloudflare. No orders were submitted/closed and no account/provider settings or sibling Render services were changed.

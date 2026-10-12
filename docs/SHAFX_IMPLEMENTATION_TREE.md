@@ -254,3 +254,15 @@
 - [!] Build/lint/test status for the final 10px sizing and notes commit must be confirmed. Last completed full suite had 361 passing and two existing unrelated failures (cTrader status expected rejected/got filled; CFD conversion expected null/got 10).
 - [!] Final browser visual acceptance pending because TinyFish automation credit is depleted. No false claim of visual verification.
 - Safety: isolated branch only; no trades/accounts changed and no main/Cloudflare/sibling Render promotion.
+
+
+## Final ticket/chart verification status — 2026-10-12
+
+- [x] Render latest app commit 48124ac477062fe361549c970e408274a85c1b3f is LIVE; production build and static-server startup checks passed.
+- [x] GitHub Actions build, static-server check and lint passed.
+- [x] 4 countdown-helper tests passed; full suite reports 361 passed and 2 existing unrelated failures (cTrader status expects rejected/got filled; CFD currency conversion expects null/got 10).
+- [x] Quote digits use MT5-style blue/red/neutral semantics; dark square 70px cards and 10px price digits; no artificial blink.
+- [x] Duplicate quote banner/native line-axis tags removed; one custom BID/ASK label only when live; hide current quote rails/tags when scrolled into history.
+- [x] No draft SL/TP lines when no actual position is open; account values use 2dp and Floating P/L has readable label/value.
+- [!] Final visual acceptance is still pending because TinyFish browser automation credit is depleted. Do not claim the newest appearance is screenshot-verified.
+- Safety: experimental branch only; no trade/account actions, no main or Cloudflare promotion, no sibling Render service changes.
