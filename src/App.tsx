@@ -617,8 +617,10 @@ const TerminalContent: React.FC = () => {
                 const nextTrade: TradeOrder = {
                   ...trade,
                   chartTimeframe: previous?.chartTimeframe ?? timeframe,
-                  plannedStopLossPrice: previous?.plannedStopLossPrice ?? null,
-                  plannedTakeProfitPrice: previous?.plannedTakeProfitPrice ?? null,
+                  // Preserve the locally confirmed ticket levels if the account stream
+                  // omits SL/TP from a position snapshot; never replace valid prices with null.
+                  plannedStopLossPrice: previous?.plannedStopLossPrice ?? trade.plannedStopLossPrice ?? null,
+                  plannedTakeProfitPrice: previous?.plannedTakeProfitPrice ?? trade.plannedTakeProfitPrice ?? null,
                   commission: previous?.commission,
                   payout: previous?.payout,
                 }
