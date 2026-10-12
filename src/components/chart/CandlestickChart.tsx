@@ -6,6 +6,7 @@ import { TIMEFRAMES, type OHLCV, type Timeframe } from '../../types'
 import { buildTradeChartMarkers, type TradeChartMarker } from './buildTradeChartMarkers'
 import { isPriceLevelOccludedByQuote } from './priceLineVisibility'
 import { resolvePriceLabelY } from './priceLineLabelLayout'
+import { getCandleCloseCountdown } from './candleCountdown'
 
 export interface ChartAnnotation { id: string; price: number; label: string; color: string; lineWidth?: 1 | 2 | 3 | 4 }
 export type ChartToolMode = 'cursor' | 'crosshair' | 'level' | 'measure' | 'alert'
@@ -1158,32 +1159,19 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const displayAsk = Number.isFinite(askPrice) && Number(askPrice) > 0 ? Number(askPrice) : displayBid
   const spreadPips = Number.isFinite(displayBid) && Number.isFinite(displayAsk) && pipSize > 0 ? (displayAsk - displayBid) / pipSize : 0
   const timeframeSeconds: Record<Timeframe, number> = { M1: 60, M5: 300, M15: 900, M30: 1800, H1: 3600, H4: 14400, D1: 86400, W1: 604800 }
-  const weekStart = (timestamp: number): number => {
-    const date = new Date(timestamp * 1000)
-    const day = date.getUTCDay()
-    const daysSinceMonday = day === 0 ? 6 : day - 1
-    date.setUTCDate(date.getUTCDate() - daysSinceMonday)
-    date.setUTCHours(0, 0, 0, 0)
-    return Math.floor(date.getTime() / 1000)
-  }
-  const [countdownTimestamp, setCountdownTimestamp] = useState(0)
+  const [countdownNowSeconds, setCountdownNowSeconds] = useState(0)
 
+  // Candle boundaries follow UTC market time. Drive the display from a local
+  // one-second clock so a quiet or delayed provider feed cannot freeze it.
   useEffect(() => {
-    if (!Number.isFinite(marketTimestamp) || Number(marketTimestamp) <= 0) return
-    const freshTimestamp = Math.floor(Number(marketTimestamp))
-    setCountdownTimestamp((current) => Math.max(current, freshTimestamp))
-  }, [marketTimestamp])
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setCountdownTimestamp((current) => current > 0 ? current + 1 : 0)
-    }, 1000)
+    const updateClock = (): void => setCountdownNowSeconds(Math.floor(Date.now() / 1000))
+    updateClock()
+    const timer = window.setInterval(updateClock, 1000)
     return () => window.clearInterval(timer)
   }, [])
-  const countdown = timeframe && Number.isFinite(countdownTimestamp)
-    ? timeframe === 'W1'
-      ? Math.max(0, weekStart(countdownTimestamp) + timeframeSeconds.W1 - countdownTimestamp)
-      : Math.max(0, timeframeSeconds[timeframe] - (countdownTimestamp % timeframeSeconds[timeframe]))
+
+  const countdown = timeframe && countdownNowSeconds > 0
+    ? getCandleCloseCountdown(countdownNowSeconds, timeframe)
     : null
   const formatCountdown = (seconds: number): string => {
     if (seconds >= 86400) return `${Math.floor(seconds / 86400)}d ${Math.floor((seconds % 86400) / 3600)}h`

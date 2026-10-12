@@ -440,18 +440,18 @@ input::placeholder { color: #667285; }
 
 
 /* Clean, square trading-side tiles: quote direction supplies color; selection is a thin underline, never a white frame. */
-.shafx-trade-side-button {
+.shafx-terminal-root .shafx-trade-side-button {
   position: relative;
   border-radius: 0 !important;
   box-shadow: none;
 }
-.shafx-trade-side-button[data-side="BUY"] {
+.shafx-terminal-root .shafx-trade-side-button[data-side="BUY"] {
   --shafx-side-accent: #22D3A5;
 }
-.shafx-trade-side-button[data-side="SELL"] {
+.shafx-terminal-root .shafx-trade-side-button[data-side="SELL"] {
   --shafx-side-accent: #FF5C75;
 }
-.shafx-trade-side-button[aria-pressed="true"]::after {
+.shafx-terminal-root .shafx-trade-side-button[aria-pressed="true"]::after {
   content: "";
   position: absolute;
   left: 0;
@@ -461,7 +461,7 @@ input::placeholder { color: #667285; }
   background: var(--shafx-side-accent, #8793A5);
   pointer-events: none;
 }
-.shafx-trade-side-button:focus-visible {
+.shafx-terminal-root .shafx-trade-side-button:focus-visible {
   outline: 2px solid #2962FF;
   outline-offset: 2px;
   box-shadow: none;
