@@ -834,21 +834,15 @@ const TerminalContent: React.FC = () => {
         // actual Ask/Bid quote changes to update its range and close.
         const nextCandles = applyCTraderQuoteToCandles(currentCandles, bucket, price)
         if (nextCandles.length > 0) {
-          const cTraderKey = [
-            String(selection.connectionId),
-            String(selection.accountId),
-            selection.environment,
-            subscriptionSymbol,
-            subscriptionTimeframe,
-          ].join(':')
+          const cTraderKey = historyRepairKeyFor(subscriptionTimeframe)
           liveCandlesRef.current = nextCandles
           cTraderCandleCacheRef.current[cTraderKey] = nextCandles
           candleCacheRef.current[subscriptionSymbol + ':' + subscriptionTimeframe] = nextCandles
           setLiveCandles(nextCandles)
         }
       }
-      if (update.resumed) void repairSkippedCandles(true)
-      else if (skippedCandleBucket) void repairSkippedCandles()
+      if (update.resumed) void repairSkippedCandles(subscriptionTimeframe, true)
+      else if (skippedCandleBucket) void repairSkippedCandles(subscriptionTimeframe)
 
       latestCTraderPriceRef.current = price
       const quoteIdentity = [
@@ -885,7 +879,7 @@ const TerminalContent: React.FC = () => {
       // Keep the current-quote freshness timer alive on a timeframe-only cleanup.
       // A provider/symbol/account switch is handled by the identity effect above.
     }
-  }, [activeProviderSelection?.accountId, activeProviderSelection?.connectionId, activeProviderSelection?.environment, activeProviderSelection?.providerId, selectedSymbol, timeframe])
+  }, [activeProviderSelection?.accountId, activeProviderSelection?.connectionId, activeProviderSelection?.environment, activeProviderSelection?.providerId, selectedSymbol])
 
   const handleLiveActiveChange = useCallback((active: boolean): void => {
     setLiveMarketActive(active)
