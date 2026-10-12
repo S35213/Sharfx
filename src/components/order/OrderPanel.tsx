@@ -156,7 +156,7 @@ const LegacyMultiplierOrderPanel: React.FC<Props> = ({
     const direction = getQuoteTickDirection(bid, previous)
     if (direction !== 'neutral') {
       setSellMarketDirection(direction)
-      lastBidTickAtRef.current = now
+      lastBidTickAtRef.current = Date.now()
     } else if (!lastBidTickAtRef.current || now - lastBidTickAtRef.current >= 15_000) {
       setSellMarketDirection('neutral')
     }
@@ -176,7 +176,7 @@ const LegacyMultiplierOrderPanel: React.FC<Props> = ({
     const direction = getQuoteTickDirection(ask, previous)
     if (direction !== 'neutral') {
       setBuyMarketDirection(direction)
-      lastAskTickAtRef.current = now
+      lastAskTickAtRef.current = Date.now()
     } else if (!lastAskTickAtRef.current || now - lastAskTickAtRef.current >= 15_000) {
       setBuyMarketDirection('neutral')
     }
