@@ -730,6 +730,50 @@ const TerminalContent: React.FC = () => {
     return () => { cancelled = true }
   }, [activeProviderSelection?.accountId, activeProviderSelection?.connectionId, activeProviderSelection?.environment, activeProviderSelection?.providerId, pushStreamToast, selectedSymbol, timeframe])
 
+  // Warm the other chart intervals in the background once per symbol/account.
+  // This lets timeframe buttons swap cached bars immediately after the initial load.
+  useEffect(() => {
+    const selection = activeProviderSelection
+    if (selection?.providerId !== 'ctrader' || !selection.connectionId || !selection.accountId) return
+    let cancelled = false
+    const connectionId = String(selection.connectionId)
+    const accountId = String(selection.accountId)
+    const environment = selection.environment === 'live' ? 'live' : 'demo'
+    const symbol = selectedSymbol
+    const keyFor = (targetTimeframe: Timeframe): string => [connectionId, accountId, selection.environment, symbol, targetTimeframe].join(':')
+    const pending = TIMEFRAMES.filter((targetTimeframe) => targetTimeframe !== timeframeRef.current &&
+      (cTraderCandleCacheRef.current[keyFor(targetTimeframe)] ?? []).length < 2)
+    let nextIndex = 0
+    const worker = async (): Promise<void> => {
+      while (!cancelled) {
+        const targetTimeframe = pending[nextIndex++]
+        if (!targetTimeframe) return
+        if (targetTimeframe === timeframeRef.current) continue
+        const cacheKey = keyFor(targetTimeframe)
+        if ((cTraderCandleCacheRef.current[cacheKey] ?? []).length > 1) continue
+        try {
+          const history = await fetchCTraderHistoricalCandles({ connectionId, accountId, environment, symbol, timeframe: targetTimeframe, count: 300 })
+          if (cancelled || selectedSymbolRef.current !== symbol || !history.length) continue
+          const latestLive = cTraderCandleCacheRef.current[cacheKey] ??
+            (timeframeRef.current === targetTimeframe ? liveCandlesRef.current : [])
+          const merged = mergeCTraderHistoricalAndLiveCandles(history, latestLive)
+          if (!merged.length) continue
+          cTraderCandleCacheRef.current[cacheKey] = merged
+          candleCacheRef.current[symbol + ':' + targetTimeframe] = merged
+          if (timeframeRef.current === targetTimeframe) {
+            liveCandlesRef.current = merged
+            setLiveCandles(merged)
+          }
+        } catch {
+          // The foreground loader handles the selected interval; other intervals retry on a later visit.
+        }
+      }
+    }
+    // Two workers avoid firing every broker-history request at once.
+    void Promise.all([worker(), worker()])
+    return () => { cancelled = true }
+  }, [activeProviderSelection?.accountId, activeProviderSelection?.connectionId, activeProviderSelection?.environment, activeProviderSelection?.providerId, selectedSymbol])
+
   useEffect(() => {
     const selection = activeProviderSelection
     if (selection?.providerId !== 'ctrader' || !selection.connectionId || !selection.accountId) return
