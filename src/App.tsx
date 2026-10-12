@@ -295,19 +295,35 @@ const TerminalContent: React.FC = () => {
     const nextCandles = cached.length > 1 ? cached : []
     liveCandlesRef.current = nextCandles
     setLiveCandles(nextCandles)
-    setLiveBidPrice(0)
-    setLiveAskPrice(0)
-    setLiveQuoteIdentity(null)
-    setLiveMarketActive(false)
-    if (cTraderQuoteStaleTimerRef.current !== null) {
-      window.clearTimeout(cTraderQuoteStaleTimerRef.current)
-      cTraderQuoteStaleTimerRef.current = null
+
+    // Changing the chart interval must not restart the live market quote. Keep
+    // Bid/Ask, quote identity, freshness timer and header price for cTrader;
+    // only the target timeframe's candle dataset is being swapped.
+    if (activeProviderSelection?.providerId !== 'ctrader') {
+      setLiveBidPrice(0)
+      setLiveAskPrice(0)
+      setLiveQuoteIdentity(null)
+      setLiveMarketActive(false)
+      if (cTraderQuoteStaleTimerRef.current !== null) {
+        window.clearTimeout(cTraderQuoteStaleTimerRef.current)
+        cTraderQuoteStaleTimerRef.current = null
+      }
+      latestCTraderPriceRef.current = null
+      liveQuoteIdentityRef.current = null
     }
-    latestCTraderPriceRef.current = null
-    liveQuoteIdentityRef.current = null
+
     const last = nextCandles[nextCandles.length - 1]
-    setCurrentPrice(last?.close ?? 0)
-    setMarketTimestamp(last ? Math.floor(last.time / 1000) : 0)
+    const currentCTraderPrice = activeProviderSelection?.providerId === 'ctrader'
+      ? latestCTraderPriceRef.current
+      : null
+    if (Number.isFinite(currentCTraderPrice) && Number(currentCTraderPrice) > 0) {
+      setCurrentPrice(Number(currentCTraderPrice))
+      // Keep the timestamp of the latest actual quote unchanged until a new
+      // broker tick arrives; never replace the live header with an old candle.
+    } else {
+      setCurrentPrice(last?.close ?? 0)
+      setMarketTimestamp(last ? Math.floor(last.time / 1000) : 0)
+    }
   }, [activeProviderSelection?.providerId, setTimeframe])
 
   const handleBotPaperRoundClosed = useCallback((trade: BotPaperTrade): void => {
