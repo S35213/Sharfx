@@ -136,6 +136,8 @@ export interface TradeOrder {
   usedMargin?: number
   stopLossPips?: number
   takeProfitPips?: number
+  /** True only when cTrader has confirmed broker-side protection levels. */
+  brokerProtectionConfirmed?: boolean
   stake?: number
   multiplier?: number
   chartTimeframe?: Timeframe
