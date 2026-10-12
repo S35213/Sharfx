@@ -439,36 +439,33 @@ input::placeholder { color: #667285; }
 }
 
 
-/* SHAFX market tiles: opaque emerald/coral action surfaces with fast quote-direction response. */
+/* MT5-inspired quote tiles: each side follows its own live tick direction. Blue = rising/idle quote, red = falling quote. */
 .shafx-terminal-root .shafx-trade-side-button {
   position: relative;
   min-width: 0;
   border-radius: 2px !important;
   background: #11161E;
-  border-color: #343C48;
-  color: #DDE4EC;
-  box-shadow: none;
-  transition: background-color 80ms linear, border-color 80ms linear;
-}
-.shafx-terminal-root .shafx-trade-side-button[data-quote-ready="true"][data-side="BUY"][data-button-tone="neutral"] {
-  background: #063D2A;
-  border-color: #00B979;
+  border: 1px solid #343C48;
   color: #FFFFFF;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.10);
+  transition: background-color 60ms linear, border-color 60ms linear, box-shadow 60ms linear;
 }
-.shafx-terminal-root .shafx-trade-side-button[data-quote-ready="true"][data-side="SELL"][data-button-tone="neutral"] {
-  background: #421821;
-  border-color: #FF5364;
+.shafx-terminal-root .shafx-trade-side-button[data-quote-ready="true"][data-button-tone="neutral"] {
+  background: #155A9F;
+  border-color: #3D8FDB;
   color: #FFFFFF;
 }
 .shafx-terminal-root .shafx-trade-side-button[data-quote-ready="true"][data-button-tone="up"] {
-  background: #087A49;
-  border-color: #25E597;
+  background: #176FC1;
+  border-color: #70B9FF;
   color: #FFFFFF;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), 0 0 0 1px rgba(44,145,255,0.12);
 }
 .shafx-terminal-root .shafx-trade-side-button[data-quote-ready="true"][data-button-tone="down"] {
-  background: #B42335;
-  border-color: #FF6575;
+  background: #C52D41;
+  border-color: #FF6979;
   color: #FFFFFF;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.14), 0 0 0 1px rgba(255,73,93,0.12);
 }
 .shafx-terminal-root .shafx-trade-side-button[aria-pressed="true"]::after {
   content: "";
@@ -484,7 +481,7 @@ input::placeholder { color: #667285; }
   display: block;
   color: #DDE4EC;
   font-size: clamp(15px, 1.35vw, 19px);
-  font-weight: 750;
+  font-weight: 800;
   line-height: 1.05;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.035em;
@@ -492,6 +489,7 @@ input::placeholder { color: #667285; }
 }
 .shafx-terminal-root .shafx-trade-side-button[data-quote-ready="true"] .shafx-trade-side-price {
   color: #FFFFFF;
+  text-shadow: 0 1px 0 rgba(0,0,0,0.15);
 }
 .shafx-terminal-root .shafx-trade-side-button[data-quote-ready="false"] .shafx-trade-side-price {
   color: #DDE4EC;
