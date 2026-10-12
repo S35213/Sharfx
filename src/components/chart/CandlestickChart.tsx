@@ -123,6 +123,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const lineLabelsHostRef = useRef<HTMLDivElement | null>(null)
   const [lineLabels, setLineLabels] = useState<Array<{ id: string; price: number; name: string; color: string; y: number }>>([])
   const lineLabelSyncRef = useRef<(() => void) | null>(null)
+  const [priceScaleRevision, setPriceScaleRevision] = useState(0)
+  const priceScaleOverlayFrameRef = useRef<number | null>(null)
   const [bidTickDirection, setBidTickDirection] = useState<QuoteTickDirection>('neutral')
   const [askTickDirection, setAskTickDirection] = useState<QuoteTickDirection>('neutral')
   const [isViewingHistory, setIsViewingHistory] = useState(false)
@@ -798,7 +800,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       }
       lineLabelSyncRef.current()
     }
-  }, [annotations, armedAlerts, askPrice, bidPrice, bidQuoteTone, chartMode, isViewingHistory, lastClose, pipSize, quoteReady, askQuoteTone, showPriceLabels, tradeLines, userLevels])
+  }, [annotations, armedAlerts, askPrice, bidPrice, bidQuoteTone, chartMode, isViewingHistory, lastClose, pipSize, priceScaleRevision, quoteReady, askQuoteTone, showPriceLabels, tradeLines, userLevels])
 
   useEffect(() => {
     const chart = chartRef.current
@@ -1075,6 +1077,24 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     lastTapRef.current = { time: now, x: event.clientX, y: event.clientY, pointerType: event.pointerType }
   }
 
+  const refreshPriceScaleOverlays = (): void => {
+    // Keep line tags visually responsive while rate-limiting the more expensive
+    // structural hide/show pass to one React effect run per animation frame.
+    lineLabelSyncRef.current?.()
+    if (priceScaleOverlayFrameRef.current !== null) return
+    priceScaleOverlayFrameRef.current = window.requestAnimationFrame(() => {
+      priceScaleOverlayFrameRef.current = null
+      setPriceScaleRevision((revision) => revision + 1)
+    })
+  }
+
+  useEffect(() => () => {
+    if (priceScaleOverlayFrameRef.current !== null) {
+      window.cancelAnimationFrame(priceScaleOverlayFrameRef.current)
+      priceScaleOverlayFrameRef.current = null
+    }
+  }, [])
+
   const resetVerticalScale = (): void => {
     const series = seriesRef.current
     if (!series) return
@@ -1084,7 +1104,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       scaleMargins: { top: 0.08, bottom: 0.08 },
     })
     // A price-axis resize does not emit a timeScale range event.
-    lineLabelSyncRef.current?.()
+    refreshPriceScaleOverlays()
   }
 
   const resetChartView = (): void => {
@@ -1140,9 +1160,9 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       autoScale: false,
       scaleMargins: { top: margin, bottom: margin },
     })
-    // Recalculate every overlay Y coordinate on every price-axis move, not
-    // after the drag completes or after a delayed logical-range notification.
-    lineLabelSyncRef.current?.()
+    // Recalculate label Y positions immediately and rerun structural-vs-quote
+    // occlusion once per animation frame while the price scale is moving.
+    refreshPriceScaleOverlays()
   }
 
   const handlePriceAxisPointerUp = (event: React.PointerEvent<HTMLDivElement>): void => {
@@ -1150,7 +1170,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     event.preventDefault()
     verticalScaleDragRef.current = null
     event.currentTarget.releasePointerCapture?.(event.pointerId)
-    lineLabelSyncRef.current?.()
+    refreshPriceScaleOverlays()
   }
 
   const toggleFullscreen = async (): Promise<void> => {
