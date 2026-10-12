@@ -22,6 +22,11 @@ export interface CTraderLiveInstrument {
   metadata?: Record<string, unknown>
 }
 
+export interface CTraderQuoteUpdateMeta {
+  pricesChanged: boolean
+  quoteClockAdvanced: boolean
+}
+
 interface SubscribeArgs {
   connectionId: string
   accountId: string
@@ -30,7 +35,7 @@ interface SubscribeArgs {
 }
 
 interface StreamState {
-  listeners: Set<(quote: CTraderLiveQuote, instrument: CTraderLiveInstrument) => void>
+  listeners: Set<(quote: CTraderLiveQuote, instrument: CTraderLiveInstrument, update: CTraderQuoteUpdateMeta) => void>
   timer: ReturnType<typeof setInterval> | null
   inFlight: Promise<void> | null
   stopped: boolean
@@ -38,6 +43,7 @@ interface StreamState {
   lastBid: number | null
   lastAsk: number | null
   lastMinuteBucket: number | null
+  lastNotifiedAt: number
 }
 
 const streams = new Map<string, StreamState>()
@@ -115,6 +121,17 @@ export const fetchCTraderHistoricalCandles = async (args: SubscribeArgs & { time
 
 
 
+export const shouldNotifyCTraderQuoteListener = (
+  update: CTraderQuoteUpdateMeta,
+  lastPublishedAt: number,
+  now: number,
+  heartbeatIntervalMs = 1000,
+): boolean =>
+  update.pricesChanged ||
+  update.quoteClockAdvanced ||
+  lastPublishedAt <= 0 ||
+  now - lastPublishedAt >= heartbeatIntervalMs
+
 const poll = async (key: string, args: SubscribeArgs, state: StreamState): Promise<void> => {
   if (state.stopped || state.inFlight) return
   state.inFlight = (async () => {
@@ -137,13 +154,17 @@ const poll = async (key: string, args: SubscribeArgs, state: StreamState): Promi
       state.lastAsk = ask
       state.instrument = result.instrument
 
-      // Even when Bid/Ask repeat, a fresh provider timestamp crossing a minute
-      // boundary must reach the chart. Otherwise a quiet minute produces no bar,
-      // and the next moving quote can jump directly to a later candle bucket.
-      if (!pricesChanged && !quoteClockAdvanced) return
-      for (const listener of state.listeners) listener(result.quote, result.instrument)
+      // Quote responses are also a feed heartbeat. Publish changed ticks and
+      // minute boundaries immediately, then publish a one-second heartbeat while
+      // prices are flat so the UI does not falsely drop into "waiting for price".
+      // Consumers use this metadata to avoid repainting candle OHLC on a heartbeat.
+      const update: CTraderQuoteUpdateMeta = { pricesChanged, quoteClockAdvanced }
+      const notifiedAt = Date.now()
+      if (!shouldNotifyCTraderQuoteListener(update, state.lastNotifiedAt, notifiedAt)) return
+      state.lastNotifiedAt = notifiedAt
+      for (const listener of state.listeners) listener(result.quote, result.instrument, update)
     } catch {
-      // Keep the stream alive. The next 250ms poll retries without spamming UI errors.
+      // Keep the stream alive. The next 150ms poll retries without spamming UI errors.
     } finally {
       state.inFlight = null
       if (streams.get(key) !== state) streams.delete(key)
@@ -152,7 +173,7 @@ const poll = async (key: string, args: SubscribeArgs, state: StreamState): Promi
   await state.inFlight
 }
 
-export const subscribeCTraderLiveQuote = (args: SubscribeArgs, listener: (quote: CTraderLiveQuote, instrument: CTraderLiveInstrument) => void): (() => void) => {
+export const subscribeCTraderLiveQuote = (args: SubscribeArgs, listener: (quote: CTraderLiveQuote, instrument: CTraderLiveInstrument, update: CTraderQuoteUpdateMeta) => void): (() => void) => {
   const key = streamKey(args)
   let state = streams.get(key)
   if (!state) {
@@ -165,6 +186,7 @@ export const subscribeCTraderLiveQuote = (args: SubscribeArgs, listener: (quote:
       lastBid: null,
       lastAsk: null,
       lastMinuteBucket: null,
+      lastNotifiedAt: 0,
     }
     streams.set(key, state)
     void poll(key, args, state)
