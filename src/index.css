@@ -450,18 +450,24 @@ input::placeholder { color: #667285; }
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.10);
   transition: background-color 60ms linear, border-color 60ms linear, box-shadow 60ms linear;
 }
-.shafx-terminal-root .shafx-trade-side-button[data-quote-ready="true"][data-button-tone="neutral"] {
+/* Explicit state classes keep styles reliable even if data attributes are omitted by another ticket renderer. */
+.shafx-terminal-root .shafx-trade-side-button.shafx-quote-tile--unavailable {
+  background: #11161E;
+  border-color: #343C48;
+  color: #DDE4EC;
+}
+.shafx-terminal-root .shafx-trade-side-button.shafx-quote-tile--neutral {
   background: #155A9F;
   border-color: #3D8FDB;
   color: #FFFFFF;
 }
-.shafx-terminal-root .shafx-trade-side-button[data-quote-ready="true"][data-button-tone="up"] {
+.shafx-terminal-root .shafx-trade-side-button.shafx-quote-tile--up {
   background: #176FC1;
   border-color: #70B9FF;
   color: #FFFFFF;
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), 0 0 0 1px rgba(44,145,255,0.12);
 }
-.shafx-terminal-root .shafx-trade-side-button[data-quote-ready="true"][data-button-tone="down"] {
+.shafx-terminal-root .shafx-trade-side-button.shafx-quote-tile--down {
   background: #C52D41;
   border-color: #FF6979;
   color: #FFFFFF;
@@ -487,11 +493,13 @@ input::placeholder { color: #667285; }
   letter-spacing: -0.035em;
   white-space: nowrap;
 }
-.shafx-terminal-root .shafx-trade-side-button[data-quote-ready="true"] .shafx-trade-side-price {
+.shafx-terminal-root .shafx-trade-side-button.shafx-quote-tile--neutral .shafx-trade-side-price,
+.shafx-terminal-root .shafx-trade-side-button.shafx-quote-tile--up .shafx-trade-side-price,
+.shafx-terminal-root .shafx-trade-side-button.shafx-quote-tile--down .shafx-trade-side-price {
   color: #FFFFFF;
   text-shadow: 0 1px 0 rgba(0,0,0,0.15);
 }
-.shafx-terminal-root .shafx-trade-side-button[data-quote-ready="false"] .shafx-trade-side-price {
+.shafx-terminal-root .shafx-trade-side-button.shafx-quote-tile--unavailable .shafx-trade-side-price {
   color: #DDE4EC;
 }
 .shafx-terminal-root .shafx-trade-side-button:focus-visible {

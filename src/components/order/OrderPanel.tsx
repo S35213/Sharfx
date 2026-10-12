@@ -128,6 +128,8 @@ const LegacyMultiplierOrderPanel: React.FC<Props> = ({
     : direction === 'down'
       ? 'border-[#FF5364] bg-[#B42335]'
       : 'border-[#343C48] bg-[#11161E]'
+  const quoteTileStateClass = (direction: QuoteTickDirection, ready: boolean): string =>
+    ready ? `shafx-quote-tile--${direction}` : 'shafx-quote-tile--unavailable'
 
   useEffect(() => {
     setSide(aiSetup?.direction ?? 'BUY')
@@ -562,6 +564,10 @@ const LegacyMultiplierOrderPanel: React.FC<Props> = ({
   const quoteProtectionSL = Number(quote?.stopLossAmount ?? (stopLossEnabled ? stopLossAmount : 0))
   const quoteProtectionTP = Number(quote?.takeProfitAmount ?? (takeProfitEnabled ? takeProfitAmount : 0))
   const busy = state === 'quoting' || state === 'buying'
+  const buyQuoteReady = marketMetrics.ask !== null && Number.isFinite(askPrice) && askPrice > 0
+  const sellQuoteReady = marketMetrics.bid !== null && Number.isFinite(bidPrice) && bidPrice > 0
+  const buyQuoteTileState = quoteTileStateClass(buyButtonDirection, buyQuoteReady)
+  const sellQuoteTileState = quoteTileStateClass(sellButtonDirection, sellQuoteReady)
 
   return (
     <section className="overflow-hidden border border-shafx-border bg-shafx-surface">
@@ -588,7 +594,7 @@ const LegacyMultiplierOrderPanel: React.FC<Props> = ({
             disabled={busy}
             aria-pressed={side === 'BUY'}
             aria-label="Select BUY at Ask price"
-            className={'shafx-trade-side-button relative min-h-[66px] border px-3 py-2 text-left text-shafx-text transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-accent ' + tradeSideButtonTone(buyButtonDirection)}
+            className={'shafx-trade-side-button shafx-quote-tile ' + buyQuoteTileState + ' relative min-h-[66px] border px-3 py-2 text-left text-shafx-text transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-accent ' + tradeSideButtonTone(buyButtonDirection)}
           >
             <span className="flex items-center justify-between gap-2 text-[11px] font-bold tracking-[0.08em]">
               <span>BUY</span><span className="text-[8px] uppercase tracking-[0.14em] text-[#AAB2BD]">ASK</span>
@@ -605,7 +611,7 @@ const LegacyMultiplierOrderPanel: React.FC<Props> = ({
             disabled={busy}
             aria-pressed={side === 'SELL'}
             aria-label="Select SELL at Bid price"
-            className={'shafx-trade-side-button relative min-h-[66px] border px-3 py-2 text-left text-shafx-text transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-accent ' + tradeSideButtonTone(sellButtonDirection)}
+            className={'shafx-trade-side-button shafx-quote-tile ' + sellQuoteTileState + ' relative min-h-[66px] border px-3 py-2 text-left text-shafx-text transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-accent ' + tradeSideButtonTone(sellButtonDirection)}
           >
             <span className="flex items-center justify-between gap-2 text-[11px] font-bold tracking-[0.08em]">
               <span>SELL</span><span className="text-[8px] uppercase tracking-[0.14em] text-[#AAB2BD]">BID</span>
