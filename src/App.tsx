@@ -237,8 +237,8 @@ const TerminalContent: React.FC = () => {
   }, [liveCandles])
 
   useEffect(() => {
-    // Quote identity belongs to one exact symbol/timeframe/account stream.
-    // Clear stale prices on identity changes so the UI cannot keep saying LIVE.
+    // Quote identity belongs to the selected symbol/provider/account. A
+    // timeframe changes candle aggregation, not the underlying live quote.
     liveQuoteIdentityRef.current = null
     latestCTraderPriceRef.current = null
     if (cTraderQuoteStaleTimerRef.current !== null) {
@@ -249,7 +249,13 @@ const TerminalContent: React.FC = () => {
     setLiveBidPrice(0)
     setLiveAskPrice(0)
     setLiveMarketActive(false)
-  }, [selectedSymbol, timeframe, activeProviderSelection?.providerId, activeProviderSelection?.accountId, activeProviderSelection?.connectionId, activeProviderSelection?.environment])
+    return () => {
+      if (cTraderQuoteStaleTimerRef.current !== null) {
+        window.clearTimeout(cTraderQuoteStaleTimerRef.current)
+        cTraderQuoteStaleTimerRef.current = null
+      }
+    }
+  }, [selectedSymbol, activeProviderSelection?.providerId, activeProviderSelection?.accountId, activeProviderSelection?.connectionId, activeProviderSelection?.environment])
 
   const pushToast = useCallback((text: string) => {
     toastId.current += 1
@@ -665,9 +671,10 @@ const TerminalContent: React.FC = () => {
     // refresh. This avoids a blank chart while the broker history request waits.
     liveCandlesRef.current = cachedCandles
     setLiveCandles(cachedCandles)
-    setLiveMarketActive(false)
+    // Keep the current broker quote and Bid/Ask rails while another timeframe's
+    // historical bars load. Cached candle close is not the current live price.
     const cachedLast = cachedCandles[cachedCandles.length - 1]
-    if (cachedLast) {
+    if (cachedLast && !(latestCTraderPriceRef.current && latestCTraderPriceRef.current > 0)) {
       setCurrentPrice(cachedLast.close)
       setMarketTimestamp(Math.floor(cachedLast.time))
     }
@@ -831,7 +838,6 @@ const TerminalContent: React.FC = () => {
       latestCTraderPriceRef.current = price
       const quoteIdentity = [
         subscriptionSymbol,
-        subscriptionTimeframe,
         'ctrader',
         String(selection.connectionId),
         String(selection.accountId),
@@ -846,7 +852,9 @@ const TerminalContent: React.FC = () => {
       setLiveMarketActive(true)
       if (cTraderQuoteStaleTimerRef.current !== null) window.clearTimeout(cTraderQuoteStaleTimerRef.current)
       cTraderQuoteStaleTimerRef.current = window.setTimeout(() => {
-        if (cancelled) return
+        // This timer survives timeframe changes. A true symbol/account change
+        // invalidates its identity and clears it in the source-identity effect.
+        if (liveQuoteIdentityRef.current !== quoteIdentity) return
         liveQuoteIdentityRef.current = null
         latestCTraderPriceRef.current = null
         setLiveQuoteIdentity(null)
@@ -859,10 +867,8 @@ const TerminalContent: React.FC = () => {
     return () => {
       cancelled = true
       unsubscribe()
-      if (cTraderQuoteStaleTimerRef.current !== null) {
-        window.clearTimeout(cTraderQuoteStaleTimerRef.current)
-        cTraderQuoteStaleTimerRef.current = null
-      }
+      // Keep the current-quote freshness timer alive on a timeframe-only cleanup.
+      // A provider/symbol/account switch is handled by the identity effect above.
     }
   }, [activeProviderSelection?.accountId, activeProviderSelection?.connectionId, activeProviderSelection?.environment, activeProviderSelection?.providerId, selectedSymbol, timeframe])
 
@@ -905,7 +911,6 @@ const TerminalContent: React.FC = () => {
   const usingCTrader = activeProviderSelection?.providerId === 'ctrader'
   const selectedCTraderQuoteIdentity = [
     selectedSymbol,
-    timeframe,
     'ctrader',
     String(activeProviderSelection?.connectionId ?? ''),
     String(activeProviderSelection?.accountId ?? ''),
