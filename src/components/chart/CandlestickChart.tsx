@@ -1195,26 +1195,20 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     date.setUTCHours(0, 0, 0, 0)
     return Math.floor(date.getTime() / 1000)
   }
-  const [clockNowMs, setClockNowMs] = useState(() => Date.now())
-  const marketTimestampAnchorRef = useRef({
-    timestamp: Number.isFinite(marketTimestamp) && Number(marketTimestamp) > 0 ? Number(marketTimestamp) : 0,
-    observedAtMs: Date.now(),
-  })
+  const [countdownTimestamp, setCountdownTimestamp] = useState(0)
 
   useEffect(() => {
     if (!Number.isFinite(marketTimestamp) || Number(marketTimestamp) <= 0) return
-    marketTimestampAnchorRef.current = { timestamp: Number(marketTimestamp), observedAtMs: Date.now() }
-    setClockNowMs(Date.now())
+    const freshTimestamp = Math.floor(Number(marketTimestamp))
+    setCountdownTimestamp((current) => Math.max(current, freshTimestamp))
   }, [marketTimestamp])
 
   useEffect(() => {
-    const timer = window.setInterval(() => setClockNowMs(Date.now()), 1000)
+    const timer = window.setInterval(() => {
+      setCountdownTimestamp((current) => current > 0 ? current + 1 : 0)
+    }, 1000)
     return () => window.clearInterval(timer)
   }, [])
-
-  const countdownTimestamp = marketTimestampAnchorRef.current.timestamp > 0
-    ? Math.floor(marketTimestampAnchorRef.current.timestamp + Math.max(0, (clockNowMs - marketTimestampAnchorRef.current.observedAtMs) / 1000))
-    : Number.NaN
   const countdown = timeframe && Number.isFinite(countdownTimestamp)
     ? timeframe === 'W1'
       ? Math.max(0, weekStart(countdownTimestamp) + timeframeSeconds.W1 - countdownTimestamp)
