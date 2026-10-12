@@ -738,13 +738,12 @@ const TerminalContent: React.FC = () => {
     let historyRepairInFlight = false
     let lastHistoryRepairAt = 0
     const subscriptionSymbol = selectedSymbol
-    const subscriptionTimeframe = timeframe
-    const historyRepairKey = [
+    const historyRepairKeyFor = (targetTimeframe: Timeframe): string => [
       String(selection.connectionId),
       String(selection.accountId),
       selection.environment,
       subscriptionSymbol,
-      subscriptionTimeframe,
+      targetTimeframe,
     ].join(':')
 
     const repairSkippedCandles = async (force = false): Promise<void> => {
