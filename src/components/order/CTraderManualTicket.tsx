@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDownRight, ArrowUpRight, CheckCircle2, Clock3, LoaderCircle, ShieldCheck, XCircle } from 'lucide-react'
+import { ArrowUpRight, CheckCircle2, Clock3, LoaderCircle, ShieldCheck, XCircle } from 'lucide-react'
 import type { SymbolSpec, Timeframe, TradeOrder, TradeSide } from '../../types'
 import type { SetupCandidate } from '../../engine/setup/types'
 import type { ActiveProviderSelection } from '../../data/provider/providerConnections'

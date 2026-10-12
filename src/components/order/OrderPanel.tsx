@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertCircle,
-  ArrowDownRight,
   ArrowUpRight,
   CheckCircle2,
   Clock3,
