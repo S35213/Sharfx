@@ -800,12 +800,11 @@ const TerminalContent: React.FC = () => {
       environment: selection.environment === 'live' ? 'live' : 'demo',
       symbol: subscriptionSymbol,
     }, (nextQuote, _nextInstrument, update) => {
-      if (
-        cancelled ||
-        selectedSymbolRef.current !== subscriptionSymbol ||
-        timeframeRef.current !== subscriptionTimeframe
-      ) return
+      if (cancelled || selectedSymbolRef.current !== subscriptionSymbol) return
 
+      // The quote stream belongs to the symbol/account; timeframe changes
+      // only switch candle aggregation and must not interrupt Bid/Ask.
+      const subscriptionTimeframe = timeframeRef.current
       const bid = Number(nextQuote.bid)
       const ask = Number(nextQuote.ask)
       const price = Number.isFinite(bid) && bid > 0
