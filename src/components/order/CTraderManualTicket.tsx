@@ -60,7 +60,7 @@ interface MarginResult {
 const sharedCTraderMarginCache = new Map<string, { margin: MarginResult; expiresAt: number }>()
 const sharedCTraderMarginInflight = new Map<string, Promise<MarginResult>>()
 const SHARED_CTRADER_MARGIN_CACHE_MS = 10000
-const QUOTE_TICK_COLOR_HOLD_MS = 1300
+const QUOTE_TICK_COLOR_HOLD_MS = 350
 
 const postCTrader = async (body: Record<string, unknown>): Promise<Record<string, unknown>> => {
   const response = await fetch('/api/providers/ctrader', {
@@ -196,11 +196,6 @@ export const CTraderManualTicket: React.FC<Props> = ({
   const riskRatio = plan.valid ? plan.riskRewardRatio : 0
   const buyButtonDirection = quoteFresh ? getTradeButtonDirection(buyMarketDirection, 'BUY') : 'neutral'
   const sellButtonDirection = quoteFresh ? getTradeButtonDirection(sellMarketDirection, 'SELL') : 'neutral'
-  const tradeSideButtonTone = (direction: QuoteTickDirection): string => direction === 'up'
-    ? 'border-[#00D084] bg-[#087A49]'
-    : direction === 'down'
-      ? 'border-[#FF5364] bg-[#B42335]'
-      : 'border-[#343C48] bg-[#11161E]'
   const quoteTileStateClass = (direction: QuoteTickDirection, ready: boolean): string =>
     ready ? `shafx-quote-tile--${direction}` : 'shafx-quote-tile--unavailable'
 
@@ -520,11 +515,11 @@ export const CTraderManualTicket: React.FC<Props> = ({
         {aiSetup && <div className="mt-2 flex items-center gap-2 rounded-xl border border-shafx-accent/20 bg-shafx-accent/[0.05] px-2.5 py-2 text-[8px] text-shafx-accent"><CheckCircle2 className="h-3.5 w-3.5" />AI reviewed setup loaded — SHAFX still waits for your manual confirm.</div>}
 
         <div className="mt-3 grid grid-cols-2 gap-2">
-          <button type="button" data-side="BUY" data-market-direction={buyButtonDirection} data-button-tone={buyButtonDirection} data-quote-ready={brokerQuoteReady ? 'true' : 'false'} aria-label="Select BUY at Ask price" aria-pressed={side === 'BUY'} onClick={() => chooseSide('BUY')} className={'shafx-trade-side-button shafx-quote-tile ' + quoteTileStateClass(buyButtonDirection, brokerQuoteReady) + ' relative min-h-[66px] border px-3 py-2 text-left text-shafx-text transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-accent ' + tradeSideButtonTone(buyButtonDirection)}>
+          <button type="button" data-side="BUY" data-market-direction={buyButtonDirection} data-button-tone={buyButtonDirection} data-quote-ready={brokerQuoteReady ? 'true' : 'false'} aria-label="Select BUY at Ask price" aria-pressed={side === 'BUY'} onClick={() => chooseSide('BUY')} className={'shafx-trade-side-button shafx-quote-tile ' + quoteTileStateClass(buyButtonDirection, brokerQuoteReady) + ' relative min-h-[66px] border px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-accent'}>
             <span className="flex items-center justify-between gap-1 text-[11px] font-bold tracking-[0.08em]"><span>BUY</span><span className="text-[8px] uppercase tracking-[0.14em] text-[#AAB2BD]">ASK</span></span>
             <span className="shafx-trade-side-price mt-1 block font-mono text-base font-semibold tabular-nums sm:text-lg tracking-tight">{brokerQuoteReady ? formatPrice(Number(quote?.ask), effectiveSymbol.pricePrecision) : '—'}</span>
           </button>
-          <button type="button" data-side="SELL" data-market-direction={sellButtonDirection} data-button-tone={sellButtonDirection} data-quote-ready={brokerQuoteReady ? 'true' : 'false'} aria-label="Select SELL at Bid price" aria-pressed={side === 'SELL'} onClick={() => chooseSide('SELL')} className={'shafx-trade-side-button shafx-quote-tile ' + quoteTileStateClass(sellButtonDirection, brokerQuoteReady) + ' relative min-h-[66px] border px-3 py-2 text-left text-shafx-text transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-accent ' + tradeSideButtonTone(sellButtonDirection)}>
+          <button type="button" data-side="SELL" data-market-direction={sellButtonDirection} data-button-tone={sellButtonDirection} data-quote-ready={brokerQuoteReady ? 'true' : 'false'} aria-label="Select SELL at Bid price" aria-pressed={side === 'SELL'} onClick={() => chooseSide('SELL')} className={'shafx-trade-side-button shafx-quote-tile ' + quoteTileStateClass(sellButtonDirection, brokerQuoteReady) + ' relative min-h-[66px] border px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-accent'}>
             <span className="flex items-center justify-between gap-1 text-[11px] font-bold tracking-[0.08em]"><span>SELL</span><span className="text-[8px] uppercase tracking-[0.14em] text-[#AAB2BD]">BID</span></span>
             <span className="shafx-trade-side-price mt-1 block font-mono text-base font-semibold tabular-nums sm:text-lg tracking-tight">{brokerQuoteReady ? formatPrice(Number(quote?.bid), effectiveSymbol.pricePrecision) : '—'}</span>
           </button>

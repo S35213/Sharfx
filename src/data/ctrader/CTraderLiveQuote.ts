@@ -25,6 +25,8 @@ export interface CTraderLiveInstrument {
 export interface CTraderQuoteUpdateMeta {
   pricesChanged: boolean
   quoteClockAdvanced: boolean
+  /** True on the first fresh broker quote after a hidden/backgrounded tab resumes. */
+  resumed?: boolean
 }
 
 interface SubscribeArgs {
@@ -44,6 +46,8 @@ interface StreamState {
   lastAsk: number | null
   lastMinuteBucket: number | null
   lastNotifiedAt: number
+  resumeRefreshPending: boolean
+  resumeListener: (() => void) | null
 }
 
 const streams = new Map<string, StreamState>()
@@ -127,6 +131,7 @@ export const shouldNotifyCTraderQuoteListener = (
   now: number,
   heartbeatIntervalMs = 1000,
 ): boolean =>
+  update.resumed === true ||
   update.pricesChanged ||
   update.quoteClockAdvanced ||
   lastPublishedAt <= 0 ||
@@ -154,11 +159,12 @@ const poll = async (key: string, args: SubscribeArgs, state: StreamState): Promi
       state.lastAsk = ask
       state.instrument = result.instrument
 
-      // Quote responses are also a feed heartbeat. Publish changed ticks and
-      // minute boundaries immediately, then publish a one-second heartbeat while
-      // prices are flat so the UI does not falsely drop into "waiting for price".
-      // Consumers use this metadata to avoid repainting candle OHLC on a heartbeat.
-      const update: CTraderQuoteUpdateMeta = { pricesChanged, quoteClockAdvanced }
+      // A tab returning from the background must republish even a flat quote,
+      // so consumers can refresh broker history and catch up missed candles.
+      // Consumers use this metadata to avoid repainting OHLC on ordinary heartbeats.
+      const resumed = state.resumeRefreshPending
+      state.resumeRefreshPending = false
+      const update: CTraderQuoteUpdateMeta = { pricesChanged, quoteClockAdvanced, resumed }
       const notifiedAt = Date.now()
       if (!shouldNotifyCTraderQuoteListener(update, state.lastNotifiedAt, notifiedAt)) return
       state.lastNotifiedAt = notifiedAt
@@ -187,10 +193,23 @@ export const subscribeCTraderLiveQuote = (args: SubscribeArgs, listener: (quote:
       lastAsk: null,
       lastMinuteBucket: null,
       lastNotifiedAt: 0,
+      resumeRefreshPending: false,
+      resumeListener: null,
     }
     streams.set(key, state)
-    void poll(key, args, state)
-    state.timer = window.setInterval(() => { void poll(key, args, state!) }, POLL_INTERVAL_MS)
+    const liveState = state
+    const refreshWhenVisible = (): void => {
+      if (document.visibilityState === 'hidden' || liveState.stopped || streams.get(key) !== liveState) return
+      liveState.resumeRefreshPending = true
+      // Do not wait for a throttled background interval to wake up.
+      void poll(key, args, liveState)
+    }
+    liveState.resumeListener = refreshWhenVisible
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+    window.addEventListener('focus', refreshWhenVisible)
+    window.addEventListener('pageshow', refreshWhenVisible)
+    void poll(key, args, liveState)
+    state.timer = window.setInterval(() => { void poll(key, args, liveState) }, POLL_INTERVAL_MS)
   }
   state.listeners.add(listener)
 
@@ -202,6 +221,12 @@ export const subscribeCTraderLiveQuote = (args: SubscribeArgs, listener: (quote:
     current.stopped = true
     if (current.timer !== null) window.clearInterval(current.timer)
     current.timer = null
+    if (current.resumeListener) {
+      document.removeEventListener('visibilitychange', current.resumeListener)
+      window.removeEventListener('focus', current.resumeListener)
+      window.removeEventListener('pageshow', current.resumeListener)
+      current.resumeListener = null
+    }
     streams.delete(key)
   }
 }

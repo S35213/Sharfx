@@ -123,11 +123,6 @@ const LegacyMultiplierOrderPanel: React.FC<Props> = ({
 
   const buyButtonDirection = getTradeButtonDirection(buyMarketDirection, 'BUY')
   const sellButtonDirection = getTradeButtonDirection(sellMarketDirection, 'SELL')
-  const tradeSideButtonTone = (direction: QuoteTickDirection): string => direction === 'up'
-    ? 'border-[#00D084] bg-[#087A49]'
-    : direction === 'down'
-      ? 'border-[#FF5364] bg-[#B42335]'
-      : 'border-[#343C48] bg-[#11161E]'
   const quoteTileStateClass = (direction: QuoteTickDirection, ready: boolean): string =>
     ready ? `shafx-quote-tile--${direction}` : 'shafx-quote-tile--unavailable'
 
@@ -594,7 +589,7 @@ const LegacyMultiplierOrderPanel: React.FC<Props> = ({
             disabled={busy}
             aria-pressed={side === 'BUY'}
             aria-label="Select BUY at Ask price"
-            className={'shafx-trade-side-button shafx-quote-tile ' + buyQuoteTileState + ' relative min-h-[66px] border px-3 py-2 text-left text-shafx-text transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-accent ' + tradeSideButtonTone(buyButtonDirection)}
+            className={'shafx-trade-side-button shafx-quote-tile ' + buyQuoteTileState + ' relative min-h-[66px] border px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-accent'}
           >
             <span className="flex items-center justify-between gap-2 text-[11px] font-bold tracking-[0.08em]">
               <span>BUY</span><span className="text-[8px] uppercase tracking-[0.14em] text-[#AAB2BD]">ASK</span>
@@ -611,7 +606,7 @@ const LegacyMultiplierOrderPanel: React.FC<Props> = ({
             disabled={busy}
             aria-pressed={side === 'SELL'}
             aria-label="Select SELL at Bid price"
-            className={'shafx-trade-side-button shafx-quote-tile ' + sellQuoteTileState + ' relative min-h-[66px] border px-3 py-2 text-left text-shafx-text transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-accent ' + tradeSideButtonTone(sellButtonDirection)}
+            className={'shafx-trade-side-button shafx-quote-tile ' + sellQuoteTileState + ' relative min-h-[66px] border px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-accent'}
           >
             <span className="flex items-center justify-between gap-2 text-[11px] font-bold tracking-[0.08em]">
               <span>SELL</span><span className="text-[8px] uppercase tracking-[0.14em] text-[#AAB2BD]">BID</span>

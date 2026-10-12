@@ -747,11 +747,11 @@ const TerminalContent: React.FC = () => {
       subscriptionTimeframe,
     ].join(':')
 
-    const repairSkippedCandles = async (): Promise<void> => {
-      // Backfill actual cTrader bars after a quote jumps over a candle bucket.
-      // Never synthesize flat candles to hide a gap: the broker's OHLC history
-      // is the only source allowed to fill those missing timestamps.
-      if (cancelled || historyRepairInFlight || Date.now() - lastHistoryRepairAt < 15_000) return
+    const repairSkippedCandles = async (force = false): Promise<void> => {
+      // Backfill actual broker bars after a gap, and always refresh once when
+      // the tab resumes so users never need to change timeframe or reload manually.
+      // Never synthesize flat candles to hide missing history.
+      if (cancelled || historyRepairInFlight || (!force && Date.now() - lastHistoryRepairAt < 15_000)) return
       historyRepairInFlight = true
       lastHistoryRepairAt = Date.now()
       try {
@@ -831,7 +831,7 @@ const TerminalContent: React.FC = () => {
       const skippedCandleBucket = candleBucketIsCurrent &&
         shouldRepairCTraderHistoryForGap(last?.time, bucket, subscriptionTimeframe)
 
-      if (candleBucketIsCurrent && (update.pricesChanged || update.quoteClockAdvanced)) {
+      if (candleBucketIsCurrent && (update.pricesChanged || update.quoteClockAdvanced || update.resumed)) {
         // Candle OHLC is bid-based. Preserve the forming candle's open and use
         // actual Ask/Bid quote changes to update its range and close.
         const nextCandles = applyCTraderQuoteToCandles(currentCandles, bucket, price)
@@ -849,7 +849,8 @@ const TerminalContent: React.FC = () => {
           setLiveCandles(nextCandles)
         }
       }
-      if (skippedCandleBucket) void repairSkippedCandles()
+      if (update.resumed) void repairSkippedCandles(true)
+      else if (skippedCandleBucket) void repairSkippedCandles()
 
       latestCTraderPriceRef.current = price
       const quoteIdentity = [

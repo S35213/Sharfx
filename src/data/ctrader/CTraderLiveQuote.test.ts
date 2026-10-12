@@ -241,4 +241,9 @@ describe('cTrader quote feed heartbeat', () => {
     expect(shouldNotifyCTraderQuoteListener(unchanged, 10_000, 10_999)).toBe(false)
     expect(shouldNotifyCTraderQuoteListener(unchanged, 10_000, 11_000)).toBe(true)
   })
+
+  it('forces a fresh quote notification when a backgrounded tab resumes', () => {
+    const resumed = { pricesChanged: false, quoteClockAdvanced: false, resumed: true }
+    expect(shouldNotifyCTraderQuoteListener(resumed, 10_000, 10_010)).toBe(true)
+  })
 })
