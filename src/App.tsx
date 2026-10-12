@@ -49,6 +49,20 @@ const positivePrice = (...values: unknown[]): number | null => {
   return null
 }
 
+interface CTraderQuoteSnapshot {
+  symbol: string
+  bid: number
+  ask: number
+  updatedAt: number
+}
+
+const latestCTraderQuoteForSymbol = (
+  quotes: Record<string, CTraderQuoteSnapshot>,
+  symbol: string,
+): CTraderQuoteSnapshot | null => Object.values(quotes)
+  .filter((quote) => Date.now() - quote.updatedAt <= 15_000 && providerSymbolsMatch(quote.symbol, symbol))
+  .sort((left, right) => right.updatedAt - left.updatedAt)[0] ?? null
+
 const providerPositionToTrade = (position: ProviderPosition): TradeOrder => {
   const metadata = position.metadata || {}
   const raw = (metadata.raw && typeof metadata.raw === 'object') ? metadata.raw as Record<string, unknown> : {}
@@ -234,6 +248,7 @@ const TerminalContent: React.FC = () => {
   const liveCandlesRef = useRef<OHLCV[]>([])
   const historyWarmInFlightRef = useRef<Record<string, Promise<Partial<Record<(typeof TIMEFRAMES)[number], OHLCV[]>>>>>({})
   const latestCTraderPriceRef = useRef<number | null>(null)
+  const latestCTraderQuotesRef = useRef<Record<string, CTraderQuoteSnapshot>>({})
   const liveQuoteIdentityRef = useRef<string | null>(null)
   const cTraderQuoteStaleTimerRef = useRef<number | null>(null)
   const toastId = useRef(0)
@@ -623,9 +638,27 @@ const TerminalContent: React.FC = () => {
             if (event.type === 'position') {
               const trade = providerPositionToTrade(event.position)
               setOpenPositions((current) => {
-                const previous = current.find((item) => item.id === trade.id ||
+                let previous = current.find((item) => item.id === trade.id ||
                   item.providerOrderId === trade.id || trade.providerOrderId === item.id ||
                   (Boolean(item.providerOrderId) && item.providerOrderId === trade.providerOrderId))
+                // cTrader order IDs and position IDs are different. Match the local
+                // just-opened trade to its broker position so it does not remain as
+                // an orphan alongside the real position.
+                if (!previous) {
+                  const tolerance = trade.symbol.toUpperCase().includes('JPY') ? 0.05 : 0.0005
+                  const similar = current.filter((item) =>
+                    item.providerId === 'ctrader' &&
+                    item.providerConnectionId === String(activeProviderSelection?.connectionId ?? '') &&
+                    item.providerAccountId === String(activeProviderSelection?.accountId ?? '') &&
+                    item.type === trade.type &&
+                    providerSymbolsMatch(item.symbol, trade.symbol) &&
+                    Math.abs(item.entryPrice - trade.entryPrice) <= tolerance)
+                  if (similar.length === 1) previous = similar[0]
+                }
+                const brokerQuote = latestCTraderQuoteForSymbol(latestCTraderQuotesRef.current, trade.symbol)
+                const exitPrice = brokerQuote ? (trade.type === 'BUY' ? brokerQuote.bid : brokerQuote.ask) : null
+                const pnlReferencePrice = positivePrice(exitPrice, trade.currentPrice, trade.entryPrice) ?? trade.entryPrice
+                const brokerProfit = Number.isFinite(trade.profit) ? Number(trade.profit) : Number(previous?.profit ?? 0)
                 const stopLoss = positivePrice(trade.stopLoss, trade.plannedStopLossPrice, previous?.stopLoss, previous?.plannedStopLossPrice)
                 const takeProfit = positivePrice(trade.takeProfit, trade.plannedTakeProfitPrice, previous?.takeProfit, previous?.plannedTakeProfitPrice)
                 const nextTrade: TradeOrder = {
@@ -633,12 +666,19 @@ const TerminalContent: React.FC = () => {
                   ...trade,
                   id: trade.id,
                   chartTimeframe: previous?.chartTimeframe ?? timeframe,
-                  // A sparse streaming snapshot may omit protection prices. Keep the last
-                  // valid broker/local value instead of replacing it with null or zero.
+                  // A sparse stream may omit protection prices. Keep the desired
+                  // levels visible, but only mark them confirmed if cTrader returns them.
                   stopLoss,
                   takeProfit,
                   plannedStopLossPrice: stopLoss,
                   plannedTakeProfitPrice: takeProfit,
+                  brokerProtectionConfirmed: positivePrice(trade.stopLoss) !== null && positivePrice(trade.takeProfit) !== null,
+                  currentPrice: pnlReferencePrice,
+                  pnlReferencePrice,
+                  pnlReferenceProfit: brokerProfit,
+                  pnlPipSize: previous?.pnlPipSize ?? getSymbolSpec(trade.symbol).pipSize,
+                  pipValuePerLot: trade.pipValuePerLot ?? previous?.pipValuePerLot,
+                  profit: brokerProfit,
                   stopLossPips: trade.stopLossPips ?? previous?.stopLossPips,
                   takeProfitPips: trade.takeProfitPips ?? previous?.takeProfitPips,
                   commission: trade.commission ?? previous?.commission,
@@ -727,11 +767,19 @@ const TerminalContent: React.FC = () => {
               if (similar.length === 1) previous = similar[0]
             }
             if (previous) consumed.add(previous.id)
+            const brokerQuote = latestCTraderQuoteForSymbol(latestCTraderQuotesRef.current, trade.symbol)
+            const exitPrice = brokerQuote ? (trade.type === 'BUY' ? brokerQuote.bid : brokerQuote.ask) : null
+            const pnlReferencePrice = positivePrice(exitPrice, trade.currentPrice, previous?.currentPrice, trade.entryPrice) ?? trade.entryPrice
+            const brokerProfit = Number.isFinite(trade.profit) ? Number(trade.profit) : Number(previous?.profit ?? 0)
             const sl = positivePrice(trade.stopLoss, trade.plannedStopLossPrice, previous?.stopLoss, previous?.plannedStopLossPrice)
             const tp = positivePrice(trade.takeProfit, trade.plannedTakeProfitPrice, previous?.takeProfit, previous?.plannedTakeProfitPrice)
             return {
               ...previous, ...trade, stopLoss: sl, takeProfit: tp,
               plannedStopLossPrice: sl, plannedTakeProfitPrice: tp,
+              currentPrice: pnlReferencePrice, pnlReferencePrice, pnlReferenceProfit: brokerProfit,
+              pnlPipSize: previous?.pnlPipSize ?? getSymbolSpec(trade.symbol).pipSize,
+              pipValuePerLot: trade.pipValuePerLot ?? previous?.pipValuePerLot,
+              profit: brokerProfit,
               chartTimeframe: previous?.chartTimeframe ?? timeframeRef.current,
               stopLossPips: trade.stopLossPips ?? previous?.stopLossPips,
               takeProfitPips: trade.takeProfitPips ?? previous?.takeProfitPips,
@@ -962,6 +1010,12 @@ const TerminalContent: React.FC = () => {
       if (!price) return
       const epochMs = Date.parse(nextQuote.timestamp)
       const timestamp = Number.isFinite(epochMs) ? epochMs : Date.now()
+      latestCTraderQuotesRef.current[normalizeProviderSymbol(subscriptionSymbol)] = {
+        symbol: subscriptionSymbol,
+        bid: Number.isFinite(bid) && bid > 0 ? bid : price,
+        ask: Number.isFinite(ask) && ask > 0 ? ask : price,
+        updatedAt: Date.now(),
+      }
       const bucket = cTraderQuoteBucket(timestamp, subscriptionTimeframe)
 
       // Quote freshness and candle timestamp validity are separate concerns.
@@ -1091,6 +1145,30 @@ const TerminalContent: React.FC = () => {
       : 0
   const chartQuoteReady = liveMarketActive && (!usingCTrader || cTraderQuoteMatchesChart) && chartBidPrice > 0 && chartAskPrice > 0
 
+  // Recalculate the selected cTrader position's floating P/L on every fresh quote.
+  // Broker snapshots remain the anchor; quote movement fills in the 3-second polling gap.
+  const liveOpenPositions = useMemo(() => openPositions.map((position) => {
+    if (!usingCTrader || !chartQuoteReady || position.providerId !== 'ctrader' ||
+      !providerSymbolsMatch(position.symbol, selectedSymbol)) return position
+    const exitPrice = position.type === 'BUY' ? liveBidPrice : liveAskPrice
+    const pipSize = positivePrice(position.pnlPipSize, getSymbolSpec(position.symbol).pipSize)
+    const pipValuePerLot = positivePrice(position.pipValuePerLot)
+    const lots = positivePrice(position.volumeLots, position.lotSize)
+    if (!Number.isFinite(exitPrice) || exitPrice <= 0 || !pipSize || !pipValuePerLot || !lots) {
+      return { ...position, currentPrice: Number.isFinite(exitPrice) && exitPrice > 0 ? exitPrice : position.currentPrice }
+    }
+    const referencePrice = positivePrice(position.pnlReferencePrice, position.currentPrice, position.entryPrice) ?? position.entryPrice
+    const referenceProfit = Number.isFinite(position.pnlReferenceProfit)
+      ? Number(position.pnlReferenceProfit)
+      : Number(position.profit ?? 0)
+    const signedPipMove = ((exitPrice - referencePrice) / pipSize) * (position.type === 'BUY' ? 1 : -1)
+    return {
+      ...position,
+      currentPrice: exitPrice,
+      profit: referenceProfit + signedPipMove * pipValuePerLot * lots,
+    }
+  }), [openPositions, usingCTrader, chartQuoteReady, selectedSymbol, liveBidPrice, liveAskPrice])
+
   // Recompute levels when completed history changes, including a backfill that preserves the last candle time.
   const structuralCandleSignature = useMemo(() => liveCandles.slice(0, -1)
     .map((candle) => [candle.time, candle.open, candle.high, candle.low, candle.close].join(':'))
@@ -1100,15 +1178,16 @@ const TerminalContent: React.FC = () => {
     [selectedSymbol, timeframe, structuralCandleSignature])
 
   const selectedOpenPosition = useMemo(
-    () => openPositions.find((position) => providerSymbolsMatch(position.symbol, selectedSymbol)) ?? null,
-    [openPositions, selectedSymbol],
+    () => liveOpenPositions.find((position) => providerSymbolsMatch(position.symbol, selectedSymbol)) ?? null,
+    [liveOpenPositions, selectedSymbol],
   )
 
-  // Render entry, current/exit, SL, and TP for every open position on this symbol.
+  // Include every matching broker position, including positions restored from cTrader
+  // after the local ticket has gone away or an order ID differs from its position ID.
   const chartOpenPositions = useMemo(
-    () => openPositions.filter((position) =>
+    () => liveOpenPositions.filter((position) =>
       position.status === 'open' && providerSymbolsMatch(position.symbol, selectedSymbol)),
-    [openPositions, selectedSymbol],
+    [liveOpenPositions, selectedSymbol],
   )
   const brokerPositionTradeLines = useMemo<ChartAnnotation[]>(
     () => chartOpenPositions.flatMap((position) =>
@@ -1133,7 +1212,7 @@ const TerminalContent: React.FC = () => {
   // are invented and trades outside the loaded history simply remain in the blotter.
   const chartTradeMarkers = useMemo<TradeChartMarker[]>(() => {
     const seen = new Set<string>()
-    const trades = [...openPositions, ...tradeHistory.slice(0, 40)]
+    const trades = [...liveOpenPositions, ...tradeHistory.slice(0, 40)]
     return trades
       .filter((trade) => providerSymbolsMatch(trade.symbol, selectedSymbol))
       .filter((trade) => {
@@ -1152,7 +1231,7 @@ const TerminalContent: React.FC = () => {
         status: trade.status,
         profit: Number(trade.profit ?? 0),
       }))
-  }, [openPositions, selectedSymbol, tradeHistory])
+  }, [liveOpenPositions, selectedSymbol, tradeHistory])
 
   // Deriv public market data requires no authenticated account. Keep chart startup
   // independent from the slower OAuth/account synchronization path.
@@ -1232,7 +1311,7 @@ const TerminalContent: React.FC = () => {
   }, [activeProviderSelection, derivOrderConnection, openPositions, pushToast, selectedSymbol, tradeHistory])
 
   const handleBulkClose = useCallback(async (mode: 'winning' | 'losing' | 'all'): Promise<void> => {
-    const candidates = openPositions
+    const candidates = liveOpenPositions
       .filter((trade) => mode === 'all' || (mode === 'winning' ? Number(trade.profit ?? 0) > 0 : Number(trade.profit ?? 0) < 0))
       .map((trade) => trade.id)
 
@@ -1247,18 +1326,32 @@ const TerminalContent: React.FC = () => {
     if (closedCount > 0) {
       pushToast('Closed ' + closedCount + ' ' + (closedCount === 1 ? 'trade' : 'trades') + '.')
     }
-  }, [handleClosePosition, openPositions, pushToast])
+  }, [handleClosePosition, liveOpenPositions, pushToast])
 
   // Deriv's authenticated account stream is the source of truth for
   // balance, equity, free margin and floating P/L. Do not overwrite broker
   // accounting with the public chart price.
-  const resolvedAccountData = accountData ?? {
+  const brokerAccountData = accountData ?? {
     balance: 0,
     equity: 0,
     usedMargin: 0,
     freeMargin: 0,
     floatingPL: 0,
     currency: 'USD',
+  }
+  const liveFloatingPnlAdjustment = usingCTrader && chartQuoteReady
+    ? liveOpenPositions.reduce((total, position) => {
+      if (position.providerId !== 'ctrader' || !providerSymbolsMatch(position.symbol, selectedSymbol)) return total
+      const previous = openPositions.find((item) => item.id === position.id)
+      if (!previous) return total
+      return total + Number(position.profit ?? 0) - Number(previous.profit ?? 0)
+    }, 0)
+    : 0
+  const resolvedAccountData: AccountData = {
+    ...brokerAccountData,
+    floatingPL: brokerAccountData.floatingPL + liveFloatingPnlAdjustment,
+    equity: brokerAccountData.equity + liveFloatingPnlAdjustment,
+    freeMargin: brokerAccountData.freeMargin + liveFloatingPnlAdjustment,
   }
 
   const handleReviewSetup = useCallback((setup?: SetupCandidate | null): void => {
@@ -1385,7 +1478,7 @@ const TerminalContent: React.FC = () => {
             <button type="button" onClick={() => openMobileDock('orders')} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Account</span><div className="mt-1 text-xs font-semibold">{accountModeLabel}</div></button>
             <button type="button" onClick={() => { setMobileTab('account'); setMobileDockOpen(false) }} className="rounded-xl border border-shafx-border bg-shafx-bg px-3 py-2 text-left hover:border-shafx-accent/30"><span className="text-[9px] text-shafx-textMuted">Funding</span><div className="mt-1 text-xs font-semibold">Deposit • Withdraw</div></button>
           </div>
-          <div className="shafx-trades-dock hidden h-36 flex-shrink-0 xl:h-40 border-t border-shafx-border bg-[#090D13] p-2 lg:block"><TradesPanel openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={currentPrice} selectedSymbol={selectedSymbol} onClosePosition={(id) => { void handleClosePosition(id) }} onBulkClose={handleBulkClose} currency={resolvedAccountData.currency} botPaperHistory={botPaperHistory} /></div>
+          <div className="shafx-trades-dock hidden h-36 flex-shrink-0 xl:h-40 border-t border-shafx-border bg-[#090D13] p-2 lg:block"><TradesPanel openPositions={liveOpenPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={currentPrice} selectedSymbol={selectedSymbol} onClosePosition={(id) => { void handleClosePosition(id) }} onBulkClose={handleBulkClose} currency={resolvedAccountData.currency} botPaperHistory={botPaperHistory} /></div>
           {mobileDockOpen && <div id="mobile-market-workspace" className="border-t border-shafx-border bg-shafx-surface p-3 lg:hidden">
             <div className="mb-3 flex items-center justify-between gap-3"><div><div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Market workspace</div><div className="text-sm font-semibold">{dock === 'insights' ? 'Structure & AI' : dock === 'liquidity' ? 'Liquidity' : 'Deriv account'}</div></div><button type="button" onClick={() => setMobileDockOpen(false)} className="min-h-10 rounded-xl border border-shafx-border px-3 text-[10px] font-semibold text-shafx-textMuted">Close</button></div>
             {dockContent[dock === 'agent' || dock === 'research' ? 'insights' : dock]}
@@ -1403,7 +1496,7 @@ const TerminalContent: React.FC = () => {
          : (activeProviderSelection?.providerId === 'ctrader' ? 'cTrader ' : 'SHAFX ') + order.type + ' trade opened on ' + (order.chartTimeframe ?? timeframe) + '.')
     }} aiSetup={reviewSetup} /></div></aside>}
       <aside className={showBot ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><SignalDeskPanel symbol={selectedSymbol} timeframe={timeframe} candles={liveCandles} currentPrice={currentPrice} analysis={marketAnalysis} setup={reviewSetup} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} connected={Boolean(derivOrderConnection)} onReviewSetup={handleReviewSetup} onPaperRoundClosed={handleBotPaperRoundClosed} /></aside>
-      <aside className={showHistory ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="h-[calc(100svh-92px)] min-h-[520px]"><TradesPanel defaultTab="history" openPositions={openPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={currentPrice} selectedSymbol={selectedSymbol} onClosePosition={(id) => { void handleClosePosition(id) }} onBulkClose={handleBulkClose} currency={resolvedAccountData.currency} botPaperHistory={botPaperHistory} /></div></aside>
+      <aside className={showHistory ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="h-[calc(100svh-92px)] min-h-[520px]"><TradesPanel defaultTab="history" openPositions={liveOpenPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={currentPrice} selectedSymbol={selectedSymbol} onClosePosition={(id) => { void handleClosePosition(id) }} onBulkClose={handleBulkClose} currency={resolvedAccountData.currency} botPaperHistory={botPaperHistory} /></div></aside>
       <aside className={showFunds ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><DerivCashierLinks /></div></aside>
       <aside className={showAccount ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><AccountPanel account={resolvedAccountData} activeProviderSelection={activeProviderSelection} /></div></aside>
 
