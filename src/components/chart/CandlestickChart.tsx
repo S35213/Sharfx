@@ -380,6 +380,16 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     const wasFollowingRealtime = followRealtimeRef.current && !chartInteractionRef.current
     const isNewBar = previousLastTime !== null && lastTime > previousLastTime
 
+    // Publish the target interval's index before setData/scrollToRealTime emit
+    // synchronous visible-range callbacks. Otherwise the handler compares the new
+    // range with the old timeframe's index and incorrectly hides live Bid/Ask rails.
+    latestIndexRef.current = lastIndex
+    if (rangeNeedsReset) {
+      followRealtimeRef.current = true
+      chartInteractionRef.current = false
+      setIsViewingHistory(false)
+    }
+
     /*
      * IMPORTANT:
      * Do not call setData() for every quote tick. Lightweight Charts can rebuild
