@@ -588,7 +588,7 @@ const LegacyMultiplierOrderPanel: React.FC<Props> = ({
             disabled={busy}
             aria-pressed={side === 'BUY'}
             aria-label="Select BUY at Ask price"
-            className={'shafx-trade-side-button relative min-h-[66px] border px-3 py-2 text-left text-shafx-text transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-accent ' + tradeSideButtonTone(buyButtonDirection) + '}
+            className={'shafx-trade-side-button relative min-h-[66px] border px-3 py-2 text-left text-shafx-text transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-accent ' + tradeSideButtonTone(buyButtonDirection)}
           >
             <span className="flex items-center justify-between gap-2 text-[11px] font-bold tracking-[0.08em]">
               <span>BUY</span><span className="text-[8px] uppercase tracking-[0.14em] text-[#AAB2BD]">ASK</span>
@@ -605,7 +605,7 @@ const LegacyMultiplierOrderPanel: React.FC<Props> = ({
             disabled={busy}
             aria-pressed={side === 'SELL'}
             aria-label="Select SELL at Bid price"
-            className={'shafx-trade-side-button relative min-h-[66px] border px-3 py-2 text-left text-shafx-text transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-accent ' + tradeSideButtonTone(sellButtonDirection) + '}
+            className={'shafx-trade-side-button relative min-h-[66px] border px-3 py-2 text-left text-shafx-text transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-accent ' + tradeSideButtonTone(sellButtonDirection)}
           >
             <span className="flex items-center justify-between gap-2 text-[11px] font-bold tracking-[0.08em]">
               <span>SELL</span><span className="text-[8px] uppercase tracking-[0.14em] text-[#AAB2BD]">BID</span>
