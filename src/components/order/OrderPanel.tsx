@@ -125,6 +125,12 @@ const LegacyMultiplierOrderPanel: React.FC<Props> = ({
   const sellButtonDirection = getTradeButtonDirection(sellMarketDirection, 'SELL')
   const quoteTileStateClass = (direction: QuoteTickDirection, ready: boolean): string =>
     ready ? `shafx-quote-tile--${direction}` : 'shafx-quote-tile--unavailable'
+  const quoteTileStyle = (direction: QuoteTickDirection, ready: boolean): React.CSSProperties => {
+    if (!ready) return { backgroundColor: '#11161E', borderColor: '#343C48', color: '#DDE4EC' }
+    if (direction === 'down') return { backgroundColor: '#C52D41', borderColor: '#FF6979', color: '#FFFFFF' }
+    if (direction === 'up') return { backgroundColor: '#176FC1', borderColor: '#70B9FF', color: '#FFFFFF' }
+    return { backgroundColor: '#155A9F', borderColor: '#3D8FDB', color: '#FFFFFF' }
+  }
 
   useEffect(() => {
     setSide(aiSetup?.direction ?? 'BUY')
@@ -585,6 +591,7 @@ const LegacyMultiplierOrderPanel: React.FC<Props> = ({
             data-market-direction={buyMarketDirection}
             data-button-tone={buyButtonDirection}
             data-quote-ready={marketMetrics.ask !== null ? 'true' : 'false'}
+            style={quoteTileStyle(buyButtonDirection, buyQuoteReady)}
             onClick={() => chooseSide('BUY')}
             disabled={busy}
             aria-pressed={side === 'BUY'}
@@ -594,7 +601,7 @@ const LegacyMultiplierOrderPanel: React.FC<Props> = ({
             <span className="flex items-center justify-between gap-2 text-[11px] font-bold tracking-[0.08em]">
               <span>BUY</span><span className="text-[8px] uppercase tracking-[0.14em] text-[#AAB2BD]">ASK</span>
             </span>
-            <span className="shafx-trade-side-price mt-1 block font-mono text-base font-semibold tabular-nums sm:text-lg tracking-tight">{Number.isFinite(askPrice) && askPrice > 0 && marketMetrics.ask !== null ? formatPrice(marketMetrics.ask, symbolSpec.pricePrecision) : '—'}</span>
+            <span className="shafx-trade-side-price mt-1 block font-mono text-base font-semibold tabular-nums sm:text-lg tracking-tight" style={{ color: buyQuoteReady ? '#FFFFFF' : '#DDE4EC' }}>{Number.isFinite(askPrice) && askPrice > 0 && marketMetrics.ask !== null ? formatPrice(marketMetrics.ask, symbolSpec.pricePrecision) : '—'}</span>
           </button>
           <button
             type="button"
@@ -602,6 +609,7 @@ const LegacyMultiplierOrderPanel: React.FC<Props> = ({
             data-market-direction={sellMarketDirection}
             data-button-tone={sellButtonDirection}
             data-quote-ready={marketMetrics.bid !== null ? 'true' : 'false'}
+            style={quoteTileStyle(sellButtonDirection, sellQuoteReady)}
             onClick={() => chooseSide('SELL')}
             disabled={busy}
             aria-pressed={side === 'SELL'}
@@ -611,7 +619,7 @@ const LegacyMultiplierOrderPanel: React.FC<Props> = ({
             <span className="flex items-center justify-between gap-2 text-[11px] font-bold tracking-[0.08em]">
               <span>SELL</span><span className="text-[8px] uppercase tracking-[0.14em] text-[#AAB2BD]">BID</span>
             </span>
-            <span className="shafx-trade-side-price mt-1 block font-mono text-base font-semibold tabular-nums sm:text-lg tracking-tight">{Number.isFinite(bidPrice) && bidPrice > 0 && marketMetrics.bid !== null ? formatPrice(marketMetrics.bid, symbolSpec.pricePrecision) : '—'}</span>
+            <span className="shafx-trade-side-price mt-1 block font-mono text-base font-semibold tabular-nums sm:text-lg tracking-tight" style={{ color: sellQuoteReady ? '#FFFFFF' : '#DDE4EC' }}>{Number.isFinite(bidPrice) && bidPrice > 0 && marketMetrics.bid !== null ? formatPrice(marketMetrics.bid, symbolSpec.pricePrecision) : '—'}</span>
           </button>
         </div>
 

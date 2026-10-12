@@ -198,6 +198,12 @@ export const CTraderManualTicket: React.FC<Props> = ({
   const sellButtonDirection = quoteFresh ? getTradeButtonDirection(sellMarketDirection, 'SELL') : 'neutral'
   const quoteTileStateClass = (direction: QuoteTickDirection, ready: boolean): string =>
     ready ? `shafx-quote-tile--${direction}` : 'shafx-quote-tile--unavailable'
+  const quoteTileStyle = (direction: QuoteTickDirection, ready: boolean): React.CSSProperties => {
+    if (!ready) return { backgroundColor: '#11161E', borderColor: '#343C48', color: '#DDE4EC' }
+    if (direction === 'down') return { backgroundColor: '#C52D41', borderColor: '#FF6979', color: '#FFFFFF' }
+    if (direction === 'up') return { backgroundColor: '#176FC1', borderColor: '#70B9FF', color: '#FFFFFF' }
+    return { backgroundColor: '#155A9F', borderColor: '#3D8FDB', color: '#FFFFFF' }
+  }
 
   useEffect(() => {
     setSide(aiSetup?.direction ?? 'BUY')
@@ -515,13 +521,13 @@ export const CTraderManualTicket: React.FC<Props> = ({
         {aiSetup && <div className="mt-2 flex items-center gap-2 rounded-xl border border-shafx-accent/20 bg-shafx-accent/[0.05] px-2.5 py-2 text-[8px] text-shafx-accent"><CheckCircle2 className="h-3.5 w-3.5" />AI reviewed setup loaded — SHAFX still waits for your manual confirm.</div>}
 
         <div className="mt-3 grid grid-cols-2 gap-2">
-          <button type="button" data-side="BUY" data-market-direction={buyButtonDirection} data-button-tone={buyButtonDirection} data-quote-ready={brokerQuoteReady ? 'true' : 'false'} aria-label="Select BUY at Ask price" aria-pressed={side === 'BUY'} onClick={() => chooseSide('BUY')} className={'shafx-trade-side-button shafx-quote-tile ' + quoteTileStateClass(buyButtonDirection, brokerQuoteReady) + ' relative min-h-[66px] border px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-accent'}>
+          <button type="button" data-side="BUY" data-market-direction={buyButtonDirection} data-button-tone={buyButtonDirection} data-quote-ready={brokerQuoteReady ? 'true' : 'false'} style={quoteTileStyle(buyButtonDirection, brokerQuoteReady)} aria-label="Select BUY at Ask price" aria-pressed={side === 'BUY'} onClick={() => chooseSide('BUY')} className={'shafx-trade-side-button shafx-quote-tile ' + quoteTileStateClass(buyButtonDirection, brokerQuoteReady) + ' relative min-h-[66px] border px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-accent'}>
             <span className="flex items-center justify-between gap-1 text-[11px] font-bold tracking-[0.08em]"><span>BUY</span><span className="text-[8px] uppercase tracking-[0.14em] text-[#AAB2BD]">ASK</span></span>
-            <span className="shafx-trade-side-price mt-1 block font-mono text-base font-semibold tabular-nums sm:text-lg tracking-tight">{brokerQuoteReady ? formatPrice(Number(quote?.ask), effectiveSymbol.pricePrecision) : '—'}</span>
+            <span className="shafx-trade-side-price mt-1 block font-mono text-base font-semibold tabular-nums sm:text-lg tracking-tight" style={{ color: brokerQuoteReady ? '#FFFFFF' : '#DDE4EC' }}>{brokerQuoteReady ? formatPrice(Number(quote?.ask), effectiveSymbol.pricePrecision) : '—'}</span>
           </button>
-          <button type="button" data-side="SELL" data-market-direction={sellButtonDirection} data-button-tone={sellButtonDirection} data-quote-ready={brokerQuoteReady ? 'true' : 'false'} aria-label="Select SELL at Bid price" aria-pressed={side === 'SELL'} onClick={() => chooseSide('SELL')} className={'shafx-trade-side-button shafx-quote-tile ' + quoteTileStateClass(sellButtonDirection, brokerQuoteReady) + ' relative min-h-[66px] border px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-accent'}>
+          <button type="button" data-side="SELL" data-market-direction={sellButtonDirection} data-button-tone={sellButtonDirection} data-quote-ready={brokerQuoteReady ? 'true' : 'false'} style={quoteTileStyle(sellButtonDirection, brokerQuoteReady)} aria-label="Select SELL at Bid price" aria-pressed={side === 'SELL'} onClick={() => chooseSide('SELL')} className={'shafx-trade-side-button shafx-quote-tile ' + quoteTileStateClass(sellButtonDirection, brokerQuoteReady) + ' relative min-h-[66px] border px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-accent'}>
             <span className="flex items-center justify-between gap-1 text-[11px] font-bold tracking-[0.08em]"><span>SELL</span><span className="text-[8px] uppercase tracking-[0.14em] text-[#AAB2BD]">BID</span></span>
-            <span className="shafx-trade-side-price mt-1 block font-mono text-base font-semibold tabular-nums sm:text-lg tracking-tight">{brokerQuoteReady ? formatPrice(Number(quote?.bid), effectiveSymbol.pricePrecision) : '—'}</span>
+            <span className="shafx-trade-side-price mt-1 block font-mono text-base font-semibold tabular-nums sm:text-lg tracking-tight" style={{ color: brokerQuoteReady ? '#FFFFFF' : '#DDE4EC' }}>{brokerQuoteReady ? formatPrice(Number(quote?.bid), effectiveSymbol.pricePrecision) : '—'}</span>
           </button>
         </div>
 
