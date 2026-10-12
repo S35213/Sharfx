@@ -622,18 +622,29 @@ const TerminalContent: React.FC = () => {
             if (event.type === 'position') {
               const trade = providerPositionToTrade(event.position)
               setOpenPositions((current) => {
-                const previous = current.find((item) => item.id === trade.id)
+                const previous = current.find((item) => item.id === trade.id ||
+                  item.providerOrderId === trade.id || trade.providerOrderId === item.id ||
+                  (Boolean(item.providerOrderId) && item.providerOrderId === trade.providerOrderId))
+                const stopLoss = positivePrice(trade.stopLoss, trade.plannedStopLossPrice, previous?.stopLoss, previous?.plannedStopLossPrice)
+                const takeProfit = positivePrice(trade.takeProfit, trade.plannedTakeProfitPrice, previous?.takeProfit, previous?.plannedTakeProfitPrice)
                 const nextTrade: TradeOrder = {
+                  ...previous,
                   ...trade,
+                  id: trade.id,
                   chartTimeframe: previous?.chartTimeframe ?? timeframe,
-                  // Preserve the locally confirmed ticket levels if the account stream
-                  // omits SL/TP from a position snapshot; never replace valid prices with null.
-                  plannedStopLossPrice: previous?.plannedStopLossPrice ?? trade.plannedStopLossPrice ?? null,
-                  plannedTakeProfitPrice: previous?.plannedTakeProfitPrice ?? trade.plannedTakeProfitPrice ?? null,
-                  commission: previous?.commission,
+                  // A sparse streaming snapshot may omit protection prices. Keep the last
+                  // valid broker/local value instead of replacing it with null or zero.
+                  stopLoss,
+                  takeProfit,
+                  plannedStopLossPrice: stopLoss,
+                  plannedTakeProfitPrice: takeProfit,
+                  stopLossPips: trade.stopLossPips ?? previous?.stopLossPips,
+                  takeProfitPips: trade.takeProfitPips ?? previous?.takeProfitPips,
+                  commission: trade.commission ?? previous?.commission,
                   payout: previous?.payout,
                 }
-                const next = current.filter((item) => item.id !== trade.id)
+                const next = current.filter((item) => item.id !== previous?.id && item.id !== trade.id &&
+                  item.providerOrderId !== trade.id && !(trade.providerOrderId && item.id === trade.providerOrderId))
                 return [...next, nextTrade].sort((a, b) => b.openTime.localeCompare(a.openTime))
               })
               setTradeHistory((current) => current.filter((item) => item.id !== trade.id))
