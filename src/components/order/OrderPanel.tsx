@@ -564,7 +564,7 @@ const LegacyMultiplierOrderPanel: React.FC<Props> = ({
             <span className="flex items-center justify-between gap-2 text-[10px] font-bold tracking-[0.08em]">
               <span>BUY</span><span className="text-[8px] uppercase tracking-[0.14em] text-[#AAB2BD]">ASK</span>
             </span>
-            <span className="shafx-trade-side-price mt-2 block font-mono text-[11px] font-semibold tabular-nums">{Number.isFinite(bidPrice) && bidPrice > 0 && marketMetrics.ask ? formatPrice(marketMetrics.ask, symbolSpec.pricePrecision) : '—'}</span>
+            <span className="shafx-trade-side-price mt-2 block font-mono text-[11px] font-semibold tabular-nums">{Number.isFinite(Number(marketMetrics.ask)) && Number(marketMetrics.ask) > 0 ? formatPrice(Number(marketMetrics.ask), symbolSpec.pricePrecision) : '—'}</span>
           </button>
           <button
             type="button"
@@ -580,7 +580,7 @@ const LegacyMultiplierOrderPanel: React.FC<Props> = ({
             <span className="flex items-center justify-between gap-2 text-[10px] font-bold tracking-[0.08em]">
               <span>SELL</span><span className="text-[8px] uppercase tracking-[0.14em] text-[#AAB2BD]">BID</span>
             </span>
-            <span className="shafx-trade-side-price mt-2 block font-mono text-[11px] font-semibold tabular-nums">{Number.isFinite(askPrice) && askPrice > 0 && marketMetrics.bid ? formatPrice(marketMetrics.bid, symbolSpec.pricePrecision) : '—'}</span>
+            <span className="shafx-trade-side-price mt-2 block font-mono text-[11px] font-semibold tabular-nums">{Number.isFinite(Number(marketMetrics.bid)) && Number(marketMetrics.bid) > 0 ? formatPrice(Number(marketMetrics.bid), symbolSpec.pricePrecision) : '—'}</span>
           </button>
         </div>
 

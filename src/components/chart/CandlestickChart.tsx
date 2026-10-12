@@ -785,7 +785,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       }
       lineLabelSyncRef.current()
     }
-  }, [annotations, armedAlerts, askPrice, bidPrice, chartMode, lastClose, pipSize, showPriceLabels, tradeLines, userLevels])
+  }, [annotations, armedAlerts, askPrice, bidPrice, bidQuoteTone, chartMode, lastClose, pipSize, quoteReady, askQuoteTone, showPriceLabels, tradeLines, userLevels])
 
   useEffect(() => {
     const chart = chartRef.current
