@@ -682,7 +682,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       const id = line.id.toLowerCase()
       const lineStyle: 0 | 1 | 2 = isStop(id) ? 2 : isTarget(id) ? 0 : id.includes('entry') ? 1 : 0
       const title = shortTitle(line) + ' ' + line.price.toFixed(pricePrecision)
-      upsertLine(line, lineStyle, false, title)
+      upsertLine(line, lineStyle, true, title)
       labelCandidates.push(line)
     })
 
