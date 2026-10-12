@@ -35,6 +35,11 @@ import {
 } from '../../server/providerConnections.js'
 
 const json = (res, status, body) => res.status(status).json(body)
+const finitePositivePrice = (value) => {
+  if (value === null || value === undefined || value === '') return null
+  const price = Number(value)
+  return Number.isFinite(price) && price > 0 ? price : null
+}
 const cookie = (req, name) => (req.headers?.cookie || '')
   .split(';')
   .map((part) => part.trim())
@@ -446,10 +451,78 @@ const handlePost = async (req, res, user, body) => {
       symbol: String(order.symbol || ''),
       symbolId: body.symbolId ?? order.symbolId,
     })
+    const requestedStopLoss = finitePositivePrice(order.stopLoss)
+    const requestedTakeProfit = finitePositivePrice(order.takeProfit)
+    const protectionRequested = requestedStopLoss !== null || requestedTakeProfit !== null
     const result = await placeCtraderOrder({ environment: context.environment, accountId, accessToken: tokens.accessToken, fullSymbol: full, order })
     const normalized = normalizeCtraderOrder(result)
-    await recordProviderAudit({ userId: user.id, connectionId, accountId, eventType: 'demo_order_placed', metadata: { provider: 'ctrader', providerOrderId: normalized.providerOrderId, positionId: normalized.positionId, symbol: order.symbol, side: order.side, lots: order.quantity } })
-    return json(res, 200, { ok: true, order: { ...normalized, symbol: String(full.name || order.symbol || ''), raw: result } })
+
+    let protectionApplied = null
+    let protectionError = ''
+    if (order.type === 'MARKET' && protectionRequested) {
+      protectionApplied = false
+      try {
+        const positionId = String(normalized.positionId || result.position?.positionId || result.positionId || '')
+        if (!positionId) throw new Error('cTrader opened the order but did not return a position ID for SL/TP verification.')
+        await amendCtraderPosition({
+          environment: context.environment,
+          accountId,
+          accessToken: tokens.accessToken,
+          positionId,
+          stopLoss: requestedStopLoss,
+          takeProfit: requestedTakeProfit,
+        })
+        const reconciled = await reconcileCtrader({ environment: context.environment, accountId, accessToken: tokens.accessToken })
+        const position = (Array.isArray(reconciled.position) ? reconciled.position : [])
+          .find((item) => String(item?.positionId || '') === positionId)
+        if (!position) throw new Error('cTrader accepted the protection request but the position could not be verified.')
+        const actualStopLoss = finitePositivePrice(position.stopLoss)
+        const actualTakeProfit = finitePositivePrice(position.takeProfit)
+        const digits = Math.max(0, Math.min(10, Number(full.digits ?? 5)))
+        const tolerance = Math.max(1e-8, (10 ** -digits) * 0.51)
+        const stopLossMatches = requestedStopLoss === null ||
+          (actualStopLoss !== null && Math.abs(actualStopLoss - requestedStopLoss) <= tolerance)
+        const takeProfitMatches = requestedTakeProfit === null ||
+          (actualTakeProfit !== null && Math.abs(actualTakeProfit - requestedTakeProfit) <= tolerance)
+        if (!stopLossMatches || !takeProfitMatches) {
+          throw new Error('cTrader did not confirm every requested SL/TP level on the opened position.')
+        }
+        protectionApplied = true
+      } catch (error) {
+        protectionApplied = false
+        protectionError = error instanceof Error
+          ? error.message
+          : 'cTrader did not confirm broker-side stop loss and take profit.'
+      }
+    }
+
+    await recordProviderAudit({
+      userId: user.id,
+      connectionId,
+      accountId,
+      eventType: 'demo_order_placed',
+      metadata: {
+        provider: 'ctrader',
+        providerOrderId: normalized.providerOrderId,
+        positionId: normalized.positionId,
+        symbol: order.symbol,
+        side: order.side,
+        lots: order.quantity,
+        protectionApplied,
+      },
+    })
+    return json(res, 200, {
+      ok: true,
+      order: {
+        ...normalized,
+        symbol: String(full.name || order.symbol || ''),
+        raw: result,
+        ...(order.type === 'MARKET' && protectionRequested ? {
+          protectionApplied,
+          ...(protectionError ? { protectionError } : {}),
+        } : {}),
+      },
+    })
   }
 
   if (action === 'modifyPosition') {
