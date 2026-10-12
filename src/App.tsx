@@ -40,16 +40,25 @@ import { mockWatchlist } from './data/mock/watchlist'
 import { fetchDerivActiveForexSymbols, fetchDerivMultiTimeframeCandles, subscribeDerivForexQuotes } from './data/deriv/DerivPublicMarketFeed'
 import { applyCTraderQuoteToCandles, cTraderQuoteBucket, fetchCTraderHistoricalCandles, isCTraderQuoteBucketCurrent, mergeCTraderHistoricalAndLiveCandles, shouldRepairCTraderHistoryForGap, subscribeCTraderLiveQuote } from './data/ctrader/CTraderLiveQuote'
 
+const positivePrice = (...values: unknown[]): number | null => {
+  for (const value of values) {
+    if (value === null || value === undefined || value === '') continue
+    const price = Number(value)
+    if (Number.isFinite(price) && price > 0) return price
+  }
+  return null
+}
+
 const providerPositionToTrade = (position: ProviderPosition): TradeOrder => {
   const metadata = position.metadata || {}
   const raw = (metadata.raw && typeof metadata.raw === 'object') ? metadata.raw as Record<string, unknown> : {}
-  const entryPrice = Number(position.entryPrice ?? 0)
-  const currentPrice = Number(position.currentPrice ?? 0)
+  const entryPrice = Number(position.entryPrice ?? raw.entryPrice ?? raw.price ?? 0)
+  const currentPrice = Number(position.currentPrice ?? raw.currentPrice ?? 0)
 
   if (metadata.provider === 'ctrader') {
-    const lots = Number(position.quantity)
-    const stopLoss = Number(position.stopLoss)
-    const takeProfit = Number(position.takeProfit)
+    const lots = Number(position.quantity ?? raw.lots ?? raw.volumeLots ?? metadata.lots ?? 0)
+    const stopLoss = positivePrice(position.stopLoss, raw.stopLoss, raw.stopLossPrice, raw.stop_loss, metadata.stopLoss, metadata.stopLossPrice)
+    const takeProfit = positivePrice(position.takeProfit, raw.takeProfit, raw.takeProfitPrice, raw.take_profit, metadata.takeProfit, metadata.takeProfitPrice)
     const usedMargin = Number(metadata.usedMargin)
     const stopLossPips = Number(metadata.stopLossPips)
     const takeProfitPips = Number(metadata.takeProfitPips)
@@ -61,10 +70,10 @@ const providerPositionToTrade = (position: ProviderPosition): TradeOrder => {
       volumeLots: Number.isFinite(lots) ? lots : 0,
       entryPrice: Number.isFinite(entryPrice) ? entryPrice : 0,
       currentPrice: Number.isFinite(currentPrice) && currentPrice > 0 ? currentPrice : undefined,
-      stopLoss: Number.isFinite(stopLoss) && stopLoss > 0 ? stopLoss : null,
-      takeProfit: Number.isFinite(takeProfit) && takeProfit > 0 ? takeProfit : null,
-      plannedStopLossPrice: Number.isFinite(stopLoss) && stopLoss > 0 ? stopLoss : null,
-      plannedTakeProfitPrice: Number.isFinite(takeProfit) && takeProfit > 0 ? takeProfit : null,
+      stopLoss,
+      takeProfit,
+      plannedStopLossPrice: stopLoss,
+      plannedTakeProfitPrice: takeProfit,
       riskPercent: 0,
       riskAmount: 0,
       rewardAmount: 0,
