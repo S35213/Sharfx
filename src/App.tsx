@@ -746,7 +746,7 @@ const TerminalContent: React.FC = () => {
       targetTimeframe,
     ].join(':')
 
-    const repairSkippedCandles = async (force = false): Promise<void> => {
+    const repairSkippedCandles = async (targetTimeframe: Timeframe, force = false): Promise<void> => {
       // Backfill actual broker bars after a gap, and always refresh once when
       // the tab resumes so users never need to change timeframe or reload manually.
       // Never synthesize flat candles to hide missing history.
@@ -759,16 +759,14 @@ const TerminalContent: React.FC = () => {
           accountId: String(selection.accountId),
           environment: selection.environment === 'live' ? 'live' : 'demo',
           symbol: subscriptionSymbol,
-          timeframe: subscriptionTimeframe,
+          timeframe: targetTimeframe,
           count: 300,
         })
-        if (
-          cancelled ||
-          selectedSymbolRef.current !== subscriptionSymbol ||
-          timeframeRef.current !== subscriptionTimeframe
-        ) return
+        if (cancelled || selectedSymbolRef.current !== subscriptionSymbol) return
 
-        const latestLive = cTraderCandleCacheRef.current[historyRepairKey] ?? liveCandlesRef.current
+        const historyRepairKey = historyRepairKeyFor(targetTimeframe)
+        const latestLive = cTraderCandleCacheRef.current[historyRepairKey] ??
+          (timeframeRef.current === targetTimeframe ? liveCandlesRef.current : [])
         const repaired = mergeCTraderHistoricalAndLiveCandles(history, latestLive)
         const unchanged = repaired.length === latestLive.length && repaired.every((bar, index) => {
           const previous = latestLive[index]
