@@ -129,6 +129,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const previousAskQuoteRef = useRef<number | null>(null)
   const lastBidTickAtRef = useRef(0)
   const lastAskTickAtRef = useRef(0)
+  const bidQuoteTone = getQuoteTickColor(bidTickDirection)
+  const askQuoteTone = getQuoteTickColor(askTickDirection)
   const structuralOcclusionRef = useRef<Map<string, boolean>>(new Map())
   const tradeMarkerSignatureRef = useRef('')
   const marketBidLineRef = useRef<IPriceLine | null>(null)
@@ -1176,9 +1178,6 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const countdown = timeframe && countdownNowSeconds > 0
     ? getCandleCloseCountdown(countdownNowSeconds, timeframe)
     : null
-
-  const bidQuoteTone = getQuoteTickColor(bidTickDirection)
-  const askQuoteTone = getQuoteTickColor(askTickDirection)
 
   useEffect(() => {
     const bid = Number(bidPrice)
