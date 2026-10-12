@@ -241,3 +241,16 @@
 - [x] No trade placement/closure, provider settings, credentials, or account settings were changed during this work.
 
 **Next step:** when TinyFish browser automation credit is available, repeat the M5 countdown readout at one-second intervals on this exact deployment, confirm square BUY/SELL corners/selection underline, then watch M5 for at least 100 seconds with live quotes and switch M5 → H1 → M5. Keep PR #58 in draft; do not merge or promote without all required gates and explicit user approval.
+
+
+## Latest ticket/chart cleanup checkpoint — 2026-10-12
+
+- [x] MT5-inspired palette: blue uptick/red downtick on quote digits only; neutral light digits while loading/no quote/no price change for 15 seconds. BUY follows Ask; SELL follows Bid.
+- [x] Square dark BUY/SELL ticket cards enlarged to 70px minimum height and quote digits reduced to 10px monospace; no diluted red/green tile fills.
+- [x] Top-right duplicate chart quote strip removed; one custom BID and one custom ASK tag when connected. Native axis tags for quote/position overlays are hidden to avoid duplicates.
+- [x] Current BID/ASK overlays hide during historical scroll and return near the latest candles, so they do not compete with old support/resistance/liquidity levels.
+- [x] Current live header/chart price is gated by a fresh quote stream; 15 seconds of stream silence clears it to WAITING instead of falling back to the last candle close.
+- [x] Draft ticket SL/TP lines are excluded until a real open position exists; Equity/Floating P/L is larger and currency amounts use 2dp.
+- [!] Build/lint/test status for the final 10px sizing and notes commit must be confirmed. Last completed full suite had 361 passing and two existing unrelated failures (cTrader status expected rejected/got filled; CFD conversion expected null/got 10).
+- [!] Final browser visual acceptance pending because TinyFish automation credit is depleted. No false claim of visual verification.
+- Safety: isolated branch only; no trades/accounts changed and no main/Cloudflare/sibling Render promotion.
