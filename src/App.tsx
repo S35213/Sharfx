@@ -63,6 +63,14 @@ const latestCTraderQuoteForSymbol = (
   .filter((quote) => Date.now() - quote.updatedAt <= 15_000 && providerSymbolsMatch(quote.symbol, symbol))
   .sort((left, right) => right.updatedAt - left.updatedAt)[0] ?? null
 
+// A failed cTrader symbol lookup can temporarily return a numeric symbol ID.
+// Never let that opaque ID overwrite a real symbol learned from the trade ticket.
+const isUnresolvedProviderSymbol = (value: string): boolean => /^\d+$/.test(value.trim())
+const positionChartSymbol = (incoming: string, previous?: string): string =>
+  isUnresolvedProviderSymbol(incoming) && previous && !isUnresolvedProviderSymbol(previous)
+    ? previous
+    : normalizeProviderSymbol(incoming)
+
 const providerPositionToTrade = (position: ProviderPosition): TradeOrder => {
   const metadata = position.metadata || {}
   const raw = (metadata.raw && typeof metadata.raw === 'object') ? metadata.raw as Record<string, unknown> : {}
@@ -651,7 +659,7 @@ const TerminalContent: React.FC = () => {
                     item.providerConnectionId === String(activeProviderSelection?.connectionId ?? '') &&
                     item.providerAccountId === String(activeProviderSelection?.accountId ?? '') &&
                     item.type === trade.type &&
-                    providerSymbolsMatch(item.symbol, trade.symbol) &&
+                    (isUnresolvedProviderSymbol(trade.symbol) || providerSymbolsMatch(item.symbol, trade.symbol)) &&
                     Math.abs(item.entryPrice - trade.entryPrice) <= tolerance)
                   if (similar.length === 1) previous = similar[0]
                 }
@@ -665,6 +673,7 @@ const TerminalContent: React.FC = () => {
                   ...previous,
                   ...trade,
                   id: trade.id,
+                  symbol: positionChartSymbol(trade.symbol, previous?.symbol),
                   chartTimeframe: previous?.chartTimeframe ?? timeframe,
                   // A sparse stream may omit protection prices. Keep the desired
                   // levels visible, but only mark them confirmed if cTrader returns them.
@@ -762,7 +771,8 @@ const TerminalContent: React.FC = () => {
               const tolerance = trade.symbol.includes('JPY') ? 0.05 : 0.0005
               const similar = current.filter((item) => !consumed.has(item.id) && item.providerId === 'ctrader' &&
                 item.providerConnectionId === String(selection.connectionId) && item.providerAccountId === String(selection.accountId) &&
-                item.type === trade.type && providerSymbolsMatch(item.symbol, trade.symbol) &&
+                item.type === trade.type &&
+                (isUnresolvedProviderSymbol(trade.symbol) || providerSymbolsMatch(item.symbol, trade.symbol)) &&
                 Math.abs(item.entryPrice - trade.entryPrice) <= tolerance)
               if (similar.length === 1) previous = similar[0]
             }
@@ -774,7 +784,9 @@ const TerminalContent: React.FC = () => {
             const sl = positivePrice(trade.stopLoss, trade.plannedStopLossPrice, previous?.stopLoss, previous?.plannedStopLossPrice)
             const tp = positivePrice(trade.takeProfit, trade.plannedTakeProfitPrice, previous?.takeProfit, previous?.plannedTakeProfitPrice)
             return {
-              ...previous, ...trade, stopLoss: sl, takeProfit: tp,
+              ...previous, ...trade,
+              symbol: positionChartSymbol(trade.symbol, previous?.symbol),
+              stopLoss: sl, takeProfit: tp,
               plannedStopLossPrice: sl, plannedTakeProfitPrice: tp,
               currentPrice: pnlReferencePrice, pnlReferencePrice, pnlReferenceProfit: brokerProfit,
               pnlPipSize: previous?.pnlPipSize ?? getSymbolSpec(trade.symbol).pipSize,
@@ -1178,7 +1190,8 @@ const TerminalContent: React.FC = () => {
     [selectedSymbol, timeframe, structuralCandleSignature])
 
   const selectedOpenPosition = useMemo(
-    () => liveOpenPositions.find((position) => providerSymbolsMatch(position.symbol, selectedSymbol)) ?? null,
+    () => liveOpenPositions.find((position) =>
+      position.status === 'open' && providerSymbolsMatch(position.symbol, selectedSymbol)) ?? null,
     [liveOpenPositions, selectedSymbol],
   )
 
@@ -1187,6 +1200,11 @@ const TerminalContent: React.FC = () => {
   const chartOpenPositions = useMemo(
     () => liveOpenPositions.filter((position) =>
       position.status === 'open' && providerSymbolsMatch(position.symbol, selectedSymbol)),
+    [liveOpenPositions, selectedSymbol],
+  )
+  const openPositionsOnOtherSymbols = useMemo(
+    () => liveOpenPositions.filter((position) =>
+      position.status === 'open' && !providerSymbolsMatch(position.symbol, selectedSymbol)),
     [liveOpenPositions, selectedSymbol],
   )
   const brokerPositionTradeLines = useMemo<ChartAnnotation[]>(
@@ -1468,7 +1486,19 @@ const TerminalContent: React.FC = () => {
              <span className="ml-auto hidden rounded-lg border border-shafx-border bg-shafx-bg px-2 py-1 font-mono text-[8px] text-shafx-textMuted md:inline">{timeframe}</span>
            </div>
            <MobileChartTools tool={chartTool} onToolChange={setChartTool} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} />
-           <div className="shafx-chart-stage relative min-h-0 p-1 sm:p-2 lg:flex-1">
+           <div
+             className="shafx-chart-stage relative min-h-0 p-1 sm:p-2 lg:flex-1"
+             data-shafx-open-position-count={liveOpenPositions.filter((position) => position.status === 'open').length}
+             data-shafx-matched-open-position-count={chartOpenPositions.length}
+             data-shafx-trade-line-count={combinedTradeLines.length}
+             data-shafx-unmatched-position-symbols={openPositionsOnOtherSymbols.map((position) => position.symbol).join(',')}
+           >
+             {usingCTrader && openPositionsOnOtherSymbols.length > 0 && chartOpenPositions.length === 0 &&
+               <div role="status" className="pointer-events-none absolute left-3 right-3 top-3 z-30 rounded-lg border border-[#F5B942]/35 bg-[#17130C]/95 px-3 py-2 text-[10px] leading-4 text-[#F5C75E] shadow-xl">
+                 {openPositionsOnOtherSymbols.some((position) => isUnresolvedProviderSymbol(position.symbol))
+                   ? 'cTrader reports an open position, but its instrument name could not be resolved yet. SHAFX is withholding entry / SL / TP lines rather than plotting them on the wrong chart.'
+                   : 'An open cTrader position is on ' + [...new Set(openPositionsOnOtherSymbols.map((position) => position.symbol))].join(', ') + '. Select that instrument to view its entry / SL / TP lines.'}
+               </div>}
              <CandlestickChart data={liveCandles} symbol={selectedSymbol} timeframe={timeframe} annotations={chartAnnotations} tradeLines={combinedTradeLines} tradeMarkers={chartTradeMarkers} bidPrice={chartBidPrice} askPrice={chartAskPrice} quoteReady={chartQuoteReady} toolMode={chartToolMode} pipSize={symbolSpec.pipSize} onToolNotice={pushToast} showGrid={chartSettings.showGrid} showPriceLabels={chartSettings.showPriceLabels} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} marketTimestamp={marketTimestamp} onTimeframeChange={handleTimeframeChange} replayMode={false} />
              {liveCandles.length === 0 && <div role="status" aria-live="polite" className="pointer-events-none absolute inset-0 z-40 flex min-h-[320px] items-center justify-center bg-shafx-bg/80 text-sm text-shafx-textMuted">Waiting for the live market stream…</div>}
            </div>
