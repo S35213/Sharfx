@@ -138,10 +138,13 @@ export const CTraderManualTicket: React.FC<Props> = ({
 }) => {
   const [side, setSide] = useState<TradeSide>(aiSetup?.direction ?? 'BUY')
   const [riskSizing, setRiskSizing] = useState(true)
-  const [riskAmount, setRiskAmount] = useState('2.00')
-  const [lotsInput, setLotsInput] = useState('0.02')
-  const [stopPipsInput, setStopPipsInput] = useState('10')
-  const [targetPipsInput, setTargetPipsInput] = useState('20')
+  const [stopDistanceMode, setStopDistanceMode] = useState<'auto' | 'manual'>(aiSetup ? 'auto' : 'manual')
+  const [targetDistanceMode, setTargetDistanceMode] = useState<'auto' | 'manual'>(aiSetup ? 'auto' : 'manual')
+  const [planConfirmed, setPlanConfirmed] = useState(false)
+  const [riskAmount, setRiskAmount] = useState('')
+  const [lotsInput, setLotsInput] = useState('')
+  const [stopPipsInput, setStopPipsInput] = useState('')
+  const [targetPipsInput, setTargetPipsInput] = useState('')
   const [quote, setQuote] = useState<ProviderQuote | null>(null)
   const [instrument, setInstrument] = useState<ProviderInstrument | null>(null)
   const [margin, setMargin] = useState<MarginResult | null>(null)
@@ -168,10 +171,18 @@ export const CTraderManualTicket: React.FC<Props> = ({
   const quoteAgeMs = now - quoteReceivedAtMs
   const quoteFresh = quoteReceivedAtMs > 0 && quoteAgeMs >= 0 && quoteAgeMs <= 15_000
 
-  const stopPips = Number(stopPipsInput)
-  const targetPips = Number(targetPipsInput)
-  const lots = Number(lotsInput)
-  const requestedRisk = Number(riskAmount)
+  const autoStopPips = aiSetup && Number.isFinite(aiSetup.entryPrice) && Number.isFinite(aiSetup.stopLoss) && aiSetup.entryPrice > 0 && aiSetup.stopLoss > 0
+    ? Math.abs(aiSetup.entryPrice - aiSetup.stopLoss) / Math.max(effectiveSymbol.pipSize, Number.EPSILON)
+    : Number.NaN
+  const autoTargetPips = aiSetup && Number.isFinite(aiSetup.entryPrice) && Number.isFinite(aiSetup.takeProfit) && aiSetup.entryPrice > 0 && aiSetup.takeProfit > 0
+    ? Math.abs(aiSetup.takeProfit - aiSetup.entryPrice) / Math.max(effectiveSymbol.pipSize, Number.EPSILON)
+    : Number.NaN
+  const hasAutoStopDistance = Number.isFinite(autoStopPips) && autoStopPips > 0
+  const hasAutoTargetDistance = Number.isFinite(autoTargetPips) && autoTargetPips > 0
+  const stopPips = stopDistanceMode === 'auto' ? (hasAutoStopDistance ? autoStopPips : Number.NaN) : (stopPipsInput.trim() ? Number(stopPipsInput) : Number.NaN)
+  const targetPips = targetDistanceMode === 'auto' ? (hasAutoTargetDistance ? autoTargetPips : Number.NaN) : (targetPipsInput.trim() ? Number(targetPipsInput) : Number.NaN)
+  const lots = lotsInput.trim() ? Number(lotsInput) : 0
+  const requestedRisk = riskAmount.trim() ? Number(riskAmount) : 0
 
   const stopLossPrice = Number.isFinite(entryPrice) && Number.isFinite(stopPips) && stopPips > 0
     ? Number((side === 'BUY' ? entryPrice - stopPips * effectiveSymbol.pipSize : entryPrice + stopPips * effectiveSymbol.pipSize).toFixed(effectiveSymbol.pricePrecision))
@@ -208,7 +219,17 @@ export const CTraderManualTicket: React.FC<Props> = ({
 
   useEffect(() => {
     setSide(aiSetup?.direction ?? 'BUY')
-  }, [aiSetup?.direction, symbol])
+    setPlanConfirmed(false)
+    if (aiSetup) {
+      setStopDistanceMode('auto')
+      setTargetDistanceMode('auto')
+      setStopPipsInput('')
+      setTargetPipsInput('')
+    } else {
+      setStopDistanceMode('manual')
+      setTargetDistanceMode('manual')
+    }
+  }, [aiSetup?.direction, aiSetup?.entryPrice, aiSetup?.stopLoss, aiSetup?.takeProfit, symbol])
 
   useEffect(() => {
     if (providerSelection?.providerId !== 'ctrader' || !connection?.accountId) return
@@ -329,6 +350,7 @@ export const CTraderManualTicket: React.FC<Props> = ({
 
   const chooseSide = (value: TradeSide): void => {
     setSide(value)
+    setPlanConfirmed(false)
     resetError()
   }
 
@@ -344,6 +366,11 @@ export const CTraderManualTicket: React.FC<Props> = ({
     }
     if (!plan.valid) {
       setError(plan.error || 'The position size is not valid.')
+      setState('error')
+      return
+    }
+    if (!planConfirmed) {
+      setError('Review the plan and tick the confirmation checkbox before placing the practice trade.')
       setState('error')
       return
     }
@@ -531,7 +558,7 @@ export const CTraderManualTicket: React.FC<Props> = ({
       Number.isFinite(Number(quote.bid)) && Number.isFinite(Number(quote.ask)) &&
       Number(quote.bid) > 0 && Number(quote.ask) > 0,
     )
-    const canTrade = Boolean(cTraderReady && brokerQuoteReady && plan.valid)
+    const canTrade = Boolean(cTraderReady && brokerQuoteReady && plan.valid && planConfirmed)
     return (
       <div className="bg-[#080D13] p-3 sm:p-4">
         <div className="flex items-center justify-between gap-2">
@@ -553,14 +580,51 @@ export const CTraderManualTicket: React.FC<Props> = ({
         </div>
 
         <div className="mt-3 rounded-2xl border border-shafx-border bg-shafx-surface">
-          <div className="border-b border-shafx-border px-3 py-2.5"><div className="flex items-center justify-between gap-2"><span className="text-[8px] font-semibold uppercase tracking-[0.14em]">Risk Window</span><span className="font-mono text-[8px] text-shafx-textMuted">{accountCurrency} account</span></div><div className="mt-2 grid grid-cols-4 gap-1.5"><div className="rounded-lg border border-shafx-border bg-shafx-bg p-2"><div className="text-[6px] uppercase tracking-[0.12em] text-shafx-textMuted">Risk</div><div className="mt-1 font-mono text-[10px] font-semibold text-shafx-danger">{formatCurrency(riskWindowRisk, accountCurrency)}</div></div><div className="rounded-lg border border-shafx-border bg-shafx-bg p-2"><div className="text-[6px] uppercase tracking-[0.12em] text-shafx-textMuted">Stop</div><div className="mt-1 font-mono text-[10px] font-semibold">{Number.isFinite(stopPips) ? stopPips.toFixed(1) : '—'}p</div></div><div className="rounded-lg border border-shafx-border bg-shafx-bg p-2"><div className="text-[6px] uppercase tracking-[0.12em] text-shafx-textMuted">Target</div><div className="mt-1 font-mono text-[10px] font-semibold">{formatCurrency(rewardWindow, accountCurrency)}</div></div><div className="rounded-lg border border-shafx-border bg-shafx-bg p-2"><div className="text-[6px] uppercase tracking-[0.12em] text-shafx-textMuted">R:R</div><div className="mt-1 font-mono text-[10px] font-semibold">1:{Number.isFinite(riskRatio) ? riskRatio.toFixed(2) : '—'}</div></div></div></div>
+          <div className="border-b border-shafx-border px-3 py-2.5"><div className="flex items-center justify-between gap-2"><span className="text-[8px] font-semibold uppercase tracking-[0.14em]">Risk Window</span><span className="font-mono text-[8px] text-shafx-textMuted">{accountCurrency} account</span></div><div className="mt-2 grid grid-cols-4 gap-1.5"><div className="rounded-lg border border-shafx-border bg-shafx-bg p-2"><div className="text-[6px] uppercase tracking-[0.12em] text-shafx-textMuted">Risk</div><div className="mt-1 font-mono text-[10px] font-semibold text-shafx-danger">{formatCurrency(riskWindowRisk, accountCurrency)}</div></div><div className="rounded-lg border border-shafx-border bg-shafx-bg p-2"><div className="text-[6px] uppercase tracking-[0.12em] text-shafx-textMuted">Stop</div><div className="mt-1 font-mono text-[10px] font-semibold">{Number.isFinite(stopPips) && stopPips > 0 ? stopPips.toFixed(1) : '—'}p</div></div><div className="rounded-lg border border-shafx-border bg-shafx-bg p-2"><div className="text-[6px] uppercase tracking-[0.12em] text-shafx-textMuted">Target</div><div className="mt-1 font-mono text-[10px] font-semibold">{formatCurrency(rewardWindow, accountCurrency)}</div></div><div className="rounded-lg border border-shafx-border bg-shafx-bg p-2"><div className="text-[6px] uppercase tracking-[0.12em] text-shafx-textMuted">R:R</div><div className="mt-1 font-mono text-[10px] font-semibold">1:{Number.isFinite(riskRatio) ? riskRatio.toFixed(2) : '—'}</div></div></div></div>
           <div className="grid grid-cols-2 gap-px bg-shafx-border">
-            <div className="bg-shafx-surface p-3"><div className="text-[7px] uppercase tracking-[0.12em] text-shafx-textMuted">Sizing</div><button type="button" onClick={() => setRiskSizing((value) => !value)} className="mt-1 rounded-lg border border-shafx-accent/25 bg-shafx-accent/[0.05] px-2 py-1 font-mono text-[7px] font-semibold text-shafx-accent">{riskSizing ? 'RISK-SIZED' : 'FIXED LOTS'}</button></div>
-            <label className="bg-shafx-surface p-3"><span className="block text-[7px] uppercase tracking-[0.12em] text-shafx-textMuted">{riskSizing ? 'Risk amount' : 'Lots'}</span><div className="mt-1 flex items-center gap-1"><span className="font-mono text-[8px] text-shafx-textMuted">{riskSizing ? accountCurrency : ''}</span><input aria-label={riskSizing ? 'Risk amount' : 'Lots'} type="number" min="0.01" step={riskSizing ? '0.50' : String(effectiveSymbol.lotStep || 0.01)} value={riskSizing ? riskAmount : lotsInput} onChange={(event) => riskSizing ? setRiskAmount(event.target.value) : setLotsInput(event.target.value)} className="min-w-0 flex-1 bg-transparent font-mono text-sm outline-none" /></div></label>
+            <div className="bg-shafx-surface p-3">
+              <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-shafx-textMuted">Position size</div>
+              <button type="button" onClick={() => { setRiskSizing((value) => !value); setPlanConfirmed(false) }} aria-pressed={riskSizing} className={riskSizing ? 'mt-2 rounded-lg border border-shafx-accent/40 bg-shafx-accent/10 px-2.5 py-1.5 text-[8px] font-bold text-shafx-accent' : 'mt-2 rounded-lg border border-shafx-border bg-shafx-bg px-2.5 py-1.5 text-[8px] font-bold text-shafx-textMuted'}>{riskSizing ? 'RISK AMOUNT' : 'FIXED LOTS'}</button>
+              <div className="mt-2 text-[8px] leading-4 text-shafx-textMuted">{riskSizing ? 'You choose the money at risk.' : 'You choose the volume.'}</div>
+            </div>
+            <div className="bg-shafx-surface p-3">
+              <label htmlFor="shafx-risk-or-lots" className="block text-[9px] font-semibold uppercase tracking-[0.12em] text-shafx-textMuted">{riskSizing ? 'Risk amount' : 'Lot size'}</label>
+              <div className="mt-2 flex items-center gap-2 rounded-lg border border-shafx-border bg-[#0A1018] px-2.5 py-2 focus-within:border-shafx-accent/70 focus-within:ring-1 focus-within:ring-shafx-accent/30">
+                <span className="shrink-0 font-mono text-[9px] text-shafx-textMuted">{riskSizing ? accountCurrency : 'LOT'}</span>
+                <input id="shafx-risk-or-lots" aria-label={riskSizing ? 'Risk amount' : 'Lot size'} type="number" min="0.01" step={riskSizing ? '0.50' : String(effectiveSymbol.lotStep || 0.01)} value={riskSizing ? riskAmount : lotsInput} placeholder={riskSizing ? 'Enter amount' : 'Enter lots'} onChange={(event) => { if (riskSizing) setRiskAmount(event.target.value); else setLotsInput(event.target.value); setPlanConfirmed(false) }} className="min-w-0 w-full bg-transparent font-mono text-sm tabular-nums text-shafx-text outline-none placeholder:text-shafx-textMuted/60" />
+              </div>
+              <div className="mt-1 text-[8px] text-shafx-textMuted">Editable field · tap to type</div>
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-px bg-shafx-border">
-            <label className="bg-shafx-surface p-3"><span className="block text-[7px] uppercase tracking-[0.12em] text-shafx-textMuted">Stop distance</span><div className="mt-1 flex items-center gap-1"><input aria-label="Stop distance" type="number" min="1" step="1" value={stopPipsInput} onChange={(event) => setStopPipsInput(event.target.value)} className="min-w-0 flex-1 bg-transparent font-mono text-sm outline-none" /><span className="font-mono text-[8px] text-shafx-textMuted">pips</span></div></label>
-            <label className="bg-shafx-surface p-3"><span className="block text-[7px] uppercase tracking-[0.12em] text-shafx-textMuted">Target distance</span><div className="mt-1 flex items-center gap-1"><input aria-label="Target distance" type="number" min="1" step="1" value={targetPipsInput} onChange={(event) => setTargetPipsInput(event.target.value)} className="min-w-0 flex-1 bg-transparent font-mono text-sm outline-none" /><span className="font-mono text-[8px] text-shafx-textMuted">pips</span></div></label>
+            <div className="bg-shafx-surface p-3">
+              <div className="flex items-center justify-between gap-1">
+                <label htmlFor="shafx-stop-distance" className="text-[9px] font-semibold uppercase tracking-[0.12em] text-shafx-textMuted">Stop distance</label>
+                <div className="inline-flex rounded-lg border border-shafx-border bg-[#0A1018] p-0.5">
+                  <button type="button" disabled={!hasAutoStopDistance} aria-pressed={stopDistanceMode === 'auto'} onClick={() => { setStopDistanceMode('auto'); setPlanConfirmed(false) }} className={stopDistanceMode === 'auto' ? 'rounded-md bg-shafx-accent px-2 py-1 text-[8px] font-bold text-white' : 'rounded-md px-2 py-1 text-[8px] font-bold text-shafx-textMuted disabled:opacity-40'} title={hasAutoStopDistance ? 'Use stop distance from the selected market setup' : 'Load a setup to enable automatic distance'}>AUTO</button>
+                  <button type="button" aria-pressed={stopDistanceMode === 'manual'} onClick={() => { setStopPipsInput(Number.isFinite(stopPips) && stopPips > 0 ? stopPips.toFixed(1) : ''); setStopDistanceMode('manual'); setPlanConfirmed(false) }} className={stopDistanceMode === 'manual' ? 'rounded-md bg-shafx-accent px-2 py-1 text-[8px] font-bold text-white' : 'rounded-md px-2 py-1 text-[8px] font-bold text-shafx-textMuted'}>EDIT</button>
+                </div>
+              </div>
+              <div className="mt-2 flex items-center gap-2 rounded-lg border border-shafx-border bg-[#0A1018] px-2.5 py-2 focus-within:border-shafx-accent/70 focus-within:ring-1 focus-within:ring-shafx-accent/30">
+                <input id="shafx-stop-distance" aria-label="Stop distance in pips" type="number" min="0.1" step="0.1" value={stopDistanceMode === 'auto' ? (hasAutoStopDistance ? autoStopPips.toFixed(1) : '') : stopPipsInput} disabled={stopDistanceMode === 'auto'} placeholder={stopDistanceMode === 'auto' ? 'From setup' : 'Enter pips'} onChange={(event) => { setStopPipsInput(event.target.value); setPlanConfirmed(false) }} className="min-w-0 w-full bg-transparent font-mono text-sm tabular-nums text-shafx-text outline-none placeholder:text-shafx-textMuted/60 disabled:cursor-not-allowed disabled:opacity-75" />
+                <span className="shrink-0 font-mono text-[8px] text-shafx-textMuted">PIPS</span>
+              </div>
+              <div className="mt-1 text-[8px] text-shafx-textMuted">{stopDistanceMode === 'auto' ? 'Calculated from the selected setup' : 'Editable · enter your stop distance'}</div>
+            </div>
+            <div className="bg-shafx-surface p-3">
+              <div className="flex items-center justify-between gap-1">
+                <label htmlFor="shafx-target-distance" className="text-[9px] font-semibold uppercase tracking-[0.12em] text-shafx-textMuted">Target distance</label>
+                <div className="inline-flex rounded-lg border border-shafx-border bg-[#0A1018] p-0.5">
+                  <button type="button" disabled={!hasAutoTargetDistance} aria-pressed={targetDistanceMode === 'auto'} onClick={() => { setTargetDistanceMode('auto'); setPlanConfirmed(false) }} className={targetDistanceMode === 'auto' ? 'rounded-md bg-shafx-accent px-2 py-1 text-[8px] font-bold text-white' : 'rounded-md px-2 py-1 text-[8px] font-bold text-shafx-textMuted disabled:opacity-40'} title={hasAutoTargetDistance ? 'Use target distance from the selected market setup' : 'Load a setup to enable automatic distance'}>AUTO</button>
+                  <button type="button" aria-pressed={targetDistanceMode === 'manual'} onClick={() => { setTargetPipsInput(Number.isFinite(targetPips) && targetPips > 0 ? targetPips.toFixed(1) : ''); setTargetDistanceMode('manual'); setPlanConfirmed(false) }} className={targetDistanceMode === 'manual' ? 'rounded-md bg-shafx-accent px-2 py-1 text-[8px] font-bold text-white' : 'rounded-md px-2 py-1 text-[8px] font-bold text-shafx-textMuted'}>EDIT</button>
+                </div>
+              </div>
+              <div className="mt-2 flex items-center gap-2 rounded-lg border border-shafx-border bg-[#0A1018] px-2.5 py-2 focus-within:border-shafx-accent/70 focus-within:ring-1 focus-within:ring-shafx-accent/30">
+                <input id="shafx-target-distance" aria-label="Target distance in pips" type="number" min="0.1" step="0.1" value={targetDistanceMode === 'auto' ? (hasAutoTargetDistance ? autoTargetPips.toFixed(1) : '') : targetPipsInput} disabled={targetDistanceMode === 'auto'} placeholder={targetDistanceMode === 'auto' ? 'From setup' : 'Enter pips'} onChange={(event) => { setTargetPipsInput(event.target.value); setPlanConfirmed(false) }} className="min-w-0 w-full bg-transparent font-mono text-sm tabular-nums text-shafx-text outline-none placeholder:text-shafx-textMuted/60 disabled:cursor-not-allowed disabled:opacity-75" />
+                <span className="shrink-0 font-mono text-[8px] text-shafx-textMuted">PIPS</span>
+              </div>
+              <div className="mt-1 text-[8px] text-shafx-textMuted">{targetDistanceMode === 'auto' ? 'Calculated from the selected setup' : 'Editable · enter your target distance'}</div>
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-px bg-shafx-border">
             <div className="bg-shafx-surface p-3"><div className="text-[7px] uppercase tracking-[0.12em] text-shafx-textMuted">Volume</div><div className="mt-1 font-mono text-lg font-semibold">{plan.valid ? plan.lotSize.toFixed(2) : '—'} <span className="text-[8px] text-shafx-textMuted">lot</span></div></div>
@@ -589,7 +653,12 @@ export const CTraderManualTicket: React.FC<Props> = ({
           <button type="button" onClick={connectCTrader} className="min-h-9 shrink-0 rounded-lg bg-shafx-accent px-3 text-[8px] font-bold text-white">CONNECT cTRADER</button>
         </div>}
 
-{(error || !plan.valid) && <div className="mt-3 rounded-xl border border-shafx-danger/25 bg-shafx-danger/10 px-3 py-2 text-[8px] leading-4 text-shafx-danger">{error || plan.error}</div>}
+{error && <div role="alert" className="mt-3 rounded-xl border border-shafx-danger/25 bg-shafx-danger/10 px-3 py-2 text-[8px] leading-4 text-shafx-danger">{error}</div>}
+          {!plan.valid && !error && <div role="status" className="mt-3 rounded-xl border border-shafx-border bg-shafx-surface px-3 py-2 text-[8px] leading-4 text-shafx-textMuted">{aiSetup ? (riskSizing ? 'Enter the risk amount to calculate volume, or choose fixed lots.' : 'Enter a lot size to calculate the plan.') : 'Enter a risk amount and both distances, or load a setup to use AUTO distances.'}</div>}
+          <label className="mt-3 flex cursor-pointer items-start gap-2.5 rounded-xl border border-shafx-border bg-shafx-surface px-3 py-3">
+            <input type="checkbox" checked={planConfirmed} onChange={(event) => { setPlanConfirmed(event.target.checked); if (event.target.checked) resetError() }} disabled={!cTraderReady || !brokerQuoteReady || !plan.valid} className="mt-0.5 h-4 w-4 shrink-0 accent-[#2962FF] disabled:opacity-40" />
+            <span><span className="block text-[9px] font-semibold text-shafx-text">I reviewed this {side} plan</span><span className="mt-1 block text-[8px] leading-4 text-shafx-textMuted">Check the entry, risk amount, Stop Loss and Take Profit above before enabling the order button.</span></span>
+          </label>
 
         <button type="button" onClick={() => void place()} disabled={!canTrade || state === 'placing'} className={'mt-3 flex min-h-12 w-full items-center justify-center gap-2 text-[9px] font-bold ' + (side === 'BUY' ? 'bg-shafx-success text-[#07110E]' : 'bg-shafx-danger text-white') + ' disabled:opacity-45'}>
           {state === 'placing'
@@ -598,7 +667,7 @@ export const CTraderManualTicket: React.FC<Props> = ({
               ? <><ArrowUpRight className="h-3.5 w-3.5" /> CONNECT cTRADER TO TRADE</>
               : !brokerQuoteReady
                 ? <><LoaderCircle className="h-3.5 w-3.5" /> WAITING FOR cTRADER PRICE…</>
-                : <><CheckCircle2 className="h-3.5 w-3.5" /> {connection?.environment === 'demo' ? 'CONFIRM PRACTICE ' : 'LIVE LOCKED '} {side}</>}
+                : <><CheckCircle2 className="h-3.5 w-3.5" /> {connection?.environment === 'demo' ? side : 'LIVE LOCKED'}</>}
         </button>
 
         {connection?.environment !== 'demo' && <div className="mt-2 text-center text-[7px] uppercase tracking-[0.14em] text-shafx-warning">Live execution is deliberately locked until the SHAFX release gate passes.</div>}
