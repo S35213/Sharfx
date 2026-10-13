@@ -4,6 +4,7 @@ import type { SymbolSpec, Timeframe, TradeOrder, TradeSide } from '../../types'
 import type { SetupCandidate } from '../../engine/setup/types'
 import type { ActiveProviderSelection } from '../../data/provider/providerConnections'
 import { calculateCfdRiskPlan } from '../../lib/cfdRiskEngine'
+import { scaleAutoRiskDistance } from '../../lib/autoRiskDistances'
 import { formatCurrency, formatPrice } from '../../lib/format'
 import type { DerivOrderConnection } from '../../data/deriv/derivTrading'
 import type { ChartAnnotation } from '../chart/CandlestickChart'
@@ -175,14 +176,15 @@ export const CTraderManualTicket: React.FC<Props> = ({
     : Number.NaN
   const usesSetupStopDistance = Number.isFinite(setupStopPips) && setupStopPips > 0
   const usesSetupTargetDistance = Number.isFinite(setupTargetPips) && setupTargetPips > 0
-  // AUTO is also available without an AI setup: use 10/20-pip defaults around
-  // the current executable price. A valid selected setup takes priority.
-  const autoStopPips = usesSetupStopDistance ? setupStopPips : 10
-  const autoTargetPips = usesSetupTargetDistance ? setupTargetPips : 20
+  const requestedRisk = riskAmount.trim() ? Number(riskAmount) : 0
+  // AUTO scales its reference protection distances with the entered risk amount.
+  // 10 account-currency units is the reference stake: defaults are 10/20 pips,
+  // while a valid selected setup supplies its own base stop/target distances.
+  const autoStopPips = scaleAutoRiskDistance(usesSetupStopDistance ? setupStopPips : 10, requestedRisk)
+  const autoTargetPips = scaleAutoRiskDistance(usesSetupTargetDistance ? setupTargetPips : 20, requestedRisk)
   const stopPips = stopDistanceMode === 'auto' ? autoStopPips : (stopPipsInput.trim() ? Number(stopPipsInput) : Number.NaN)
   const targetPips = targetDistanceMode === 'auto' ? autoTargetPips : (targetPipsInput.trim() ? Number(targetPipsInput) : Number.NaN)
   const lots = lotsInput.trim() ? Number(lotsInput) : 0
-  const requestedRisk = riskAmount.trim() ? Number(riskAmount) : 0
 
   const stopLossPrice = Number.isFinite(entryPrice) && Number.isFinite(stopPips) && stopPips > 0
     ? Number((side === 'BUY' ? entryPrice - stopPips * effectiveSymbol.pipSize : entryPrice + stopPips * effectiveSymbol.pipSize).toFixed(effectiveSymbol.pricePrecision))
@@ -573,7 +575,7 @@ export const CTraderManualTicket: React.FC<Props> = ({
               <div className="flex items-center justify-between gap-1">
                 <label htmlFor="shafx-stop-distance" className="text-[9px] font-semibold uppercase tracking-[0.12em] text-shafx-textMuted">Stop distance</label>
                 <div className="inline-flex rounded-lg border border-shafx-border bg-[#0A1018] p-0.5">
-                  <button type="button" aria-pressed={stopDistanceMode === 'auto'} onClick={() => setStopDistanceMode('auto')} className={stopDistanceMode === 'auto' ? 'rounded-md bg-shafx-accent px-2 py-1 text-[8px] font-bold text-white' : 'rounded-md px-2 py-1 text-[8px] font-bold text-shafx-textMuted disabled:opacity-40'} title={usesSetupStopDistance ? 'Use stop distance from the selected market setup' : 'Use the automatic 10-pip default until a setup is loaded'}>AUTO</button>
+                  <button type="button" aria-pressed={stopDistanceMode === 'auto'} onClick={() => setStopDistanceMode('auto')} className={stopDistanceMode === 'auto' ? 'rounded-md bg-shafx-accent px-2 py-1 text-[8px] font-bold text-white' : 'rounded-md px-2 py-1 text-[8px] font-bold text-shafx-textMuted disabled:opacity-40'} title={usesSetupStopDistance ? 'Scale the selected setup stop by the entered risk amount' : 'Scale the 10-pip stop baseline with the entered risk amount'}>AUTO</button>
                   <button type="button" aria-pressed={stopDistanceMode === 'manual'} onClick={() => { setStopPipsInput(Number.isFinite(stopPips) && stopPips > 0 ? stopPips.toFixed(1) : ''); setStopDistanceMode('manual') }} className={stopDistanceMode === 'manual' ? 'rounded-md bg-shafx-accent px-2 py-1 text-[8px] font-bold text-white' : 'rounded-md px-2 py-1 text-[8px] font-bold text-shafx-textMuted'}>EDIT</button>
                 </div>
               </div>
@@ -581,13 +583,13 @@ export const CTraderManualTicket: React.FC<Props> = ({
                 <input id="shafx-stop-distance" aria-label="Stop distance in pips" type="number" min="0.1" step="0.1" value={stopDistanceMode === 'auto' ? autoStopPips.toFixed(1) : stopPipsInput} disabled={stopDistanceMode === 'auto'} placeholder={stopDistanceMode === 'auto' ? 'From setup' : 'Enter pips'} onChange={(event) => { setStopPipsInput(event.target.value) }} className="min-w-0 w-full bg-transparent font-mono text-sm tabular-nums text-shafx-text outline-none placeholder:text-shafx-textMuted/60 disabled:cursor-not-allowed disabled:opacity-75" />
                 <span className="shrink-0 font-mono text-[8px] text-shafx-textMuted">PIPS</span>
               </div>
-              <div className="mt-1 text-[8px] text-shafx-textMuted">{stopDistanceMode === 'auto' ? (usesSetupStopDistance ? 'From selected setup' : 'Automatic default · 10 pips') : 'Editable · enter your stop distance'}</div>
+              <div className="mt-1 text-[8px] text-shafx-textMuted">{stopDistanceMode === 'auto' ? (usesSetupStopDistance ? 'Selected setup scaled by risk amount' : 'AUTO baseline · 10 pips at 10 risk units') : 'Editable · enter your stop distance'}</div>
             </div>
             <div className="bg-shafx-surface p-3">
               <div className="flex items-center justify-between gap-1">
                 <label htmlFor="shafx-target-distance" className="text-[9px] font-semibold uppercase tracking-[0.12em] text-shafx-textMuted">Target distance</label>
                 <div className="inline-flex rounded-lg border border-shafx-border bg-[#0A1018] p-0.5">
-                  <button type="button" aria-pressed={targetDistanceMode === 'auto'} onClick={() => setTargetDistanceMode('auto')} className={targetDistanceMode === 'auto' ? 'rounded-md bg-shafx-accent px-2 py-1 text-[8px] font-bold text-white' : 'rounded-md px-2 py-1 text-[8px] font-bold text-shafx-textMuted disabled:opacity-40'} title={usesSetupTargetDistance ? 'Use target distance from the selected market setup' : 'Use the automatic 20-pip default until a setup is loaded'}>AUTO</button>
+                  <button type="button" aria-pressed={targetDistanceMode === 'auto'} onClick={() => setTargetDistanceMode('auto')} className={targetDistanceMode === 'auto' ? 'rounded-md bg-shafx-accent px-2 py-1 text-[8px] font-bold text-white' : 'rounded-md px-2 py-1 text-[8px] font-bold text-shafx-textMuted disabled:opacity-40'} title={usesSetupTargetDistance ? 'Scale the selected setup target by the entered risk amount' : 'Scale the 20-pip target baseline with the entered risk amount'}>AUTO</button>
                   <button type="button" aria-pressed={targetDistanceMode === 'manual'} onClick={() => { setTargetPipsInput(Number.isFinite(targetPips) && targetPips > 0 ? targetPips.toFixed(1) : ''); setTargetDistanceMode('manual') }} className={targetDistanceMode === 'manual' ? 'rounded-md bg-shafx-accent px-2 py-1 text-[8px] font-bold text-white' : 'rounded-md px-2 py-1 text-[8px] font-bold text-shafx-textMuted'}>EDIT</button>
                 </div>
               </div>
@@ -595,7 +597,7 @@ export const CTraderManualTicket: React.FC<Props> = ({
                 <input id="shafx-target-distance" aria-label="Target distance in pips" type="number" min="0.1" step="0.1" value={targetDistanceMode === 'auto' ? autoTargetPips.toFixed(1) : targetPipsInput} disabled={targetDistanceMode === 'auto'} placeholder={targetDistanceMode === 'auto' ? 'From setup' : 'Enter pips'} onChange={(event) => { setTargetPipsInput(event.target.value) }} className="min-w-0 w-full bg-transparent font-mono text-sm tabular-nums text-shafx-text outline-none placeholder:text-shafx-textMuted/60 disabled:cursor-not-allowed disabled:opacity-75" />
                 <span className="shrink-0 font-mono text-[8px] text-shafx-textMuted">PIPS</span>
               </div>
-              <div className="mt-1 text-[8px] text-shafx-textMuted">{targetDistanceMode === 'auto' ? (usesSetupTargetDistance ? 'From selected setup' : 'Automatic default · 20 pips') : 'Editable · enter your target distance'}</div>
+              <div className="mt-1 text-[8px] text-shafx-textMuted">{targetDistanceMode === 'auto' ? (usesSetupTargetDistance ? 'Selected setup scaled by risk amount' : 'AUTO baseline · 20 pips at 10 risk units') : 'Editable · enter your target distance'}</div>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-px bg-shafx-border">
