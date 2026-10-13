@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ColorType, createChart, type CandlestickData, type IChartApi, type IPriceLine, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts'
+import { ColorType, createChart, type AutoscaleInfo, type CandlestickData, type IChartApi, type IPriceLine, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts'
 import { Crosshair, Eraser, Maximize2, Minimize2, Ruler, RotateCcw } from 'lucide-react'
 import type { CandleTheme, ChartMode } from '../../app/chartSettings'
 import { TIMEFRAMES, type OHLCV, type Timeframe } from '../../types'
@@ -381,7 +381,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       // Include actual entry/SL/TP levels so the lines stay on-screen at their
       // true price instead of leaving their labels stranded at the chart edge.
       nextSeries.applyOptions({
-        autoscaleInfoProvider: (original) => {
+        autoscaleInfoProvider: (original: () => AutoscaleInfo | null): AutoscaleInfo | null => {
           const info = original()
           const levels = tradeScalePricesRef.current
           if (!info || levels.length === 0) return info
