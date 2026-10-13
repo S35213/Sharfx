@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { TrendingUp } from 'lucide-react'
 
 import { TerminalProvider, useTerminal } from './app/TerminalContext'
 import { ErrorBoundary } from './app/ErrorBoundary'
@@ -1490,7 +1491,14 @@ const TerminalContent: React.FC = () => {
         <div className="flex min-h-0 flex-1 flex-col overflow-visible">
           <div className="shafx-market-header flex min-h-10 flex-shrink-0 items-center justify-between gap-3 border-b border-shafx-border bg-[#0A0E14] px-3 sm:px-4 lg:min-h-12">
             <div className="flex min-w-0 items-center gap-2"><span className="truncate text-sm font-semibold">{selectedSymbol}</span><span className="font-mono text-xs font-semibold tabular-nums text-shafx-textMuted">{chartQuoteReady ? chartBidPrice.toFixed(symbolSpec.pricePrecision) : '—'}</span><span className={'rounded-full border px-2 py-0.5 text-[8px] font-semibold ' + (chartQuoteReady ? 'border-[#2F80FF]/30 bg-[#2F80FF]/10 text-[#9AC2FF]' : 'border-[#59616D] bg-[#151A21] text-[#AAB2BD]')}>{chartQuoteReady ? 'LIVE' : 'WAITING'}</span></div>
-            <div className="flex items-center gap-1.5">{liveControl}</div>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <button type="button" onClick={handleTrendToggle} aria-pressed={trendVisible} aria-label={trendVisible ? 'Hide support, resistance and liquidity' : 'Show support, resistance and liquidity'} className={trendVisible ? 'inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-shafx-accent/35 bg-shafx-accent/[0.09] px-2.5 text-[9px] font-bold text-shafx-accent transition sm:px-3' : 'inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-shafx-border bg-shafx-bg/80 px-2.5 text-[9px] font-bold text-shafx-textMuted transition sm:px-3'}>
+                <TrendingUp className="h-3.5 w-3.5" />
+                <span>Trend</span>
+                <span className={trendVisible ? 'rounded-full bg-shafx-accent px-1.5 py-0.5 text-[7px] font-bold text-white' : 'rounded-full border border-shafx-border px-1.5 py-0.5 text-[7px] font-bold'}>{trendVisible ? 'ON' : 'OFF'}</span>
+              </button>
+              {activeProviderSelection?.providerId !== 'ctrader' ? liveControl : null}
+            </div>
           </div>
            <div className="shafx-timeframe-bar flex min-h-11 flex-shrink-0 items-center gap-1 overflow-x-auto border-b border-shafx-border bg-[#0C1118] px-3 py-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:px-4">
              <span className="mr-1 hidden text-[8px] font-bold uppercase tracking-[0.16em] text-shafx-textMuted sm:inline">TIMEFRAME</span>
@@ -1501,7 +1509,7 @@ const TerminalContent: React.FC = () => {
              ))}
              <span className="ml-auto hidden rounded-lg border border-shafx-border bg-shafx-bg px-2 py-1 font-mono text-[8px] text-shafx-textMuted md:inline">{timeframe}</span>
            </div>
-           <MobileChartTools tool={chartTool} onToolChange={setChartTool} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} trendVisible={trendVisible} onTrendToggle={handleTrendToggle} />
+           <MobileChartTools tool={chartTool} onToolChange={setChartTool} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} />
            <div
              className="shafx-chart-stage relative min-h-0 p-1 sm:p-2 lg:flex-1"
              data-shafx-open-position-count={liveOpenPositions.filter((position) => position.status === 'open').length}
