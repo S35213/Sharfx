@@ -1207,6 +1207,13 @@ const TerminalContent: React.FC = () => {
     [liveOpenPositions, selectedSymbol],
   )
 
+  // Expose only the focused position to chart status/diagnostic attributes.
+  // The account still tracks all open positions; this collection is chart-only.
+  const chartOpenPositions = useMemo(
+    () => selectedOpenPosition ? [selectedOpenPosition] : [],
+    [selectedOpenPosition],
+  )
+
   const openPositionsOnOtherSymbols = useMemo(
     () => liveOpenPositions.filter((position) =>
       position.status === 'open' && !providerSymbolsMatch(position.symbol, selectedSymbol)),
