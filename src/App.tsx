@@ -1209,7 +1209,7 @@ const TerminalContent: React.FC = () => {
   )
   const brokerPositionTradeLines = useMemo<ChartAnnotation[]>(
     () => chartOpenPositions.flatMap((position) =>
-      buildOpenPositionChartLines(position, chartBidPrice, chartAskPrice)),
+      buildOpenPositionChartLines(position, chartBidPrice, chartAskPrice, accountData?.currency ?? 'USD')),
     [chartOpenPositions, chartBidPrice, chartAskPrice],
   )
 

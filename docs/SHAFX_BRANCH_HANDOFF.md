@@ -513,3 +513,19 @@ Code state at the verified app commit:
 Important limitation: no fresh visual browser acceptance run was possible after this exact revision because TinyFish browser automation credit was depleted during the earlier 130-second Watchlist stability test. Therefore the final on-screen colors, number sizing, single BID/ASK tags, history-scroll behavior, 15-second stale state and account card layout are NOT marked visually verified. The earlier Watchlist stability test on a prior build ran about 130 seconds with active quote updates and M5-to-H1-to-M5 switching without reproducing the React insertBefore error; that is time-bounded prior-build evidence only.
 
 Do not merge draft PR #58 or promote to main/Cloudflare. No orders were submitted/closed and no account/provider settings or sibling Render services were changed.
+
+
+## Chart duplicate-label and floating-P/L correction — 2026-10-13
+
+**Scope:** experimental branch `test/rebuild-deriv-native-manual-20260930`; Render service `sharfx-deriv-render` only. Do not merge to `main`, deploy Cloudflare production, or change either sibling Render test service.
+
+**Source finding:** `src/components/chart/CandlestickChart.tsx` was rendering each `tradeLines` item twice at the price scale: Lightweight Charts' native axis tag was enabled while SHAFX also rendered its custom in-chart label. This affected entry/current-exit/SL/TP values and made identical prices look like stacked designs.
+
+**Correction committed for verification:**
+- Disable the native price-axis label for trade lines, matching the single custom-tag system already used by support/resistance/liquidity.
+- Keep trade prices as actual lines; the custom in-chart labels display one price each.
+- The entry line now displays `OPEN P/L +$x.xx` / `OPEN P/L −$x.xx` in the account currency, with positive/negative/neutral color based on the current position P/L. It displays a dash and neutral color when the broker hasn't supplied P/L rather than inventing zero.
+- The live exit-price tag is presented neutrally as `LIVE PRICE`; BUY/SELL remains internal metadata for selecting Bid versus Ask and hiding the matching quote rail.
+- Unit tests cover positive USD P/L, negative EUR P/L, missing P/L, current exit quote side, and closed-position suppression.
+
+**Verification status:** awaiting the Render auto-deploy/build and focused unit-test result for this commit. Authenticated visual browser acceptance is still blocked by insufficient TinyFish automation-wallet credit; do not claim the new visual treatment or the user's existing trade has been visually verified. No orders were placed/closed; no provider credentials/account settings were changed.

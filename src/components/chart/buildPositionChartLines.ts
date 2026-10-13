@@ -1,28 +1,36 @@
 import type { TradeOrder } from '../../types'
 import type { ChartAnnotation } from './CandlestickChart'
 
+const formatOpenPositionProfit = (profit: number, currency: string): string => {
+  const code = currency.trim().toUpperCase() || 'USD'
+  const marker = ({ USD: '$', EUR: '€', GBP: '£', JPY: '¥', KES: 'KSh ' } as Record<string, string>)[code] ?? (code + ' ')
+  const sign = profit > 0 ? '+' : profit < 0 ? '−' : ''
+  return sign + marker + Math.abs(profit).toFixed(2)
+}
+
 /**
- * The chart-level mapping for one open position. A BUY position exits at Bid;
- * a SELL position exits at Ask. Entry stays fixed while the exit line follows
- * the real quotes supplied to the chart.
+ * The chart-level mapping for one open position. Entry stays fixed and carries
+ * floating P/L; the live exit price follows Bid for BUY and Ask for SELL.
  */
 export const buildOpenPositionChartLines = (
   position: TradeOrder | null,
   bidPrice: number,
   askPrice: number,
+  currency = 'USD',
 ): ChartAnnotation[] => {
   if (!position || position.status !== 'open' || !Number.isFinite(position.entryPrice) || position.entryPrice <= 0) return []
 
-  const sideColor = position.type === 'BUY' ? '#22D3A5' : '#FF5C75'
-  const profit = Number(position.profit ?? 0)
-  const currentLineColor = Number.isFinite(profit) && profit >= 0 ? '#22D3A5' : '#FF5C75'
+  const hasProfit = typeof position.profit === 'number' && Number.isFinite(position.profit)
+  const profit = hasProfit ? position.profit as number : 0
+  const currentLineColor = !hasProfit ? '#8A96A8' : profit > 0 ? '#22D3A5' : profit < 0 ? '#FF5C75' : '#8A96A8'
+  const profitLabel = hasProfit ? formatOpenPositionProfit(profit, currency) : '—'
   const currentPrice = position.type === 'BUY' ? bidPrice : askPrice
   const result: ChartAnnotation[] = [
     {
       id: position.id + '-entry',
       price: position.entryPrice,
-      label: position.type + ' ENTRY',
-      color: sideColor,
+      label: 'OPEN P/L ' + profitLabel,
+      color: currentLineColor,
       lineWidth: 2,
     },
   ]

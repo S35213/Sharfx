@@ -618,10 +618,16 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       if (id.includes('ai-entry')) return 'AI ENTRY'
       if (id.includes('ai-stop')) return 'AI STOP'
       if (id.includes('ai-target')) return 'AI TARGET'
-      if (id.includes('current')) return annotation.label.toUpperCase() || 'CURRENT EXIT PRICE'
+      if (id.includes('current')) {
+        const explicit = annotation.label.trim().toUpperCase()
+        // Keep direction as internal metadata for quote-rail logic, but show one neutral live-price tag.
+        if (explicit.startsWith('BUY CURRENT') || explicit.startsWith('SELL CURRENT') || explicit.endsWith('LIVE PRICE')) return 'LIVE PRICE'
+        return explicit || 'CURRENT EXIT PRICE'
+      }
       if (id.includes('entry')) {
         const explicit = annotation.label.trim().toUpperCase()
-        return /^(BUY|SELL)\s+ENTRY/.test(explicit) ? explicit : 'TRADE ENTRY'
+        if (explicit.startsWith('OPEN P/L ')) return explicit
+        return 'TRADE ENTRY'
       }
       if (id.includes('stop') || /(?:^|[-_])sl(?:$|[-_])/.test(id)) return 'STOP LOSS'
       if (id.includes('target') || /(?:^|[-_])tp(?:$|[-_])/.test(id)) return 'TAKE PROFIT'
@@ -684,7 +690,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       const id = line.id.toLowerCase()
       const lineStyle: 0 | 1 | 2 = isStop(id) ? 2 : isTarget(id) ? 0 : id.includes('entry') ? 1 : 0
       const title = shortTitle(line) + ' ' + line.price.toFixed(pricePrecision)
-      upsertLine(line, lineStyle, true, title)
+      // Each trade line has one custom in-chart label. Disable the native axis tag to prevent duplicate prices.
+      upsertLine(line, lineStyle, false, title)
       labelCandidates.push(line)
     })
 
