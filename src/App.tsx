@@ -1207,25 +1207,27 @@ const TerminalContent: React.FC = () => {
     [liveOpenPositions, selectedSymbol],
   )
 
-  // Include every matching broker position, including positions restored from cTrader
-  // after the local ticket has gone away or an order ID differs from its position ID.
-  const chartOpenPositions = useMemo(
-    () => liveOpenPositions.filter((position) =>
-      position.status === 'open' && providerSymbolsMatch(position.symbol, selectedSymbol)),
-    [liveOpenPositions, selectedSymbol],
-  )
   const openPositionsOnOtherSymbols = useMemo(
     () => liveOpenPositions.filter((position) =>
       position.status === 'open' && !providerSymbolsMatch(position.symbol, selectedSymbol)),
     [liveOpenPositions, selectedSymbol],
   )
+
+  // The blotter can contain several open positions for the same pair, but the
+  // chart shows one focused set of live levels for the selected/latest position.
+  // This prevents every new trade from adding another BID/exit, SL and TP label.
   const brokerPositionTradeLines = useMemo<ChartAnnotation[]>(
-    () => chartOpenPositions.flatMap((position) =>
-      buildOpenPositionChartLines(position, chartBidPrice, chartAskPrice, accountData?.currency ?? 'USD')),
-    [chartOpenPositions, chartBidPrice, chartAskPrice],
+    () => selectedOpenPosition
+      ? buildOpenPositionChartLines(selectedOpenPosition, chartBidPrice, chartAskPrice, accountData?.currency ?? 'USD')
+      : [],
+    [selectedOpenPosition, chartBidPrice, chartAskPrice, accountData?.currency],
   )
 
   const combinedTradeLines = useMemo(() => {
+    // For cTrader, the selected broker position is the source of truth. Do not
+    // add the ticket's local preview lines as a second copy of the same position.
+    if (usingCTrader) return brokerPositionTradeLines
+
     // Draft ticket SL/TP are sizing previews, not active chart levels.
     const draftLevelIds = new Set(['shafx-cfd-sl', 'shafx-cfd-tp', 'plan-sl', 'plan-tp'])
     return [
@@ -1235,7 +1237,7 @@ const TerminalContent: React.FC = () => {
       ),
       ...brokerPositionTradeLines,
     ]
-  }, [brokerPositionTradeLines, tradeLines])
+  }, [brokerPositionTradeLines, tradeLines, usingCTrader])
 
   // The chart's trade map includes entries and exits for this symbol only.
   // Marker coordinates resolve against historical candle timestamps; no prices
