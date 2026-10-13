@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ColorType, createChart, type AutoscaleInfo, type CandlestickData, type IChartApi, type IPriceLine, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts'
+import { ColorType, createChart, type CandlestickData, type IChartApi, type IPriceLine, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts'
 import { Crosshair, Eraser, Maximize2, Minimize2, Ruler, RotateCcw } from 'lucide-react'
 import type { CandleTheme, ChartMode } from '../../app/chartSettings'
 import { TIMEFRAMES, type OHLCV, type Timeframe } from '../../types'
@@ -113,7 +113,6 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ShafxSeries | null>(null)
   const seriesConfigRef = useRef<{ chartMode: ChartMode; pipSize: number } | null>(null)
-  const tradeScalePricesRef = useRef<number[]>([])
   const tradeScaleAppliedSignatureRef = useRef('')
   const chartData = useMemo(() => prepareData(data), [data])
   const visualData = useMemo(() => {
@@ -377,24 +376,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         })
       }
 
-      // Price lines do not reliably expand the candle series' autoscale range.
-      // Include actual entry/SL/TP levels so the lines stay on-screen at their
-      // true price instead of leaving their labels stranded at the chart edge.
-      nextSeries.applyOptions({
-        autoscaleInfoProvider: (original: () => AutoscaleInfo | null): AutoscaleInfo | null => {
-          const info = original()
-          const levels = tradeScalePricesRef.current
-          if (!info || levels.length === 0) return info
-          return {
-            ...info,
-            priceRange: {
-              ...info.priceRange,
-              minValue: Math.min(info.priceRange.minValue, ...levels),
-              maxValue: Math.max(info.priceRange.maxValue, ...levels),
-            },
-          }
-        },
-      })
+      // Broker entry, Stop Loss and Take Profit lines are overlays only.
+      // They must not expand candle autoscaling when far away from market price.
       seriesRef.current = nextSeries
       seriesConfigRef.current = { chartMode, pipSize }
     }
@@ -476,10 +459,12 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
        */
       if (!wasFollowingRealtime && (structureChanged || isModeSwitch)) {
         try {
-          if (visibleLogicalRange) {
-            chart.timeScale().setVisibleLogicalRange(visibleLogicalRange)
-          } else if (visibleTimeRange) {
+          if (visibleTimeRange) {
+            // Preserve actual timestamps rather than logical bar indexes, which can
+            // shift when the broker prepends older candles or backfills history.
             chart.timeScale().setVisibleRange(visibleTimeRange)
+          } else if (visibleLogicalRange) {
+            chart.timeScale().setVisibleLogicalRange(visibleLogicalRange)
           }
         } catch {
           /* The broker may have replaced a range that is no longer available. */
@@ -507,10 +492,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     renderedDataLengthRef.current = visualData.length
   }, [visualData, symbol, timeframe, chartMode, pipSize])
 
-  // Refit the vertical range only when the actual trade levels change (open,
-  // close, or broker-confirmed protection amendment). Floating Bid/Ask updates
-  // do not trigger repeated autoscaling and the manual price-axis drag remains
-  // available to the user between such trade-level changes.
+  // Refresh candle-based vertical autoscaling when broker levels change. Protection
+  // prices remain true-price overlays and do not widen the candle price range.
   useLayoutEffect(() => {
     const protectedLines = tradeLines.filter((line) => {
       const id = line.id.toLowerCase()
@@ -518,9 +501,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     })
     const signature = protectedLines.map((line) => line.id + ':' + line.price).join('|')
     if (signature === tradeScaleAppliedSignatureRef.current) return
-
     tradeScaleAppliedSignatureRef.current = signature
-    tradeScalePricesRef.current = protectedLines.map((line) => line.price)
     const series = seriesRef.current
     if (series) series.priceScale().applyOptions({ autoScale: true })
   }, [tradeLines])
@@ -531,7 +512,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     const chart = chartRef.current
     if (!chart || isViewingHistory || chartInteractionRef.current || !followRealtimeRef.current) return
     chart.timeScale().scrollToRealTime()
-  }, [chartTimeSignature, lastClose, isViewingHistory])
+  }, [chartTimeSignature, isViewingHistory])
 
   /*
    * Presentation changes are separate from data updates. This prevents quote
@@ -658,9 +639,6 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       : []
     // Keep true broker entry, SL and TP visible at all times. Analysis overlays
     // are secondary and should never hide real trade levels near a live quote.
-    const hasOpenPosition = tradeLines.some((line) =>
-      line.id.toLowerCase().endsWith('-entry') && line.label.trim().toUpperCase().startsWith('OPEN '),
-    )
     const tradeLineYs = tradeLines
       .filter((line) => !line.id.toLowerCase().endsWith('-current'))
       .filter((line) => Number.isFinite(line.price) && line.price > 0)
@@ -753,12 +731,10 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       if (!currentOverlayIds.has(id)) structuralOcclusionRef.current.delete(id)
     }
 
-    annotations.forEach((annotation) => {
+    if (!isViewingHistory) annotations.forEach((annotation) => {
       const structuralKind = structuralOverlayKind(annotation)
-      // Support/resistance/liquidity are analytical context, not broker protection.
-      // While a real position is open, hide these auto-overlays on the chart so
-      // entry, SL, TP, Bid and Ask remain the visual priority.
-      if (hasOpenPosition && structuralKind) return
+      // Trend levels remain available with open positions; quote proximity
+      // suppression prevents them obscuring broker-confirmed protection.
       if (structuralKind && isStructuralOccluded(annotation)) return
       const id = annotation.id.toLowerCase()
       const lineStyle: 0 | 1 | 2 = structuralKind === 'liquidity' ? 1
@@ -770,8 +746,9 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       labelCandidates.push(annotation)
     })
 
-    // Trade entry/exit/SL/TP, user levels and alerts remain separate from structure.
-    tradeLines.forEach((line) => {
+    // Dynamic broker prices should not float across unrelated historical candles.
+    // Timestamp-mapped trade markers remain anchored to their real candle times.
+    if (!isViewingHistory) tradeLines.forEach((line) => {
       const id = line.id.toLowerCase()
       const lineStyle: 0 | 1 | 2 = isStop(id) || id.endsWith('-current') ? 2 : isTarget(id) ? 0 : id.includes('entry') ? 1 : 0
       const title = shortTitle(line) + ' ' + line.price.toFixed(pricePrecision)
@@ -1371,7 +1348,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     style={{ height: chartFullscreen ? '100svh' : height, minHeight: 280 }}
   >
     <div ref={chartHostRef} className="absolute inset-0 z-0" aria-hidden="true" />
-    <div ref={lineLabelsHostRef} aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 right-[82px] z-20 overflow-hidden sm:right-[96px]">
+    <div ref={lineLabelsHostRef} aria-hidden="true" className={`pointer-events-none absolute inset-y-0 left-0 right-[82px] z-20 overflow-hidden sm:right-[96px] ${isViewingHistory ? 'hidden' : ''}`}>
       {lineLabels.map((label) => {
         const centeredPnl = label.name.startsWith('OPEN ')
         const formattedPrice = label.price.toFixed(pricePrecision)
