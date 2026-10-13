@@ -550,3 +550,15 @@ Verification notes: code/build/tests must be checked for this commit. Authentica
 - While an open matching position exists, hide auto-generated support/resistance/liquidity from the chart itself so entry, SL, TP, Bid and Ask get first priority. Keep analysis panels available; never alter broker prices.
 - Keep the live candle at the right edge when following real-time. Recent small intraday history holes should request cTrader history backfill, never synthetic OHLC.
 - User screenshot acceptance is still required after deployment. No trade placement/closure or provider-account mutation; don't touch sibling Render services, main, or Cloudflare production.
+
+
+## Chart history, Trend toggle and manual-ticket clarity — 2026-10-13
+
+Scope remains the experimental branch `test/rebuild-deriv-native-manual-20260930` and the Render service **Shafek Derive Render** only. No trade was opened or closed, no broker-side protection was modified, and no sibling Render service, `main`, or Cloudflare production was targeted.
+
+- Candle autoscaling no longer expands to distant SL/TP prices; broker entry/SL/TP prices remain unchanged as overlays with true-price labels.
+- Live quote ticks no longer trigger an unnecessary scroll to the newest candle. Historical viewport restoration prefers the actual time range over logical bar indexes. Dynamic trade/structure lines and edge labels hide while browsing history; timestamp-mapped trade markers stay on their candles.
+- Added a **Trend** toggle for support, resistance and liquidity, with on-demand recomputation from latest cached candle data; normal candle updates continue to refresh analysis. Detailed chart tools remain in the adjacent drawer.
+- Manual cTrader risk/lot and pip-distance fields start blank with visible editing affordances and **AUTO / EDIT** stop/target controls. A plan-review checkbox explicitly gates the practice BUY/SELL action; order mechanics and broker protection values are unchanged.
+
+Verification remains pending. Run lint, build and tests; verify only the correct Render service and inspect the existing open position in an authenticated session without placing or closing any trade. Keep changes on the experiment until visual acceptance; do not merge into `main` or promote Cloudflare.
