@@ -29,30 +29,34 @@ describe('open position chart lines', () => {
       ['pos-1-sl', 1.119],
       ['pos-1-tp', 1.122],
     ])
-    expect(lines[0].label).toBe('OPEN P/L +$0.50')
-    expect(lines[0].color).toBe('#22D3A5')
+    expect(lines[0].label).toBe('OPEN +$0.50')
+    expect(lines[0].color).toBe('#8A96A8')
+    expect(lines[0].labelColor).toBe('#22D3A5')
     expect(lines[1].label).toBe('BUY CURRENT / EXIT')
-    expect(lines[1].color).toBe('#22D3A5')
+    expect(lines[1].color).toBe('#2F80FF')
   })
 
   it('uses the live Ask as a SELL exit and colors a losing position red', () => {
     const lines = buildOpenPositionChartLines(position({ type: 'SELL', profit: -0.25 }), 1.1212, 1.1214, 'EUR')
     expect(lines.find(line => line.id === 'pos-1-entry')).toMatchObject({
-      label: 'OPEN P/L −€0.25',
-      color: '#FF5C75',
+      label: 'OPEN −€0.25',
+      color: '#8A96A8',
+      labelColor: '#FF5C75',
     })
     expect(lines.find(line => line.id === 'pos-1-current')).toMatchObject({
       price: 1.1214,
       label: 'SELL CURRENT / EXIT',
-      color: '#FF5C75',
+      color: '#F04452',
+      labelColor: '#F04452',
     })
   })
 
   it('does not fabricate a P/L amount when the broker has not supplied one', () => {
     const lines = buildOpenPositionChartLines(position({ profit: undefined }), 1.1212, 1.1214)
     expect(lines.find(line => line.id === 'pos-1-entry')).toMatchObject({
-      label: 'OPEN P/L —',
+      label: 'OPEN —',
       color: '#8A96A8',
+      labelColor: '#8A96A8',
     })
   })
 

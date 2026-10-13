@@ -9,7 +9,8 @@ import { resolvePriceLabelY } from './priceLineLabelLayout'
 import { getCandleCloseCountdown } from './candleCountdown'
 import { getQuoteTickColor, getQuoteTickDirection, type QuoteTickDirection } from '../order/quoteTickDirection'
 
-export interface ChartAnnotation { id: string; price: number; label: string; color: string; lineWidth?: 1 | 2 | 3 | 4 }
+export interface ChartAnnotation { id: string; price: number; label: string; color: string; labelColor?: string; lineWidth?: 1 | 2 | 3 | 4 }
+type PriceLineLabel = { id: string; price: number; name: string; color: string; y: number }
 export type ChartToolMode = 'cursor' | 'crosshair' | 'level' | 'measure' | 'alert'
 
 interface CandlestickChartProps {
@@ -75,6 +76,29 @@ const TIMEFRAME_SECONDS: Record<Timeframe, number> = {
 }
 const timeframeSecondsFor = (nextTimeframe: Timeframe): number => TIMEFRAME_SECONDS[nextTimeframe]
 
+const layoutPriceLabels = (entries: PriceLineLabel[], minY: number, maxY: number, rowGap: number): PriceLineLabel[] => {
+  const centered = entries.filter((entry) => entry.name.startsWith('OPEN '))
+  const rightAligned = entries.filter((entry) => !entry.name.startsWith('OPEN '))
+    .sort((a, b) => a.y - b.y || a.id.localeCompare(b.id))
+  const positions = rightAligned.map((entry) => Math.max(minY, Math.min(maxY, entry.y)))
+  for (let index = 1; index < positions.length; index += 1) {
+    positions[index] = Math.max(positions[index], positions[index - 1] + rowGap)
+  }
+  if (positions.length > 0 && positions[positions.length - 1] > maxY) {
+    positions[positions.length - 1] = maxY
+    for (let index = positions.length - 2; index >= 0; index -= 1) {
+      positions[index] = Math.min(positions[index], positions[index + 1] - rowGap)
+    }
+  }
+  if (positions.length > 0 && positions[0] < minY) {
+    const shift = minY - positions[0]
+    for (let index = 0; index < positions.length; index += 1) positions[index] += shift
+  }
+  const stacked = rightAligned.map((entry, index) => ({ ...entry, y: positions[index] }))
+  const anchored = centered.map((entry) => ({ ...entry, y: Math.max(minY, Math.min(maxY, entry.y)) }))
+  return [...stacked, ...anchored].sort((a, b) => a.y - b.y || a.id.localeCompare(b.id))
+}
+
 const structuralOverlayKind = (annotation: ChartAnnotation): OverlayKind | null => {
   const id = annotation.id.toLowerCase()
   if (id.includes('support')) return 'support'
@@ -121,7 +145,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const priceLinesRef = useRef<Map<string, IPriceLine>>(new Map())
   const priceLinesSeriesRef = useRef<ShafxSeries | null>(null)
   const lineLabelsHostRef = useRef<HTMLDivElement | null>(null)
-  const [lineLabels, setLineLabels] = useState<Array<{ id: string; price: number; name: string; color: string; y: number }>>([])
+  const [lineLabels, setLineLabels] = useState<PriceLineLabel[]>([])
   const lineLabelSyncRef = useRef<(() => void) | null>(null)
   const [priceScaleRevision, setPriceScaleRevision] = useState(0)
   const priceScaleOverlayFrameRef = useRef<number | null>(null)
@@ -575,12 +599,34 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     const host = lineLabelsHostRef.current
     if (!series) return
 
+    if (priceLinesSeriesRef.current !== series) {
+      priceLinesRef.current.clear()
+      priceLinesSeriesRef.current = series
+      structuralOcclusionRef.current.clear()
+    }
+
     const quoteYs = quoteReady && !isViewingHistory
       ? [bidPrice, askPrice]
           .filter((price): price is number => Number.isFinite(price) && Number(price) > 0)
           .map((price) => series.priceToCoordinate(Number(price)))
       : []
+    // Hide secondary levels when the live quote reaches their pixel row. The
+    // wider restore threshold prevents rapid show/hide flicker at crossings.
+    const hiddenTradeLineIds = new Set<string>()
+    tradeLines.forEach((line) => {
+      const id = line.id.toLowerCase()
+      const isCurrentExit = id.endsWith('-current')
+      const wasHidden = structuralOcclusionRef.current.get(line.id) === true
+      const isHidden = !isCurrentExit && isPriceLevelOccludedByQuote(
+        series.priceToCoordinate(line.price),
+        quoteYs,
+        wasHidden ? 12 : 7,
+      )
+      structuralOcclusionRef.current.set(line.id, isHidden)
+      if (isHidden) hiddenTradeLineIds.add(line.id)
+    })
     const tradeLineYs = tradeLines
+      .filter((line) => !hiddenTradeLineIds.has(line.id) && !line.id.toLowerCase().endsWith('-current'))
       .filter((line) => Number.isFinite(line.price) && line.price > 0)
       .map((line) => series.priceToCoordinate(line.price))
     const occludingLevelYs = [...quoteYs, ...tradeLineYs]
@@ -595,12 +641,6 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       const isHidden = isPriceLevelOccludedByQuote(levelY, occludingLevelYs, wasHidden ? 12 : 7)
       structuralOcclusionRef.current.set(annotation.id, isHidden)
       return isHidden
-    }
-
-    if (priceLinesSeriesRef.current !== series) {
-      priceLinesRef.current.clear()
-      priceLinesSeriesRef.current = series
-      structuralOcclusionRef.current.clear()
     }
 
     const shortTitle = (annotation: ChartAnnotation | UserLevel): string => {
@@ -620,13 +660,15 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       if (id.includes('ai-target')) return 'AI TARGET'
       if (id.includes('current')) {
         const explicit = annotation.label.trim().toUpperCase()
-        // Keep direction as internal metadata for quote-rail logic, but show one neutral live-price tag.
-        if (explicit.startsWith('BUY CURRENT') || explicit.startsWith('SELL CURRENT') || explicit.endsWith('LIVE PRICE')) return 'LIVE PRICE'
-        return explicit || 'CURRENT EXIT PRICE'
+        // A BUY closes at Bid and a SELL closes at Ask. Keep those compact names.
+        if (explicit.startsWith('BUY CURRENT')) return 'BID'
+        if (explicit.startsWith('SELL CURRENT')) return 'ASK'
+        if (explicit.endsWith('LIVE PRICE')) return 'BID'
+        return explicit || 'BID / ASK'
       }
       if (id.includes('entry')) {
         const explicit = annotation.label.trim().toUpperCase()
-        if (explicit.startsWith('OPEN P/L ')) return explicit
+        if (explicit.startsWith('OPEN ')) return explicit
         return 'TRADE ENTRY'
       }
       if (id.includes('stop') || /(?:^|[-_])sl(?:$|[-_])/.test(id)) return 'STOP LOSS'
@@ -665,9 +707,14 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       priceLinesRef.current.set(annotation.id, series.createPriceLine(options))
     }
 
-    const currentAnnotationIds = new Set(annotations.map((annotation) => annotation.id))
+    const currentOverlayIds = new Set([
+      ...annotations.map((annotation) => annotation.id),
+      ...tradeLines.map((line) => line.id),
+      ...userLevels.map((level) => level.id),
+      ...armedAlerts.map((alert) => alert.id),
+    ])
     for (const id of structuralOcclusionRef.current.keys()) {
-      if (!currentAnnotationIds.has(id)) structuralOcclusionRef.current.delete(id)
+      if (!currentOverlayIds.has(id)) structuralOcclusionRef.current.delete(id)
     }
 
     annotations.forEach((annotation) => {
@@ -688,7 +735,13 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     // Trade entry/exit/SL/TP, user levels and alerts remain separate from structure.
     tradeLines.forEach((line) => {
       const id = line.id.toLowerCase()
-      const lineStyle: 0 | 1 | 2 = isStop(id) ? 2 : isTarget(id) ? 0 : id.includes('entry') ? 1 : 0
+      if (hiddenTradeLineIds.has(line.id)) {
+        // Keep the centered entry/P&L readout available while suppressing its
+        // line at the quote crossing; stop/target labels hide with their lines.
+        if (id.endsWith('-entry') && line.label.trim().toUpperCase().startsWith('OPEN ')) labelCandidates.push(line)
+        return
+      }
+      const lineStyle: 0 | 1 | 2 = isStop(id) || id.endsWith('-current') ? 2 : isTarget(id) ? 0 : id.includes('entry') ? 1 : 0
       const title = shortTitle(line) + ' ' + line.price.toFixed(pricePrecision)
       // Each trade line has one custom in-chart label. Disable the native axis tag to prevent duplicate prices.
       upsertLine(line, lineStyle, false, title)
@@ -705,10 +758,10 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     const labelBid = quoteTagsReady && Number.isFinite(bidPrice) && Number(bidPrice) > 0 ? Number(bidPrice) : 0
     const labelAsk = quoteTagsReady && Number.isFinite(askPrice) && Number(askPrice) > 0 ? Number(askPrice) : 0
     if (labelBid > 0 && activePositionSide !== 'BUY') {
-      labelCandidates.push({ id: 'shafx-live-bid-label', price: labelBid, label: 'BID', color: bidQuoteTone, lineWidth: 1 })
+      labelCandidates.push({ id: 'shafx-live-bid-label', price: labelBid, label: 'BID', color: '#2F80FF', lineWidth: 1 })
     }
     if (labelAsk > 0 && activePositionSide !== 'SELL') {
-      labelCandidates.push({ id: 'shafx-live-ask-label', price: labelAsk, label: 'ASK', color: askQuoteTone, lineWidth: 1 })
+      labelCandidates.push({ id: 'shafx-live-ask-label', price: labelAsk, label: 'ASK', color: '#F04452', lineWidth: 1 })
     }
 
     userLevels.forEach((level) => {
@@ -734,7 +787,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         .map((line) => ({
           id: line.id,
           price: line.price,
-          color: line.color,
+          color: ('labelColor' in line && line.labelColor) ? line.labelColor : line.color,
           name: shortTitle(line),
           // Even if the real line is just outside the current price scale,
           // keep its named price tag visible at the nearest chart edge.
@@ -743,28 +796,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         .sort((a, b) => a.y - b.y || a.id.localeCompare(b.id))
 
       const rowGap = 19
-      const positions = entries.map((entry) => Math.max(minY, Math.min(maxY, entry.y)))
-      for (let index = 1; index < positions.length; index += 1) {
-        positions[index] = Math.max(positions[index], positions[index - 1] + rowGap)
-      }
-      if (positions.length > 0 && positions[positions.length - 1] > maxY) {
-        positions[positions.length - 1] = maxY
-        for (let index = positions.length - 2; index >= 0; index -= 1) {
-          positions[index] = Math.min(positions[index], positions[index + 1] - rowGap)
-        }
-      }
-      if (positions.length > 0 && positions[0] < minY) {
-        const shift = minY - positions[0]
-        for (let index = 0; index < positions.length; index += 1) positions[index] += shift
-      }
-
-      const initialLabels = entries.map((entry, index) => ({
-        id: entry.id,
-        price: entry.price,
-        name: entry.name,
-        color: entry.color,
-        y: positions[index],
-      }))
+      const initialLabels = layoutPriceLabels(entries, minY, maxY, rowGap)
       setLineLabels((current) => {
         if (current.length === initialLabels.length && current.every((item, index) =>
           item.id === initialLabels[index].id &&
@@ -791,21 +823,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
             y: resolvePriceLabelY(liveSeries.priceToCoordinate(entry.price), entry.price, lastClose, currentMinY, currentMaxY),
           }))
           .sort((left, right) => left.y - right.y || left.id.localeCompare(right.id))
-        const currentPositions = visible.map((entry) => Math.max(currentMinY, Math.min(currentMaxY, entry.y)))
-        for (let index = 1; index < currentPositions.length; index += 1) {
-          currentPositions[index] = Math.max(currentPositions[index], currentPositions[index - 1] + rowGap)
-        }
-        if (currentPositions.length > 0 && currentPositions[currentPositions.length - 1] > currentMaxY) {
-          currentPositions[currentPositions.length - 1] = currentMaxY
-          for (let index = currentPositions.length - 2; index >= 0; index -= 1) {
-            currentPositions[index] = Math.min(currentPositions[index], currentPositions[index + 1] - rowGap)
-          }
-        }
-        if (currentPositions.length > 0 && currentPositions[0] < currentMinY) {
-          const shift = currentMinY - currentPositions[0]
-          for (let index = 0; index < currentPositions.length; index += 1) currentPositions[index] += shift
-        }
-        const nextLabels = visible.map((entry, index) => ({ ...entry, y: currentPositions[index] }))
+        const nextLabels = layoutPriceLabels(visible, currentMinY, currentMaxY, rowGap)
         setLineLabels((current) => {
           if (current.length === nextLabels.length && current.every((item, index) =>
             item.id === nextLabels[index].id &&
@@ -897,8 +915,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
 
     // Actual positions replace a same-side quote rail. No historical close is
     // passed off as a current quote while the live feed is unavailable.
-    updateQuoteLine(marketBidLineRef, bid, bidQuoteTone, 'BID', positionSide === 'BUY')
-    updateQuoteLine(marketAskLineRef, ask, askQuoteTone, 'ASK', positionSide === 'SELL')
+    updateQuoteLine(marketBidLineRef, bid, '#2F80FF', 'BID', positionSide === 'BUY')
+    updateQuoteLine(marketAskLineRef, ask, '#F04452', 'ASK', positionSide === 'SELL')
 
     return () => {
       // Price-line objects are intentionally retained between quote ticks.
@@ -1323,9 +1341,11 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     <div ref={chartHostRef} className="absolute inset-0 z-0" aria-hidden="true" />
     <div ref={lineLabelsHostRef} aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 right-[82px] z-20 overflow-hidden sm:right-[96px]">
       {lineLabels.map((label) => {
-        const text = label.name + '  ' + label.price.toFixed(pricePrecision)
+        const centeredPnl = label.name.startsWith('OPEN ')
+        const formattedPrice = label.price.toFixed(pricePrecision)
+        const text = centeredPnl ? label.name + ' · ' + formattedPrice : label.name + '  ' + formattedPrice
         return (
-          <span key={label.id} className="shafx-price-line-label" data-shafx-price-line-label={label.id} role="img" aria-label={text} title={text} style={{ top: label.y + 'px', borderLeftColor: label.color, color: label.color }}>
+          <span key={label.id} className={centeredPnl ? 'shafx-price-line-label shafx-price-line-label--center' : 'shafx-price-line-label'} data-shafx-price-line-label={label.id} role="img" aria-label={text} title={text} style={{ top: label.y + 'px', borderLeftColor: label.color, color: label.color }}>
             {text}
           </span>
         )

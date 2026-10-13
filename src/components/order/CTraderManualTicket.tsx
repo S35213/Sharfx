@@ -163,9 +163,9 @@ export const CTraderManualTicket: React.FC<Props> = ({
     : Number(quote?.bid ?? bidPrice ?? currentPrice)
 
   const effectiveSymbol = useMemo(() => providerSymbolSpec(symbolSpec, instrument), [instrument, symbolSpec])
-  // Use the actual receipt clock. The one-second UI clock can be behind a freshly
-  // delivered quote, so comparing the two creates a brief false "waiting" state.
-  const quoteAgeMs = Date.now() - quoteReceivedAtMs
+  // The quote callback and UI clock share the same state-backed timestamp, so
+  // freshness checks remain pure during render and update on every quote/timer tick.
+  const quoteAgeMs = now - quoteReceivedAtMs
   const quoteFresh = quoteReceivedAtMs > 0 && quoteAgeMs >= 0 && quoteAgeMs <= 15_000
 
   const stopPips = Number(stopPipsInput)
@@ -291,9 +291,11 @@ export const CTraderManualTicket: React.FC<Props> = ({
       environment: connection.environment === 'live' ? 'live' : 'demo',
       symbol,
     }, (nextQuote, nextInstrument) => {
+      const receivedAtMs = Date.now()
       setQuote(nextQuote)
       setInstrument(nextInstrument)
-      setQuoteReceivedAtMs(Date.now())
+      setQuoteReceivedAtMs(receivedAtMs)
+      setNow(receivedAtMs)
       setQuoteLoading(false)
       setError('')
     })

@@ -22,15 +22,16 @@ export const buildOpenPositionChartLines = (
 
   const hasProfit = typeof position.profit === 'number' && Number.isFinite(position.profit)
   const profit = hasProfit ? position.profit as number : 0
-  const currentLineColor = !hasProfit ? '#8A96A8' : profit > 0 ? '#22D3A5' : profit < 0 ? '#FF5C75' : '#8A96A8'
-  const profitLabel = hasProfit ? formatOpenPositionProfit(profit, currency) : '—'
+  const profitLabelColor = !hasProfit ? '#8A96A8' : profit > 0 ? '#22D3A5' : profit < 0 ? '#FF5C75' : '#8A96A8'
+  const currentLineColor = position.type === 'BUY' ? '#2F80FF' : '#F04452'
   const currentPrice = position.type === 'BUY' ? bidPrice : askPrice
   const result: ChartAnnotation[] = [
     {
       id: position.id + '-entry',
       price: position.entryPrice,
-      label: 'OPEN P/L ' + profitLabel,
-      color: currentLineColor,
+      label: 'OPEN ' + (hasProfit ? formatOpenPositionProfit(profit, currency) : '—'),
+      color: '#8A96A8',
+      labelColor: profitLabelColor,
       lineWidth: 2,
     },
   ]
@@ -41,6 +42,7 @@ export const buildOpenPositionChartLines = (
       price: currentPrice,
       label: position.type + ' CURRENT / EXIT',
       color: currentLineColor,
+      labelColor: currentLineColor,
       lineWidth: 2,
     })
   }
@@ -68,7 +70,7 @@ export const buildOpenPositionChartLines = (
       id: position.id + '-tp',
       price: takeProfitPrice,
       label: position.brokerProtectionConfirmed === false ? 'TAKE PROFIT — UNCONFIRMED' : 'TAKE PROFIT',
-      color: '#22D3A5',
+      color: '#2F80FF',
       lineWidth: 2,
     })
   }

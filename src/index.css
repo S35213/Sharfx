@@ -437,6 +437,18 @@ input::placeholder { color: #667285; }
     font-size: 8px;
   }
 }
+.shafx-price-line-label--center {
+  left: 50%;
+  right: auto;
+  transform: translate(-50%, -50%);
+  max-width: min(178px, calc(100% - 16px));
+  z-index: 2;
+}
+@media (max-width: 639px) {
+  .shafx-price-line-label--center {
+    max-width: min(148px, calc(100% - 12px));
+  }
+}
 
 
 /* MT5-inspired quote tiles: each side follows its own live tick direction. Blue = rising/idle quote, red = falling quote. */

@@ -529,3 +529,15 @@ Do not merge draft PR #58 or promote to main/Cloudflare. No orders were submitte
 - Unit tests cover positive USD P/L, negative EUR P/L, missing P/L, current exit quote side, and closed-position suppression.
 
 **Verification status:** awaiting the Render auto-deploy/build and focused unit-test result for this commit. Authenticated visual browser acceptance is still blocked by insufficient TinyFish automation-wallet credit; do not claim the new visual treatment or the user's existing trade has been visually verified. No orders were placed/closed; no provider credentials/account settings were changed.
+
+## Chart quote-tag and collision polish — 2026-10-13
+
+Scope remains the experimental branch `test/rebuild-deriv-native-manual-20260930` and Render service `sharfx-deriv-render` only. No trade actions, provider/account settings, sibling Render services, `main`, or Cloudflare production are touched.
+
+- Replaced the generic “LIVE PRICE” tag with compact **BID** for the BUY exit (Bid) and **ASK** for the SELL exit (Ask), matching the existing quote-tag size.
+- Fixed chart quote colors to blue for Bid and red for Ask. Active position exit lines use the same side colors rather than inheriting the floating-P/L green/red color. Quote rails and current-exit rails are dashed; SL remains dashed, TP is blue, and entry line stays neutral.
+- The entry line now has a small centered `OPEN +$0.50 · 1.11913`-style tag (using the actual position profit and entry price). Its y coordinate is anchored to the fixed entry price and is excluded from right-edge label stacking so it does not jump when Ask/Bid tags move. P/L amount color still reflects positive/negative result, while the price-line itself stays neutral.
+- Added quote-proximity suppression for trade entry/SL/TP levels as well as structural levels. These secondary lines and edge labels hide when within 7 chart pixels of a live quote and restore beyond a 12-pixel hysteresis threshold; the centered OPEN/P&L readout remains available even while its entry line is hidden. Current BID/ASK exit lines are exempt so the active exit remains visible.
+- Fixed the existing cTrader ticket render-purity lint error by deriving quote age from the state-backed clock, synchronized on receipt and on the one-second clock. No order logic changed.
+
+Verification notes: code/build/tests must be checked for this commit. Authenticated visual inspection still requires a signed-in browser; the previous attempt could not start because TinyFish browser automation credit was exhausted. Do not claim visual acceptance until the account's existing position has been inspected without opening or closing trades. Keep PR #58 experimental; do not merge into `main` or promote Cloudflare.
