@@ -583,7 +583,7 @@ export const CTraderManualTicket: React.FC<Props> = ({
                 <input id="shafx-stop-distance" aria-label="Stop distance in pips" type="number" min="0.1" step="0.1" value={stopDistanceMode === 'auto' ? autoStopPips.toFixed(1) : stopPipsInput} disabled={stopDistanceMode === 'auto'} placeholder={stopDistanceMode === 'auto' ? 'From setup' : 'Enter pips'} onChange={(event) => { setStopPipsInput(event.target.value) }} className="min-w-0 w-full bg-transparent font-mono text-sm tabular-nums text-shafx-text outline-none placeholder:text-shafx-textMuted/60 disabled:cursor-not-allowed disabled:opacity-75" />
                 <span className="shrink-0 font-mono text-[8px] text-shafx-textMuted">PIPS</span>
               </div>
-              <div className="mt-1 text-[8px] text-shafx-textMuted">{stopDistanceMode === 'auto' ? (usesSetupStopDistance ? 'Selected setup scaled by risk amount' : 'AUTO baseline · 10 pips at 10 risk units') : 'Editable · enter your stop distance'}</div>
+              <div className="mt-1 text-[8px] text-shafx-textMuted">{stopDistanceMode === 'auto' ? (usesSetupStopDistance ? 'Selected setup scaled by risk amount' : 'AUTO baseline · 10 pips at ' + formatCurrency(10, accountCurrency) + ' risk') : 'Editable · enter your stop distance'}</div>
             </div>
             <div className="bg-shafx-surface p-3">
               <div className="flex items-center justify-between gap-1">
@@ -597,7 +597,7 @@ export const CTraderManualTicket: React.FC<Props> = ({
                 <input id="shafx-target-distance" aria-label="Target distance in pips" type="number" min="0.1" step="0.1" value={targetDistanceMode === 'auto' ? autoTargetPips.toFixed(1) : targetPipsInput} disabled={targetDistanceMode === 'auto'} placeholder={targetDistanceMode === 'auto' ? 'From setup' : 'Enter pips'} onChange={(event) => { setTargetPipsInput(event.target.value) }} className="min-w-0 w-full bg-transparent font-mono text-sm tabular-nums text-shafx-text outline-none placeholder:text-shafx-textMuted/60 disabled:cursor-not-allowed disabled:opacity-75" />
                 <span className="shrink-0 font-mono text-[8px] text-shafx-textMuted">PIPS</span>
               </div>
-              <div className="mt-1 text-[8px] text-shafx-textMuted">{targetDistanceMode === 'auto' ? (usesSetupTargetDistance ? 'Selected setup scaled by risk amount' : 'AUTO baseline · 20 pips at 10 risk units') : 'Editable · enter your target distance'}</div>
+              <div className="mt-1 text-[8px] text-shafx-textMuted">{targetDistanceMode === 'auto' ? (usesSetupTargetDistance ? 'Selected setup scaled by risk amount' : 'AUTO baseline · 20 pips at ' + formatCurrency(10, accountCurrency) + ' risk') : 'Editable · enter your target distance'}</div>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-px bg-shafx-border">
