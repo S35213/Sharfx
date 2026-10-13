@@ -8,7 +8,7 @@ import { formatCurrency, formatPrice } from '../../lib/format'
 import type { DerivOrderConnection } from '../../data/deriv/derivTrading'
 import type { ChartAnnotation } from '../chart/CandlestickChart'
 import { subscribeCTraderLiveQuote } from '../../data/ctrader/CTraderLiveQuote'
-import { getQuoteTickDirection, getTradeButtonDirection, type QuoteTickDirection } from './quoteTickDirection'
+import { getQuoteTickDirection, type QuoteTickDirection } from './quoteTickDirection'
 
 interface Props {
   symbol: string
@@ -140,7 +140,6 @@ export const CTraderManualTicket: React.FC<Props> = ({
   const [riskSizing, setRiskSizing] = useState(true)
   const [stopDistanceMode, setStopDistanceMode] = useState<'auto' | 'manual'>(aiSetup ? 'auto' : 'manual')
   const [targetDistanceMode, setTargetDistanceMode] = useState<'auto' | 'manual'>(aiSetup ? 'auto' : 'manual')
-  const [planConfirmed, setPlanConfirmed] = useState(false)
   const [riskAmount, setRiskAmount] = useState('')
   const [lotsInput, setLotsInput] = useState('')
   const [stopPipsInput, setStopPipsInput] = useState('')
@@ -153,13 +152,10 @@ export const CTraderManualTicket: React.FC<Props> = ({
   const [error, setError] = useState('')
   const [protectionWarning, setProtectionWarning] = useState('')
   const [now, setNow] = useState(0)
-  const previousBidRef = useRef<number | null>(null)
-  const previousAskRef = useRef<number | null>(null)
-  const bidDirectionResetTimerRef = useRef<number | null>(null)
-  const askDirectionResetTimerRef = useRef<number | null>(null)
+  const previousMidPriceRef = useRef<number | null>(null)
+  const marketDirectionResetTimerRef = useRef<number | null>(null)
   const [quoteReceivedAtMs, setQuoteReceivedAtMs] = useState(0)
-  const [buyMarketDirection, setBuyMarketDirection] = useState<QuoteTickDirection>('neutral')
-  const [sellMarketDirection, setSellMarketDirection] = useState<QuoteTickDirection>('neutral')
+  const [marketDirection, setMarketDirection] = useState<QuoteTickDirection>('neutral')
 
   const entryPrice = side === 'BUY'
     ? Number(quote?.ask ?? askPrice ?? currentPrice)
@@ -171,16 +167,20 @@ export const CTraderManualTicket: React.FC<Props> = ({
   const quoteAgeMs = now - quoteReceivedAtMs
   const quoteFresh = quoteReceivedAtMs > 0 && quoteAgeMs >= 0 && quoteAgeMs <= 15_000
 
-  const autoStopPips = aiSetup && Number.isFinite(aiSetup.entryPrice) && Number.isFinite(aiSetup.stopLoss) && aiSetup.entryPrice > 0 && aiSetup.stopLoss > 0
+  const setupStopPips = aiSetup && Number.isFinite(aiSetup.entryPrice) && Number.isFinite(aiSetup.stopLoss) && aiSetup.entryPrice > 0 && aiSetup.stopLoss > 0
     ? Math.abs(aiSetup.entryPrice - aiSetup.stopLoss) / Math.max(effectiveSymbol.pipSize, Number.EPSILON)
     : Number.NaN
-  const autoTargetPips = aiSetup && Number.isFinite(aiSetup.entryPrice) && Number.isFinite(aiSetup.takeProfit) && aiSetup.entryPrice > 0 && aiSetup.takeProfit > 0
+  const setupTargetPips = aiSetup && Number.isFinite(aiSetup.entryPrice) && Number.isFinite(aiSetup.takeProfit) && aiSetup.entryPrice > 0 && aiSetup.takeProfit > 0
     ? Math.abs(aiSetup.takeProfit - aiSetup.entryPrice) / Math.max(effectiveSymbol.pipSize, Number.EPSILON)
     : Number.NaN
-  const hasAutoStopDistance = Number.isFinite(autoStopPips) && autoStopPips > 0
-  const hasAutoTargetDistance = Number.isFinite(autoTargetPips) && autoTargetPips > 0
-  const stopPips = stopDistanceMode === 'auto' ? (hasAutoStopDistance ? autoStopPips : Number.NaN) : (stopPipsInput.trim() ? Number(stopPipsInput) : Number.NaN)
-  const targetPips = targetDistanceMode === 'auto' ? (hasAutoTargetDistance ? autoTargetPips : Number.NaN) : (targetPipsInput.trim() ? Number(targetPipsInput) : Number.NaN)
+  const usesSetupStopDistance = Number.isFinite(setupStopPips) && setupStopPips > 0
+  const usesSetupTargetDistance = Number.isFinite(setupTargetPips) && setupTargetPips > 0
+  // AUTO is also available without an AI setup: use 10/20-pip defaults around
+  // the current executable price. A valid selected setup takes priority.
+  const autoStopPips = usesSetupStopDistance ? setupStopPips : 10
+  const autoTargetPips = usesSetupTargetDistance ? setupTargetPips : 20
+  const stopPips = stopDistanceMode === 'auto' ? autoStopPips : (stopPipsInput.trim() ? Number(stopPipsInput) : Number.NaN)
+  const targetPips = targetDistanceMode === 'auto' ? autoTargetPips : (targetPipsInput.trim() ? Number(targetPipsInput) : Number.NaN)
   const lots = lotsInput.trim() ? Number(lotsInput) : 0
   const requestedRisk = riskAmount.trim() ? Number(riskAmount) : 0
 
@@ -206,20 +206,23 @@ export const CTraderManualTicket: React.FC<Props> = ({
   const riskWindowRisk = plan.valid ? plan.estimatedLossAtStop : 0
   const rewardWindow = plan.valid ? plan.estimatedRewardAtTarget : 0
   const riskRatio = plan.valid ? plan.riskRewardRatio : 0
-  const buyButtonDirection = quoteFresh ? getTradeButtonDirection(buyMarketDirection, 'BUY') : 'neutral'
-  const sellButtonDirection = quoteFresh ? getTradeButtonDirection(sellMarketDirection, 'SELL') : 'neutral'
+  const buyButtonDirection: QuoteTickDirection = marketDirection === 'down' ? 'down' : 'up'
+  const sellButtonDirection: QuoteTickDirection = marketDirection === 'down' ? 'up' : 'down'
   const quoteTileStateClass = (direction: QuoteTickDirection, ready: boolean): string =>
     ready ? `shafx-quote-tile--${direction}` : 'shafx-quote-tile--unavailable'
-  const quoteTileStyle = (direction: QuoteTickDirection, ready: boolean): React.CSSProperties => {
-    if (!ready) return { backgroundColor: '#11161E', borderColor: '#343C48', color: '#DDE4EC' }
+  const quoteTileStyle = (direction: QuoteTickDirection, ready: boolean, buttonSide: TradeSide): React.CSSProperties => {
+    if (!ready) return buttonSide === 'BUY'
+      ? { backgroundColor: '#15375A', borderColor: '#2F80FF', color: '#D4E5FF' }
+      : { backgroundColor: '#4A1B25', borderColor: '#F04452', color: '#FFE0E4' }
     if (direction === 'down') return { backgroundColor: '#C52D41', borderColor: '#FF6979', color: '#FFFFFF' }
     if (direction === 'up') return { backgroundColor: '#176FC1', borderColor: '#70B9FF', color: '#FFFFFF' }
-    return { backgroundColor: '#155A9F', borderColor: '#3D8FDB', color: '#FFFFFF' }
+    return buttonSide === 'BUY'
+      ? { backgroundColor: '#176FC1', borderColor: '#70B9FF', color: '#FFFFFF' }
+      : { backgroundColor: '#C52D41', borderColor: '#FF6979', color: '#FFFFFF' }
   }
 
   useEffect(() => {
     setSide(aiSetup?.direction ?? 'BUY')
-    setPlanConfirmed(false)
     if (aiSetup) {
       setStopDistanceMode('auto')
       setTargetDistanceMode('auto')
@@ -240,64 +243,41 @@ export const CTraderManualTicket: React.FC<Props> = ({
   }, [connection?.accountId, providerSelection?.providerId])
 
   useEffect(() => {
-    const marketBid = Number(quote?.bid)
-    const clearBidReset = (): void => {
-      if (bidDirectionResetTimerRef.current !== null) window.clearTimeout(bidDirectionResetTimerRef.current)
-      bidDirectionResetTimerRef.current = null
+    const bid = Number(quote?.bid)
+    const ask = Number(quote?.ask)
+    const midpoint = (bid + ask) / 2
+    const clearReset = (): void => {
+      if (marketDirectionResetTimerRef.current !== null) window.clearTimeout(marketDirectionResetTimerRef.current)
+      marketDirectionResetTimerRef.current = null
     }
-    if (!quoteFresh || !Number.isFinite(marketBid) || marketBid <= 0) {
-      clearBidReset()
-      previousBidRef.current = null
-      setSellMarketDirection('neutral')
+    if (!quoteFresh || !Number.isFinite(midpoint) || midpoint <= 0 || bid <= 0 || ask <= 0) {
+      clearReset()
+      previousMidPriceRef.current = null
+      setMarketDirection('neutral')
       return
     }
-    const previous = previousBidRef.current
-    previousBidRef.current = marketBid
-    if (previous === null) { clearBidReset(); setSellMarketDirection('neutral'); return }
-    const direction = getQuoteTickDirection(marketBid, previous)
-    if (direction === 'neutral') return
-    clearBidReset()
-    setSellMarketDirection(direction)
-    bidDirectionResetTimerRef.current = window.setTimeout(() => {
-      setSellMarketDirection('neutral')
-      bidDirectionResetTimerRef.current = null
-    }, QUOTE_TICK_COLOR_HOLD_MS)
-  }, [quoteFresh, quote?.bid])
-
-  useEffect(() => {
-    const marketAsk = Number(quote?.ask)
-    const clearAskReset = (): void => {
-      if (askDirectionResetTimerRef.current !== null) window.clearTimeout(askDirectionResetTimerRef.current)
-      askDirectionResetTimerRef.current = null
-    }
-    if (!quoteFresh || !Number.isFinite(marketAsk) || marketAsk <= 0) {
-      clearAskReset()
-      previousAskRef.current = null
-      setBuyMarketDirection('neutral')
+    const previous = previousMidPriceRef.current
+    previousMidPriceRef.current = midpoint
+    if (previous === null) {
+      clearReset()
+      setMarketDirection('neutral')
       return
     }
-    const previous = previousAskRef.current
-    previousAskRef.current = marketAsk
-    if (previous === null) { clearAskReset(); setBuyMarketDirection('neutral'); return }
-    const direction = getQuoteTickDirection(marketAsk, previous)
+    const direction = getQuoteTickDirection(midpoint, previous)
     if (direction === 'neutral') return
-    clearAskReset()
-    setBuyMarketDirection(direction)
-    askDirectionResetTimerRef.current = window.setTimeout(() => {
-      setBuyMarketDirection('neutral')
-      askDirectionResetTimerRef.current = null
+    clearReset()
+    setMarketDirection(direction)
+    marketDirectionResetTimerRef.current = window.setTimeout(() => {
+      setMarketDirection('neutral')
+      marketDirectionResetTimerRef.current = null
     }, QUOTE_TICK_COLOR_HOLD_MS)
-  }, [quoteFresh, quote?.ask])
+  }, [quoteFresh, quote?.bid, quote?.ask])
 
   useEffect(() => {
-    previousBidRef.current = null
-    previousAskRef.current = null
-    if (bidDirectionResetTimerRef.current !== null) window.clearTimeout(bidDirectionResetTimerRef.current)
-    if (askDirectionResetTimerRef.current !== null) window.clearTimeout(askDirectionResetTimerRef.current)
-    bidDirectionResetTimerRef.current = null
-    askDirectionResetTimerRef.current = null
-    setBuyMarketDirection('neutral')
-    setSellMarketDirection('neutral')
+    previousMidPriceRef.current = null
+    if (marketDirectionResetTimerRef.current !== null) window.clearTimeout(marketDirectionResetTimerRef.current)
+    marketDirectionResetTimerRef.current = null
+    setMarketDirection('neutral')
     setQuote(null)
     setInstrument(null)
     setQuoteReceivedAtMs(0)
@@ -322,10 +302,8 @@ export const CTraderManualTicket: React.FC<Props> = ({
     })
     return () => {
       unsubscribe()
-      if (bidDirectionResetTimerRef.current !== null) window.clearTimeout(bidDirectionResetTimerRef.current)
-      if (askDirectionResetTimerRef.current !== null) window.clearTimeout(askDirectionResetTimerRef.current)
-      bidDirectionResetTimerRef.current = null
-      askDirectionResetTimerRef.current = null
+      if (marketDirectionResetTimerRef.current !== null) window.clearTimeout(marketDirectionResetTimerRef.current)
+      marketDirectionResetTimerRef.current = null
       setQuoteLoading(false)
     }
   }, [connection?.accountId, connection?.connectionId, connection?.environment, providerSelection?.providerId, symbol])
@@ -350,7 +328,6 @@ export const CTraderManualTicket: React.FC<Props> = ({
 
   const chooseSide = (value: TradeSide): void => {
     setSide(value)
-    setPlanConfirmed(false)
     resetError()
   }
 
@@ -366,11 +343,6 @@ export const CTraderManualTicket: React.FC<Props> = ({
     }
     if (!plan.valid) {
       setError(plan.error || 'The position size is not valid.')
-      setState('error')
-      return
-    }
-    if (!planConfirmed) {
-      setError('Review the plan and tick the confirmation checkbox before placing the practice trade.')
       setState('error')
       return
     }
@@ -558,7 +530,7 @@ export const CTraderManualTicket: React.FC<Props> = ({
       Number.isFinite(Number(quote.bid)) && Number.isFinite(Number(quote.ask)) &&
       Number(quote.bid) > 0 && Number(quote.ask) > 0,
     )
-    const canTrade = Boolean(cTraderReady && brokerQuoteReady && plan.valid && planConfirmed)
+    const canTrade = Boolean(cTraderReady && brokerQuoteReady && plan.valid)
     return (
       <div className="bg-[#080D13] p-3 sm:p-4">
         <div className="flex items-center justify-between gap-2">
@@ -569,11 +541,11 @@ export const CTraderManualTicket: React.FC<Props> = ({
         {aiSetup && <div className="mt-2 flex items-center gap-2 rounded-xl border border-shafx-accent/20 bg-shafx-accent/[0.05] px-2.5 py-2 text-[8px] text-shafx-accent"><CheckCircle2 className="h-3.5 w-3.5" />AI reviewed setup loaded — SHAFX still waits for your manual confirm.</div>}
 
         <div className="mt-3 grid grid-cols-2 gap-2">
-          <button type="button" data-side="BUY" data-market-direction={buyButtonDirection} data-button-tone={buyButtonDirection} data-quote-ready={brokerQuoteReady ? 'true' : 'false'} style={quoteTileStyle(buyButtonDirection, brokerQuoteReady)} aria-label="Select BUY at Ask price" aria-pressed={side === 'BUY'} onClick={() => chooseSide('BUY')} className={'shafx-trade-side-button shafx-quote-tile ' + quoteTileStateClass(buyButtonDirection, brokerQuoteReady) + ' relative min-h-[66px] border px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-accent'}>
+          <button type="button" data-side="BUY" data-market-direction={buyButtonDirection} data-button-tone={buyButtonDirection} data-quote-ready={brokerQuoteReady ? 'true' : 'false'} style={quoteTileStyle(buyButtonDirection, brokerQuoteReady, 'BUY')} aria-label="Select BUY at Ask price" aria-pressed={side === 'BUY'} onClick={() => chooseSide('BUY')} className={'shafx-trade-side-button shafx-quote-tile ' + quoteTileStateClass(buyButtonDirection, brokerQuoteReady) + ' relative min-h-[66px] border px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-accent'}>
             <span className="flex items-center justify-between gap-1 text-[11px] font-bold tracking-[0.08em]"><span>BUY</span><span className="text-[8px] uppercase tracking-[0.14em] text-[#AAB2BD]">ASK</span></span>
             <span className="shafx-trade-side-price mt-1 block font-mono text-base font-semibold tabular-nums sm:text-lg tracking-tight" style={{ color: brokerQuoteReady ? '#FFFFFF' : '#DDE4EC' }}>{brokerQuoteReady ? formatPrice(Number(quote?.ask), effectiveSymbol.pricePrecision) : '—'}</span>
           </button>
-          <button type="button" data-side="SELL" data-market-direction={sellButtonDirection} data-button-tone={sellButtonDirection} data-quote-ready={brokerQuoteReady ? 'true' : 'false'} style={quoteTileStyle(sellButtonDirection, brokerQuoteReady)} aria-label="Select SELL at Bid price" aria-pressed={side === 'SELL'} onClick={() => chooseSide('SELL')} className={'shafx-trade-side-button shafx-quote-tile ' + quoteTileStateClass(sellButtonDirection, brokerQuoteReady) + ' relative min-h-[66px] border px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-accent'}>
+          <button type="button" data-side="SELL" data-market-direction={sellButtonDirection} data-button-tone={sellButtonDirection} data-quote-ready={brokerQuoteReady ? 'true' : 'false'} style={quoteTileStyle(sellButtonDirection, brokerQuoteReady, 'SELL')} aria-label="Select SELL at Bid price" aria-pressed={side === 'SELL'} onClick={() => chooseSide('SELL')} className={'shafx-trade-side-button shafx-quote-tile ' + quoteTileStateClass(sellButtonDirection, brokerQuoteReady) + ' relative min-h-[66px] border px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-accent'}>
             <span className="flex items-center justify-between gap-1 text-[11px] font-bold tracking-[0.08em]"><span>SELL</span><span className="text-[8px] uppercase tracking-[0.14em] text-[#AAB2BD]">BID</span></span>
             <span className="shafx-trade-side-price mt-1 block font-mono text-base font-semibold tabular-nums sm:text-lg tracking-tight" style={{ color: brokerQuoteReady ? '#FFFFFF' : '#DDE4EC' }}>{brokerQuoteReady ? formatPrice(Number(quote?.bid), effectiveSymbol.pricePrecision) : '—'}</span>
           </button>
@@ -584,14 +556,14 @@ export const CTraderManualTicket: React.FC<Props> = ({
           <div className="grid grid-cols-2 gap-px bg-shafx-border">
             <div className="bg-shafx-surface p-3">
               <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-shafx-textMuted">Position size</div>
-              <button type="button" onClick={() => { setRiskSizing((value) => !value); setPlanConfirmed(false) }} aria-pressed={riskSizing} className={riskSizing ? 'mt-2 rounded-lg border border-shafx-accent/40 bg-shafx-accent/10 px-2.5 py-1.5 text-[8px] font-bold text-shafx-accent' : 'mt-2 rounded-lg border border-shafx-border bg-shafx-bg px-2.5 py-1.5 text-[8px] font-bold text-shafx-textMuted'}>{riskSizing ? 'RISK AMOUNT' : 'FIXED LOTS'}</button>
+              <button type="button" onClick={() => { setRiskSizing((value) => !value) }} aria-pressed={riskSizing} className={riskSizing ? 'mt-2 rounded-lg border border-shafx-accent/40 bg-shafx-accent/10 px-2.5 py-1.5 text-[8px] font-bold text-shafx-accent' : 'mt-2 rounded-lg border border-shafx-border bg-shafx-bg px-2.5 py-1.5 text-[8px] font-bold text-shafx-textMuted'}>{riskSizing ? 'RISK AMOUNT' : 'FIXED LOTS'}</button>
               <div className="mt-2 text-[8px] leading-4 text-shafx-textMuted">{riskSizing ? 'You choose the money at risk.' : 'You choose the volume.'}</div>
             </div>
             <div className="bg-shafx-surface p-3">
               <label htmlFor="shafx-risk-or-lots" className="block text-[9px] font-semibold uppercase tracking-[0.12em] text-shafx-textMuted">{riskSizing ? 'Risk amount' : 'Lot size'}</label>
               <div className="mt-2 flex items-center gap-2 rounded-lg border border-shafx-border bg-[#0A1018] px-2.5 py-2 focus-within:border-shafx-accent/70 focus-within:ring-1 focus-within:ring-shafx-accent/30">
                 <span className="shrink-0 font-mono text-[9px] text-shafx-textMuted">{riskSizing ? accountCurrency : 'LOT'}</span>
-                <input id="shafx-risk-or-lots" aria-label={riskSizing ? 'Risk amount' : 'Lot size'} type="number" min="0.01" step={riskSizing ? '0.50' : String(effectiveSymbol.lotStep || 0.01)} value={riskSizing ? riskAmount : lotsInput} placeholder={riskSizing ? 'Enter amount' : 'Enter lots'} onChange={(event) => { if (riskSizing) setRiskAmount(event.target.value); else setLotsInput(event.target.value); setPlanConfirmed(false) }} className="min-w-0 w-full bg-transparent font-mono text-sm tabular-nums text-shafx-text outline-none placeholder:text-shafx-textMuted/60" />
+                <input id="shafx-risk-or-lots" aria-label={riskSizing ? 'Risk amount' : 'Lot size'} type="number" min="0.01" step={riskSizing ? '0.50' : String(effectiveSymbol.lotStep || 0.01)} value={riskSizing ? riskAmount : lotsInput} placeholder={riskSizing ? 'Enter amount' : 'Enter lots'} onChange={(event) => { if (riskSizing) setRiskAmount(event.target.value); else setLotsInput(event.target.value) }} className="min-w-0 w-full bg-transparent font-mono text-sm tabular-nums text-shafx-text outline-none placeholder:text-shafx-textMuted/60" />
               </div>
               <div className="mt-1 text-[8px] text-shafx-textMuted">Editable field · tap to type</div>
             </div>
@@ -601,29 +573,29 @@ export const CTraderManualTicket: React.FC<Props> = ({
               <div className="flex items-center justify-between gap-1">
                 <label htmlFor="shafx-stop-distance" className="text-[9px] font-semibold uppercase tracking-[0.12em] text-shafx-textMuted">Stop distance</label>
                 <div className="inline-flex rounded-lg border border-shafx-border bg-[#0A1018] p-0.5">
-                  <button type="button" disabled={!hasAutoStopDistance} aria-pressed={stopDistanceMode === 'auto'} onClick={() => { setStopDistanceMode('auto'); setPlanConfirmed(false) }} className={stopDistanceMode === 'auto' ? 'rounded-md bg-shafx-accent px-2 py-1 text-[8px] font-bold text-white' : 'rounded-md px-2 py-1 text-[8px] font-bold text-shafx-textMuted disabled:opacity-40'} title={hasAutoStopDistance ? 'Use stop distance from the selected market setup' : 'Load a setup to enable automatic distance'}>AUTO</button>
-                  <button type="button" aria-pressed={stopDistanceMode === 'manual'} onClick={() => { setStopPipsInput(Number.isFinite(stopPips) && stopPips > 0 ? stopPips.toFixed(1) : ''); setStopDistanceMode('manual'); setPlanConfirmed(false) }} className={stopDistanceMode === 'manual' ? 'rounded-md bg-shafx-accent px-2 py-1 text-[8px] font-bold text-white' : 'rounded-md px-2 py-1 text-[8px] font-bold text-shafx-textMuted'}>EDIT</button>
+                  <button type="button" aria-pressed={stopDistanceMode === 'auto'} onClick={() => setStopDistanceMode('auto')} className={stopDistanceMode === 'auto' ? 'rounded-md bg-shafx-accent px-2 py-1 text-[8px] font-bold text-white' : 'rounded-md px-2 py-1 text-[8px] font-bold text-shafx-textMuted disabled:opacity-40'} title={usesSetupStopDistance ? 'Use stop distance from the selected market setup' : 'Use the automatic 10-pip default until a setup is loaded'}>AUTO</button>
+                  <button type="button" aria-pressed={stopDistanceMode === 'manual'} onClick={() => { setStopPipsInput(Number.isFinite(stopPips) && stopPips > 0 ? stopPips.toFixed(1) : ''); setStopDistanceMode('manual') }} className={stopDistanceMode === 'manual' ? 'rounded-md bg-shafx-accent px-2 py-1 text-[8px] font-bold text-white' : 'rounded-md px-2 py-1 text-[8px] font-bold text-shafx-textMuted'}>EDIT</button>
                 </div>
               </div>
               <div className="mt-2 flex items-center gap-2 rounded-lg border border-shafx-border bg-[#0A1018] px-2.5 py-2 focus-within:border-shafx-accent/70 focus-within:ring-1 focus-within:ring-shafx-accent/30">
-                <input id="shafx-stop-distance" aria-label="Stop distance in pips" type="number" min="0.1" step="0.1" value={stopDistanceMode === 'auto' ? (hasAutoStopDistance ? autoStopPips.toFixed(1) : '') : stopPipsInput} disabled={stopDistanceMode === 'auto'} placeholder={stopDistanceMode === 'auto' ? 'From setup' : 'Enter pips'} onChange={(event) => { setStopPipsInput(event.target.value); setPlanConfirmed(false) }} className="min-w-0 w-full bg-transparent font-mono text-sm tabular-nums text-shafx-text outline-none placeholder:text-shafx-textMuted/60 disabled:cursor-not-allowed disabled:opacity-75" />
+                <input id="shafx-stop-distance" aria-label="Stop distance in pips" type="number" min="0.1" step="0.1" value={stopDistanceMode === 'auto' ? autoStopPips.toFixed(1) : stopPipsInput} disabled={stopDistanceMode === 'auto'} placeholder={stopDistanceMode === 'auto' ? 'From setup' : 'Enter pips'} onChange={(event) => { setStopPipsInput(event.target.value) }} className="min-w-0 w-full bg-transparent font-mono text-sm tabular-nums text-shafx-text outline-none placeholder:text-shafx-textMuted/60 disabled:cursor-not-allowed disabled:opacity-75" />
                 <span className="shrink-0 font-mono text-[8px] text-shafx-textMuted">PIPS</span>
               </div>
-              <div className="mt-1 text-[8px] text-shafx-textMuted">{stopDistanceMode === 'auto' ? 'Calculated from the selected setup' : 'Editable · enter your stop distance'}</div>
+              <div className="mt-1 text-[8px] text-shafx-textMuted">{stopDistanceMode === 'auto' ? (usesSetupStopDistance ? 'From selected setup' : 'Automatic default · 10 pips') : 'Editable · enter your stop distance'}</div>
             </div>
             <div className="bg-shafx-surface p-3">
               <div className="flex items-center justify-between gap-1">
                 <label htmlFor="shafx-target-distance" className="text-[9px] font-semibold uppercase tracking-[0.12em] text-shafx-textMuted">Target distance</label>
                 <div className="inline-flex rounded-lg border border-shafx-border bg-[#0A1018] p-0.5">
-                  <button type="button" disabled={!hasAutoTargetDistance} aria-pressed={targetDistanceMode === 'auto'} onClick={() => { setTargetDistanceMode('auto'); setPlanConfirmed(false) }} className={targetDistanceMode === 'auto' ? 'rounded-md bg-shafx-accent px-2 py-1 text-[8px] font-bold text-white' : 'rounded-md px-2 py-1 text-[8px] font-bold text-shafx-textMuted disabled:opacity-40'} title={hasAutoTargetDistance ? 'Use target distance from the selected market setup' : 'Load a setup to enable automatic distance'}>AUTO</button>
-                  <button type="button" aria-pressed={targetDistanceMode === 'manual'} onClick={() => { setTargetPipsInput(Number.isFinite(targetPips) && targetPips > 0 ? targetPips.toFixed(1) : ''); setTargetDistanceMode('manual'); setPlanConfirmed(false) }} className={targetDistanceMode === 'manual' ? 'rounded-md bg-shafx-accent px-2 py-1 text-[8px] font-bold text-white' : 'rounded-md px-2 py-1 text-[8px] font-bold text-shafx-textMuted'}>EDIT</button>
+                  <button type="button" aria-pressed={targetDistanceMode === 'auto'} onClick={() => setTargetDistanceMode('auto')} className={targetDistanceMode === 'auto' ? 'rounded-md bg-shafx-accent px-2 py-1 text-[8px] font-bold text-white' : 'rounded-md px-2 py-1 text-[8px] font-bold text-shafx-textMuted disabled:opacity-40'} title={usesSetupTargetDistance ? 'Use target distance from the selected market setup' : 'Use the automatic 20-pip default until a setup is loaded'}>AUTO</button>
+                  <button type="button" aria-pressed={targetDistanceMode === 'manual'} onClick={() => { setTargetPipsInput(Number.isFinite(targetPips) && targetPips > 0 ? targetPips.toFixed(1) : ''); setTargetDistanceMode('manual') }} className={targetDistanceMode === 'manual' ? 'rounded-md bg-shafx-accent px-2 py-1 text-[8px] font-bold text-white' : 'rounded-md px-2 py-1 text-[8px] font-bold text-shafx-textMuted'}>EDIT</button>
                 </div>
               </div>
               <div className="mt-2 flex items-center gap-2 rounded-lg border border-shafx-border bg-[#0A1018] px-2.5 py-2 focus-within:border-shafx-accent/70 focus-within:ring-1 focus-within:ring-shafx-accent/30">
-                <input id="shafx-target-distance" aria-label="Target distance in pips" type="number" min="0.1" step="0.1" value={targetDistanceMode === 'auto' ? (hasAutoTargetDistance ? autoTargetPips.toFixed(1) : '') : targetPipsInput} disabled={targetDistanceMode === 'auto'} placeholder={targetDistanceMode === 'auto' ? 'From setup' : 'Enter pips'} onChange={(event) => { setTargetPipsInput(event.target.value); setPlanConfirmed(false) }} className="min-w-0 w-full bg-transparent font-mono text-sm tabular-nums text-shafx-text outline-none placeholder:text-shafx-textMuted/60 disabled:cursor-not-allowed disabled:opacity-75" />
+                <input id="shafx-target-distance" aria-label="Target distance in pips" type="number" min="0.1" step="0.1" value={targetDistanceMode === 'auto' ? autoTargetPips.toFixed(1) : targetPipsInput} disabled={targetDistanceMode === 'auto'} placeholder={targetDistanceMode === 'auto' ? 'From setup' : 'Enter pips'} onChange={(event) => { setTargetPipsInput(event.target.value) }} className="min-w-0 w-full bg-transparent font-mono text-sm tabular-nums text-shafx-text outline-none placeholder:text-shafx-textMuted/60 disabled:cursor-not-allowed disabled:opacity-75" />
                 <span className="shrink-0 font-mono text-[8px] text-shafx-textMuted">PIPS</span>
               </div>
-              <div className="mt-1 text-[8px] text-shafx-textMuted">{targetDistanceMode === 'auto' ? 'Calculated from the selected setup' : 'Editable · enter your target distance'}</div>
+              <div className="mt-1 text-[8px] text-shafx-textMuted">{targetDistanceMode === 'auto' ? (usesSetupTargetDistance ? 'From selected setup' : 'Automatic default · 20 pips') : 'Editable · enter your target distance'}</div>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-px bg-shafx-border">
@@ -637,7 +609,7 @@ export const CTraderManualTicket: React.FC<Props> = ({
         </div>}
 
         <div className="mt-3 grid grid-cols-2 gap-2">
-          <div className="rounded-xl border border-shafx-border bg-shafx-surface p-2.5"><div className="text-[7px] uppercase tracking-[0.12em] text-shafx-textMuted">Broker margin</div><div className="mt-1 font-mono text-sm font-semibold">{selectedMargin !== null ? formatCurrency(selectedMargin, accountCurrency) : 'Checked on trade'}</div><div className="mt-1 text-[7px] leading-3.5 text-shafx-textMuted">SHAFX checks cTrader margin once when you confirm the trade.</div></div>
+          <div className="rounded-xl border border-shafx-border bg-shafx-surface p-2.5"><div className="text-[7px] uppercase tracking-[0.12em] text-shafx-textMuted">Broker margin</div><div className="mt-1 font-mono text-sm font-semibold">{selectedMargin !== null ? formatCurrency(selectedMargin, accountCurrency) : 'Checked on trade'}</div><div className="mt-1 text-[7px] leading-3.5 text-shafx-textMuted">SHAFX checks cTrader margin before you place the trade.</div></div>
           <div className="rounded-xl border border-shafx-border bg-shafx-surface p-2.5"><div className="text-[7px] uppercase tracking-[0.12em] text-shafx-textMuted">Price plan</div><div className="mt-1 font-mono text-[9px]">Entry {formatPrice(entryPrice, effectiveSymbol.pricePrecision)}</div><div className="mt-1 grid grid-cols-2 gap-2 text-[8px]"><span className="text-shafx-danger">SL {stopLossPrice > 0 ? formatPrice(stopLossPrice, effectiveSymbol.pricePrecision) : '—'}</span><span className="text-right text-shafx-success">TP {takeProfitPrice > 0 ? formatPrice(takeProfitPrice, effectiveSymbol.pricePrecision) : '—'}</span></div></div>
         </div>
 
@@ -655,12 +627,8 @@ export const CTraderManualTicket: React.FC<Props> = ({
 
 {error && <div role="alert" className="mt-3 rounded-xl border border-shafx-danger/25 bg-shafx-danger/10 px-3 py-2 text-[8px] leading-4 text-shafx-danger">{error}</div>}
           {!plan.valid && !error && <div role="status" className="mt-3 rounded-xl border border-shafx-border bg-shafx-surface px-3 py-2 text-[8px] leading-4 text-shafx-textMuted">{aiSetup ? (riskSizing ? 'Enter the risk amount to calculate volume, or choose fixed lots.' : 'Enter a lot size to calculate the plan.') : 'Enter a risk amount and both distances, or load a setup to use AUTO distances.'}</div>}
-          <label className="mt-3 flex cursor-pointer items-start gap-2.5 rounded-xl border border-shafx-border bg-shafx-surface px-3 py-3">
-            <input type="checkbox" checked={planConfirmed} onChange={(event) => { setPlanConfirmed(event.target.checked); if (event.target.checked) resetError() }} disabled={!cTraderReady || !brokerQuoteReady || !plan.valid} className="mt-0.5 h-4 w-4 shrink-0 accent-[#2962FF] disabled:opacity-40" />
-            <span><span className="block text-[9px] font-semibold text-shafx-text">I reviewed this {side} plan</span><span className="mt-1 block text-[8px] leading-4 text-shafx-textMuted">Check the entry, risk amount, Stop Loss and Take Profit above before enabling the order button.</span></span>
-          </label>
 
-        <button type="button" onClick={() => void place()} disabled={!canTrade || state === 'placing'} className={'mt-3 flex min-h-12 w-full items-center justify-center gap-2 text-[9px] font-bold ' + (side === 'BUY' ? 'bg-shafx-success text-[#07110E]' : 'bg-shafx-danger text-white') + ' disabled:opacity-45'}>
+        <button type="button" onClick={() => void place()} disabled={!canTrade || state === 'placing'} className={'mt-3 flex min-h-12 w-full items-center justify-center gap-2 text-[9px] font-bold ' + (side === 'BUY' ? 'bg-[#176FC1] text-white' : 'bg-[#C52D41] text-white') + ' disabled:opacity-45'}>
           {state === 'placing'
             ? <><LoaderCircle className="h-3.5 w-3.5 animate-spin" /> PLACING {side}…</>
             : !cTraderReady
