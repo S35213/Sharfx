@@ -538,7 +538,7 @@ export const CTraderManualTicket: React.FC<Props> = ({
           <div className={'rounded-full border px-2 py-1 text-[7px] font-bold tracking-wide ' + (brokerQuoteReady ? 'border-[#2F80FF]/35 bg-[#2F80FF]/10 text-[#8AB8FF]' : 'border-[#59616D] bg-[#151A21] text-[#AAB2BD]')}>{brokerQuoteReady ? 'LIVE PRICE' : quoteLoading ? 'CONNECTING' : connection?.accountId ? 'WAITING FOR TICKS' : 'OFFLINE'}</div>
         </div>
 
-        {aiSetup && <div className="mt-2 flex items-center gap-2 rounded-xl border border-shafx-accent/20 bg-shafx-accent/[0.05] px-2.5 py-2 text-[8px] text-shafx-accent"><CheckCircle2 className="h-3.5 w-3.5" />AI reviewed setup loaded — SHAFX still waits for your manual confirm.</div>}
+        {aiSetup && <div className="mt-2 flex items-center gap-2 rounded-xl border border-shafx-accent/20 bg-shafx-accent/[0.05] px-2.5 py-2 text-[8px] text-shafx-accent"><CheckCircle2 className="h-3.5 w-3.5" />Setup loaded. The final BUY/SELL button activates when the plan is complete.</div>}
 
         <div className="mt-3 grid grid-cols-2 gap-2">
           <button type="button" data-side="BUY" data-market-direction={buyButtonDirection} data-button-tone={buyButtonDirection} data-quote-ready={brokerQuoteReady ? 'true' : 'false'} style={quoteTileStyle(buyButtonDirection, brokerQuoteReady, 'BUY')} aria-label="Select BUY at Ask price" aria-pressed={side === 'BUY'} onClick={() => chooseSide('BUY')} className={'shafx-trade-side-button shafx-quote-tile ' + quoteTileStateClass(buyButtonDirection, brokerQuoteReady) + ' relative min-h-[66px] border px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-shafx-accent'}>
