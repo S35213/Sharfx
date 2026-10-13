@@ -52,6 +52,17 @@ const assetNamesById = (assets) => Object.fromEntries((Array.isArray(assets) ? a
 const symbolNameById = (symbols) => Object.fromEntries((Array.isArray(symbols) ? symbols : []).map((symbol) => [String(symbol.symbolId), String(symbol.name || symbol.symbolName || symbol.symbolId)]))
 const cTraderSymbolCache = new Map()
 const CTraderSymbolCacheMs = 300000
+const cTraderSymbolCatalogCache = new Map()
+const CTraderSymbolCatalogCacheMs = 300000
+
+const loadCtraderSymbolCatalog = async ({ environment, accountId, accessToken }) => {
+  const key = [environment, String(accountId)].join(':')
+  const cached = cTraderSymbolCatalogCache.get(key)
+  if (cached && cached.expiresAt > Date.now()) return cached.symbols
+  const symbols = await getCtraderSymbols({ environment, accountId, accessToken })
+  cTraderSymbolCatalogCache.set(key, { symbols, expiresAt: Date.now() + CTraderSymbolCatalogCacheMs })
+  return symbols
+}
 
 const loadCtraderFullSymbol = async ({ environment, accountId, accessToken, symbolId }) => {
   const key = [environment, String(accountId), String(symbolId)].join(':')
@@ -92,7 +103,30 @@ const buildNormalizedReconcile = async ({ environment, accountId, accessToken, c
     }
   }))
   const instrumentsById = Object.fromEntries(fullSymbols.filter(([, symbol]) => Boolean(symbol)))
-  const symbolNames = Object.fromEntries(fullSymbols.map(([symbolId, symbol]) => [symbolId, symbol?.name || symbol?.symbolName || symbolId]))
+
+  // GetFullSymbolById can fail transiently even though the account's symbol
+  // catalogue still knows the instrument. Resolve names from that catalogue
+  // before returning a numeric ID that the chart cannot match after reload.
+  const unresolvedSymbolIds = new Set(fullSymbols
+    .filter(([symbolId, symbol]) => !symbol?.name && !symbol?.symbolName)
+    .map(([symbolId]) => String(symbolId)))
+  const catalogueSymbolNames = {}
+  if (unresolvedSymbolIds.size) {
+    try {
+      const catalogue = await loadCtraderSymbolCatalog({ environment, accountId, accessToken })
+      for (const symbol of catalogue) {
+        const symbolId = String(symbol?.symbolId || '')
+        const name = String(symbol?.name || symbol?.symbolName || '')
+        if (unresolvedSymbolIds.has(symbolId) && name) catalogueSymbolNames[symbolId] = name
+      }
+    } catch {
+      // A temporary catalogue failure should not fail account/position recovery.
+    }
+  }
+  const symbolNames = Object.fromEntries(fullSymbols.map(([symbolId, symbol]) => [
+    symbolId,
+    symbol?.name || symbol?.symbolName || catalogueSymbolNames[String(symbolId)] || symbolId,
+  ]))
   const positions = positionsRaw.map((position) => normalizePositionForApi(
     position,
     symbolNames,
