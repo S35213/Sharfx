@@ -1,10 +1,10 @@
 import React, { useState } from 'react'
-import { Activity, BellRing, ChevronDown, Crosshair, Minus, Ruler, Wrench } from 'lucide-react'
+import { Activity, BellRing, ChevronDown, Crosshair, Minus, Ruler, TrendingUp, Wrench } from 'lucide-react'
 import type { CandleTheme, ChartMode } from '../../app/chartSettings'
 import { readChartWorkspaceSettings, writeChartWorkspaceSettings } from '../../app/chartSettings'
 import type { WorkspaceTool } from './WorkspaceRail'
 
-interface Props { tool: WorkspaceTool; onToolChange: (tool: WorkspaceTool) => void; candleTheme: CandleTheme; chartMode: ChartMode }
+interface Props { tool: WorkspaceTool; onToolChange: (tool: WorkspaceTool) => void; candleTheme: CandleTheme; chartMode: ChartMode; trendVisible: boolean; onTrendToggle: () => void }
 
 const items: Array<{ id: WorkspaceTool; label: string; icon: React.ElementType; detail: string }> = [
   { id: 'cursor', label: 'Pointer', icon: Activity, detail: 'Pan and inspect' },
@@ -14,18 +14,26 @@ const items: Array<{ id: WorkspaceTool; label: string; icon: React.ElementType; 
   { id: 'alert', label: 'Price alert', icon: BellRing, detail: 'Arm an alert at a chart price' },
 ]
 
-export const MobileChartTools: React.FC<Props> = ({ tool, onToolChange, candleTheme, chartMode }) => {
+export const MobileChartTools: React.FC<Props> = ({ tool, onToolChange, candleTheme, chartMode, trendVisible, onTrendToggle }) => {
   const [open, setOpen] = useState(false)
   const active = items.find((item) => item.id === tool) ?? items[0]
   const ActiveIcon = active.icon
 
   return (
     <div className="relative z-40 border-b border-shafx-border bg-shafx-surface/75 lg:hidden">
-      <button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open} className="flex min-h-12 w-full items-center gap-2.5 px-3 text-left">
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-shafx-accent/10 text-shafx-accent"><ActiveIcon className="h-4 w-4" /></span>
-        <span className="min-w-0 flex-1"><span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-shafx-textMuted">Chart tools</span><span className="mt-0.5 block truncate text-xs font-semibold">{active.label}<span className="ml-2 text-[9px] font-normal text-shafx-textMuted">{active.detail}</span></span></span>
-        <ChevronDown className={open ? 'h-4 w-4 rotate-180 text-shafx-accent transition-transform' : 'h-4 w-4 text-shafx-textMuted transition-transform'} />
-      </button>
+      <div className="flex min-h-12 items-center gap-2 px-3 py-2">
+        <button type="button" onClick={onTrendToggle} aria-pressed={trendVisible} className={trendVisible ? 'flex min-w-0 flex-1 items-center gap-2.5 rounded-xl border border-shafx-accent/35 bg-shafx-accent/[0.09] px-2.5 py-2 text-left text-shafx-accent transition' : 'flex min-w-0 flex-1 items-center gap-2.5 rounded-xl border border-shafx-border bg-shafx-bg/80 px-2.5 py-2 text-left text-shafx-textMuted transition'}>
+          <span className={trendVisible ? 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-shafx-accent/15' : 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-shafx-surface'}>
+            <TrendingUp className="h-4 w-4" />
+          </span>
+          <span className="min-w-0 flex-1"><span className="block text-[10px] font-semibold uppercase tracking-[0.14em]">Trend</span><span className="mt-0.5 block truncate text-[9px] font-normal opacity-75">Support · Resistance · Liquidity</span></span>
+          <span className={trendVisible ? 'rounded-full bg-shafx-accent px-2 py-1 text-[8px] font-bold text-white' : 'rounded-full border border-shafx-border px-2 py-1 text-[8px] font-bold'}>{trendVisible ? 'ON' : 'OFF'}</span>
+        </button>
+        <button type="button" onClick={() => setOpen((value) => !value)} aria-label={open ? 'Close chart tools' : 'Open chart tools'} aria-expanded={open} className="flex h-10 w-10 shrink-0 items-center justify-center gap-1 rounded-xl border border-shafx-border bg-shafx-bg text-shafx-textMuted">
+          <ActiveIcon className="h-4 w-4" />
+          <ChevronDown className={open ? 'h-3 w-3 rotate-180 transition-transform' : 'h-3 w-3 transition-transform'} />
+        </button>
+      </div>
 
       {open && (
         <div className="border-t border-shafx-border bg-shafx-bg p-2.5">
