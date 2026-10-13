@@ -73,10 +73,10 @@ interface MarkerGroup {
 }
 
 /**
- * SHAFX trade map: the opening arrow points to the candle in which an execution
- * started; a compact OUT marker points to the candle in which a closed trade
- * finished. Exact open-position entry/SL/TP prices remain separate native price
- * lines, so markers add time context without pretending to be exact price levels.
+ * SHAFX trade map for completed trades: the entry arrow gives time context and
+ * a compact OUT marker points to the candle in which a trade finished. An open
+ * position uses exact entry/SL/TP price lines instead of a candle-edge arrow that
+ * can visually appear detached from the true entry price.
  */
 export const buildTradeChartMarkers = (
   candles: readonly CandleTimeLike[],
@@ -97,7 +97,7 @@ export const buildTradeChartMarkers = (
 
   for (const trade of trades) {
     const entryTime = candleAtTradeTime(trade.openTime, candles, timeframe)
-    if (entryTime !== null && Number.isFinite(trade.entryPrice) && trade.entryPrice > 0) {
+    if (trade.status === 'closed' && entryTime !== null && Number.isFinite(trade.entryPrice) && trade.entryPrice > 0) {
       const isBuy = trade.side === 'BUY'
       const lots = Number.isFinite(trade.volume) && trade.volume > 0 ? trade.volume.toFixed(2) : ''
       const text = [trade.side, lots].filter(Boolean).join(' ')

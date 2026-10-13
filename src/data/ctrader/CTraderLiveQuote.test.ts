@@ -8,6 +8,7 @@ import {
   normalizeCTraderHistoricalCandles,
   shouldNotifyCTraderQuoteListener,
   shouldRepairCTraderHistoryForGap,
+  getRecentCTraderCandleGapSignature,
 } from './CTraderLiveQuote'
 
 const candle = (time: number, open = 1.1, high = 1.12, low = 1.09, close = 1.11) => ({
@@ -177,6 +178,28 @@ describe('cTrader chart timestamps', () => {
 
 
 describe('cTrader history gap recovery', () => {
+  it('detects a recent missing intraday candle and creates a stable backfill signature', () => {
+    const start = 1_791_547_200
+    const bars = [
+      candle(start, 1.1, 1.101, 1.099, 1.1005),
+      candle(start + 300, 1.1005, 1.1015, 1.1002, 1.101),
+      candle(start + 900, 1.101, 1.102, 1.1007, 1.1017),
+      candle(start + 1200, 1.1017, 1.1022, 1.1011, 1.102),
+    ]
+    expect(getRecentCTraderCandleGapSignature(bars, 'M5')).toBe(String(start + 300) + ':' + String(start + 900))
+  })
+
+  it('does not classify long market closures or higher-timeframe gaps as missing intraday bars', () => {
+    const start = 1_791_547_200
+    const bars = [
+      candle(start, 1.1, 1.101, 1.099, 1.1005),
+      candle(start + 60, 1.1005, 1.1015, 1.1002, 1.101),
+      candle(start + 86400, 1.101, 1.102, 1.1007, 1.1017),
+    ]
+    expect(getRecentCTraderCandleGapSignature(bars, 'M1')).toBeNull()
+    expect(getRecentCTraderCandleGapSignature(bars, 'H1')).toBeNull()
+  })
+
   it('requests broker history when live quotes skip one or more candle buckets', () => {
     const lastM1 = 1_791_547_200
     expect(shouldRepairCTraderHistoryForGap(lastM1, lastM1 + 60, 'M1')).toBe(false)

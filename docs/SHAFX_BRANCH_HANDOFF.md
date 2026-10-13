@@ -541,3 +541,12 @@ Scope remains the experimental branch `test/rebuild-deriv-native-manual-20260930
 - Fixed the existing cTrader ticket render-purity lint error by deriving quote age from the state-backed clock, synchronized on receipt and on the one-second clock. No order logic changed.
 
 Verification notes: code/build/tests must be checked for this commit. Authenticated visual inspection still requires a signed-in browser; the previous attempt could not start because TinyFish browser automation credit was exhausted. Do not claim visual acceptance until the account's existing position has been inspected without opening or closing trades. Keep PR #58 experimental; do not merge into `main` or promote Cloudflare.
+
+
+## Next chart pass — 2026-10-13 (mobile screenshot follow-up)
+
+- The user confirmed the open position is the same trade previously shown by the green `BUY 0.02` candle marker and `OPEN +$...` entry line.
+- The entry arrow was misleading because chart markers sit above/below candles, not at exact execution prices. Open trades now use exact entry/P&L and SL/TP price lines; closed historical entries retain arrows.
+- While an open matching position exists, hide auto-generated support/resistance/liquidity from the chart itself so entry, SL, TP, Bid and Ask get first priority. Keep analysis panels available; never alter broker prices.
+- Keep the live candle at the right edge when following real-time. Recent small intraday history holes should request cTrader history backfill, never synthetic OHLC.
+- User screenshot acceptance is still required after deployment. No trade placement/closure or provider-account mutation; don't touch sibling Render services, main, or Cloudflare production.

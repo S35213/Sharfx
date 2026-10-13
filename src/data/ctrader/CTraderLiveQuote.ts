@@ -276,6 +276,36 @@ export const shouldRepairCTraderHistoryForGap = (
 }
 
 /**
+ * Stable signature for small, recent intraday holes in broker history. This
+ * allows a broker-history refresh without fabricating flat candles or treating
+ * ordinary daily/weekly session gaps as missing bars.
+ */
+export const getRecentCTraderCandleGapSignature = (
+  candles: readonly OHLCV[],
+  timeframe: Timeframe,
+): string | null => {
+  if (!['M1', 'M5', 'M15', 'M30'].includes(timeframe)) return null
+  const ordered = normalizeCTraderHistoricalCandles(candles)
+  if (ordered.length < 3) return null
+
+  const interval = CTRADER_TIMEFRAME_SECONDS[timeframe]
+  const recentStart = ordered[ordered.length - 1].time - interval * 48
+  const gaps: string[] = []
+  for (let index = 1; index < ordered.length; index += 1) {
+    const previous = ordered[index - 1]
+    const next = ordered[index]
+    if (next.time < recentStart) continue
+    const distance = next.time - previous.time
+    // Two- or three-bucket jumps can mean one or two missing bars. Ignore
+    // larger jumps, which are more likely market/session closures.
+    if (distance > interval + 1 && distance <= interval * 3 + 1) {
+      gaps.push(String(previous.time) + ':' + String(next.time))
+    }
+  }
+  return gaps.length ? gaps.join('|') : null
+}
+
+/**
  * Apply one accepted broker bid tick to the forming candle.
  *
  * Bid is the OHLC candle source, like an OTC FX chart in MT5. Ask remains a

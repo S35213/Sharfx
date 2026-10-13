@@ -487,6 +487,14 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     renderedDataLengthRef.current = visualData.length
   }, [visualData, symbol, timeframe, chartMode, pipSize])
 
+  // When following live data, keep the latest candle at the right edge after a
+  // quote update. Do not override a deliberate manual pan into chart history.
+  useLayoutEffect(() => {
+    const chart = chartRef.current
+    if (!chart || isViewingHistory || chartInteractionRef.current || !followRealtimeRef.current) return
+    chart.timeScale().scrollToRealTime()
+  }, [chartTimeSignature, lastClose, isViewingHistory])
+
   /*
    * Presentation changes are separate from data updates. This prevents quote
    * ticks from repeatedly re-applying series options while the user is trying
@@ -610,23 +618,13 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
           .filter((price): price is number => Number.isFinite(price) && Number(price) > 0)
           .map((price) => series.priceToCoordinate(Number(price)))
       : []
-    // Hide secondary levels when the live quote reaches their pixel row. The
-    // wider restore threshold prevents rapid show/hide flicker at crossings.
-    const hiddenTradeLineIds = new Set<string>()
-    tradeLines.forEach((line) => {
-      const id = line.id.toLowerCase()
-      const isCurrentExit = id.endsWith('-current')
-      const wasHidden = structuralOcclusionRef.current.get(line.id) === true
-      const isHidden = !isCurrentExit && isPriceLevelOccludedByQuote(
-        series.priceToCoordinate(line.price),
-        quoteYs,
-        wasHidden ? 12 : 7,
-      )
-      structuralOcclusionRef.current.set(line.id, isHidden)
-      if (isHidden) hiddenTradeLineIds.add(line.id)
-    })
+    // Keep true broker entry, SL and TP visible at all times. Analysis overlays
+    // are secondary and should never hide real trade levels near a live quote.
+    const hasOpenPosition = tradeLines.some((line) =>
+      line.id.toLowerCase().endsWith('-entry') && line.label.trim().toUpperCase().startsWith('OPEN '),
+    )
     const tradeLineYs = tradeLines
-      .filter((line) => !hiddenTradeLineIds.has(line.id) && !line.id.toLowerCase().endsWith('-current'))
+      .filter((line) => !line.id.toLowerCase().endsWith('-current'))
       .filter((line) => Number.isFinite(line.price) && line.price > 0)
       .map((line) => series.priceToCoordinate(line.price))
     const occludingLevelYs = [...quoteYs, ...tradeLineYs]
@@ -719,9 +717,11 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
 
     annotations.forEach((annotation) => {
       const structuralKind = structuralOverlayKind(annotation)
-      if (structuralKind && isStructuralOccluded(annotation)) {
-        return
-      }
+      // Support/resistance/liquidity are analytical context, not broker protection.
+      // While a real position is open, hide these auto-overlays on the chart so
+      // entry, SL, TP, Bid and Ask remain the visual priority.
+      if (hasOpenPosition && structuralKind) return
+      if (structuralKind && isStructuralOccluded(annotation)) return
       const id = annotation.id.toLowerCase()
       const lineStyle: 0 | 1 | 2 = structuralKind === 'liquidity' ? 1
         : structuralKind || isStop(id) ? 2
@@ -735,12 +735,6 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     // Trade entry/exit/SL/TP, user levels and alerts remain separate from structure.
     tradeLines.forEach((line) => {
       const id = line.id.toLowerCase()
-      if (hiddenTradeLineIds.has(line.id)) {
-        // Keep the centered entry/P&L readout available while suppressing its
-        // line at the quote crossing; stop/target labels hide with their lines.
-        if (id.endsWith('-entry') && line.label.trim().toUpperCase().startsWith('OPEN ')) labelCandidates.push(line)
-        return
-      }
       const lineStyle: 0 | 1 | 2 = isStop(id) || id.endsWith('-current') ? 2 : isTarget(id) ? 0 : id.includes('entry') ? 1 : 0
       const title = shortTitle(line) + ' ' + line.price.toFixed(pricePrecision)
       // Each trade line has one custom in-chart label. Disable the native axis tag to prevent duplicate prices.

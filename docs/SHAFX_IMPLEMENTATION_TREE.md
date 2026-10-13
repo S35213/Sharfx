@@ -294,3 +294,12 @@ Scope remains the experimental branch `test/rebuild-deriv-native-manual-20260930
 - Fixed the existing cTrader ticket render-purity lint error by deriving quote age from the state-backed clock, synchronized on receipt and on the one-second clock. No order logic changed.
 
 Verification notes: code/build/tests must be checked for this commit. Authenticated visual inspection still requires a signed-in browser; the previous attempt could not start because TinyFish browser automation credit was exhausted. Do not claim visual acceptance until the account's existing position has been inspected without opening or closing trades. Keep PR #58 experimental; do not merge into `main` or promote Cloudflare.
+
+
+## Chart declutter and candle-gap recovery — 2026-10-13
+
+- While a matching broker position is open, automatic support/resistance/liquidity overlays are hidden from the chart canvas while the separate analysis panels remain available. Broker entry, stop-loss, take-profit, and live Bid/Ask retain priority; actual broker protection prices are not altered or hidden near a quote.
+- Open trades no longer get a candle-edge BUY/SELL arrow that can appear detached from the exact entry price. Their true entry/P&L line is shown instead; completed historical trades retain their time markers.
+- When following live data, the chart scrolls to the latest bar after accepted candle updates without changing zoom or overriding an intentional history pan.
+- Recent small intraday gaps in cTrader candle history trigger a broker-history refresh. SHAFX does not fabricate flat candles; if the broker still omits a timestamp, the missing bar remains honest.
+- Keep the experiment on `test/rebuild-deriv-native-manual-20260930`; do not merge into main or promote Cloudflare production. Visual screenshot acceptance is still required after deployment.

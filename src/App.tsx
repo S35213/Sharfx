@@ -38,7 +38,7 @@ import { normalizeProviderSymbol, providerSymbolsMatch } from './lib/normalizePr
 import type { SetupCandidate } from './engine/setup/types'
 import { mockWatchlist } from './data/mock/watchlist'
 import { fetchDerivActiveForexSymbols, fetchDerivMultiTimeframeCandles, subscribeDerivForexQuotes } from './data/deriv/DerivPublicMarketFeed'
-import { applyCTraderQuoteToCandles, cTraderQuoteBucket, fetchCTraderHistoricalCandles, isCTraderQuoteBucketCurrent, mergeCTraderHistoricalAndLiveCandles, shouldRepairCTraderHistoryForGap, subscribeCTraderLiveQuote } from './data/ctrader/CTraderLiveQuote'
+import { applyCTraderQuoteToCandles, cTraderQuoteBucket, fetchCTraderHistoricalCandles, getRecentCTraderCandleGapSignature, isCTraderQuoteBucketCurrent, mergeCTraderHistoricalAndLiveCandles, shouldRepairCTraderHistoryForGap, subscribeCTraderLiveQuote } from './data/ctrader/CTraderLiveQuote'
 
 const positivePrice = (...values: unknown[]): number | null => {
   for (const value of values) {
@@ -944,6 +944,7 @@ const TerminalContent: React.FC = () => {
     let cancelled = false
     let historyRepairInFlight = false
     let lastHistoryRepairAt = 0
+    let lastHistoryGapRepairSignature = ''
     const subscriptionSymbol = selectedSymbol
     const historyRepairKeyFor = (targetTimeframe: Timeframe): string => [
       String(selection.connectionId),
@@ -1041,6 +1042,8 @@ const TerminalContent: React.FC = () => {
       const candleBucketIsCurrent = isCTraderQuoteBucketCurrent(bucket, last?.time)
       const skippedCandleBucket = candleBucketIsCurrent &&
         shouldRepairCTraderHistoryForGap(last?.time, bucket, subscriptionTimeframe)
+      const recentGapSignature = getRecentCTraderCandleGapSignature(currentCandles, subscriptionTimeframe)
+      const newlyDetectedHistoryGap = Boolean(recentGapSignature && recentGapSignature !== lastHistoryGapRepairSignature)
 
       if (candleBucketIsCurrent && (update.pricesChanged || update.quoteClockAdvanced || update.resumed)) {
         // Candle OHLC is bid-based. Preserve the forming candle's open and use
@@ -1054,8 +1057,14 @@ const TerminalContent: React.FC = () => {
           setLiveCandles(nextCandles)
         }
       }
-      if (update.resumed) void repairSkippedCandles(subscriptionTimeframe, true)
-      else if (skippedCandleBucket) void repairSkippedCandles(subscriptionTimeframe)
+      if (update.resumed) {
+        void repairSkippedCandles(subscriptionTimeframe, true)
+      } else if (newlyDetectedHistoryGap && recentGapSignature) {
+        lastHistoryGapRepairSignature = recentGapSignature
+        void repairSkippedCandles(subscriptionTimeframe)
+      } else if (skippedCandleBucket) {
+        void repairSkippedCandles(subscriptionTimeframe)
+      }
 
       latestCTraderPriceRef.current = price
       const quoteIdentity = [

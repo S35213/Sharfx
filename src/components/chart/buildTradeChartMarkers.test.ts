@@ -20,16 +20,8 @@ const trade = (overrides: Partial<TradeChartMarker> = {}): TradeChartMarker => (
 })
 
 describe('SHAFX trade chart markers', () => {
-  it('marks the candle where a real trade opened with a directional entry arrow', () => {
-    const markers = buildTradeChartMarkers(candles, [trade()], 'M1')
-    expect(markers).toHaveLength(1)
-    expect(markers[0]).toMatchObject({
-      time: baseTime,
-      position: 'belowBar',
-      shape: 'arrowUp',
-      text: 'BUY 0.02',
-      color: '#22D3A5',
-    })
+  it('uses the exact entry-price line rather than a candle-edge arrow for an open position', () => {
+    expect(buildTradeChartMarkers(candles, [trade()], 'M1')).toEqual([])
   })
 
   it('shows SELL entries and exit markers for closed trades', () => {
@@ -50,8 +42,8 @@ describe('SHAFX trade chart markers', () => {
 
   it('groups same-direction entries on the same candle to avoid label pile-ups', () => {
     const markers = buildTradeChartMarkers(candles, [
-      trade({ id: 'one' }),
-      trade({ id: 'two', openTime: new Date((baseTime + 25) * 1000).toISOString() }),
+      trade({ id: 'one', status: 'closed' }),
+      trade({ id: 'two', status: 'closed', openTime: new Date((baseTime + 25) * 1000).toISOString() }),
     ], 'M1')
     expect(markers).toHaveLength(1)
     expect(markers[0].text).toBe('BUY ×2')
@@ -60,7 +52,7 @@ describe('SHAFX trade chart markers', () => {
   it('does not attach a marker to an unrelated candle when the entry bucket is missing', () => {
     const sparse = [candles[0], candles[2]]
     const markers = buildTradeChartMarkers(sparse, [
-      trade({ openTime: new Date((baseTime + 75) * 1000).toISOString() }),
+      trade({ status: 'closed', openTime: new Date((baseTime + 75) * 1000).toISOString() }),
     ], 'M1')
     expect(markers).toHaveLength(0)
   })
