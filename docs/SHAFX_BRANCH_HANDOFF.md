@@ -562,3 +562,12 @@ Scope remains the experimental branch `test/rebuild-deriv-native-manual-20260930
 - Manual cTrader risk/lot and pip-distance fields start blank with visible editing affordances and **AUTO / EDIT** stop/target controls. A plan-review checkbox explicitly gates the practice BUY/SELL action; order mechanics and broker protection values are unchanged.
 
 Verification remains pending. Run lint, build and tests; verify only the correct Render service and inspect the existing open position in an authenticated session without placing or closing any trade. Keep changes on the experiment until visual acceptance; do not merge into `main` or promote Cloudflare.
+
+
+## Trend header placement and ticket follow-up — 2026-10-13
+
+Follow-up remains on the experimental branch `test/rebuild-deriv-native-manual-20260930` and Render service **Shafek Derive Render** only. The green `cTrader LIVE` badge is removed from the chart header; the Trend ON/OFF switch for support, resistance and liquidity now occupies that location. The misplaced separate Trend row is removed and the mobile Chart tools row is restored. The Deriv live-feed component remains mounted for Deriv mode.
+
+Manual ticket: BUY and SELL price tiles use one midpoint direction and complementary colors together (baseline BUY blue / SELL red; on downward ticks colors swap; they cannot both be blue or both red). Stop/Target AUTO controls are always tappable: use distance from a valid selected AI setup or defaults of 10/20 pips until one is loaded; EDIT returns to editable pip inputs. The separate review checkbox is removed. The final BUY/SELL button activates when a cTrader demo connection, fresh quotes, size input and protection distances form a valid plan; users still make an explicit final BUY/SELL tap, and selecting a side alone does not submit an order.
+
+No broker-side protection has been changed, and no trade has been opened or closed. Verification pending.
