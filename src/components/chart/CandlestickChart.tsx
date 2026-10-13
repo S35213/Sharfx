@@ -113,6 +113,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ShafxSeries | null>(null)
   const seriesConfigRef = useRef<{ chartMode: ChartMode; pipSize: number } | null>(null)
+  const tradeScalePricesRef = useRef<number[]>([])
+  const tradeScaleAppliedSignatureRef = useRef('')
   const chartData = useMemo(() => prepareData(data), [data])
   const visualData = useMemo(() => {
     if (chartMode === 'candles' || chartMode === 'bars') return chartData
@@ -375,6 +377,24 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         })
       }
 
+      // Price lines do not reliably expand the candle series' autoscale range.
+      // Include actual entry/SL/TP levels so the lines stay on-screen at their
+      // true price instead of leaving their labels stranded at the chart edge.
+      nextSeries.applyOptions({
+        autoscaleInfoProvider: (original) => {
+          const info = original()
+          const levels = tradeScalePricesRef.current
+          if (!info || levels.length === 0) return info
+          return {
+            ...info,
+            priceRange: {
+              ...info.priceRange,
+              minValue: Math.min(info.priceRange.minValue, ...levels),
+              maxValue: Math.max(info.priceRange.maxValue, ...levels),
+            },
+          }
+        },
+      })
       seriesRef.current = nextSeries
       seriesConfigRef.current = { chartMode, pipSize }
     }
@@ -486,6 +506,24 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     renderedLastTimeRef.current = lastTime
     renderedDataLengthRef.current = visualData.length
   }, [visualData, symbol, timeframe, chartMode, pipSize])
+
+  // Refit the vertical range only when the actual trade levels change (open,
+  // close, or broker-confirmed protection amendment). Floating Bid/Ask updates
+  // do not trigger repeated autoscaling and the manual price-axis drag remains
+  // available to the user between such trade-level changes.
+  useLayoutEffect(() => {
+    const protectedLines = tradeLines.filter((line) => {
+      const id = line.id.toLowerCase()
+      return !id.endsWith('-current') && Number.isFinite(line.price) && line.price > 0
+    })
+    const signature = protectedLines.map((line) => line.id + ':' + line.price).join('|')
+    if (signature === tradeScaleAppliedSignatureRef.current) return
+
+    tradeScaleAppliedSignatureRef.current = signature
+    tradeScalePricesRef.current = protectedLines.map((line) => line.price)
+    const series = seriesRef.current
+    if (series) series.priceScale().applyOptions({ autoScale: true })
+  }, [tradeLines])
 
   // When following live data, keep the latest candle at the right edge after a
   // quote update. Do not override a deliberate manual pan into chart history.
