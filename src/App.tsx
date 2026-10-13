@@ -239,6 +239,8 @@ const TerminalContent: React.FC = () => {
   const [toast, setToast] = useState<ToastMessage | null>(null)
   const [tradeLines, setTradeLines] = useState<ChartAnnotation[]>([])
   const [chartTool, setChartTool] = useState<WorkspaceTool>('cursor')
+  const [trendVisible, setTrendVisible] = useState(true)
+  const [trendRefreshVersion, setTrendRefreshVersion] = useState(0)
   const [dock, setDock] = useState<WorkspaceDock>('orders')
   const [mobileTab, setMobileTab] = useState<MobileNavTab>('market')
   const [mobileDockOpen, setMobileDockOpen] = useState(false)
@@ -1196,7 +1198,7 @@ const TerminalContent: React.FC = () => {
     .join('|'), [liveCandles])
   const chartAnnotations = useMemo(() => buildStructuralChartAnnotations(selectedSymbol, liveCandles, timeframe)
     .map((annotation) => ({ ...annotation, id: 'live-' + timeframe + '-' + annotation.id })),
-    [selectedSymbol, timeframe, structuralCandleSignature])
+    [selectedSymbol, timeframe, structuralCandleSignature, trendRefreshVersion])
 
   const selectedOpenPosition = useMemo(
     () => liveOpenPositions.find((position) =>
@@ -1381,6 +1383,11 @@ const TerminalContent: React.FC = () => {
     freeMargin: brokerAccountData.freeMargin + liveFloatingPnlAdjustment,
   }
 
+  const handleTrendToggle = (): void => {
+    setTrendVisible((visible) => !visible)
+    setTrendRefreshVersion((version) => version + 1)
+  }
+
   const handleReviewSetup = useCallback((setup?: SetupCandidate | null): void => {
     setReviewSetup(setup || null)
     setMobileTab('chat')
@@ -1494,7 +1501,7 @@ const TerminalContent: React.FC = () => {
              ))}
              <span className="ml-auto hidden rounded-lg border border-shafx-border bg-shafx-bg px-2 py-1 font-mono text-[8px] text-shafx-textMuted md:inline">{timeframe}</span>
            </div>
-           <MobileChartTools tool={chartTool} onToolChange={setChartTool} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} />
+           <MobileChartTools tool={chartTool} onToolChange={setChartTool} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} trendVisible={trendVisible} onTrendToggle={handleTrendToggle} />
            <div
              className="shafx-chart-stage relative min-h-0 p-1 sm:p-2 lg:flex-1"
              data-shafx-open-position-count={liveOpenPositions.filter((position) => position.status === 'open').length}
@@ -1508,7 +1515,7 @@ const TerminalContent: React.FC = () => {
                    ? 'cTrader reports an open position, but its instrument name could not be resolved yet. SHAFX is withholding entry / SL / TP lines rather than plotting them on the wrong chart.'
                    : 'An open cTrader position is on ' + [...new Set(openPositionsOnOtherSymbols.map((position) => position.symbol))].join(', ') + '. Select that instrument to view its entry / SL / TP lines.'}
                </div>}
-             <CandlestickChart data={liveCandles} symbol={selectedSymbol} timeframe={timeframe} annotations={chartAnnotations} tradeLines={combinedTradeLines} tradeMarkers={chartTradeMarkers} bidPrice={chartBidPrice} askPrice={chartAskPrice} quoteReady={chartQuoteReady} toolMode={chartToolMode} pipSize={symbolSpec.pipSize} onToolNotice={pushToast} showGrid={chartSettings.showGrid} showPriceLabels={chartSettings.showPriceLabels} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} marketTimestamp={marketTimestamp} onTimeframeChange={handleTimeframeChange} replayMode={false} />
+             <CandlestickChart data={liveCandles} symbol={selectedSymbol} timeframe={timeframe} annotations={trendVisible ? chartAnnotations : []} tradeLines={combinedTradeLines} tradeMarkers={chartTradeMarkers} bidPrice={chartBidPrice} askPrice={chartAskPrice} quoteReady={chartQuoteReady} toolMode={chartToolMode} pipSize={symbolSpec.pipSize} onToolNotice={pushToast} showGrid={chartSettings.showGrid} showPriceLabels={chartSettings.showPriceLabels} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} marketTimestamp={marketTimestamp} onTimeframeChange={handleTimeframeChange} replayMode={false} />
              {liveCandles.length === 0 && <div role="status" aria-live="polite" className="pointer-events-none absolute inset-0 z-40 flex min-h-[320px] items-center justify-center bg-shafx-bg/80 text-sm text-shafx-textMuted">Waiting for the live market stream…</div>}
            </div>
           <div className="shafx-landscape-secondary grid grid-cols-2 gap-2 border-t border-shafx-border bg-shafx-surface/55 p-2 sm:grid-cols-4">
