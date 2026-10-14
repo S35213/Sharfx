@@ -675,6 +675,10 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       const explicitLabel = annotation.label.trim().toUpperCase()
       if (explicitLabel.includes('UNCONFIRMED')) return explicitLabel
       if (/\b\d+ TRADES\b/.test(explicitLabel)) return explicitLabel
+      // Multi-timeframe zones already have a compact source-aware label
+      // (for example "H4 RES · H1 BSL"). Preserve it instead of repeating
+      // the long generic concept title for every timeframe's merged level.
+      if (annotation.id.toLowerCase().startsWith('mtf-zone-')) return explicitLabel
       const ids = annotation.id.toLowerCase().split('+')
       const labels: string[] = []
       if (ids.some((id) => id.includes('support'))) labels.push('SUPPORT')
