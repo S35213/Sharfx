@@ -400,6 +400,23 @@ export const normalizeCtraderInstrument = (symbol) => {
   }
 }
 
+/**
+ * cTrader ProtoOA relative SL/TP distances are encoded as 1/100000 of a
+ * price unit. This conversion is independent of the broker's display digits.
+ */
+export const ctraderRelativeDistanceUnits = (entryPrice, protectionPrice) => {
+  const entry = Number(entryPrice)
+  const level = Number(protectionPrice)
+  if (!Number.isFinite(entry) || entry <= 0 || !Number.isFinite(level) || level <= 0) {
+    throw new Error('A valid entry and protection price are required for cTrader relative SL/TP.')
+  }
+  const units = Math.round(Math.abs(entry - level) * 100000)
+  if (!Number.isSafeInteger(units) || units < 1) {
+    throw new Error('cTrader relative SL/TP distance must be at least one protocol unit.')
+  }
+  return units
+}
+
 export const ctraderLotsToProtocolVolume = (lots, fullSymbol) => {
   const lotSizeCents = asNumber(fullSymbol?.lotSize)
   if (!Number.isFinite(lots) || lots <= 0 || lotSizeCents <= 0) throw new Error('cTrader symbol lot size is unavailable.')
@@ -706,6 +723,8 @@ export const placeCtraderOrder = async ({ environment, accountId, accessToken, f
     // The API route amends the filled position using ProtoOAAmendPositionSLTPReq.
     ...(order.type !== 'MARKET' && order.stopLoss !== undefined ? { stopLoss: Number(order.stopLoss) } : {}),
     ...(order.type !== 'MARKET' && order.takeProfit !== undefined ? { takeProfit: Number(order.takeProfit) } : {}),
+    ...(order.type === 'MARKET' && order.relativeStopLoss !== undefined ? { relativeStopLoss: requirePositiveInt('relative stop loss distance', order.relativeStopLoss) } : {}),
+    ...(order.type === 'MARKET' && order.relativeTakeProfit !== undefined ? { relativeTakeProfit: requirePositiveInt('relative take profit distance', order.relativeTakeProfit) } : {}),
     ...(order.clientOrderId ? { clientOrderId: order.clientOrderId } : {}),
     label: 'SHAFX',
     comment: 'SHAFX manual CFD',
