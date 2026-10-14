@@ -60,6 +60,10 @@ const loadCTraderFrames = async (
   if (!source.connectionId || !source.accountId || !source.environment) {
     throw new Error(signalBotMarketSourceError(source) ?? 'A complete cTrader account selection is required.')
   }
+  // Snapshot narrowed values before they are captured by asynchronous workers.
+  const connectionId = source.connectionId
+  const accountId = source.accountId
+  const environment = source.environment
 
   const frames: Partial<Record<Timeframe, OHLCV[]>> = {}
   const errors: string[] = []
@@ -74,9 +78,9 @@ const loadCTraderFrames = async (
       if (!timeframe) return
       try {
         const candles = await fetchCTraderHistoricalCandles({
-          connectionId: source.connectionId,
-          accountId: source.accountId,
-          environment: source.environment,
+          connectionId,
+          accountId,
+          environment,
           symbol,
           timeframe,
           count: HISTORY_COUNT,
@@ -179,7 +183,6 @@ export const useSignalBotMarketData = (
         })
       } catch (error) {
         if (stopped) return
-        const previousState = state
         setState((previous) => {
           const oldFrames = previous.sourceKey === sourceKey ? previous.frames : {}
           const usable = TIMEFRAMES.some((timeframe) => (oldFrames[timeframe]?.length ?? 0) >= 8)
@@ -192,7 +195,6 @@ export const useSignalBotMarketData = (
             error: message,
           }
         })
-        void previousState
       } finally {
         inFlight = false
         if (!stopped) timer = window.setTimeout(() => { void refresh() }, REFRESH_INTERVAL_MS)
