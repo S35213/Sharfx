@@ -44,7 +44,7 @@ export const tradeBotMarketSourceError = (source: TradeBotMarketSource | null): 
     return null
   }
   if (source.providerId === 'deriv') return 'The independent Trade Bot currently supports cTrader practice accounts only. Deriv data is not used as a fallback.'
-  return \`Trade Bot is not connected to provider "\${source.providerId}". No other provider will be substituted.\`
+  return `Trade Bot is not connected to provider "${source.providerId}". No other provider will be substituted.`
 }
 
 export const tradeBotFramesForSource = (
@@ -99,7 +99,7 @@ const emptyState = (
 const shortError = (errors: string[]): string | null => {
   if (!errors.length) return null
   const shown = errors.slice(0, 2).join('; ')
-  return errors.length > 2 ? shown + \` (+\${errors.length - 2} more)\` : shown
+  return errors.length > 2 ? shown + ` (+${errors.length - 2} more)` : shown
 }
 
 /**
