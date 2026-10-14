@@ -15,7 +15,7 @@ import { FXMoveMatrix } from './components/market/FXMoveMatrix'
 import { CandlestickChart, type ChartAnnotation, type ChartToolMode } from './components/chart/CandlestickChart'
 import type { TradeChartMarker } from './components/chart/buildTradeChartMarkers'
 import { buildOpenPositionsChartLines } from './components/chart/buildPositionChartLines'
-import { buildStructuralChartAnnotations } from './components/chart/buildAIChartAnnotations'
+import { buildMultiTimeframeStructuralAnnotations } from './components/chart/buildMultiTimeframeChartAnnotations'
 import { Watchlist } from './components/watchlist/Watchlist'
 import { MarketAnalysisPanel } from './components/analysis/MarketAnalysis'
 import { AIAssistantPanel } from './components/ai/AIAssistantPanel'
@@ -471,6 +471,8 @@ const TerminalContent: React.FC = () => {
           const current = candleCacheRef.current[key] ?? []
           if (candles.length > current.length) candleCacheRef.current[key] = candles
         }
+        // Re-run an active Trend scan after multi-timeframe history becomes available.
+        setTrendRefreshVersion((version) => version + 1)
         const currentKey = selectedSymbol + ':' + timeframeRef.current
         const current = candleCacheRef.current[currentKey] ?? []
         if (current.length > 1) {
@@ -951,8 +953,13 @@ const TerminalContent: React.FC = () => {
         }
       }
     }
-    // Two workers avoid firing every broker-history request at once.
-    void Promise.all([worker(), worker()])
+    // Two workers avoid firing every broker-history request at once. Once
+    // the background histories settle, rebuild visible levels from the new cache.
+    void Promise.all([worker(), worker()]).then(() => {
+      if (!cancelled && selectedSymbolRef.current === symbol) {
+        setTrendRefreshVersion((version) => version + 1)
+      }
+    })
     return () => { cancelled = true }
   }, [activeProviderSelection?.accountId, activeProviderSelection?.connectionId, activeProviderSelection?.environment, activeProviderSelection?.providerId, selectedSymbol])
 
@@ -1215,9 +1222,39 @@ const TerminalContent: React.FC = () => {
   const structuralCandleSignature = useMemo(() => liveCandles.slice(0, -1)
     .map((candle) => [candle.time, candle.open, candle.high, candle.low, candle.close].join(':'))
     .join('|'), [liveCandles])
-  const chartAnnotations = useMemo(() => buildStructuralChartAnnotations(selectedSymbol, liveCandles, timeframe)
-    .map((annotation) => ({ ...annotation, id: 'live-' + timeframe + '-' + annotation.id })),
-    [selectedSymbol, timeframe, structuralCandleSignature, trendRefreshVersion])
+  // Snapshot every available candle interval so Trend scans source-specific structure,
+  // not one timeframe's swings reused on a different chart.
+  const structuralHistories = useMemo<Partial<Record<Timeframe, OHLCV[]>>>(() => {
+    const histories: Partial<Record<Timeframe, OHLCV[]>> = {}
+    for (const sourceTimeframe of TIMEFRAMES) {
+      let sourceCandles: OHLCV[] = []
+      if (activeProviderSelection?.providerId === 'ctrader' && activeProviderSelection.connectionId && activeProviderSelection.accountId) {
+        const sourceKey = [
+          String(activeProviderSelection.connectionId),
+          String(activeProviderSelection.accountId),
+          activeProviderSelection.environment,
+          selectedSymbol,
+          sourceTimeframe,
+        ].join(':')
+        sourceCandles = cTraderCandleCacheRef.current[sourceKey]
+          ?? candleCacheRef.current[`${selectedSymbol}:${sourceTimeframe}`]
+          ?? []
+      } else {
+        sourceCandles = candleCacheRef.current[`${selectedSymbol}:${sourceTimeframe}`] ?? []
+      }
+      histories[sourceTimeframe] = sourceCandles
+    }
+
+    // The active series is authoritative for the selected interval, including
+    // the latest broker/live updates that may not yet be copied into its cache.
+    histories[timeframe] = liveCandles
+    return histories
+  }, [activeProviderSelection, selectedSymbol, timeframe, structuralCandleSignature, trendRefreshVersion])
+
+  const chartAnnotations = useMemo(
+    () => buildMultiTimeframeStructuralAnnotations(selectedSymbol, timeframe, structuralHistories),
+    [selectedSymbol, timeframe, structuralHistories],
+  )
 
   const selectedOpenPosition = useMemo(
     () => liveOpenPositions.find((position) =>
