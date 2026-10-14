@@ -838,11 +838,15 @@ export const normalizeCtraderOrder = (event) => {
   const deal = asObject(payload.deal)
   const tradeData = asObject(item.tradeData)
   const positionTradeData = asObject(position.tradeData)
-  const statusMap = { 1: 'accepted', 2: 'accepted', 3: 'filled', 4: 'rejected', 5: 'cancelled', 6: 'cancelled', 7: 'rejected', 8: 'rejected', 11: 'accepted' }
+  // ProtoOAOrder.orderStatus and ProtoOAExecutionEvent.executionType are
+  // separate enums. Keep their numeric codes separate: orderStatus=3 is REJECTED,
+  // while executionType=3 means ORDER_FILLED.
+  const orderStatusMap = { 1: 'accepted', 2: 'filled', 3: 'rejected', 4: 'cancelled', 5: 'cancelled' }
+  const executionTypeMap = { 2: 'accepted', 3: 'filled', 4: 'accepted', 5: 'cancelled', 6: 'cancelled', 7: 'rejected', 8: 'accepted', 11: 'accepted' }
   const executionType = Number(payload.executionType)
   const status = item.orderStatus != null
-    ? (statusMap[Number(item.orderStatus)] || 'pending')
-    : (statusMap[executionType] || 'pending')
+    ? (orderStatusMap[Number(item.orderStatus)] || 'pending')
+    : (executionTypeMap[executionType] || 'pending')
   const providerOrderId = String(item.orderId || deal.orderId || '')
   const positionId = String(
     position.positionId ??
