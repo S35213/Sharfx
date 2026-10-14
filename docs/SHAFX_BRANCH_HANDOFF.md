@@ -627,3 +627,9 @@ On the experimental branch `test/rebuild-deriv-native-manual-20260930` and the R
 - Render had not activated the implementation commit; last known live deployment remained `dep-db7ku0m7bikc73d50r0g` while the failed build was investigated.
 - User clarified acceptance behavior: higher timeframe charts must not inherit lower timeframe S/R/liquidity while zoomed in; levels stay tied to their timeframe and additional higher-timeframe context appears only after zooming out. Trend must actually hide/show the structural overlays. Trade levels must remain unaffected.
 - Automated build/tests and authenticated visual verification of the repaired commit are pending. Keep changes on the experimental branch; do not merge to `main` or promote Cloudflare production.
+
+
+## Verification update — 2026-10-14
+
+- Commit `c6a2c53f4d5c7c221ae13d6362d6bbc7e0c9f78f` is LIVE on the correct Render service. Build and lint passed. The first test run found one failing newly-added assertion caused by an over-escaped whitespace regular expression in the test itself; the assertion is being simplified to a `startsWith('M5 ')` check and the suite is being rerun.
+- Authenticated visual verification of zoom tiers and the Trend on/off control is still pending. Keep this on the experimental branch.

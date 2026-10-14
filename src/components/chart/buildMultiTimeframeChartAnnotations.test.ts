@@ -80,7 +80,7 @@ describe('buildMultiTimeframeStructuralAnnotations', () => {
   it('shows only the selected timeframe when zoomed in, then progressively adds higher intervals', () => {
     const focused = buildMultiTimeframeStructuralAnnotations('EUR/USD', 'M5', alignedHistoryByTimeframe, 80)
     expect(focused.length).toBeGreaterThan(0)
-    expect(focused.every((item) => /^M5\\s/.test(item.label))).toBe(true)
+    expect(focused.every((item) => item.label.startsWith('M5 '))).toBe(true)
 
     const zoomedOut = buildMultiTimeframeStructuralAnnotations('EUR/USD', 'M5', alignedHistoryByTimeframe, 160)
     expect(zoomedOut.some((item) => item.label.includes('H1'))).toBe(true)
