@@ -390,6 +390,12 @@ export const normalizeCtraderInstrument = (symbol) => {
       quoteAssetId: String(item.quoteAssetId || ''),
       digits: String(digits),
       pipPosition: String(item.pipPosition ?? ''),
+      // Broker minimum protection distances are expressed in symbol points or
+      // percentages according to distanceSetIn; the ticket only converts the
+      // points-based form to pips and otherwise leaves broker validation in charge.
+      slDistance: String(item.slDistance ?? ''),
+      tpDistance: String(item.tpDistance ?? ''),
+      distanceSetIn: String(item.distanceSetIn ?? ''),
     },
   }
 }
