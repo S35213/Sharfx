@@ -2,10 +2,28 @@ import { describe, expect, it } from 'vitest'
 import {
   ctraderLotsToProtocolVolume,
   ctraderProtocolVolumeToLots,
+  ctraderRelativeDistanceUnits,
   normalizeCtraderInstrument,
   normalizeCtraderOrder,
   normalizeCtraderPosition,
 } from './ctrader.js'
+
+describe('cTrader relative SL/TP distance encoding', () => {
+  it('encodes FX pip distances in 1/100000 price units', () => {
+    expect(ctraderRelativeDistanceUnits(1.12, 1.1198)).toBe(20)
+    expect(ctraderRelativeDistanceUnits(1.12, 1.1204)).toBe(40)
+  })
+
+  it('supports JPY pairs and absolute distance inputs in either direction', () => {
+    expect(ctraderRelativeDistanceUnits(150.12, 150.10)).toBe(2000)
+    expect(ctraderRelativeDistanceUnits(150.12, 150.14)).toBe(2000)
+  })
+
+  it('rejects invalid or sub-protocol-resolution prices', () => {
+    expect(() => ctraderRelativeDistanceUnits(0, 1.12)).toThrow(/valid entry/i)
+    expect(() => ctraderRelativeDistanceUnits(1.12, 1.120001)).toThrow(/at least one protocol unit/i)
+  })
+})
 
 describe('cTrader SHAFX normalization', () => {
   const symbol = {
