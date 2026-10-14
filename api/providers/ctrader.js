@@ -581,8 +581,8 @@ const handlePost = async (req, res, user, body) => {
           const actualTakeProfit = finitePositivePrice(verifiedPosition?.takeProfit)
           throw new Error(
             'cTrader did not confirm the relative protection attached to the market order. ' +
-            'Requested distances: SL ' + (requestedStopUnits === null ? 'not set' : (requestedStopUnits / 10).toFixed(1) + ' points') +
-            ', TP ' + (requestedTargetUnits === null ? 'not set' : (requestedTargetUnits / 10).toFixed(1) + ' points') +
+            'Requested relative distances: SL ' + (requestedStopUnits === null ? 'not set' : (requestedStopUnits / 100000).toFixed(5) + ' price units') +
+            ', TP ' + (requestedTargetUnits === null ? 'not set' : (requestedTargetUnits / 100000).toFixed(5) + ' price units') +
             '; broker reports SL ' + (actualStopLoss ?? 'missing') + ', TP ' + (actualTakeProfit ?? 'missing') +
             '. Check the actual position in cTrader before relying on these levels.',
           )
