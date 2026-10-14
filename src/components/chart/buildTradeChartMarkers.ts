@@ -69,14 +69,14 @@ interface MarkerGroup {
   marker: SeriesMarker<UTCTimestamp>
   count: number
   firstText: string
+  texts: string[]
   key: string
 }
 
 /**
- * SHAFX trade map for completed trades: the entry arrow gives time context and
- * a compact OUT marker points to the candle in which a trade finished. An open
- * position uses exact entry/SL/TP price lines instead of a candle-edge arrow that
- * can visually appear detached from the true entry price.
+ * Keep an entry arrow on the original candle for both open and completed trades.
+ * This provides stable time context alongside the exact entry/SL/TP price lines.
+ * Closed trades also get a compact OUT marker at their exit candle.
  */
 export const buildTradeChartMarkers = (
   candles: readonly CandleTimeLike[],
@@ -90,14 +90,15 @@ export const buildTradeChartMarkers = (
     const current = groups.get(key)
     if (current) {
       current.count += 1
+      current.texts.push(marker.text || '')
       return
     }
-    groups.set(key, { marker, count: 1, firstText: marker.text || '', key })
+    groups.set(key, { marker, count: 1, firstText: marker.text || '', texts: [marker.text || ''], key })
   }
 
   for (const trade of trades) {
     const entryTime = candleAtTradeTime(trade.openTime, candles, timeframe)
-    if (trade.status === 'closed' && entryTime !== null && Number.isFinite(trade.entryPrice) && trade.entryPrice > 0) {
+    if ((trade.status === 'open' || trade.status === 'closed') && entryTime !== null && Number.isFinite(trade.entryPrice) && trade.entryPrice > 0) {
       const isBuy = trade.side === 'BUY'
       const lots = Number.isFinite(trade.volume) && trade.volume > 0 ? trade.volume.toFixed(2) : ''
       const text = [trade.side, lots].filter(Boolean).join(' ')
@@ -130,8 +131,16 @@ export const buildTradeChartMarkers = (
 
   return [...groups.values()]
     .sort((a, b) => Number(a.marker.time) - Number(b.marker.time) || a.key.localeCompare(b.key))
-    .map(({ marker, count, firstText, key }) => ({
-      ...marker,
-      text: count > 1 ? (key.includes(':entry:') ? firstText.split(' ')[0] + ' ×' + count : firstText + ' ×' + count) : firstText,
-    }))
+    .map(({ marker, count, firstText, texts, key }) => {
+      if (count <= 1) return { ...marker, text: firstText }
+      if (!key.includes(':entry:')) return { ...marker, text: firstText + ' ×' + count }
+
+      const side = firstText.split(' ')[0]
+      const lots = texts.map((text) => text.split(' ').slice(1).join(' ')).filter(Boolean)
+      const uniqueLots = [...new Set(lots)]
+      const text = uniqueLots.length === 1
+        ? [side, uniqueLots[0], '×' + count].filter(Boolean).join(' ')
+        : [side, lots.join(' + ')].filter(Boolean).join(' ')
+      return { ...marker, text }
+    })
 }
