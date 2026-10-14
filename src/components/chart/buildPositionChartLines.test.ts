@@ -53,6 +53,17 @@ describe('open position chart lines', () => {
     expect(lines.find(line => line.id === 'pos-1-tp')?.label).toContain('UNCONFIRMED')
   })
 
+  it('prefers broker-confirmed SL/TP over stale planned levels', () => {
+    const lines = buildOpenPositionChartLines(position({
+      stopLoss: 1.119,
+      plannedStopLossPrice: 1.1187,
+      takeProfit: 1.122,
+      plannedTakeProfitPrice: 1.1223,
+    }))
+    expect(lines.find(line => line.id === 'pos-1-sl')?.price).toBe(1.119)
+    expect(lines.find(line => line.id === 'pos-1-tp')?.price).toBe(1.122)
+  })
+
   it('does not fabricate a P/L amount when the broker has not supplied one', () => {
     const lines = buildOpenPositionChartLines(position({ profit: undefined }))
     expect(lines.find(line => line.id === 'pos-1-entry')).toMatchObject({
