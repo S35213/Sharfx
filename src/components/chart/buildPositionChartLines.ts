@@ -36,7 +36,7 @@ export const buildOpenPositionChartLines = (
   ]
 
   // A stale/empty planning value of 0 must not mask a valid broker SL.
-  const stopLossPrice = [position.plannedStopLossPrice, position.stopLoss]
+  const stopLossPrice = [position.stopLoss, position.plannedStopLossPrice]
     .map(Number)
     .find((value) => Number.isFinite(value) && value > 0)
   if (stopLossPrice !== undefined) {
@@ -51,7 +51,7 @@ export const buildOpenPositionChartLines = (
   }
 
   // Prefer a valid planned TP, then fall back to the broker's current TP.
-  const takeProfitPrice = [position.plannedTakeProfitPrice, position.takeProfit]
+  const takeProfitPrice = [position.takeProfit, position.plannedTakeProfitPrice]
     .map(Number)
     .find((value) => Number.isFinite(value) && value > 0)
   if (takeProfitPrice !== undefined) {
