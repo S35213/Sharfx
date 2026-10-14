@@ -25,6 +25,22 @@ describe('SHAFX CFD risk engine', () => {
     expect(calculatePipValuePerLot(eurGbp, 'USD', 1.25)).toBeCloseTo(12.5, 8)
   })
 
+  it('refuses a CFD plan when quote-to-account conversion is missing', () => {
+    const eurGbp = { ...eurUsd, symbol: 'EUR/GBP', quoteCurrency: 'GBP' }
+    const plan = calculateCfdRiskPlan({
+      accountBalance: 100,
+      accountCurrency: 'USD',
+      symbol: eurGbp,
+      side: 'BUY',
+      entryPrice: 0.85,
+      stopLossPrice: 0.849,
+      takeProfitPrice: 0.852,
+      riskAmount: 5,
+    })
+    expect(plan.valid).toBe(false)
+    expect(plan.error).toContain('pip-value conversion')
+  })
+
   it('sizes $5 risk with a 10 pip stop at about 0.05 lot', () => {
     expect(calculateLotSizeForRisk(5, 10, 10, eurUsd)).toBeCloseTo(0.05, 8)
   })
