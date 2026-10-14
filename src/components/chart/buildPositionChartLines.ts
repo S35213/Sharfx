@@ -105,7 +105,7 @@ export const buildOpenPositionsChartLines = (
     const unconfirmed = key.endsWith(':unconfirmed')
     result.push({
       ...first,
-      id: 'shafx-position-group-' + key.replaceAll(':', '-'),
+      id: 'shafx-position-group-' + key.replace(/:/g, '-'),
       label: kind + (unconfirmed ? ' — UNCONFIRMED' : '') + ' · ' + group.length + ' trades',
     })
   }
