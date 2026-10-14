@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { TIMEFRAMES, type OHLCV, type Timeframe } from '../../types'
 import { fetchCTraderHistoricalCandles } from '../../data/ctrader/CTraderLiveQuote'
-import { fetchDerivMultiTimeframeCandles } from '../../data/deriv/DerivPublicMarketFeed'
 
 export interface TradeBotMarketSource {
   providerId: string | null
