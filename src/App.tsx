@@ -240,7 +240,7 @@ const TerminalContent: React.FC = () => {
   const [toast, setToast] = useState<ToastMessage | null>(null)
   const [tradeLines, setTradeLines] = useState<ChartAnnotation[]>([])
   const [chartTool, setChartTool] = useState<WorkspaceTool>('cursor')
-  const [trendVisible, setTrendVisible] = useState(true)
+  const [trendVisible, setTrendVisible] = useState(false)
   const [trendRefreshVersion, setTrendRefreshVersion] = useState(0)
   const [dock, setDock] = useState<WorkspaceDock>('orders')
   const [mobileTab, setMobileTab] = useState<MobileNavTab>('market')
@@ -1250,7 +1250,7 @@ const TerminalContent: React.FC = () => {
   // are invented and trades outside the loaded history simply remain in the blotter.
   const chartTradeMarkers = useMemo<TradeChartMarker[]>(() => {
     const seen = new Set<string>()
-    const trades = [...liveOpenPositions, ...tradeHistory.slice(0, 40)]
+    const trades = [...liveOpenPositions, ...tradeHistory.slice(0, 20)]
     return trades
       .filter((trade) => providerSymbolsMatch(trade.symbol, selectedSymbol))
       .filter((trade) => {
