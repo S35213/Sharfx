@@ -418,6 +418,9 @@ export const CTraderManualTicket: React.FC<Props> = ({
           quantity: plan.lotSize,
           quantityUnit: 'lots',
           type: 'MARKET',
+          // The API converts these absolute planned levels to relative distances
+          // so cTrader anchors protection to the actual fill price.
+          entryPrice,
           stopLoss: stopLossPrice,
           takeProfit: takeProfitPrice,
           clientOrderId: 'shafx-' + crypto.randomUUID(),
@@ -438,6 +441,19 @@ export const CTraderManualTicket: React.FC<Props> = ({
             ? ((rawOrder.executedPrice ?? rawOrder.executionPrice ?? rawOrder.price ?? rawPosition.price) as number | string | undefined)
             : entryPrice),
       )
+      const filledEntryPrice = Number.isFinite(executionPrice) && executionPrice > 0 ? executionPrice : entryPrice
+      const stopDistancePrice = Number((Math.round(Math.abs(entryPrice - stopLossPrice) * 100000) / 100000).toFixed(effectiveSymbol.pricePrecision))
+      const targetDistancePrice = Number((Math.round(Math.abs(takeProfitPrice - entryPrice) * 100000) / 100000).toFixed(effectiveSymbol.pricePrecision))
+      const brokerStopPrice = Number(rawPosition.stopLoss)
+      const brokerTargetPrice = Number(rawPosition.takeProfit)
+      const plannedStopAtFill = side === 'BUY' ? filledEntryPrice - stopDistancePrice : filledEntryPrice + stopDistancePrice
+      const plannedTargetAtFill = side === 'BUY' ? filledEntryPrice + targetDistancePrice : filledEntryPrice - targetDistancePrice
+      const effectiveStopLossPrice = Number.isFinite(brokerStopPrice) && brokerStopPrice > 0
+        ? brokerStopPrice
+        : Number(plannedStopAtFill.toFixed(effectiveSymbol.pricePrecision))
+      const effectiveTakeProfitPrice = Number.isFinite(brokerTargetPrice) && brokerTargetPrice > 0
+        ? brokerTargetPrice
+        : Number(plannedTargetAtFill.toFixed(effectiveSymbol.pricePrecision))
       const trade: TradeOrder = {
         // cTrader close/amend operations require the broker positionId, not the orderId.
         id: positionId || providerOrderId,
@@ -445,15 +461,15 @@ export const CTraderManualTicket: React.FC<Props> = ({
         type: side,
         lotSize: plan.lotSize,
         volumeLots: plan.lotSize,
-        entryPrice: Number.isFinite(executionPrice) && executionPrice > 0 ? executionPrice : entryPrice,
-        currentPrice: Number.isFinite(executionPrice) && executionPrice > 0 ? executionPrice : entryPrice,
-        pnlReferencePrice: Number.isFinite(executionPrice) && executionPrice > 0 ? executionPrice : entryPrice,
+        entryPrice: filledEntryPrice,
+        currentPrice: filledEntryPrice,
+        pnlReferencePrice: filledEntryPrice,
         pnlReferenceProfit: 0,
         pnlPipSize: effectiveSymbol.pipSize,
-        stopLoss: stopLossPrice,
-        takeProfit: takeProfitPrice,
-        plannedStopLossPrice: stopLossPrice,
-        plannedTakeProfitPrice: takeProfitPrice,
+        stopLoss: effectiveStopLossPrice,
+        takeProfit: effectiveTakeProfitPrice,
+        plannedStopLossPrice: effectiveStopLossPrice,
+        plannedTakeProfitPrice: effectiveTakeProfitPrice,
         riskPercent: accountBalance > 0 ? (plan.estimatedLossAtStop / accountBalance) * 100 : 0,
         riskAmount: plan.estimatedLossAtStop,
         rewardAmount: plan.estimatedRewardAtTarget,
