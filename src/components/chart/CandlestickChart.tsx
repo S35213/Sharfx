@@ -660,6 +660,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     const shortTitle = (annotation: ChartAnnotation | UserLevel): string => {
       const explicitLabel = annotation.label.trim().toUpperCase()
       if (explicitLabel.includes('UNCONFIRMED')) return explicitLabel
+      if (/\b\d+ TRADES\b/.test(explicitLabel)) return explicitLabel
       const ids = annotation.id.toLowerCase().split('+')
       const labels: string[] = []
       if (ids.some((id) => id.includes('support'))) labels.push('SUPPORT')
