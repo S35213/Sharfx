@@ -67,9 +67,10 @@ export const getPipDistance = (priceA: number, priceB: number, pipSize: number):
  * the quote currency is not the account currency. This avoids silently
  * pretending every FX pair is USD-quoted.
  */
-export const calculatePipValuePerLot = (symbol: SymbolSpec, accountCurrency: string, quoteToAccountRate = 1): number | null => {
+export const calculatePipValuePerLot = (symbol: SymbolSpec, accountCurrency: string, quoteToAccountRate?: number): number | null => {
   if (!isPositiveFinite(symbol.contractSize) || !isPositiveFinite(symbol.pipSize)) return null
   if (symbol.quoteCurrency === accountCurrency) return symbol.contractSize * symbol.pipSize
+  // Missing a conversion must not be silently treated as a 1:1 currency rate.
   if (!isPositiveFinite(quoteToAccountRate)) return null
   return symbol.contractSize * symbol.pipSize * quoteToAccountRate
 }
@@ -112,7 +113,7 @@ export const calculateCfdRiskPlan = (input: CfdRiskInput): CfdRiskPlan => {
     riskAmount,
     riskPercent,
     lots,
-    quoteToAccountRate = 1,
+    quoteToAccountRate,
     baseToAccountRate = 1,
     effectiveLeverage,
   } = input
