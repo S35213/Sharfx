@@ -472,6 +472,9 @@ export const CTraderManualTicket: React.FC<Props> = ({
         stopLossPips: plan.stopDistancePips,
         takeProfitPips: plan.targetDistancePips,
         brokerProtectionConfirmed: protectionApplied,
+        brokerProtectionError: protectionApplied === false
+          ? protectionError || 'cTrader did not confirm the requested broker-side SL/TP levels.'
+          : undefined,
       }
       onTradeOpened(trade)
 
