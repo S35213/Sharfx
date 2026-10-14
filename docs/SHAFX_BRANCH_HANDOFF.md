@@ -621,15 +621,12 @@ On the experimental branch `test/rebuild-deriv-native-manual-20260930` and the R
 - Regression coverage includes compact cross-timeframe confluence, no lower-timeframe labels on H4/W1, at most four zones per chart, missing-history handling, and the timeframe hierarchy. Build, static-server smoke, lint, unit tests, dependency audit, and Render rebuild-service verification passed on commit `6002849db490b6a645774a49ccb60316d64be7d2`; Render service **Shafek Derive Render** is live on that commit. Authenticated visual review has not been performed; ask the user to confirm the chart is visually clean after refresh. No broker orders/positions were touched; no promotion to `main` or Cloudflare.
 
 
-## Structural overlay isolation / Trend toggle verification checkpoint — 2026-10-14
+## Structural overlay isolation / Trend toggle — final verification checkpoint, 2026-10-14
 
-- The first implementation commit `b72b405636c2c865e199eb2f480efd186f6ea1dc` failed TypeScript build because the history-consistency helper does not narrow optional candle arrays. Follow-up commit explicitly guards missing selected/source histories before use.
-- Render had not activated the implementation commit; last known live deployment remained `dep-db7ku0m7bikc73d50r0g` while the failed build was investigated.
-- User clarified acceptance behavior: higher timeframe charts must not inherit lower timeframe S/R/liquidity while zoomed in; levels stay tied to their timeframe and additional higher-timeframe context appears only after zooming out. Trend must actually hide/show the structural overlays. Trade levels must remain unaffected.
-- Automated build/tests and authenticated visual verification of the repaired commit are pending. Keep changes on the experimental branch; do not merge to `main` or promote Cloudflare production.
-
-
-## Verification update — 2026-10-14
-
-- Commit `c6a2c53f4d5c7c221ae13d6362d6bbc7e0c9f78f` is LIVE on the correct Render service. Build and lint passed. The first test run found one failing newly-added assertion caused by an over-escaped whitespace regular expression in the test itself; the assertion is being simplified to a `startsWith('M5 ')` check and the suite is being rerun.
-- Authenticated visual verification of zoom tiers and the Trend on/off control is still pending. Keep this on the experimental branch.
+- Latest branch commit: `15952361fa48dd401d5dfc42c0ac6b9a85253748` — [commit](https://github.com/S35213/Sharfx/commit/15952361fa48dd401d5dfc42c0ac6b9a85253748).
+- Render service **Shafek Derive Render** (`srv-dav8hrt9fdbs73d690s0`) is live on deployment `dep-db7la5qjnfac73de3c2g`.
+- Verification: production build passed; static server check passed; lint passed; **82 test files / 399 tests passed**; production dependency audit reported 0 vulnerabilities; Render smoke and manual CFD branch verification passed.
+- Structural annotations show the selected timeframe when zoomed in; higher-timeframe context is added only when the user zooms out. A weekly chart cannot import lower-timeframe structure; cached candle histories are validated by observed timestamp cadence. Zone IDs include source timeframe, concept, and price to avoid map/label collisions.
+- Trend is controlled by an explicit chart-level structural-overlay gate. Turning it off removes support/resistance/liquidity lines and labels while preserving broker-confirmed entry, SL/TP and Bid/Ask overlays.
+- Authenticated visual review of the user's live session has not been independently performed. Please refresh the Render chart and check zoom/toggle behavior on the actual session; if anything remains, record that specific state for a targeted follow-up.
+- No broker-side protection was changed; no trade was opened or closed. All changes remain on the experimental branch. Do not merge to `main` or promote Cloudflare production without acceptance.
