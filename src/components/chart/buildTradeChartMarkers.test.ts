@@ -20,8 +20,10 @@ const trade = (overrides: Partial<TradeChartMarker> = {}): TradeChartMarker => (
 })
 
 describe('SHAFX trade chart markers', () => {
-  it('uses the exact entry-price line rather than a candle-edge arrow for an open position', () => {
-    expect(buildTradeChartMarkers(candles, [trade()], 'M1')).toEqual([])
+  it('keeps an entry arrow and exact lot size visible for an open position', () => {
+    expect(buildTradeChartMarkers(candles, [trade()], 'M1')).toMatchObject([
+      { time: baseTime, position: 'belowBar', shape: 'arrowUp', text: 'BUY 0.02', color: '#22D3A5' },
+    ])
   })
 
   it('shows SELL entries and exit markers for closed trades', () => {
@@ -46,7 +48,16 @@ describe('SHAFX trade chart markers', () => {
       trade({ id: 'two', status: 'closed', openTime: new Date((baseTime + 25) * 1000).toISOString() }),
     ], 'M1')
     expect(markers).toHaveLength(1)
-    expect(markers[0].text).toBe('BUY ×2')
+    expect(markers[0].text).toBe('BUY 0.02 ×2')
+  })
+
+  it('preserves distinct lot sizes when multiple entries share the same candle', () => {
+    const markers = buildTradeChartMarkers(candles, [
+      trade({ id: 'small', volume: 0.02 }),
+      trade({ id: 'large', volume: 0.10 }),
+    ], 'M1')
+    expect(markers).toHaveLength(1)
+    expect(markers[0].text).toBe('BUY 0.02 + 0.10')
   })
 
   it('does not attach a marker to an unrelated candle when the entry bucket is missing', () => {
