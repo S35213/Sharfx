@@ -1448,7 +1448,9 @@ const TerminalContent: React.FC = () => {
       setTradeLines([])
       setReviewSetup(null)
       pushToast(order.providerId === 'ctrader' && order.brokerProtectionConfirmed === false
-         ? 'Trade opened, but cTrader did not confirm broker SL/TP. Verify protection in cTrader before relying on it.'
+         ? 'Trade opened, but cTrader did not confirm broker SL/TP. ' +
+          (order.brokerProtectionError ? 'Details: ' + order.brokerProtectionError + ' ' : '') +
+          'Verify the actual SL/TP in cTrader before relying on it.'
          : (activeProviderSelection?.providerId === 'ctrader' ? 'cTrader ' : 'Deriv ') + order.type + ' trade opened on ' + (order.chartTimeframe ?? timeframe) + '.')
     }} aiSetup={reviewSetup} />
     </div>,
@@ -1472,7 +1474,9 @@ const TerminalContent: React.FC = () => {
       setTradeLines([])
       setReviewSetup(null)
       pushToast(order.providerId === 'ctrader' && order.brokerProtectionConfirmed === false
-         ? 'Trade opened, but cTrader did not confirm broker SL/TP. Verify protection in cTrader before relying on it.'
+         ? 'Trade opened, but cTrader did not confirm broker SL/TP. ' +
+          (order.brokerProtectionError ? 'Details: ' + order.brokerProtectionError + ' ' : '') +
+          'Verify the actual SL/TP in cTrader before relying on it.'
          : (activeProviderSelection?.providerId === 'ctrader' ? 'cTrader ' : 'SHAFX ') + order.type + ' trade opened on ' + (order.chartTimeframe ?? timeframe) + '.')
     }} aiSetup={reviewSetup} />,
 
@@ -1554,7 +1558,9 @@ const TerminalContent: React.FC = () => {
       setTradeLines([])
       setReviewSetup(null)
       pushToast(order.providerId === 'ctrader' && order.brokerProtectionConfirmed === false
-         ? 'Trade opened, but cTrader did not confirm broker SL/TP. Verify protection in cTrader before relying on it.'
+         ? 'Trade opened, but cTrader did not confirm broker SL/TP. ' +
+          (order.brokerProtectionError ? 'Details: ' + order.brokerProtectionError + ' ' : '') +
+          'Verify the actual SL/TP in cTrader before relying on it.'
          : (activeProviderSelection?.providerId === 'ctrader' ? 'cTrader ' : 'SHAFX ') + order.type + ' trade opened on ' + (order.chartTimeframe ?? timeframe) + '.')
     }} aiSetup={reviewSetup} /></div></aside>}
       <aside className={showBot ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><SignalDeskPanel symbol={selectedSymbol} timeframe={timeframe} candles={liveCandles} currentPrice={currentPrice} analysis={marketAnalysis} setup={reviewSetup} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} connected={Boolean(derivOrderConnection)} onReviewSetup={handleReviewSetup} onPaperRoundClosed={handleBotPaperRoundClosed} /></aside>
