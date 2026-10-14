@@ -203,14 +203,14 @@ export const buildMultiTimeframeStructuralAnnotations = (
   const sourceCount = visibleBarCount >= 240 ? 3 : visibleBarCount >= 140 ? 2 : 1
   const sourceTimeframes = context.slice(0, Math.min(context.length, sourceCount))
   const currentCandles = historyByTimeframe[selectedTimeframe]
-  if (!isHistoryConsistentWithTimeframe(currentCandles, selectedTimeframe)) return []
-  const currentPrice = currentCandles?.[currentCandles.length - 1]?.close
+  if (!currentCandles || !isHistoryConsistentWithTimeframe(currentCandles, selectedTimeframe)) return []
+  const currentPrice = currentCandles[currentCandles.length - 1]?.close
   if (!Number.isFinite(currentPrice) || (currentPrice ?? 0) <= 0) return []
 
   const levels: StructuralLevel[] = []
   for (const sourceTimeframe of sourceTimeframes) {
     const candles = historyByTimeframe[sourceTimeframe]
-    if (!isHistoryConsistentWithTimeframe(candles, sourceTimeframe)) continue
+    if (!candles || !isHistoryConsistentWithTimeframe(candles, sourceTimeframe)) continue
 
     const sourceAnnotations = buildStructuralChartAnnotations(symbol, candles, sourceTimeframe)
     for (const annotation of sourceAnnotations) {

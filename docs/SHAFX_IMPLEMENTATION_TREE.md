@@ -324,3 +324,11 @@ Follow-up remains on the experimental branch `test/rebuild-deriv-native-manual-2
 Manual ticket: BUY and SELL price tiles use one midpoint direction and complementary colors together (baseline BUY blue / SELL red; on downward ticks colors swap; they cannot both be blue or both red). Stop/Target AUTO controls are always tappable: use distance from a valid selected AI setup or defaults of 10/20 pips until one is loaded; EDIT returns to editable pip inputs. The separate review checkbox is removed. The final BUY/SELL button activates when a cTrader demo connection, fresh quotes, size input and protection distances form a valid plan; users still make an explicit final BUY/SELL tap, and selecting a side alone does not submit an order.
 
 No broker-side protection has been changed, and no trade has been opened or closed. Verification pending.
+
+
+## Structural overlay isolation / Trend toggle verification checkpoint — 2026-10-14
+
+- The first implementation commit `b72b405636c2c865e199eb2f480efd186f6ea1dc` failed TypeScript build because the history-consistency helper does not narrow optional candle arrays. Follow-up commit explicitly guards missing selected/source histories before use.
+- Render had not activated the implementation commit; last known live deployment remained `dep-db7ku0m7bikc73d50r0g` while the failed build was investigated.
+- User clarified acceptance behavior: higher timeframe charts must not inherit lower timeframe S/R/liquidity while zoomed in; levels stay tied to their timeframe and additional higher-timeframe context appears only after zooming out. Trend must actually hide/show the structural overlays. Trade levels must remain unaffected.
+- Automated build/tests and authenticated visual verification of the repaired commit are pending. Keep changes on the experimental branch; do not merge to `main` or promote Cloudflare production.
