@@ -498,7 +498,25 @@ const handlePost = async (req, res, user, body) => {
       try {
         const positionId = String(normalized.positionId || result.position?.positionId || result.positionId || '')
         if (!positionId) throw new Error('cTrader opened the order but did not return a position ID for SL/TP verification.')
-        await amendCtraderPosition({
+
+        const digits = Math.max(0, Math.min(10, Number(full.digits ?? 5)))
+        const tolerance = Math.max(1e-8, (10 ** -digits) * 0.51)
+        const matchesRequestedProtection = (position) => {
+          if (!position || String(position.positionId || '') !== positionId) return false
+          const actualStopLoss = finitePositivePrice(position.stopLoss)
+          const actualTakeProfit = finitePositivePrice(position.takeProfit)
+          const stopLossMatches = requestedStopLoss === null ||
+            (actualStopLoss !== null && Math.abs(actualStopLoss - requestedStopLoss) <= tolerance)
+          const takeProfitMatches = requestedTakeProfit === null ||
+            (actualTakeProfit !== null && Math.abs(actualTakeProfit - requestedTakeProfit) <= tolerance)
+          return stopLossMatches && takeProfitMatches
+        }
+
+        // cTrader's amendment execution response may already contain the updated
+        // position. Trust that broker response when it explicitly matches; do not
+        // immediately open a second authenticated socket and risk reading a stale
+        // reconcile snapshot.
+        const amendment = await amendCtraderPosition({
           environment: context.environment,
           accountId,
           accessToken: tokens.accessToken,
@@ -506,20 +524,38 @@ const handlePost = async (req, res, user, body) => {
           stopLoss: requestedStopLoss,
           takeProfit: requestedTakeProfit,
         })
-        const reconciled = await reconcileCtrader({ environment: context.environment, accountId, accessToken: tokens.accessToken })
-        const position = (Array.isArray(reconciled.position) ? reconciled.position : [])
-          .find((item) => String(item?.positionId || '') === positionId)
-        if (!position) throw new Error('cTrader accepted the protection request but the position could not be verified.')
-        const actualStopLoss = finitePositivePrice(position.stopLoss)
-        const actualTakeProfit = finitePositivePrice(position.takeProfit)
-        const digits = Math.max(0, Math.min(10, Number(full.digits ?? 5)))
-        const tolerance = Math.max(1e-8, (10 ** -digits) * 0.51)
-        const stopLossMatches = requestedStopLoss === null ||
-          (actualStopLoss !== null && Math.abs(actualStopLoss - requestedStopLoss) <= tolerance)
-        const takeProfitMatches = requestedTakeProfit === null ||
-          (actualTakeProfit !== null && Math.abs(actualTakeProfit - requestedTakeProfit) <= tolerance)
-        if (!stopLossMatches || !takeProfitMatches) {
-          throw new Error('cTrader did not confirm every requested SL/TP level on the opened position.')
+        let verifiedPosition = amendment.position &&
+          String(amendment.position.positionId || '') === positionId
+          ? amendment.position
+          : null
+
+        if (!matchesRequestedProtection(verifiedPosition)) {
+          // Position updates can arrive shortly after the amendment event. Retry a
+          // bounded number of times before reporting failure, rather than marking
+          // a correct SL/TP as failed based on the first stale account snapshot.
+          const retryDelays = [0, 200, 400, 700]
+          for (const delayMs of retryDelays) {
+            if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs))
+            const reconciled = await reconcileCtrader({ environment: context.environment, accountId, accessToken: tokens.accessToken })
+            const candidate = (Array.isArray(reconciled.position) ? reconciled.position : [])
+              .find((item) => String(item?.positionId || '') === positionId)
+            if (candidate) verifiedPosition = candidate
+            if (matchesRequestedProtection(verifiedPosition)) break
+          }
+        }
+
+        if (!verifiedPosition) {
+          throw new Error('cTrader accepted the trade but returned no matching open position to verify stop loss and take profit.')
+        }
+        if (!matchesRequestedProtection(verifiedPosition)) {
+          const actualStopLoss = finitePositivePrice(verifiedPosition.stopLoss)
+          const actualTakeProfit = finitePositivePrice(verifiedPosition.takeProfit)
+          throw new Error(
+            'cTrader position protection does not match the requested levels after retrying verification. ' +
+            'Requested SL ' + (requestedStopLoss ?? 'not set') + ', TP ' + (requestedTakeProfit ?? 'not set') +
+            '; broker reports SL ' + (actualStopLoss ?? 'missing') + ', TP ' + (actualTakeProfit ?? 'missing') +
+            '. Check the broker minimum stop distance and verify these levels in cTrader.',
+          )
         }
         protectionApplied = true
       } catch (error) {
