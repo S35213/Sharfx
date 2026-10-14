@@ -23,6 +23,7 @@ import {
   reconcileCtrader,
   syncCtraderAccountsForConnection,
   ctraderLotsToProtocolVolume,
+  ctraderRelativeDistanceUnits,
   resolveCtraderSymbol,
 } from '../../server/ctrader.js'
 import {
@@ -488,7 +489,41 @@ const handlePost = async (req, res, user, body) => {
     const requestedStopLoss = finitePositivePrice(order.stopLoss)
     const requestedTakeProfit = finitePositivePrice(order.takeProfit)
     const protectionRequested = requestedStopLoss !== null || requestedTakeProfit !== null
-    const result = await placeCtraderOrder({ environment: context.environment, accountId, accessToken: tokens.accessToken, fullSymbol: full, order })
+    const entryReferencePrice = finitePositivePrice(order.entryPrice)
+    let orderToPlace = order
+    let requestedStopUnits = null
+    let requestedTargetUnits = null
+
+    if (order.type === 'MARKET' && protectionRequested) {
+      if (!entryReferencePrice) {
+        return json(res, 400, { ok: false, error: 'SHAFX needs the current entry quote to attach relative cTrader protection to a market order. Refresh the quote and try again.' })
+      }
+      const side = order.side === 'SELL' ? 'SELL' : order.side === 'BUY' ? 'BUY' : null
+      if (!side) return json(res, 400, { ok: false, error: 'Select BUY or SELL before placing a cTrader market order.' })
+      if (requestedStopLoss !== null && (side === 'BUY' ? requestedStopLoss >= entryReferencePrice : requestedStopLoss <= entryReferencePrice)) {
+        return json(res, 400, { ok: false, error: side + ' stop loss must be on the protective side of the entry quote.' })
+      }
+      if (requestedTakeProfit !== null && (side === 'BUY' ? requestedTakeProfit <= entryReferencePrice : requestedTakeProfit >= entryReferencePrice)) {
+        return json(res, 400, { ok: false, error: side + ' take profit must be on the profitable side of the entry quote.' })
+      }
+      try {
+        requestedStopUnits = requestedStopLoss === null ? null : ctraderRelativeDistanceUnits(entryReferencePrice, requestedStopLoss)
+        requestedTargetUnits = requestedTakeProfit === null ? null : ctraderRelativeDistanceUnits(entryReferencePrice, requestedTakeProfit)
+      } catch (error) {
+        return json(res, 400, { ok: false, error: error instanceof Error ? error.message : 'Invalid relative SL/TP distance.' })
+      }
+
+      // Attach SL/TP to the market order as relative distances. The broker then
+      // anchors protection to the actual fill price, avoiding a second amendment
+      // request and avoiding absolute levels becoming stale during order latency.
+      orderToPlace = {
+        ...order,
+        ...(requestedStopUnits !== null ? { relativeStopLoss: requestedStopUnits } : {}),
+        ...(requestedTargetUnits !== null ? { relativeTakeProfit: requestedTargetUnits } : {}),
+      }
+    }
+
+    const result = await placeCtraderOrder({ environment: context.environment, accountId, accessToken: tokens.accessToken, fullSymbol: full, order: orderToPlace })
     const normalized = normalizeCtraderOrder(result)
 
     let protectionApplied = null
@@ -497,7 +532,7 @@ const handlePost = async (req, res, user, body) => {
       protectionApplied = false
       try {
         const positionId = String(normalized.positionId || result.position?.positionId || result.positionId || '')
-        if (!positionId) throw new Error('cTrader opened the order but did not return a position ID for SL/TP verification.')
+        if (!positionId) throw new Error('cTrader returned no position ID with which to verify the attached SL/TP.')
 
         const digits = Math.max(0, Math.min(10, Number(full.digits ?? 5)))
         const tolerance = Math.max(1e-8, (10 ** -digits) * 0.51)
@@ -505,36 +540,33 @@ const handlePost = async (req, res, user, body) => {
           if (!position || String(position.positionId || '') !== positionId) return false
           const actualStopLoss = finitePositivePrice(position.stopLoss)
           const actualTakeProfit = finitePositivePrice(position.takeProfit)
-          const stopLossMatches = requestedStopLoss === null ||
-            (actualStopLoss !== null && Math.abs(actualStopLoss - requestedStopLoss) <= tolerance)
-          const takeProfitMatches = requestedTakeProfit === null ||
-            (actualTakeProfit !== null && Math.abs(actualTakeProfit - requestedTakeProfit) <= tolerance)
+          const actualEntry = finitePositivePrice(position.price) || finitePositivePrice(normalized.executionPrice) || entryReferencePrice
+          if (!actualEntry) return false
+
+          const stopLossMatches = requestedStopUnits === null || (
+            actualStopLoss !== null &&
+            (order.side === 'BUY' ? actualStopLoss < actualEntry : actualStopLoss > actualEntry) &&
+            Math.abs(Math.abs(actualEntry - actualStopLoss) - requestedStopUnits / 100000) <= tolerance
+          )
+          const takeProfitMatches = requestedTargetUnits === null || (
+            actualTakeProfit !== null &&
+            (order.side === 'BUY' ? actualTakeProfit > actualEntry : actualTakeProfit < actualEntry) &&
+            Math.abs(Math.abs(actualTakeProfit - actualEntry) - requestedTargetUnits / 100000) <= tolerance
+          )
           return stopLossMatches && takeProfitMatches
         }
 
-        // cTrader's amendment execution response may already contain the updated
-        // position. Trust that broker response when it explicitly matches; do not
-        // immediately open a second authenticated socket and risk reading a stale
-        // reconcile snapshot.
-        const amendment = await amendCtraderPosition({
-          environment: context.environment,
-          accountId,
-          accessToken: tokens.accessToken,
-          positionId,
-          stopLoss: requestedStopLoss,
-          takeProfit: requestedTakeProfit,
-        })
-        let verifiedPosition = amendment.position &&
-          String(amendment.position.positionId || '') === positionId
-          ? amendment.position
+        // The market-order execution response commonly already includes the
+        // resulting position with its attached protection, so check it first.
+        let verifiedPosition = result.position &&
+          String(result.position.positionId || '') === positionId
+          ? result.position
           : null
 
         if (!matchesRequestedProtection(verifiedPosition)) {
-          // Position updates can arrive shortly after the amendment event. Retry a
-          // bounded number of times before reporting failure, rather than marking
-          // a correct SL/TP as failed based on the first stale account snapshot.
-          const retryDelays = [0, 200, 400, 700]
-          for (const delayMs of retryDelays) {
+          // If the execution response did not include current levels, the account
+          // snapshot can lag the fill. Retry briefly, without a separate amend.
+          for (const delayMs of [0, 200, 450]) {
             if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs))
             const reconciled = await reconcileCtrader({ environment: context.environment, accountId, accessToken: tokens.accessToken })
             const candidate = (Array.isArray(reconciled.position) ? reconciled.position : [])
@@ -544,17 +576,15 @@ const handlePost = async (req, res, user, body) => {
           }
         }
 
-        if (!verifiedPosition) {
-          throw new Error('cTrader accepted the trade but returned no matching open position to verify stop loss and take profit.')
-        }
         if (!matchesRequestedProtection(verifiedPosition)) {
-          const actualStopLoss = finitePositivePrice(verifiedPosition.stopLoss)
-          const actualTakeProfit = finitePositivePrice(verifiedPosition.takeProfit)
+          const actualStopLoss = finitePositivePrice(verifiedPosition?.stopLoss)
+          const actualTakeProfit = finitePositivePrice(verifiedPosition?.takeProfit)
           throw new Error(
-            'cTrader position protection does not match the requested levels after retrying verification. ' +
-            'Requested SL ' + (requestedStopLoss ?? 'not set') + ', TP ' + (requestedTakeProfit ?? 'not set') +
+            'cTrader did not confirm the relative protection attached to the market order. ' +
+            'Requested distances: SL ' + (requestedStopUnits === null ? 'not set' : (requestedStopUnits / 10).toFixed(1) + ' points') +
+            ', TP ' + (requestedTargetUnits === null ? 'not set' : (requestedTargetUnits / 10).toFixed(1) + ' points') +
             '; broker reports SL ' + (actualStopLoss ?? 'missing') + ', TP ' + (actualTakeProfit ?? 'missing') +
-            '. Check the broker minimum stop distance and verify these levels in cTrader.',
+            '. Check the actual position in cTrader before relying on these levels.',
           )
         }
         protectionApplied = true
@@ -578,6 +608,7 @@ const handlePost = async (req, res, user, body) => {
         symbol: order.symbol,
         side: order.side,
         lots: order.quantity,
+        protectionRequested,
         protectionApplied,
       },
     })
