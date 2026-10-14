@@ -526,6 +526,18 @@ const handlePost = async (req, res, user, body) => {
     const result = await placeCtraderOrder({ environment: context.environment, accountId, accessToken: tokens.accessToken, fullSymbol: full, order: orderToPlace })
     const normalized = normalizeCtraderOrder(result)
 
+    // Only tell the client a MARKET trade is open after cTrader reports a fill.
+    // Accepted/rejected/cancelled orders must not be added as fake open positions.
+    if (order.type === 'MARKET' && normalized.status !== 'filled') {
+      const status = String(normalized.status || 'unknown')
+      const detail = String(normalized.message || '')
+      return json(res, 409, {
+        ok: false,
+        error: 'cTrader did not fill the market order (status: ' + status + '). SHAFX has not marked it as an open trade.' +
+          (detail ? ' ' + detail : ''),
+      })
+    }
+
     let protectionApplied = null
     let protectionError = ''
     if (order.type === 'MARKET' && protectionRequested) {
