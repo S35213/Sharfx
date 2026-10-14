@@ -71,7 +71,7 @@ export const calculatePipValuePerLot = (symbol: SymbolSpec, accountCurrency: str
   if (!isPositiveFinite(symbol.contractSize) || !isPositiveFinite(symbol.pipSize)) return null
   if (symbol.quoteCurrency === accountCurrency) return symbol.contractSize * symbol.pipSize
   // Missing a conversion must not be silently treated as a 1:1 currency rate.
-  if (!isPositiveFinite(quoteToAccountRate)) return null
+  if (quoteToAccountRate === undefined || !isPositiveFinite(quoteToAccountRate)) return null
   return symbol.contractSize * symbol.pipSize * quoteToAccountRate
 }
 
