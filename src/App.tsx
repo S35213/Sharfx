@@ -41,6 +41,8 @@ import { mockWatchlist } from './data/mock/watchlist'
 import { fetchDerivActiveForexSymbols, fetchDerivMultiTimeframeCandles, subscribeDerivForexQuotes } from './data/deriv/DerivPublicMarketFeed'
 import { applyCTraderQuoteToCandles, cTraderQuoteBucket, fetchCTraderHistoricalCandles, getRecentCTraderCandleGapSignature, isCTraderQuoteBucketCurrent, mergeCTraderHistoricalAndLiveCandles, shouldRepairCTraderHistoryForGap, subscribeCTraderLiveQuote } from './data/ctrader/CTraderLiveQuote'
 
+const EMPTY_STRUCTURAL_HISTORIES: Partial<Record<Timeframe, OHLCV[]>> = {}
+
 const positivePrice = (...values: unknown[]): number | null => {
   for (const value of values) {
     if (value === null || value === undefined || value === '') continue
@@ -259,6 +261,10 @@ const TerminalContent: React.FC = () => {
   const [chartTool, setChartTool] = useState<WorkspaceTool>('cursor')
   const [trendVisible, setTrendVisible] = useState(false)
   const [trendRefreshVersion, setTrendRefreshVersion] = useState(0)
+  const [structuralHistorySnapshot, setStructuralHistorySnapshot] = useState<{
+    symbol: string
+    histories: Partial<Record<Timeframe, OHLCV[]>>
+  }>({ symbol: '', histories: {} })
   const [dock, setDock] = useState<WorkspaceDock>('orders')
   const [mobileTab, setMobileTab] = useState<MobileNavTab>('market')
   const [mobileDockOpen, setMobileDockOpen] = useState(false)
@@ -275,6 +281,31 @@ const TerminalContent: React.FC = () => {
   const cTraderCandleCacheRef = useRef<Record<string, OHLCV[]>>({})
   const liveCandlesRef = useRef<OHLCV[]>([])
   const historyWarmInFlightRef = useRef<Record<string, Promise<Partial<Record<(typeof TIMEFRAMES)[number], OHLCV[]>>>>>({})
+  // Read mutable candle caches only from event/effect callbacks, then keep a
+  // render-safe snapshot in state for the chart's multi-timeframe annotation pass.
+  const collectStructuralHistorySnapshot = useCallback((
+    symbol: string,
+    selection: ActiveProviderSelection | null | undefined,
+  ): { symbol: string; histories: Partial<Record<Timeframe, OHLCV[]>> } => {
+    const histories: Partial<Record<Timeframe, OHLCV[]>> = {}
+    for (const sourceTimeframe of TIMEFRAMES) {
+      if (selection?.providerId === 'ctrader' && selection.connectionId && selection.accountId) {
+        const sourceKey = [
+          String(selection.connectionId),
+          String(selection.accountId),
+          selection.environment,
+          symbol,
+          sourceTimeframe,
+        ].join(':')
+        histories[sourceTimeframe] = cTraderCandleCacheRef.current[sourceKey]
+          ?? candleCacheRef.current[`${symbol}:${sourceTimeframe}`]
+          ?? []
+      } else {
+        histories[sourceTimeframe] = candleCacheRef.current[`${symbol}:${sourceTimeframe}`] ?? []
+      }
+    }
+    return { symbol, histories }
+  }, [])
   const latestCTraderPriceRef = useRef<number | null>(null)
   const latestCTraderQuotesRef = useRef<Record<string, CTraderQuoteSnapshot>>({})
   const liveQuoteIdentityRef = useRef<string | null>(null)
@@ -330,6 +361,7 @@ const TerminalContent: React.FC = () => {
 
     timeframeRef.current = nextTimeframe
     setTimeframe(nextTimeframe)
+    setStructuralHistorySnapshot(collectStructuralHistorySnapshot(selectedSymbolRef.current, activeProviderSelection))
 
     // Reuse only the exact target timeframe's cache. Never keep rendering the
     // previous interval while the selected cTrader history request is in flight.
@@ -377,7 +409,14 @@ const TerminalContent: React.FC = () => {
       setCurrentPrice(last?.close ?? 0)
       setMarketTimestamp(last ? Math.floor(last.time / 1000) : 0)
     }
-  }, [activeProviderSelection?.providerId, setTimeframe])
+  }, [
+    activeProviderSelection?.accountId,
+    activeProviderSelection?.connectionId,
+    activeProviderSelection?.environment,
+    activeProviderSelection?.providerId,
+    collectStructuralHistorySnapshot,
+    setTimeframe,
+  ])
 
   const handleBotPaperRoundClosed = useCallback((trade: BotPaperTrade): void => {
     setBotPaperHistory((current) => [trade, ...current.filter((item) => item.id !== trade.id)].slice(0, 200))
@@ -471,7 +510,8 @@ const TerminalContent: React.FC = () => {
           const current = candleCacheRef.current[key] ?? []
           if (candles.length > current.length) candleCacheRef.current[key] = candles
         }
-        // Re-run an active Trend scan after multi-timeframe history becomes available.
+        // Re-snapshot every source interval after multi-timeframe history becomes available.
+        setStructuralHistorySnapshot(collectStructuralHistorySnapshot(selectedSymbol, activeProviderSelection))
         setTrendRefreshVersion((version) => version + 1)
         const currentKey = selectedSymbol + ':' + timeframeRef.current
         const current = candleCacheRef.current[currentKey] ?? []
@@ -495,7 +535,7 @@ const TerminalContent: React.FC = () => {
     setCurrentPrice(last?.close ?? 0)
     setMarketTimestamp(last ? Math.floor(last.time / 1000) : 0)
     void warm()
-  }, [selectedSymbol, activeProviderSelection?.providerId])
+  }, [selectedSymbol, activeProviderSelection, collectStructuralHistorySnapshot])
 
   useEffect(() => {
     if (activeProviderSelection?.providerId === 'ctrader') return
@@ -957,11 +997,12 @@ const TerminalContent: React.FC = () => {
     // the background histories settle, rebuild visible levels from the new cache.
     void Promise.all([worker(), worker()]).then(() => {
       if (!cancelled && selectedSymbolRef.current === symbol) {
+        setStructuralHistorySnapshot(collectStructuralHistorySnapshot(symbol, selection))
         setTrendRefreshVersion((version) => version + 1)
       }
     })
     return () => { cancelled = true }
-  }, [activeProviderSelection?.accountId, activeProviderSelection?.connectionId, activeProviderSelection?.environment, activeProviderSelection?.providerId, selectedSymbol])
+  }, [activeProviderSelection?.accountId, activeProviderSelection?.connectionId, activeProviderSelection?.environment, activeProviderSelection?.providerId, collectStructuralHistorySnapshot, selectedSymbol])
 
   useEffect(() => {
     const selection = activeProviderSelection
@@ -1222,39 +1263,17 @@ const TerminalContent: React.FC = () => {
   const structuralCandleSignature = useMemo(() => liveCandles.slice(0, -1)
     .map((candle) => [candle.time, candle.open, candle.high, candle.low, candle.close].join(':'))
     .join('|'), [liveCandles])
-  // Snapshot every available candle interval so Trend scans source-specific structure,
-  // not one timeframe's swings reused on a different chart.
-  const structuralHistories = useMemo<Partial<Record<Timeframe, OHLCV[]>>>(() => {
-    const histories: Partial<Record<Timeframe, OHLCV[]>> = {}
-    for (const sourceTimeframe of TIMEFRAMES) {
-      let sourceCandles: OHLCV[] = []
-      if (activeProviderSelection?.providerId === 'ctrader' && activeProviderSelection.connectionId && activeProviderSelection.accountId) {
-        const sourceKey = [
-          String(activeProviderSelection.connectionId),
-          String(activeProviderSelection.accountId),
-          activeProviderSelection.environment,
-          selectedSymbol,
-          sourceTimeframe,
-        ].join(':')
-        sourceCandles = cTraderCandleCacheRef.current[sourceKey]
-          ?? candleCacheRef.current[`${selectedSymbol}:${sourceTimeframe}`]
-          ?? []
-      } else {
-        sourceCandles = candleCacheRef.current[`${selectedSymbol}:${sourceTimeframe}`] ?? []
-      }
-      histories[sourceTimeframe] = sourceCandles
-    }
-
-    // The active series is authoritative for the selected interval, including
-    // the latest broker/live updates that may not yet be copied into its cache.
-    histories[timeframe] = liveCandles
-    return histories
-  }, [activeProviderSelection, selectedSymbol, timeframe, structuralCandleSignature, trendRefreshVersion])
-
-  const chartAnnotations = useMemo(
-    () => buildMultiTimeframeStructuralAnnotations(selectedSymbol, timeframe, structuralHistories),
-    [selectedSymbol, timeframe, structuralHistories],
-  )
+  // A symbol change intentionally blanks old source history until its own caches load.
+  const structuralHistories = structuralHistorySnapshot.symbol === selectedSymbol
+    ? structuralHistorySnapshot.histories
+    : EMPTY_STRUCTURAL_HISTORIES
+  const chartAnnotations = useMemo(() => {
+    const historyByTimeframe: Partial<Record<Timeframe, OHLCV[]>> = { ...structuralHistories }
+    // Use the latest selected-interval candles from React state, while the
+    // source history signature keeps incomplete live ticks from re-running scans.
+    historyByTimeframe[timeframe] = liveCandles
+    return buildMultiTimeframeStructuralAnnotations(selectedSymbol, timeframe, historyByTimeframe)
+  }, [selectedSymbol, timeframe, structuralHistories, structuralCandleSignature, trendRefreshVersion])
 
   const selectedOpenPosition = useMemo(
     () => liveOpenPositions.find((position) =>
@@ -1448,6 +1467,7 @@ const TerminalContent: React.FC = () => {
   }
 
   const handleTrendToggle = (): void => {
+    setStructuralHistorySnapshot(collectStructuralHistorySnapshot(selectedSymbol, activeProviderSelection))
     setTrendVisible((visible) => !visible)
     setTrendRefreshVersion((version) => version + 1)
   }
