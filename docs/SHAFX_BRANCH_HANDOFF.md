@@ -600,3 +600,8 @@ Scope stays on `test/rebuild-deriv-native-manual-20260930` and the Render servic
 - If cTrader candle history has a single missing timeframe bucket, an open marker may attach to the nearest real candle only within one timeframe interval and within the loaded history window. It never fabricates OHLC and never pins an old trade to a recent unrelated candle.
 
 Verification still required after Render deploy: lint/build and focused marker tests must pass. In the authenticated chart, confirm both open positions (one BUY and one SELL if that's what the broker reports) are present, the badges move with zoom/pan and are anchored to the recorded price/time, and no trade values are changed. Keep the branch experimental; do not merge to `main` or promote Cloudflare.
+
+
+## Open-position marker label cleanup — 2026-10-14
+
+On the experimental branch `test/rebuild-deriv-native-manual-20260930` and the Render service **Shafek Derive Render** only, the persistent open-entry marker label now shows the side and lot size (for example, `BUY 0.10` or `SELL 0.10`) without repeating the price in the label. The marker still uses the true entry price internally for its vertical coordinate, preserving correct price anchoring during zoom/pan. No broker order or position was changed. Do not merge to `main` or promote to Cloudflare.

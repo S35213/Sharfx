@@ -1453,7 +1453,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
         const edgeGlyph = marker.edge === 'top' ? '↑ ' : marker.edge === 'bottom' ? '↓ ' : ''
         const labelSideClass = marker.labelOnLeft ? 'shafx-open-entry-label--left' : 'shafx-open-entry-label--right'
         const labelVerticalClass = marker.side === 'BUY' ? 'shafx-open-entry-label--above' : 'shafx-open-entry-label--below'
-        const label = marker.side + ' ' + marker.volume.toFixed(2) + ' · ' + marker.entryPrice.toFixed(pricePrecision)
+        const label = marker.side + ' ' + marker.volume.toFixed(2)
         return (
           <div key={marker.id} className={'shafx-open-entry-marker ' + sideClass} data-shafx-open-entry-marker={marker.id} style={{ left: marker.x + 'px', top: marker.y + 'px' }}>
             <span className="shafx-open-entry-marker__point">{marker.side === 'BUY' ? '▲' : '▼'}</span>
