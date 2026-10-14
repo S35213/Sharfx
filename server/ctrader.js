@@ -76,6 +76,29 @@ const closeSocket = async (socket) => {
   try { socket.close() } catch {}
 }
 
+/**
+ * Open API has both generic ProtoOAErrorRes (2142) and order-specific
+ * ProtoOAOrderErrorEvent (2132). Both are terminal responses for a pending
+ * request; ignoring 2132 makes failed orders wait for the socket timeout.
+ */
+export const getCtraderRequestError = (message) => {
+  const messageType = Number(message?.payloadType)
+  if (messageType !== 2132 && messageType !== 2142) return null
+  const body = asObject(message?.payload)
+  const isOrderError = messageType === 2132
+  const code = String(body.errorCode || (isOrderError ? 'CTRADER_ORDER_ERROR' : 'CTRADER_ERROR'))
+  return {
+    message: String(body.description || body.errorCode || (isOrderError
+      ? 'cTrader rejected the order request.'
+      : 'cTrader rejected the request.')),
+    code,
+    providerCode: String(body.errorCode || code),
+    orderId: body.orderId == null ? undefined : String(body.orderId),
+    positionId: body.positionId == null ? undefined : String(body.positionId),
+    payloadType: messageType,
+  }
+}
+
 const ctraderRequest = (socket, payloadType, payload, matcher = (message) => message.payloadType === payloadType, timeoutMs = 15000) => new Promise((resolve, reject) => {
   const clientMsgId = randomUUID()
   let settled = false
@@ -99,11 +122,14 @@ const ctraderRequest = (socket, payloadType, payload, matcher = (message) => mes
     try {
       const raw = typeof event.data === 'string' ? event.data : Buffer.from(event.data).toString('utf8')
       const message = JSON.parse(raw)
-      if (message.payloadType === 2142) {
-        const body = asObject(message.payload)
-        finish(reject, Object.assign(new Error(body.description || body.errorCode || 'cTrader rejected the request.'), {
-          code: body.errorCode || 'CTRADER_ERROR',
-          providerCode: body.errorCode,
+      const requestError = getCtraderRequestError(message)
+      if (requestError) {
+        finish(reject, Object.assign(new Error(requestError.message), {
+          code: requestError.code,
+          providerCode: requestError.providerCode,
+          orderId: requestError.orderId,
+          positionId: requestError.positionId,
+          payloadType: requestError.payloadType,
         }))
         return
       }
