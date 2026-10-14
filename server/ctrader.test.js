@@ -4,10 +4,39 @@ import {
   ctraderProtocolVolumeToLots,
   ctraderRelativeDistanceUnits,
   isCtraderMarketOrderTerminalEvent,
+  getCtraderRequestError,
   normalizeCtraderInstrument,
   normalizeCtraderOrder,
   normalizeCtraderPosition,
 } from './ctrader.js'
+
+describe('cTrader request error normalization', () => {
+  it('handles order errors immediately with broker details', () => {
+    expect(getCtraderRequestError({
+      payloadType: 2132,
+      payload: { errorCode: 'TRADING_BAD_STOPS', description: 'Stop loss is too close.', orderId: 81, positionId: 92 },
+    })).toEqual({
+      message: 'Stop loss is too close.',
+      code: 'TRADING_BAD_STOPS',
+      providerCode: 'TRADING_BAD_STOPS',
+      orderId: '81',
+      positionId: '92',
+      payloadType: 2132,
+    })
+  })
+
+  it('retains generic protocol errors and ignores ordinary events', () => {
+    expect(getCtraderRequestError({
+      payloadType: 2142,
+      payload: { errorCode: 'CH_ACCESS_TOKEN_INVALID' },
+    })).toMatchObject({
+      message: 'CH_ACCESS_TOKEN_INVALID',
+      code: 'CH_ACCESS_TOKEN_INVALID',
+      payloadType: 2142,
+    })
+    expect(getCtraderRequestError({ payloadType: 2126, payload: { executionType: 2 } })).toBeNull()
+  })
+})
 
 describe('cTrader relative SL/TP distance encoding', () => {
   it('encodes FX pip distances in 1/100000 price units', () => {
