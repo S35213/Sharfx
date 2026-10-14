@@ -335,3 +335,15 @@ No broker-side protection has been changed, and no trade has been opened or clos
 - Trend is controlled by an explicit chart-level structural-overlay gate. Turning it off removes support/resistance/liquidity lines and labels while preserving broker-confirmed entry, SL/TP and Bid/Ask overlays.
 - Authenticated visual review of the user's live session has not been independently performed. Please refresh the Render chart and check zoom/toggle behavior on the actual session; if anything remains, record that specific state for a targeted follow-up.
 - No broker-side protection was changed; no trade was opened or closed. All changes remain on the experimental branch. Do not merge to `main` or promote Cloudflare production without acceptance.
+
+
+## Signal Bot / Trade Bot independence checkpoint — 2026-10-14
+
+- [x] Signal Bot uses a provider-scoped historical-data loop with a 15-second, non-overlapping refresh target and no cross-provider fallback.
+- [x] Signal Bot runtime is separated from the paper-trading panel; errors are contained within its component boundary.
+- [x] Provider/source cache isolation regressions added and verified in CI.
+- [x] Build, lint, 402 tests across 83 files, dependency audit and Render verification passed on commit `37c283f8af1717e7836f19fabffe98c2c820fa77`.
+- [~] Authenticated live visual acceptance remains pending.
+- [ ] Build the Trade Bot as a separate controller with its own data pipeline, analysis state, risk/eligibility checks and cTrader-practice reconciliation. It must not consume Signal Bot output or share lifecycle state.
+- [ ] Keep real-money execution disabled until practice account acceptance and release gates are complete.
+
