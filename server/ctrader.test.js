@@ -83,4 +83,19 @@ describe('cTrader SHAFX normalization', () => {
     expect(order.status).toBe('rejected')
     expect(order.side).toBe('SELL')
   })
+
+  it('uses the distinct cTrader execution-event status enum', () => {
+    const filled = normalizeCtraderOrder({
+      executionType: 3,
+      orderId: 8,
+      tradeData: { symbolId: 17, tradeSide: 1, volume: 1000 },
+    })
+    const rejected = normalizeCtraderOrder({
+      executionType: 7,
+      orderId: 9,
+      tradeData: { symbolId: 17, tradeSide: 2, volume: 1000 },
+    })
+    expect(filled.status).toBe('filled')
+    expect(rejected.status).toBe('rejected')
+  })
 })
