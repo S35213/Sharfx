@@ -571,7 +571,7 @@ input::placeholder { color: #667285; }
 .shafx-open-entry-marker--buy .shafx-open-entry-marker__label { color: #22D3A5; border-left-color: #22D3A5; }
 .shafx-open-entry-marker--sell .shafx-open-entry-marker__label { color: #FF5C75; border-left-color: #FF5C75; }
 .shafx-open-entry-label--right { left: 8px; }
-.shafx-open-entry-label--left { right: 8px; }
+.shafx-open-entry-label--left { left: -8px; }
 .shafx-open-entry-label--above { bottom: 8px; }
 .shafx-open-entry-label--below { top: 8px; }
 .shafx-open-entry-label--right.shafx-open-entry-label--above { transform: translateY(-100%); }
