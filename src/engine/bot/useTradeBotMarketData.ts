@@ -112,23 +112,24 @@ export const useTradeBotMarketData = (
   source: TradeBotMarketSource | null,
   enabled: boolean,
 ): TradeBotMarketState => {
-  const sourceKey = tradeBotMarketSourceKey(symbol, source)
+  const providerId = source?.providerId ?? null
+  const connectionId = source?.connectionId ?? null
+  const accountId = source?.accountId ?? null
+  const environment = source?.environment ?? null
+  const selectedSource: TradeBotMarketSource | null = providerId
+    ? { providerId, connectionId, accountId, environment }
+    : null
+  const sourceKey = tradeBotMarketSourceKey(symbol, selectedSource)
   const [state, setState] = useState<TradeBotMarketState>(() => emptyState(sourceKey, 'stopped'))
 
   useEffect(() => {
     let stopped = false
     let timer: number | null = null
     let inFlight = false
-    if (!enabled) {
-      setState(emptyState(sourceKey, 'stopped'))
-      return () => { stopped = true }
-    }
+    if (!enabled) return () => { stopped = true }
 
-    const sourceError = tradeBotMarketSourceError(source)
-    if (sourceError) {
-      setState(emptyState(sourceKey, 'unavailable', sourceError))
-      return () => { stopped = true }
-    }
+    const sourceError = tradeBotMarketSourceError(selectedSource)
+    if (sourceError) return () => { stopped = true }
 
     const refresh = async (): Promise<void> => {
       if (stopped || inFlight) return
@@ -141,7 +142,7 @@ export const useTradeBotMarketData = (
         error: null,
       }))
       try {
-        const result = await loadTradeBotFrames(symbol, source as TradeBotMarketSource)
+        const result = await loadTradeBotFrames(symbol, selectedSource as TradeBotMarketSource)
         if (stopped) return
         const usable = TIMEFRAMES.filter((timeframe) => (result.frames[timeframe]?.length ?? 0) >= 8).length
         const status: TradeBotMarketStatus = usable === TIMEFRAMES.length ? 'ready' : usable > 0 ? 'partial' : 'error'
@@ -166,12 +167,11 @@ export const useTradeBotMarketData = (
       stopped = true
       if (timer !== null) window.clearTimeout(timer)
     }
-  }, [enabled, sourceKey, symbol, source?.providerId, source?.connectionId, source?.accountId, source?.environment])
+  }, [enabled, sourceKey, symbol, providerId, connectionId, accountId, environment])
 
   if (!enabled) return emptyState(sourceKey, 'stopped')
-  if (state.sourceKey !== sourceKey) {
-    const reason = tradeBotMarketSourceError(source)
-    return emptyState(sourceKey, reason ? 'unavailable' : 'loading', reason)
-  }
+  const sourceError = tradeBotMarketSourceError(selectedSource)
+  if (sourceError) return emptyState(sourceKey, 'unavailable', sourceError)
+  if (state.sourceKey !== sourceKey) return emptyState(sourceKey, 'loading')
   return { ...state, frames: tradeBotFramesForSource(state, sourceKey) }
 }
