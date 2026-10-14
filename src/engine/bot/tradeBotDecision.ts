@@ -47,7 +47,7 @@ export const evaluateTradeBotDecision = (input: {
   if (!riskBudget) return wait(timeframe, 'Account balance is unavailable; risk sizing is blocked.', 0)
 
   const candles = frames[timeframe] ?? []
-  if (candles.length < 8) return wait(timeframe, \`Waiting for at least 8 \${timeframe} candles.\`, riskBudget)
+  if (candles.length < 8) return wait(timeframe, `Waiting for at least 8 ${timeframe} candles.`, riskBudget)
 
   const multi = analyzeMultiTimeframeBias(frames)
   const rawBias = multi.higherTimeframeBias
