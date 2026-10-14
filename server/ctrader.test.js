@@ -3,6 +3,7 @@ import {
   ctraderLotsToProtocolVolume,
   ctraderProtocolVolumeToLots,
   ctraderRelativeDistanceUnits,
+  isCtraderMarketOrderTerminalEvent,
   normalizeCtraderInstrument,
   normalizeCtraderOrder,
   normalizeCtraderPosition,
@@ -22,6 +23,32 @@ describe('cTrader relative SL/TP distance encoding', () => {
   it('rejects invalid or sub-protocol-resolution prices', () => {
     expect(() => ctraderRelativeDistanceUnits(0, 1.12)).toThrow(/valid entry/i)
     expect(() => ctraderRelativeDistanceUnits(1.12, 1.120001)).toThrow(/at least one protocol unit/i)
+  })
+})
+
+describe('cTrader market execution completion', () => {
+  it('does not treat accepted or partial-fill events as a completed market order', () => {
+    expect(isCtraderMarketOrderTerminalEvent({
+      payloadType: 2126, payload: { executionType: 2, order: { orderStatus: 1 } },
+    })).toBe(false)
+    expect(isCtraderMarketOrderTerminalEvent({
+      payloadType: 2126, payload: { executionType: 11, order: { orderStatus: 1 } },
+    })).toBe(false)
+  })
+
+  it('waits for a filled event or resolves on rejection/cancellation', () => {
+    expect(isCtraderMarketOrderTerminalEvent({
+      payloadType: 2126, payload: { executionType: 3, order: { orderStatus: 2 } },
+    })).toBe(true)
+    expect(isCtraderMarketOrderTerminalEvent({
+      payloadType: 2126, payload: { executionType: 7, order: { orderStatus: 3 } },
+    })).toBe(true)
+    expect(isCtraderMarketOrderTerminalEvent({
+      payloadType: 2126, payload: { order: { orderStatus: 5 } },
+    })).toBe(true)
+    expect(isCtraderMarketOrderTerminalEvent({
+      payloadType: 2106, payload: { executionType: 3 },
+    })).toBe(false)
   })
 })
 
@@ -87,8 +114,7 @@ describe('cTrader SHAFX normalization', () => {
   it('uses the distinct cTrader execution-event status enum', () => {
     const filled = normalizeCtraderOrder({
       executionType: 3,
-      orderId: 8,
-      tradeData: { symbolId: 17, tradeSide: 1, volume: 1000 },
+      order: { orderId: 8, orderStatus: 1, tradeData: { symbolId: 17, tradeSide: 1, volume: 1000 } },
     })
     const rejected = normalizeCtraderOrder({
       executionType: 7,
