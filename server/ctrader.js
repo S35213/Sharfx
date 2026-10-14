@@ -707,6 +707,25 @@ export const getCtraderMargin = async ({ environment, accountId, accessToken, sy
   }
 }
 
+/**
+ * Market orders must wait for an actual fill or a terminal failure event.
+ * cTrader can first emit ORDER_ACCEPTED; treating that as filled leads to a
+ * false "trade opened" state before a position ID/protection levels exist.
+ */
+export const isCtraderMarketOrderTerminalEvent = (message) => {
+  if (Number(message?.payloadType) !== 2126) return false
+  const payload = asObject(message.payload)
+  const item = asObject(payload.order)
+  const orderStatus = Number(item.orderStatus ?? payload.orderStatus)
+  const executionType = Number(payload.executionType)
+
+  // ProtoOAOrderStatus: filled=2, rejected=3, expired=4, cancelled=5.
+  if ([2, 3, 4, 5].includes(orderStatus)) return true
+  // ProtoOAExecutionType: filled=3, cancelled=5, expired=6, rejected=7.
+  // Do not return on accepted=2, replaced=4 or partial fill=11.
+  return [3, 5, 6, 7].includes(executionType)
+}
+
 export const placeCtraderOrder = async ({ environment, accountId, accessToken, fullSymbol, order }) => {
   const account = requirePositiveInt('account ID', accountId)
   const symbolId = requirePositiveInt('symbol ID', fullSymbol?.symbolId)
@@ -736,7 +755,9 @@ export const placeCtraderOrder = async ({ environment, accountId, accessToken, f
     accountId,
     payloadType: 2106,
     payload,
-    matcher: (message) => message.payloadType === 2126,
+    matcher: (message) => order.type === 'MARKET'
+      ? isCtraderMarketOrderTerminalEvent(message)
+      : message.payloadType === 2126,
     timeoutMs: 20000,
   })
   return asObject(response.payload)
