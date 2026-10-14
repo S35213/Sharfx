@@ -3,7 +3,7 @@ import { ColorType, createChart, type CandlestickData, type IChartApi, type IPri
 import { Crosshair, Eraser, Maximize2, Minimize2, Ruler, RotateCcw } from 'lucide-react'
 import type { CandleTheme, ChartMode } from '../../app/chartSettings'
 import { TIMEFRAMES, type OHLCV, type Timeframe } from '../../types'
-import { buildTradeChartMarkers, type TradeChartMarker } from './buildTradeChartMarkers'
+import { buildOpenTradeEntryMarkers, buildTradeChartMarkers, type TradeChartMarker } from './buildTradeChartMarkers'
 import { isPriceLevelOccludedByQuote } from './priceLineVisibility'
 import { resolvePriceLabelY } from './priceLineLabelLayout'
 import { getCandleCloseCountdown } from './candleCountdown'
@@ -11,6 +11,18 @@ import { getQuoteTickColor, getQuoteTickDirection, type QuoteTickDirection } fro
 
 export interface ChartAnnotation { id: string; price: number; label: string; color: string; labelColor?: string; lineWidth?: 1 | 2 | 3 | 4; priceTagOnly?: boolean }
 type PriceLineLabel = { id: string; price: number; name: string; color: string; y: number; priceTagOnly?: boolean }
+type PositionedOpenEntryMarker = {
+  id: string
+  side: 'BUY' | 'SELL'
+  time: number
+  entryPrice: number
+  volume: number
+  openTime: string
+  x: number
+  y: number
+  edge: 'top' | 'bottom' | null
+  labelOnLeft: boolean
+}
 export type ChartToolMode = 'cursor' | 'crosshair' | 'level' | 'measure' | 'alert'
 
 interface CandlestickChartProps {
@@ -148,6 +160,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const lineLabelsHostRef = useRef<HTMLDivElement | null>(null)
   const [lineLabels, setLineLabels] = useState<PriceLineLabel[]>([])
   const lineLabelSyncRef = useRef<(() => void) | null>(null)
+  const openTradeMarkerSyncRef = useRef<(() => void) | null>(null)
+  const [openEntryMarkerPositions, setOpenEntryMarkerPositions] = useState<PositionedOpenEntryMarker[]>([])
   const [priceScaleRevision, setPriceScaleRevision] = useState(0)
   const priceScaleOverlayFrameRef = useRef<number | null>(null)
   const [bidTickDirection, setBidTickDirection] = useState<QuoteTickDirection>('neutral')
@@ -936,23 +950,97 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   }, [askPrice, bidPrice, bidQuoteTone, chartMode, quoteReady, askQuoteTone, showPriceLabels, tradeLines, isViewingHistory])
 
 
+  const openEntryMarkers = useMemo(
+    () => (timeframe && (chartMode === 'candles' || chartMode === 'bars'))
+      ? buildOpenTradeEntryMarkers(chartData, tradeMarkers, timeframe)
+      : [],
+    [chartData, chartMode, timeframe, tradeMarkers],
+  )
+
   useEffect(() => {
     const series = seriesRef.current
     if (!series) return
 
+    // Live/open positions use the price-and-time overlay below. Native markers
+    // remain for completed entries/exits so we never show a duplicate open arrow.
+    const closedTrades = tradeMarkers.filter((trade) => trade.status === 'closed')
     const markers = (chartMode === 'candles' || chartMode === 'bars') && timeframe
-      ? buildTradeChartMarkers(chartData, tradeMarkers, timeframe)
+      ? buildTradeChartMarkers(chartData, closedTrades, timeframe)
       : []
     const signature = JSON.stringify(markers.map((marker) => [
       Number(marker.time), marker.position, marker.shape, marker.color, marker.text ?? '', marker.size ?? 1,
     ]))
     if (signature === tradeMarkerSignatureRef.current) return
 
-    // Trade entry/exit arrows are native series markers; their timestamps map
-    // to real candles and remain in SHAFX's own visual language.
     series.setMarkers(markers)
     tradeMarkerSignatureRef.current = signature
   }, [chartData, chartMode, timeframe, tradeMarkers])
+
+  // Open positions are pinned to their real entry time and execution price.
+  // Their marker coordinates are recalculated after horizontal zoom/pan, vertical
+  // scale changes, timeframe/data changes, and mobile resize/orientation changes.
+  useEffect(() => {
+    const chart = chartRef.current
+    const series = seriesRef.current
+    const shell = containerRef.current
+    if (!chart || !series || !shell) {
+      setOpenEntryMarkerPositions([])
+      openTradeMarkerSyncRef.current = null
+      return
+    }
+
+    const sync = (): void => {
+      const liveChart = chartRef.current
+      const liveSeries = seriesRef.current
+      const liveShell = containerRef.current
+      if (!liveChart || !liveSeries || !liveShell) return
+      const plotWidth = liveChart.timeScale().width()
+      const plotHeight = Math.max(1, liveShell.clientHeight - 30)
+      const next: PositionedOpenEntryMarker[] = []
+
+      for (const entry of openEntryMarkers) {
+        const timeX = liveChart.timeScale().timeToCoordinate(entry.time as UTCTimestamp)
+        const priceY = liveSeries.priceToCoordinate(entry.entryPrice)
+        if (timeX === null || !Number.isFinite(timeX) || timeX < -8 || timeX > plotWidth + 8 ||
+          priceY === null || !Number.isFinite(priceY)) continue
+
+        const edge = priceY < 0 ? 'top' : priceY > plotHeight ? 'bottom' : null
+        const y = Math.max(12, Math.min(plotHeight - 12, priceY))
+        next.push({
+          ...entry,
+          x: timeX,
+          y,
+          edge,
+          labelOnLeft: timeX > plotWidth - 150,
+        })
+      }
+
+      const signature = next.map((item) => [
+        item.id, item.side, item.time, item.entryPrice, item.volume,
+        Math.round(item.x * 10) / 10, Math.round(item.y * 10) / 10, item.edge, item.labelOnLeft,
+      ].join(':')).join('|')
+      setOpenEntryMarkerPositions((current) => {
+        const currentSignature = current.map((item) => [
+          item.id, item.side, item.time, item.entryPrice, item.volume,
+          Math.round(item.x * 10) / 10, Math.round(item.y * 10) / 10, item.edge, item.labelOnLeft,
+        ].join(':')).join('|')
+        return currentSignature === signature ? current : next
+      })
+    }
+
+    openTradeMarkerSyncRef.current = sync
+    sync()
+    chart.timeScale().subscribeVisibleLogicalRangeChange(sync)
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(sync) : null
+    observer?.observe(shell)
+    window.addEventListener('resize', sync)
+    return () => {
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(sync)
+      observer?.disconnect()
+      window.removeEventListener('resize', sync)
+      if (openTradeMarkerSyncRef.current === sync) openTradeMarkerSyncRef.current = null
+    }
+  }, [openEntryMarkers, chartMode, chartTimeSignature, isFullscreen, priceScaleRevision])
 
   useEffect(() => {
     const chart = chartRef.current
@@ -1130,6 +1218,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     // Keep line tags visually responsive while rate-limiting the more expensive
     // structural hide/show pass to one React effect run per animation frame.
     lineLabelSyncRef.current?.()
+    openTradeMarkerSyncRef.current?.()
     if (priceScaleOverlayFrameRef.current !== null) return
     priceScaleOverlayFrameRef.current = window.requestAnimationFrame(() => {
       priceScaleOverlayFrameRef.current = null
@@ -1342,6 +1431,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     data-shafx-trade-line-count={tradeLines.length}
     data-shafx-trade-line-labels={tradeLines.map((line) => line.label).join('|')}
     data-shafx-trade-line-values={tradeLines.map((line) => line.label + ':' + line.price).join('|')}
+    data-shafx-open-entry-marker-count={openEntryMarkerPositions.length}
+    data-shafx-open-entry-markers={openEntryMarkerPositions.map((marker) => marker.side + ':' + marker.volume + ':' + marker.entryPrice).join('|')}
     onPointerDownCapture={handleChartPointerDown}
     onPointerMoveCapture={handleChartPointerMove}
     onPointerUpCapture={handleChartPointerUp}
@@ -1351,6 +1442,23 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     style={{ height: chartFullscreen ? '100svh' : height, minHeight: 280 }}
   >
     <div ref={chartHostRef} className="absolute inset-0 z-0" aria-hidden="true" />
+    <div className="shafx-open-entry-marker-layer pointer-events-none absolute left-0 right-[82px] top-0 bottom-[30px] z-10 overflow-hidden sm:right-[96px]" aria-hidden="true">
+      {openEntryMarkerPositions.map((marker) => {
+        const sideClass = marker.side === 'BUY' ? 'shafx-open-entry-marker--buy' : 'shafx-open-entry-marker--sell'
+        const edgeGlyph = marker.edge === 'top' ? '↑ ' : marker.edge === 'bottom' ? '↓ ' : ''
+        const labelSideClass = marker.labelOnLeft ? 'shafx-open-entry-label--left' : 'shafx-open-entry-label--right'
+        const labelVerticalClass = marker.side === 'BUY' ? 'shafx-open-entry-label--above' : 'shafx-open-entry-label--below'
+        const label = marker.side + ' ' + marker.volume.toFixed(2) + ' · ' + marker.entryPrice.toFixed(pricePrecision)
+        return (
+          <div key={marker.id} className={'shafx-open-entry-marker ' + sideClass} data-shafx-open-entry-marker={marker.id} style={{ left: marker.x + 'px', top: marker.y + 'px' }}>
+            <span className="shafx-open-entry-marker__point">{marker.side === 'BUY' ? '▲' : '▼'}</span>
+            <span className={'shafx-open-entry-marker__label ' + labelSideClass + ' ' + labelVerticalClass} title={marker.openTime + ' · ' + label}>
+              {edgeGlyph + label}
+            </span>
+          </div>
+        )
+      })}
+    </div>
     <div ref={lineLabelsHostRef} aria-hidden="true" className={`pointer-events-none absolute inset-y-0 left-0 right-[82px] z-20 overflow-hidden sm:right-[96px] ${isViewingHistory ? 'hidden' : ''}`}>
       {lineLabels.map((label) => {
         const centeredPnl = label.name.startsWith('OPEN ')

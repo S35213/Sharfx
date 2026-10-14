@@ -524,3 +524,63 @@ input::placeholder { color: #667285; }
     font-size: clamp(15px, 4.5vw, 18px);
   }
 }
+
+
+/* Open broker entries are positioned from the actual entry time and entry price,
+   so their marker follows both axes during chart zoom/pan instead of floating
+   a fixed distance above or below an arbitrary candle. */
+.shafx-open-entry-marker-layer {
+  z-index: 12;
+}
+.shafx-open-entry-marker {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+.shafx-open-entry-marker__point {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
+  font: 900 10px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  text-shadow: 0 1px 3px rgba(0,0,0,.9);
+}
+.shafx-open-entry-marker--buy .shafx-open-entry-marker__point { color: #22D3A5; }
+.shafx-open-entry-marker--sell .shafx-open-entry-marker__point { color: #FF5C75; }
+.shafx-open-entry-marker__label {
+  position: absolute;
+  z-index: 1;
+  display: block;
+  max-width: 148px;
+  overflow: hidden;
+  padding: 3px 5px;
+  border: 1px solid #263342;
+  border-left-width: 3px;
+  border-radius: 4px;
+  background: rgba(7, 10, 15, .96);
+  font: 800 8px/1.3 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  box-shadow: 0 2px 8px rgba(0,0,0,.45);
+}
+.shafx-open-entry-marker--buy .shafx-open-entry-marker__label { color: #22D3A5; border-left-color: #22D3A5; }
+.shafx-open-entry-marker--sell .shafx-open-entry-marker__label { color: #FF5C75; border-left-color: #FF5C75; }
+.shafx-open-entry-label--right { left: 8px; }
+.shafx-open-entry-label--left { right: 8px; }
+.shafx-open-entry-label--above { bottom: 8px; }
+.shafx-open-entry-label--below { top: 8px; }
+.shafx-open-entry-label--right.shafx-open-entry-label--above { transform: translateY(-100%); }
+.shafx-open-entry-label--left.shafx-open-entry-label--above { transform: translate(-100%, -100%); }
+.shafx-open-entry-label--left.shafx-open-entry-label--below { transform: translateX(-100%); }
+@media (max-width: 639px) {
+  .shafx-open-entry-marker__label {
+    max-width: 132px;
+    padding: 3px 4px;
+    font-size: 7px;
+  }
+}

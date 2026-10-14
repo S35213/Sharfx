@@ -588,3 +588,15 @@ Work is isolated on `fix/ctrader-protection-all-trades-axis-labels-20261014` pen
 - The chart now renders every open broker position on the selected instrument. Each entry has an `OPEN + P/L` label in the plot area and a numeric price tag on the right axis. SL/TP labels likewise retain their text in the plot area while their prices appear in boxed axis tags. Identical SL/TP levels are merged with a trade count, and BID/ASK remain shared market labels rather than one per trade. Broker-reported protection prices take precedence over planned fallbacks.
 
 Next: verify branch tests/build and deploy only to **Shafek Derive Render** after passing the build. Visually inspect the authenticated UI and current practice account without placing or closing any trade. Do not merge to `main` or promote Cloudflare production.
+
+
+## Open-position entry marker and timestamp correction — 2026-10-14
+
+Scope stays on `test/rebuild-deriv-native-manual-20260930` and the Render service **Shafek Derive Render** only. No broker orders were placed/closed/amended, and no sibling Render service, `main`, or Cloudflare production was targeted.
+
+- Open positions now have dedicated chart badges anchored to both their recorded entry time and exact entry price. BUY markers use teal/up arrows; SELL markers use red/down arrows and each label includes lot size and exact entry price.
+- Badges recompute on chart zoom/pan, timeframe/data changes, price-axis scaling and viewport resize. Completed-trade history markers remain separate, preventing a duplicate native open arrow.
+- Open entry time parsing now normalizes epoch seconds, milliseconds and microseconds before ISO conversion. If a cTrader account poll omits the open timestamp, SHAFX preserves the previously known timestamp instead of moving the marker to the poll time.
+- If cTrader candle history has a single missing timeframe bucket, an open marker may attach to the nearest real candle only within one timeframe interval and within the loaded history window. It never fabricates OHLC and never pins an old trade to a recent unrelated candle.
+
+Verification still required after Render deploy: lint/build and focused marker tests must pass. In the authenticated chart, confirm both open positions (one BUY and one SELL if that's what the broker reports) are present, the badges move with zoom/pan and are anchored to the recorded price/time, and no trade values are changed. Keep the branch experimental; do not merge to `main` or promote Cloudflare.

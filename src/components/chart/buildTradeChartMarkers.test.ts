@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { OHLCV } from '../../types'
-import { buildTradeChartMarkers, type TradeChartMarker } from './buildTradeChartMarkers'
+import { buildOpenTradeEntryMarkers, buildTradeChartMarkers, type TradeChartMarker } from './buildTradeChartMarkers'
 
 const baseTime = 1_791_547_200
 const candles: OHLCV[] = [
@@ -58,6 +58,32 @@ describe('SHAFX trade chart markers', () => {
     ], 'M1')
     expect(markers).toHaveLength(1)
     expect(markers[0].text).toBe('BUY 0.02 + 0.10')
+  })
+
+  it('returns independent price-anchored entry records for simultaneous open BUY and SELL positions', () => {
+    const entries = buildOpenTradeEntryMarkers(candles, [
+      trade({ id: 'buy-open', side: 'BUY', openTime: new Date((baseTime + 15) * 1000).toISOString(), entryPrice: 1.11985, volume: 0.10 }),
+      trade({ id: 'sell-open', side: 'SELL', openTime: new Date((baseTime + 135) * 1000).toISOString(), entryPrice: 1.12015, volume: 0.02 }),
+    ], 'M1')
+
+    expect(entries).toHaveLength(2)
+    expect(entries).toMatchObject([
+      { id: 'buy-open', side: 'BUY', time: baseTime, entryPrice: 1.11985, volume: 0.10 },
+      { id: 'sell-open', side: 'SELL', time: baseTime + 120, entryPrice: 1.12015, volume: 0.02 },
+    ])
+  })
+
+  it('snaps an open entry across a single missing candle bucket only to a nearby real candle', () => {
+    const sparse = [candles[0], candles[2]]
+    const entries = buildOpenTradeEntryMarkers(sparse, [
+      trade({ id: 'sell-gap', side: 'SELL', openTime: new Date((baseTime + 75) * 1000).toISOString() }),
+    ], 'M1')
+    expect(entries).toMatchObject([{ id: 'sell-gap', side: 'SELL', time: baseTime + 120 }])
+
+    const outOfHistory = buildOpenTradeEntryMarkers(sparse, [
+      trade({ id: 'old-sell', side: 'SELL', openTime: new Date((baseTime - 600) * 1000).toISOString() }),
+    ], 'M1')
+    expect(outOfHistory).toHaveLength(0)
   })
 
   it('does not attach a marker to an unrelated candle when the entry bucket is missing', () => {

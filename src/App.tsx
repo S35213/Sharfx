@@ -72,6 +72,25 @@ const positionChartSymbol = (incoming: string, previous?: string): string =>
     ? previous
     : normalizeProviderSymbol(incoming)
 
+// cTrader normally reports epoch milliseconds. Historical payloads or adapters
+// may expose seconds/microseconds, so normalize units before converting to ISO;
+// otherwise an entry marker can be lost because its timestamp lands in 1970.
+const parseCTraderOpenTime = (value: unknown): string | undefined => {
+  if (value === null || value === undefined || value === '') return undefined
+  if (typeof value === 'number' || (typeof value === 'string' && /^\d+(?:\.\d+)?$/.test(value.trim()))) {
+    const raw = Number(value)
+    if (!Number.isFinite(raw) || raw <= 0) return undefined
+    const milliseconds = raw >= 1e14 ? raw / 1000 : raw < 1e11 ? raw * 1000 : raw
+    const parsed = new Date(milliseconds)
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString()
+  }
+  if (typeof value === 'string') {
+    const parsed = new Date(value)
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString()
+  }
+  return undefined
+}
+
 const providerPositionToTrade = (position: ProviderPosition): TradeOrder => {
   const metadata = position.metadata || {}
   const raw = (metadata.raw && typeof metadata.raw === 'object') ? metadata.raw as Record<string, unknown> : {}
@@ -103,9 +122,7 @@ const providerPositionToTrade = (position: ProviderPosition): TradeOrder => {
       rewardAmount: 0,
       riskRewardRatio: 0,
       status: 'open',
-      openTime: typeof metadata.openTimestamp === 'string' && metadata.openTimestamp
-        ? new Date(Number(metadata.openTimestamp)).toISOString()
-        : new Date().toISOString(),
+      openTime: parseCTraderOpenTime(metadata.openTimestamp) ?? new Date().toISOString(),
       profit: Number.isFinite(position.unrealizedPL) ? position.unrealizedPL : 0,
       providerOrderId: String(position.id),
       brokerProduct: 'SHAFX_CFD_CTRADER',
@@ -685,6 +702,7 @@ const TerminalContent: React.FC = () => {
                   plannedStopLossPrice: stopLoss,
                   plannedTakeProfitPrice: takeProfit,
                   brokerProtectionConfirmed: positivePrice(trade.stopLoss) !== null && positivePrice(trade.takeProfit) !== null,
+                  openTime: parseCTraderOpenTime(event.position.metadata?.openTimestamp) ?? previous?.openTime ?? trade.openTime,
                   currentPrice: pnlReferencePrice,
                   pnlReferencePrice,
                   pnlReferenceProfit: brokerProfit,

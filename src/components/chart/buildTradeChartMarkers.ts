@@ -65,6 +65,68 @@ const candleAtTradeTime = (timestampText: string | undefined, candles: readonly 
   return null
 }
 
+export interface OpenTradeEntryMarker {
+  id: string
+  side: 'BUY' | 'SELL'
+  time: number
+  entryPrice: number
+  volume: number
+  openTime: string
+  profit?: number
+}
+
+/**
+ * Resolve the candle for an open entry. Prefer the true candle bucket; if the
+ * feed skipped exactly one candle, use the nearest real candle only when it is
+ * within one timeframe interval and inside the loaded history window. Never
+ * synthesize a candle or attach an old entry to an unrelated recent candle.
+ */
+export const buildOpenTradeEntryMarkers = (
+  candles: readonly CandleTimeLike[],
+  trades: readonly TradeChartMarker[],
+  timeframe: Timeframe,
+): OpenTradeEntryMarker[] => {
+  if (candles.length === 0 || trades.length === 0) return []
+  const duration = timeframeSeconds[timeframe]
+  const candleTimes = candles.map((candle) => Number(candle.time)).filter(Number.isFinite).sort((a, b) => a - b)
+  if (candleTimes.length === 0) return []
+  const firstTime = candleTimes[0]
+  const lastTime = candleTimes[candleTimes.length - 1]
+  const seen = new Set<string>()
+
+  return trades.flatMap((trade) => {
+    if (trade.status !== 'open' || !trade.id || seen.has(trade.id) ||
+      !Number.isFinite(trade.entryPrice) || trade.entryPrice <= 0 || !trade.openTime) return []
+    seen.add(trade.id)
+
+    const parsedMs = Date.parse(trade.openTime)
+    if (!Number.isFinite(parsedMs)) return []
+    const timestamp = Math.floor(parsedMs / 1000)
+    const exactTime = candleAtTradeTime(trade.openTime, candles, timeframe)
+    let candleTime = exactTime
+
+    // A small feed hole can make the exact bucket unavailable even though the
+    // trade belongs to this loaded window. Snap to a nearby real candle only
+    // within one timeframe; if the trade is outside loaded history, omit it.
+    if (candleTime === null && timestamp >= firstTime && timestamp <= lastTime + duration) {
+      const nearest = candleTimes.reduce((best, current) =>
+        Math.abs(current - timestamp) < Math.abs(best - timestamp) ? current : best, candleTimes[0])
+      if (Math.abs(nearest - timestamp) <= duration) candleTime = nearest
+    }
+    if (candleTime === null || timestamp < firstTime || timestamp > lastTime + duration) return []
+
+    return [{
+      id: trade.id,
+      side: trade.side,
+      time: candleTime,
+      entryPrice: trade.entryPrice,
+      volume: Number.isFinite(trade.volume) && trade.volume > 0 ? trade.volume : 0,
+      openTime: trade.openTime,
+      profit: trade.profit,
+    }]
+  })
+}
+
 interface MarkerGroup {
   marker: SeriesMarker<UTCTimestamp>
   count: number
