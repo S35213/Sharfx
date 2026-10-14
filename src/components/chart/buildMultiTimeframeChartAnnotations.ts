@@ -40,6 +40,35 @@ const TIMEFRAME_STRENGTH: Record<Timeframe, number> = {
   D1: 7,
   W1: 8,
 }
+const EXPECTED_CANDLE_SECONDS: Record<Timeframe, number> = {
+  M1: 60, M5: 300, M15: 900, M30: 1800,
+  H1: 3600, H4: 14400, D1: 86400, W1: 604800,
+}
+
+/** Reject a cached candle set when its observed cadence belongs to another timeframe. */
+export const isHistoryConsistentWithTimeframe = (
+  candles: OHLCV[] | undefined,
+  timeframe: Timeframe,
+): boolean => {
+  if (!candles || candles.length < 5) return false
+  const timestamps = candles.map((candle) => Number(candle.time))
+    .filter((time) => Number.isFinite(time)).sort((a, b) => a - b)
+  const intervals: number[] = []
+  for (let index = 1; index < timestamps.length; index += 1) {
+    const interval = timestamps[index] - timestamps[index - 1]
+    if (interval > 0) intervals.push(interval)
+  }
+  if (intervals.length < 3) return false
+  intervals.sort((a, b) => a - b)
+  const middle = Math.floor(intervals.length / 2)
+  const medianInterval = intervals.length % 2 === 0
+    ? (intervals[middle - 1] + intervals[middle]) / 2
+    : intervals[middle]
+  const ratio = medianInterval / EXPECTED_CANDLE_SECONDS[timeframe]
+  // Weekend/holiday gaps are fine; a different candle interval is not.
+  return ratio >= 0.45 && ratio <= 3.2
+}
+
 const MAX_ZONES_PER_SIDE = 2
 
 const priceMergeTolerance = (symbol: string, price: number): number =>
@@ -124,8 +153,11 @@ const labelForZone = (zone: StructuralZone, currentPrice: number): string => {
 const summarizeZone = (zone: StructuralZone, currentPrice: number): ChartAnnotation => {
   const kinds = new Set(zone.levels.map((level) => level.kind))
   const timeframes = [...new Set(zone.levels.map((level) => level.timeframe))]
-  const sortedMembers = [...new Set(zone.levels.map((level) => level.annotation.id))].sort()
-  const id = 'mtf-zone-' + sortedMembers.map((member) => member.replace(/^mtf-/, '')).join('+')
+  // Include source timeframe and concept; generic IDs like "support" collided
+  // across separate timeframe zones and caused duplicate React keys/line entries.
+  const sortedMembers = [...new Set(zone.levels.map((level) => level.timeframe + '-' + level.kind))].sort()
+  const priceIdentity = Math.round(zone.price * 1_000_000)
+  const id = 'mtf-zone-' + sortedMembers.join('+') + '-' + priceIdentity
   const hasSupport = kinds.has('support')
   const hasResistance = kinds.has('resistance')
   const color = hasSupport && hasResistance
@@ -163,16 +195,22 @@ export const buildMultiTimeframeStructuralAnnotations = (
   symbol: string,
   selectedTimeframe: Timeframe,
   historyByTimeframe: Partial<Record<Timeframe, OHLCV[]>>,
+  visibleBarCount = 0,
 ): ChartAnnotation[] => {
-  const sourceTimeframes = STRUCTURAL_TIMEFRAME_CONTEXTS[selectedTimeframe]
+  // Zoomed-in charts show the selected interval only. Higher context is added
+  // progressively when zooming out; W1 can never import M5/H1 structure.
+  const context = STRUCTURAL_TIMEFRAME_CONTEXTS[selectedTimeframe]
+  const sourceCount = visibleBarCount >= 240 ? 3 : visibleBarCount >= 140 ? 2 : 1
+  const sourceTimeframes = context.slice(0, Math.min(context.length, sourceCount))
   const currentCandles = historyByTimeframe[selectedTimeframe]
+  if (!isHistoryConsistentWithTimeframe(currentCandles, selectedTimeframe)) return []
   const currentPrice = currentCandles?.[currentCandles.length - 1]?.close
   if (!Number.isFinite(currentPrice) || (currentPrice ?? 0) <= 0) return []
 
   const levels: StructuralLevel[] = []
   for (const sourceTimeframe of sourceTimeframes) {
     const candles = historyByTimeframe[sourceTimeframe]
-    if (!candles || candles.length < 5) continue
+    if (!isHistoryConsistentWithTimeframe(candles, sourceTimeframe)) continue
 
     const sourceAnnotations = buildStructuralChartAnnotations(symbol, candles, sourceTimeframe)
     for (const annotation of sourceAnnotations) {

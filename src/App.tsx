@@ -260,6 +260,7 @@ const TerminalContent: React.FC = () => {
   const [tradeLines, setTradeLines] = useState<ChartAnnotation[]>([])
   const [chartTool, setChartTool] = useState<WorkspaceTool>('cursor')
   const [trendVisible, setTrendVisible] = useState(false)
+  const [visibleChartBars, setVisibleChartBars] = useState(0)
   const [trendRefreshVersion, setTrendRefreshVersion] = useState(0)
   const [structuralHistorySnapshot, setStructuralHistorySnapshot] = useState<{
     symbol: string
@@ -360,6 +361,7 @@ const TerminalContent: React.FC = () => {
     if (timeframeRef.current === nextTimeframe) return
 
     timeframeRef.current = nextTimeframe
+    setVisibleChartBars(0)
     setTimeframe(nextTimeframe)
     setStructuralHistorySnapshot(collectStructuralHistorySnapshot(selectedSymbolRef.current, activeProviderSelection))
 
@@ -1272,8 +1274,8 @@ const TerminalContent: React.FC = () => {
     // Use the latest selected-interval candles from React state, while the
     // source history signature keeps incomplete live ticks from re-running scans.
     historyByTimeframe[timeframe] = liveCandles
-    return buildMultiTimeframeStructuralAnnotations(selectedSymbol, timeframe, historyByTimeframe)
-  }, [selectedSymbol, timeframe, structuralHistories, structuralCandleSignature, trendRefreshVersion])
+    return buildMultiTimeframeStructuralAnnotations(selectedSymbol, timeframe, historyByTimeframe, visibleChartBars)
+  }, [selectedSymbol, timeframe, structuralHistories, structuralCandleSignature, trendRefreshVersion, visibleChartBars])
 
   const selectedOpenPosition = useMemo(
     () => liveOpenPositions.find((position) =>
@@ -1467,10 +1469,20 @@ const TerminalContent: React.FC = () => {
   }
 
   const handleTrendToggle = (): void => {
-    setStructuralHistorySnapshot(collectStructuralHistorySnapshot(selectedSymbol, activeProviderSelection))
-    setTrendVisible((visible) => !visible)
-    setTrendRefreshVersion((version) => version + 1)
+    const showNext = !trendVisible
+    if (showNext) {
+      setStructuralHistorySnapshot(collectStructuralHistorySnapshot(selectedSymbol, activeProviderSelection))
+      setTrendRefreshVersion((version) => version + 1)
+    }
+    // Hiding avoids a rescan; the chart removes structure immediately while
+    // broker entry/SL/TP and Bid/Ask overlays remain visible.
+    setTrendVisible(showNext)
   }
+
+  const handleVisibleChartBarsChange = useCallback((count: number): void => {
+    const zoomTier = count >= 240 ? 240 : count >= 140 ? 140 : 0
+    setVisibleChartBars((current) => current === zoomTier ? current : zoomTier)
+  }, [])
 
   const handleReviewSetup = useCallback((setup?: SetupCandidate | null): void => {
     setReviewSetup(setup || null)
@@ -1610,7 +1622,7 @@ const TerminalContent: React.FC = () => {
                    ? 'cTrader reports an open position, but its instrument name could not be resolved yet. SHAFX is withholding entry / SL / TP lines rather than plotting them on the wrong chart.'
                    : 'An open cTrader position is on ' + [...new Set(openPositionsOnOtherSymbols.map((position) => position.symbol))].join(', ') + '. Select that instrument to view its entry / SL / TP lines.'}
                </div>}
-             <CandlestickChart data={liveCandles} symbol={selectedSymbol} timeframe={timeframe} annotations={trendVisible ? chartAnnotations : []} tradeLines={combinedTradeLines} tradeMarkers={chartTradeMarkers} bidPrice={chartBidPrice} askPrice={chartAskPrice} quoteReady={chartQuoteReady} toolMode={chartToolMode} pipSize={symbolSpec.pipSize} onToolNotice={pushToast} showGrid={chartSettings.showGrid} showPriceLabels={chartSettings.showPriceLabels} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} marketTimestamp={marketTimestamp} onTimeframeChange={handleTimeframeChange} replayMode={false} />
+             <CandlestickChart data={liveCandles} symbol={selectedSymbol} timeframe={timeframe} annotations={chartAnnotations} showStructuralOverlays={trendVisible} onVisibleBarCountChange={handleVisibleChartBarsChange} tradeLines={combinedTradeLines} tradeMarkers={chartTradeMarkers} bidPrice={chartBidPrice} askPrice={chartAskPrice} quoteReady={chartQuoteReady} toolMode={chartToolMode} pipSize={symbolSpec.pipSize} onToolNotice={pushToast} showGrid={chartSettings.showGrid} showPriceLabels={chartSettings.showPriceLabels} candleTheme={chartSettings.candleTheme} chartMode={chartSettings.chartMode} marketTimestamp={marketTimestamp} onTimeframeChange={handleTimeframeChange} replayMode={false} />
              {liveCandles.length === 0 && <div role="status" aria-live="polite" className="pointer-events-none absolute inset-0 z-40 flex min-h-[320px] items-center justify-center bg-shafx-bg/80 text-sm text-shafx-textMuted">Waiting for the live market stream…</div>}
            </div>
           <div className="shafx-landscape-secondary grid grid-cols-2 gap-2 border-t border-shafx-border bg-shafx-surface/55 p-2 sm:grid-cols-4">

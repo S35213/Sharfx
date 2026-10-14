@@ -46,6 +46,8 @@ interface CandlestickChartProps {
   marketTimestamp?: number
   onTimeframeChange?: (timeframe: Timeframe) => void
   replayMode?: boolean
+  showStructuralOverlays?: boolean
+  onVisibleBarCountChange?: (count: number) => void
 }
 
 interface UserLevel { id: string; price: number; label: string; color: string; lineWidth?: 1 | 2 | 3 | 4; dashed?: boolean; armed?: boolean }
@@ -119,8 +121,10 @@ const structuralOverlayKind = (annotation: ChartAnnotation): OverlayKind | null 
   return null
 }
 
-export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, symbol, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [], tradeMarkers = [], candleTheme = 'shafx', chartMode = 'candles', quoteReady = false, onTimeframeChange, replayMode = false }) => {
+export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, symbol, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [], tradeMarkers = [], candleTheme = 'shafx', chartMode = 'candles', quoteReady = false, onTimeframeChange, replayMode = false, showStructuralOverlays = true, onVisibleBarCountChange }) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
+  const visibleBarCountCallbackRef = useRef(onVisibleBarCountChange)
+  useEffect(() => { visibleBarCountCallbackRef.current = onVisibleBarCountChange }, [onVisibleBarCountChange])
   const chartHostRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ShafxSeries | null>(null)
@@ -263,7 +267,11 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       if (width > 0 && h > 0) chart.applyOptions({ width, height: Math.max(280, h) })
     })
     const onVisibleRangeChange = (range: { from: number; to: number } | null): void => {
-      if (!range) return
+      if (!range) {
+        visibleBarCountCallbackRef.current?.(0)
+        return
+      }
+      visibleBarCountCallbackRef.current?.(Math.max(0, Math.ceil(range.to - range.from + 1)))
 
       const lastIndex = latestIndexRef.current
       if (lastIndex < 0) {
@@ -740,8 +748,14 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       priceLinesRef.current.set(annotation.id, series.createPriceLine(options))
     }
 
+    // Gate structural rendering inside the chart, and remove stale structure
+    // lines/labels on hide without touching broker-confirmed trade levels.
+    const visibleAnnotations = showStructuralOverlays
+      ? annotations
+      : annotations.filter((annotation) => structuralOverlayKind(annotation) === null)
+
     const currentOverlayIds = new Set([
-      ...annotations.map((annotation) => annotation.id),
+      ...visibleAnnotations.map((annotation) => annotation.id),
       ...tradeLines.map((line) => line.id),
       ...userLevels.map((level) => level.id),
       ...armedAlerts.map((alert) => alert.id),
@@ -750,7 +764,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       if (!currentOverlayIds.has(id)) structuralOcclusionRef.current.delete(id)
     }
 
-    if (!isViewingHistory) annotations.forEach((annotation) => {
+    if (!isViewingHistory) visibleAnnotations.forEach((annotation) => {
       const structuralKind = structuralOverlayKind(annotation)
       // Trend levels remain available with open positions; quote proximity
       // suppression prevents them obscuring broker-confirmed protection.
@@ -867,7 +881,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       }
       lineLabelSyncRef.current()
     }
-  }, [annotations, armedAlerts, askPrice, bidPrice, bidQuoteTone, chartMode, isViewingHistory, lastClose, pipSize, priceScaleRevision, quoteReady, askQuoteTone, showPriceLabels, tradeLines, userLevels])
+  }, [annotations, armedAlerts, askPrice, bidPrice, bidQuoteTone, chartMode, isViewingHistory, lastClose, pipSize, priceScaleRevision, quoteReady, askQuoteTone, showPriceLabels, showStructuralOverlays, tradeLines, userLevels])
 
   useEffect(() => {
     const chart = chartRef.current
