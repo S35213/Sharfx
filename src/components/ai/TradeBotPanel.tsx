@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { Activity, CircleStop, Play, ShieldCheck } from 'lucide-react'
 import type { SymbolSpec, Timeframe } from '../../types'
 import type { SetupCandidate } from '../../engine/setup/types'
@@ -20,7 +20,6 @@ export const TradeBotPanel: React.FC<Props> = ({
   symbol, timeframe, marketSource, accountBalance, accountCurrency, symbolSpec, onReviewSetup,
 }) => {
   const [running, setRunning] = useState(false)
-  const [cycles, setCycles] = useState(0)
   const market = useTradeBotMarketData(symbol, marketSource, running)
   const decision = useMemo(() => evaluateTradeBotDecision({
     frames: market.frames,
@@ -30,10 +29,6 @@ export const TradeBotPanel: React.FC<Props> = ({
     accountCurrency,
     symbolSpec,
   }), [market.frames, symbol, timeframe, accountBalance, accountCurrency, symbolSpec])
-
-  useEffect(() => {
-    if (running && market.updatedAt !== null) setCycles((previous) => previous + 1)
-  }, [running, market.updatedAt])
 
   const statusLabel = !running ? 'STOPPED' : market.status === 'ready' ? 'MONITORING' : market.status === 'partial' ? 'PARTIAL DATA' : market.status === 'loading' ? 'LOADING' : market.status === 'unavailable' ? 'BLOCKED' : 'DATA ERROR'
   const statusTone = decision.status === 'READY' && running
@@ -48,7 +43,6 @@ export const TradeBotPanel: React.FC<Props> = ({
     accountBalance > 0
 
   const start = (): void => {
-    setCycles(0)
     setRunning(true)
   }
   const stop = (): void => setRunning(false)
@@ -126,7 +120,7 @@ export const TradeBotPanel: React.FC<Props> = ({
           </button>
         )}
       </div>
-      <p className="text-[8px] leading-4 text-shafx-textMuted">Analysis cycles: {cycles} • refresh target 15 seconds • no auto-start • no automatic orders</p>
+      <p className="text-[8px] leading-4 text-shafx-textMuted">Refresh target 15 seconds • last update {updatedAt} • no auto-start • no automatic orders</p>
     </section>
   )
 }
