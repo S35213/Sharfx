@@ -187,14 +187,20 @@ export const CTraderManualTicket: React.FC<Props> = ({
     Number(quote?.ask) > Number(quote?.bid)
     ? (Number(quote?.ask) - Number(quote?.bid)) / Math.max(effectiveSymbol.pipSize, Number.EPSILON)
     : 0
-  // cTrader distance value 1 means points. Avoid interpreting percentage-based
-  // broker distances as points; cTrader itself remains authoritative for those.
-  const brokerMinStopPips = brokerDistanceUnit === 1
-    ? Math.max(0, Number(brokerMetadata.slDistance) || 0) * brokerPointPips + quoteSpreadPips + brokerPointPips
-    : 0
-  const brokerMinTargetPips = brokerDistanceUnit === 1
-    ? Math.max(0, Number(brokerMetadata.tpDistance) || 0) * brokerPointPips + brokerPointPips
-    : 0
+  // cTrader distance mode 1 is symbol points; mode 2 is hundredths of a
+  // percent (100 means 1%). Convert both to pips before validating AUTO / EDIT.
+  const brokerMinStopPriceDistance = brokerDistanceUnit === 1
+    ? Math.max(0, Number(brokerMetadata.slDistance) || 0) * brokerPricePoint
+    : brokerDistanceUnit === 2
+      ? Math.max(0, Number(brokerMetadata.slDistance) || 0) * Math.max(entryPrice, 0) / 10000
+      : 0
+  const brokerMinTargetPriceDistance = brokerDistanceUnit === 1
+    ? Math.max(0, Number(brokerMetadata.tpDistance) || 0) * brokerPricePoint
+    : brokerDistanceUnit === 2
+      ? Math.max(0, Number(brokerMetadata.tpDistance) || 0) * Math.max(entryPrice, 0) / 10000
+      : 0
+  const brokerMinStopPips = brokerMinStopPriceDistance / Math.max(effectiveSymbol.pipSize, Number.EPSILON) + quoteSpreadPips + brokerPointPips
+  const brokerMinTargetPips = brokerMinTargetPriceDistance / Math.max(effectiveSymbol.pipSize, Number.EPSILON) + brokerPointPips
   // AUTO scales the reference distance with risk but never goes below the
   // broker's known minimum. Lot sizing then adjusts to keep planned cash risk.
   const autoStopPips = Math.max(
