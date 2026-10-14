@@ -605,3 +605,10 @@ Verification still required after Render deploy: lint/build and focused marker t
 ## Open-position marker label cleanup — 2026-10-14
 
 On the experimental branch `test/rebuild-deriv-native-manual-20260930` and the Render service **Shafek Derive Render** only, the persistent open-entry marker label now shows the side and lot size (for example, `BUY 0.10` or `SELL 0.10`) without repeating the price in the label. The marker still uses the true entry price internally for its vertical coordinate, preserving correct price anchoring during zoom/pan. No broker order or position was changed. Do not merge to `main` or promote to Cloudflare.
+
+## Source-aware multi-timeframe chart scan — 2026-10-14
+
+- Trend annotations now use candle histories per source timeframe rather than treating the selected interval as the only structural context. The scanner labels each level with its source timeframe so the trader can tell an H1 level from H4 or D1.
+- Context policy: M1 shows M1/M5/H1; M5 shows M5/H1/H4; M15 shows M15/H1/H4; M30 shows M30/H4/D1; H1 shows H1/H4/D1; H4 shows H4/D1/W1; D1 shows D1/W1; W1 shows W1 only. This is deliberately top-down: lower-timeframe structure never gets painted onto a higher-timeframe chart.
+- Clicking Trend triggers a fresh render from the selected symbol's timeframe caches. Deriv history warming and cTrader's background interval warmer now bump the scan version when new history arrives, so the visible source-aware levels refresh after cached history finishes loading. A timeframe switch recalculates the source set for the new chart.
+- Added unit tests for the M5/H4/W1 hierarchy and missing history. This is an analysis-only chart change; it does not open, modify, or close trades. Scope remains this experimental branch and Render service **Shafek Derive Render**. Do not merge to main or promote Cloudflare before CI and live QA pass.
