@@ -20,6 +20,7 @@ import { Watchlist } from './components/watchlist/Watchlist'
 import { MarketAnalysisPanel } from './components/analysis/MarketAnalysis'
 import { AIAssistantPanel } from './components/ai/AIAssistantPanel'
 import { SignalDeskPanel } from './components/ai/SignalDeskPanel'
+import { TradeBotPanel } from './components/ai/TradeBotPanel'
 import { OrderPanel } from './components/order/OrderPanel'
 import { closeDerivContract } from './data/deriv/derivTrading'
 import { AccountPanel } from './components/account/AccountPanel'
@@ -1540,7 +1541,7 @@ const TerminalContent: React.FC = () => {
          : (activeProviderSelection?.providerId === 'ctrader' ? 'cTrader ' : 'Deriv ') + order.type + ' trade opened on ' + (order.chartTimeframe ?? timeframe) + '.')
     }} aiSetup={reviewSetup} />
     </div>,
-    bot: <ErrorBoundary><SignalDeskPanel symbol={selectedSymbol} timeframe={timeframe} marketSource={signalBotMarketSource} onReviewSetup={handleReviewSetup} /></ErrorBoundary>,
+    bot: <div className="space-y-4"><ErrorBoundary><SignalDeskPanel symbol={selectedSymbol} timeframe={timeframe} marketSource={signalBotMarketSource} onReviewSetup={handleReviewSetup} /></ErrorBoundary><ErrorBoundary><TradeBotPanel symbol={selectedSymbol} timeframe={timeframe} marketSource={signalBotMarketSource} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} onReviewSetup={handleReviewSetup} /></ErrorBoundary></div>,
     liquidity: <LiquidityPanel key={selectedSymbol} symbol={selectedSymbol} price={currentPrice} precision={symbolSpec.pricePrecision} pipSize={symbolSpec.pipSize} candles={liveCandles} />,
     orders: <OrderPanel providerSelection={activeProviderSelection} symbol={selectedSymbol} currentPrice={currentPrice} bidPrice={chartBidPrice} askPrice={chartAskPrice} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} timeframe={timeframe} connection={derivOrderConnection} activePosition={selectedOpenPosition} onTradeClosed={(id) => { void handleClosePosition(id) }} onTradeLinesChange={setTradeLines} onTradeOpened={(order) => {
       setOpenPositions((current) => [order, ...current.filter((item) => item.id !== order.id)])
@@ -1637,13 +1638,13 @@ const TerminalContent: React.FC = () => {
           'Verify the actual SL/TP in cTrader before relying on it.'
          : (activeProviderSelection?.providerId === 'ctrader' ? 'cTrader ' : 'SHAFX ') + order.type + ' trade opened on ' + (order.chartTimeframe ?? timeframe) + '.')
     }} aiSetup={reviewSetup} /></div></aside>}
-      <aside className={showBot ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><ErrorBoundary><SignalDeskPanel symbol={selectedSymbol} timeframe={timeframe} marketSource={signalBotMarketSource} onReviewSetup={handleReviewSetup} /></ErrorBoundary></aside>
+      <aside className={showBot ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-4"><ErrorBoundary><SignalDeskPanel symbol={selectedSymbol} timeframe={timeframe} marketSource={signalBotMarketSource} onReviewSetup={handleReviewSetup} /></ErrorBoundary><ErrorBoundary><TradeBotPanel symbol={selectedSymbol} timeframe={timeframe} marketSource={signalBotMarketSource} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} onReviewSetup={handleReviewSetup} /></ErrorBoundary></div></aside>
       <aside className={showHistory ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="h-[calc(100svh-92px)] min-h-[520px]"><TradesPanel defaultTab="history" openPositions={liveOpenPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={currentPrice} selectedSymbol={selectedSymbol} onClosePosition={(id) => { void handleClosePosition(id) }} onBulkClose={handleBulkClose} currency={resolvedAccountData.currency} botPaperHistory={botPaperHistory} /></div></aside>
       <aside className={showFunds ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><DerivCashierLinks /></div></aside>
       <aside className={showAccount ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><AccountPanel account={resolvedAccountData} activeProviderSelection={activeProviderSelection} /></div></aside>
 
        {!isCompactViewport && <aside className="shafx-desktop-right-panel hidden w-[320px] min-w-[300px] max-w-[340px] flex-shrink-0 flex-col overflow-hidden border-l border-shafx-border bg-[#090D13] lg:flex xl:w-[340px] 2xl:w-[360px]">
-        <div className="shafx-right-panel-header flex h-12 flex-shrink-0 items-center justify-between border-b border-shafx-border px-4"><div><div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">{dock === 'orders' ? 'TRADE' : 'WORKSPACE'}</div><div className="text-xs font-semibold">{dock === 'insights' ? 'Market intelligence' : dock === 'chat' ? 'Chat & Order Ticket' : dock === 'bot' ? 'SHAFX Signal Desk' : dock === 'liquidity' ? 'Liquidity & depth' : 'Trade ticket'}</div></div></div>
+        <div className="shafx-right-panel-header flex h-12 flex-shrink-0 items-center justify-between border-b border-shafx-border px-4"><div><div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">{dock === 'orders' ? 'TRADE' : 'WORKSPACE'}</div><div className="text-xs font-semibold">{dock === 'insights' ? 'Market intelligence' : dock === 'chat' ? 'Chat & Order Ticket' : dock === 'bot' ? 'SHAFX Bots' : dock === 'liquidity' ? 'Liquidity & depth' : 'Trade ticket'}</div></div></div>
         <div className="shafx-right-panel-content min-h-0 flex-1 overflow-y-auto p-4">{dockContent[dock === 'agent' || dock === 'research' ? 'insights' : dock]}</div>
       </aside>}
     </main>
