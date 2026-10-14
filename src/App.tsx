@@ -252,7 +252,7 @@ const TerminalContent: React.FC = () => {
   const [openPositions, setOpenPositions] = useState<TradeOrder[]>([])
   const [pendingOrders] = useState<TradeOrder[]>([])
   const [tradeHistory, setTradeHistory] = useState<TradeOrder[]>([])
-  const [botPaperHistory, setBotPaperHistory] = useState<BotPaperTrade[]>(() => readBotPaperHistory())
+  const [botPaperHistory] = useState<BotPaperTrade[]>(() => readBotPaperHistory())
   const [reviewSetup, setReviewSetup] = useState<SetupCandidate | null>(null)
   const [liveMarketActive, setLiveMarketActive] = useState(false)
   const [chartSettings, setChartSettings] = useState<ChartWorkspaceSettings>(() => readChartWorkspaceSettings())
@@ -420,14 +420,6 @@ const TerminalContent: React.FC = () => {
     setTimeframe,
   ])
 
-  const handleBotPaperRoundClosed = useCallback((trade: BotPaperTrade): void => {
-    setBotPaperHistory((current) => [trade, ...current.filter((item) => item.id !== trade.id)].slice(0, 200))
-  }, [])
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    window.localStorage.setItem(BOT_PAPER_HISTORY_STORAGE_KEY, JSON.stringify(botPaperHistory))
-  }, [botPaperHistory])
   const dismissToast = useCallback(() => setToast(null), [])
 
   useLayoutEffect(() => {
@@ -1521,6 +1513,13 @@ const TerminalContent: React.FC = () => {
         onActiveChange={handleLiveActiveChange}
       />
 
+  const signalBotMarketSource = {
+    providerId: activeProviderSelection?.providerId ?? null,
+    connectionId: activeProviderSelection?.connectionId ?? null,
+    accountId: activeProviderSelection?.accountId ?? null,
+    environment: activeProviderSelection?.environment ?? null,
+  }
+
   const dockContent = {
     insights: <div className="space-y-3">
       <FXMoveMatrix pairs={watchlist} />
@@ -1541,19 +1540,7 @@ const TerminalContent: React.FC = () => {
          : (activeProviderSelection?.providerId === 'ctrader' ? 'cTrader ' : 'Deriv ') + order.type + ' trade opened on ' + (order.chartTimeframe ?? timeframe) + '.')
     }} aiSetup={reviewSetup} />
     </div>,
-    bot: <SignalDeskPanel
-      symbol={selectedSymbol}
-      timeframe={timeframe}
-      candles={liveCandles}
-      currentPrice={currentPrice}
-      analysis={marketAnalysis}
-      setup={reviewSetup}
-      accountBalance={resolvedAccountData.balance}
-      accountCurrency={resolvedAccountData.currency}
-      connected={Boolean(derivOrderConnection)}
-      onReviewSetup={handleReviewSetup}
-      onPaperRoundClosed={handleBotPaperRoundClosed}
-    />,
+    bot: <ErrorBoundary><SignalDeskPanel symbol={selectedSymbol} timeframe={timeframe} marketSource={signalBotMarketSource} onReviewSetup={handleReviewSetup} /></ErrorBoundary>,
     liquidity: <LiquidityPanel key={selectedSymbol} symbol={selectedSymbol} price={currentPrice} precision={symbolSpec.pricePrecision} pipSize={symbolSpec.pipSize} candles={liveCandles} />,
     orders: <OrderPanel providerSelection={activeProviderSelection} symbol={selectedSymbol} currentPrice={currentPrice} bidPrice={chartBidPrice} askPrice={chartAskPrice} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} timeframe={timeframe} connection={derivOrderConnection} activePosition={selectedOpenPosition} onTradeClosed={(id) => { void handleClosePosition(id) }} onTradeLinesChange={setTradeLines} onTradeOpened={(order) => {
       setOpenPositions((current) => [order, ...current.filter((item) => item.id !== order.id)])
@@ -1650,7 +1637,7 @@ const TerminalContent: React.FC = () => {
           'Verify the actual SL/TP in cTrader before relying on it.'
          : (activeProviderSelection?.providerId === 'ctrader' ? 'cTrader ' : 'SHAFX ') + order.type + ' trade opened on ' + (order.chartTimeframe ?? timeframe) + '.')
     }} aiSetup={reviewSetup} /></div></aside>}
-      <aside className={showBot ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><SignalDeskPanel symbol={selectedSymbol} timeframe={timeframe} candles={liveCandles} currentPrice={currentPrice} analysis={marketAnalysis} setup={reviewSetup} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} connected={Boolean(derivOrderConnection)} onReviewSetup={handleReviewSetup} onPaperRoundClosed={handleBotPaperRoundClosed} /></aside>
+      <aside className={showBot ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><ErrorBoundary><SignalDeskPanel symbol={selectedSymbol} timeframe={timeframe} marketSource={signalBotMarketSource} onReviewSetup={handleReviewSetup} /></ErrorBoundary></aside>
       <aside className={showHistory ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="h-[calc(100svh-92px)] min-h-[520px]"><TradesPanel defaultTab="history" openPositions={liveOpenPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={currentPrice} selectedSymbol={selectedSymbol} onClosePosition={(id) => { void handleClosePosition(id) }} onBulkClose={handleBulkClose} currency={resolvedAccountData.currency} botPaperHistory={botPaperHistory} /></div></aside>
       <aside className={showFunds ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><DerivCashierLinks /></div></aside>
       <aside className={showAccount ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><AccountPanel account={resolvedAccountData} activeProviderSelection={activeProviderSelection} /></div></aside>
