@@ -142,6 +142,8 @@ export interface TradeOrder {
   takeProfitPips?: number
   /** True only when cTrader has confirmed broker-side protection levels. */
   brokerProtectionConfirmed?: boolean
+  /** Broker-side protection verification details when cTrader declines or delays SL/TP. */
+  brokerProtectionError?: string
   stake?: number
   multiplier?: number
   chartTimeframe?: Timeframe
