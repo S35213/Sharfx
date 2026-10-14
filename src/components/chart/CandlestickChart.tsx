@@ -9,8 +9,8 @@ import { resolvePriceLabelY } from './priceLineLabelLayout'
 import { getCandleCloseCountdown } from './candleCountdown'
 import { getQuoteTickColor, getQuoteTickDirection, type QuoteTickDirection } from '../order/quoteTickDirection'
 
-export interface ChartAnnotation { id: string; price: number; label: string; color: string; labelColor?: string; lineWidth?: 1 | 2 | 3 | 4 }
-type PriceLineLabel = { id: string; price: number; name: string; color: string; y: number }
+export interface ChartAnnotation { id: string; price: number; label: string; color: string; labelColor?: string; lineWidth?: 1 | 2 | 3 | 4; priceTagOnly?: boolean }
+type PriceLineLabel = { id: string; price: number; name: string; color: string; y: number; priceTagOnly?: boolean }
 export type ChartToolMode = 'cursor' | 'crosshair' | 'level' | 'measure' | 'alert'
 
 interface CandlestickChartProps {
@@ -751,25 +751,23 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     if (!isViewingHistory) tradeLines.forEach((line) => {
       const id = line.id.toLowerCase()
       const lineStyle: 0 | 1 | 2 = isStop(id) || id.endsWith('-current') ? 2 : isTarget(id) ? 0 : id.includes('entry') ? 1 : 0
-      const title = shortTitle(line) + ' ' + line.price.toFixed(pricePrecision)
-      // Each trade line has one custom in-chart label. Disable the native axis tag to prevent duplicate prices.
-      upsertLine(line, lineStyle, false, title)
+      const showPriceOnAxis = line.priceTagOnly === true
+      // Position prices belong in the boxed price-scale label. Keep the plot-area
+      // label short (OPEN + P/L, STOP LOSS, TAKE PROFIT) instead of duplicating price.
+      const title = showPriceOnAxis ? '' : shortTitle(line) + ' ' + line.price.toFixed(pricePrecision)
+      upsertLine(line, lineStyle, showPriceOnAxis, title)
       labelCandidates.push(line)
     })
 
-    const activePositionCurrentLine = tradeLines.find((line) => line.id.toLowerCase().endsWith('-current'))
-    const activePositionSide = activePositionCurrentLine?.label.toUpperCase().startsWith('BUY')
-      ? 'BUY'
-      : activePositionCurrentLine?.label.toUpperCase().startsWith('SELL')
-        ? 'SELL'
-        : null
+    // Current Bid/Ask are shared market labels. Open positions do not each add
+    // their own moving exit-price line, so opening more trades cannot duplicate BID.
     const quoteTagsReady = quoteReady && !isViewingHistory
     const labelBid = quoteTagsReady && Number.isFinite(bidPrice) && Number(bidPrice) > 0 ? Number(bidPrice) : 0
     const labelAsk = quoteTagsReady && Number.isFinite(askPrice) && Number(askPrice) > 0 ? Number(askPrice) : 0
-    if (labelBid > 0 && activePositionSide !== 'BUY') {
+    if (labelBid > 0) {
       labelCandidates.push({ id: 'shafx-live-bid-label', price: labelBid, label: 'BID', color: '#2F80FF', lineWidth: 1 })
     }
-    if (labelAsk > 0 && activePositionSide !== 'SELL') {
+    if (labelAsk > 0) {
       labelCandidates.push({ id: 'shafx-live-ask-label', price: labelAsk, label: 'ASK', color: '#F04452', lineWidth: 1 })
     }
 
@@ -798,6 +796,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
           price: line.price,
           color: ('labelColor' in line && line.labelColor) ? line.labelColor : line.color,
           name: shortTitle(line),
+          priceTagOnly: 'priceTagOnly' in line && line.priceTagOnly === true,
           // Even if the real line is just outside the current price scale,
           // keep its named price tag visible at the nearest chart edge.
           y: resolvePriceLabelY(series.priceToCoordinate(line.price), line.price, lastClose, minY, maxY),
@@ -812,6 +811,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
           item.price === initialLabels[index].price &&
           item.name === initialLabels[index].name &&
           item.color === initialLabels[index].color &&
+          item.priceTagOnly === initialLabels[index].priceTagOnly &&
           item.y === initialLabels[index].y
         )) return current
         return initialLabels
@@ -829,6 +829,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
             price: entry.price,
             name: entry.name,
             color: entry.color,
+            priceTagOnly: entry.priceTagOnly,
             y: resolvePriceLabelY(liveSeries.priceToCoordinate(entry.price), entry.price, lastClose, currentMinY, currentMaxY),
           }))
           .sort((left, right) => left.y - right.y || left.id.localeCompare(right.id))
@@ -839,6 +840,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
             item.price === nextLabels[index].price &&
             item.name === nextLabels[index].name &&
             item.color === nextLabels[index].color &&
+            item.priceTagOnly === nextLabels[index].priceTagOnly &&
             item.y === nextLabels[index].y
           )) return current
           return nextLabels
@@ -1352,9 +1354,12 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       {lineLabels.map((label) => {
         const centeredPnl = label.name.startsWith('OPEN ')
         const formattedPrice = label.price.toFixed(pricePrecision)
-        const text = centeredPnl ? label.name + ' · ' + formattedPrice : label.name + '  ' + formattedPrice
+        const text = label.priceTagOnly
+          ? label.name
+          : centeredPnl ? label.name + ' · ' + formattedPrice : label.name + '  ' + formattedPrice
+        const accessibleText = label.name + ' ' + formattedPrice
         return (
-          <span key={label.id} className={centeredPnl ? 'shafx-price-line-label shafx-price-line-label--center' : 'shafx-price-line-label'} data-shafx-price-line-label={label.id} role="img" aria-label={text} title={text} style={{ top: label.y + 'px', borderLeftColor: label.color, color: label.color }}>
+          <span key={label.id} className={centeredPnl ? 'shafx-price-line-label shafx-price-line-label--center' : 'shafx-price-line-label'} data-shafx-price-line-label={label.id} role="img" aria-label={accessibleText} title={accessibleText} style={{ top: label.y + 'px', borderLeftColor: label.color, color: label.color }}>
             {text}
           </span>
         )
