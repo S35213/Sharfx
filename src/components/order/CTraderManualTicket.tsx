@@ -177,13 +177,41 @@ export const CTraderManualTicket: React.FC<Props> = ({
   const usesSetupStopDistance = Number.isFinite(setupStopPips) && setupStopPips > 0
   const usesSetupTargetDistance = Number.isFinite(setupTargetPips) && setupTargetPips > 0
   const requestedRisk = riskAmount.trim() ? Number(riskAmount) : 0
-  // AUTO scales its reference protection distances with the entered risk amount.
-  // 10 account-currency units is the reference stake: defaults are 10/20 pips,
-  // while a valid selected setup supplies its own base stop/target distances.
-  const autoStopPips = scaleAutoRiskDistance(usesSetupStopDistance ? setupStopPips : 10, requestedRisk)
-  const autoTargetPips = scaleAutoRiskDistance(usesSetupTargetDistance ? setupTargetPips : 20, requestedRisk)
+  const brokerMetadata = instrument?.metadata ?? {}
+  const brokerDistanceUnit = Number(brokerMetadata.distanceSetIn)
+  const brokerPricePoint = Number(instrument?.priceIncrement) > 0
+    ? Number(instrument?.priceIncrement)
+    : 10 ** -effectiveSymbol.pricePrecision
+  const brokerPointPips = brokerPricePoint / Math.max(effectiveSymbol.pipSize, Number.EPSILON)
+  const quoteSpreadPips = Number.isFinite(Number(quote?.ask)) && Number.isFinite(Number(quote?.bid)) &&
+    Number(quote?.ask) > Number(quote?.bid)
+    ? (Number(quote?.ask) - Number(quote?.bid)) / Math.max(effectiveSymbol.pipSize, Number.EPSILON)
+    : 0
+  // cTrader distance value 1 means points. Avoid interpreting percentage-based
+  // broker distances as points; cTrader itself remains authoritative for those.
+  const brokerMinStopPips = brokerDistanceUnit === 1
+    ? Math.max(0, Number(brokerMetadata.slDistance) || 0) * brokerPointPips + quoteSpreadPips + brokerPointPips
+    : 0
+  const brokerMinTargetPips = brokerDistanceUnit === 1
+    ? Math.max(0, Number(brokerMetadata.tpDistance) || 0) * brokerPointPips + brokerPointPips
+    : 0
+  // AUTO scales the reference distance with risk but never goes below the
+  // broker's known minimum. Lot sizing then adjusts to keep planned cash risk.
+  const autoStopPips = Math.max(
+    scaleAutoRiskDistance(usesSetupStopDistance ? setupStopPips : 10, requestedRisk),
+    brokerMinStopPips,
+  )
+  const autoTargetPips = Math.max(
+    scaleAutoRiskDistance(usesSetupTargetDistance ? setupTargetPips : 20, requestedRisk),
+    brokerMinTargetPips,
+  )
   const stopPips = stopDistanceMode === 'auto' ? autoStopPips : (stopPipsInput.trim() ? Number(stopPipsInput) : Number.NaN)
   const targetPips = targetDistanceMode === 'auto' ? autoTargetPips : (targetPipsInput.trim() ? Number(targetPipsInput) : Number.NaN)
+  const protectionDistanceError = stopPips > 0 && stopPips + 1e-8 < brokerMinStopPips
+    ? 'cTrader requires a stop distance of at least ' + brokerMinStopPips.toFixed(1) + ' pips for this symbol.'
+    : targetPips > 0 && targetPips + 1e-8 < brokerMinTargetPips
+      ? 'cTrader requires a target distance of at least ' + brokerMinTargetPips.toFixed(1) + ' pips for this symbol.'
+      : ''
   const lots = lotsInput.trim() ? Number(lotsInput) : 0
 
   const stopLossPrice = Number.isFinite(entryPrice) && Number.isFinite(stopPips) && stopPips > 0
@@ -352,44 +380,26 @@ export const CTraderManualTicket: React.FC<Props> = ({
     setError('')
     setProtectionWarning('')
     try {
+      if (protectionDistanceError) throw new Error(protectionDistanceError)
+
+      // A fresh cached margin is a quick local guard. Never delay market order
+      // submission for a separate margin WebSocket round-trip; cTrader validates
+      // actual available margin during execution.
       let marginToUse: MarginResult | null = null
+      let marginCacheKey = ''
+      const roundedLots = Number(Number(plan.lotSize).toFixed(2))
       if (instrument?.providerSymbol) {
-        const roundedLots = Number(Number(plan.lotSize).toFixed(2))
-        const key = [
+        marginCacheKey = [
           connection.environment,
           connection.accountId,
           instrument.providerSymbol,
           roundedLots.toFixed(2),
         ].join(':')
-        const cached = sharedCTraderMarginCache.get(key)
+        const cached = sharedCTraderMarginCache.get(marginCacheKey)
         if (cached && cached.expiresAt > Date.now()) {
           marginToUse = cached.margin
-        } else {
-          let marginResult = sharedCTraderMarginInflight.get(key)
-          if (!marginResult) {
-            marginResult = (async () => {
-              const payload = await postCTrader({
-                connectionId: connection.connectionId,
-                accountId: connection.accountId,
-                environment: connection.environment,
-                action: 'margin',
-                symbol,
-                symbolId: instrument.providerSymbol,
-                lots: roundedLots,
-              })
-              const next = payload.margin as MarginResult
-              sharedCTraderMarginCache.set(key, { margin: next, expiresAt: Date.now() + SHARED_CTRADER_MARGIN_CACHE_MS })
-              return next
-            })()
-            sharedCTraderMarginInflight.set(key, marginResult)
-          }
-          try {
-            marginToUse = await marginResult
-          } finally {
-            if (sharedCTraderMarginInflight.get(key) === marginResult) sharedCTraderMarginInflight.delete(key)
-          }
+          setMargin(marginToUse)
         }
-        setMargin(marginToUse)
       }
       const requiredMargin = side === 'BUY' ? marginToUse?.buyMargin ?? null : marginToUse?.sellMargin ?? null
       if (requiredMargin !== null && requiredMargin > accountFreeMargin) {
@@ -464,6 +474,35 @@ export const CTraderManualTicket: React.FC<Props> = ({
         brokerProtectionConfirmed: protectionApplied,
       }
       onTradeOpened(trade)
+
+      // Warm margin in the background for a subsequent order, rather than making
+      // the current market entry wait for another cTrader connection.
+      if (instrument?.providerSymbol && marginCacheKey) {
+        const cached = sharedCTraderMarginCache.get(marginCacheKey)
+        if (!cached || cached.expiresAt <= Date.now()) {
+          let marginResult = sharedCTraderMarginInflight.get(marginCacheKey)
+          if (!marginResult) {
+            marginResult = postCTrader({
+              connectionId: connection.connectionId,
+              accountId: connection.accountId,
+              environment: connection.environment,
+              action: 'margin',
+              symbol,
+              symbolId: instrument.providerSymbol,
+              lots: roundedLots,
+            }).then((marginPayload) => {
+              const next = marginPayload.margin as MarginResult
+              sharedCTraderMarginCache.set(marginCacheKey, { margin: next, expiresAt: Date.now() + SHARED_CTRADER_MARGIN_CACHE_MS })
+              return next
+            }).finally(() => {
+              if (sharedCTraderMarginInflight.get(marginCacheKey) === marginResult) sharedCTraderMarginInflight.delete(marginCacheKey)
+            })
+            sharedCTraderMarginInflight.set(marginCacheKey, marginResult)
+          }
+          void marginResult.then(setMargin).catch(() => undefined)
+        }
+      }
+
       if (protectionApplied === false) {
         setProtectionWarning(
           'Trade opened, but cTrader did not confirm broker-side SL/TP. Treat the chart levels as unconfirmed and check this position in cTrader. ' +
@@ -532,7 +571,7 @@ export const CTraderManualTicket: React.FC<Props> = ({
       Number.isFinite(Number(quote.bid)) && Number.isFinite(Number(quote.ask)) &&
       Number(quote.bid) > 0 && Number(quote.ask) > 0,
     )
-    const canTrade = Boolean(cTraderReady && brokerQuoteReady && plan.valid)
+    const canTrade = Boolean(cTraderReady && brokerQuoteReady && plan.valid && !protectionDistanceError)
     return (
       <div className="bg-[#080D13] p-3 sm:p-4">
         <div className="flex items-center justify-between gap-2">
@@ -605,6 +644,8 @@ export const CTraderManualTicket: React.FC<Props> = ({
             <div className="bg-shafx-surface p-3 text-right"><div className="text-[7px] uppercase tracking-[0.12em] text-shafx-textMuted">Pip value</div><div className="mt-1 font-mono text-lg font-semibold">{plan.valid ? formatCurrency(plan.pipValuePerLot * Math.max(plan.lotSize, 0), accountCurrency) : '—'}<span className="ml-1 text-[8px] text-shafx-textMuted">/pip</span></div></div>
           </div>
         </div>
+
+        {protectionDistanceError && <div role="alert" className="mt-2 rounded-xl border border-shafx-warning/25 bg-shafx-warning/[0.06] px-3 py-2.5 text-[8px] leading-4 text-shafx-warning">{protectionDistanceError} AUTO will adjust its distance when selected.</div>}
 
         {plan.warning && <div className="mt-2 rounded-xl border border-shafx-warning/25 bg-shafx-warning/[0.06] px-3 py-2.5 text-[8px] leading-4 text-shafx-warning">
           <span className="font-semibold">Broker minimum lot:</span> {plan.warning}
