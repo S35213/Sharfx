@@ -29,7 +29,7 @@ jobs:
         shell: bash
         run: |
           env -u GITHUB_ACTIONS -u SHAFX_VISUAL_PREVIEW npm run build
-          test ! -e dist/visual-preview.html
+          test ! -e dist/client/visual-preview.html
           echo "SHAFX_NORMAL_BUILD_EXCLUDES_VISUAL_PREVIEW: PASS"
           rm -rf dist
 
@@ -37,7 +37,7 @@ jobs:
         run: env -u GITHUB_ACTIONS SHAFX_VISUAL_PREVIEW=1 npm run build
 
       - name: Confirm the test-only preview entry exists
-        run: test -s dist/visual-preview.html
+        run: test -s dist/client/visual-preview.html
 
       - name: Install Chromium for screenshots
         run: npx --yes playwright install --with-deps chromium
