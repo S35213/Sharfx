@@ -347,3 +347,15 @@ No broker-side protection has been changed, and no trade has been opened or clos
 - [ ] Build the Trade Bot as a separate controller with its own data pipeline, analysis state, risk/eligibility checks and cTrader-practice reconciliation. It must not consume Signal Bot output or share lifecycle state.
 - [ ] Keep real-money execution disabled until practice account acceptance and release gates are complete.
 
+
+
+## Independent Trade Bot baseline — 2026-10-15
+
+- [x] Added separate opt-in Trade Bot candle loader and source-scoped state (cTrader practice only, 15-second refresh target).
+- [x] Added independent structure/liquidity decision path and conservative risk ceiling; it does not consume Signal Bot output.
+- [x] Mounted separate Trade Bot panel with its own error boundary in desktop/mobile Bots dock; starts stopped.
+- [x] Added five regression tests for source isolation, practice-only gating, risk ceiling and missing history.
+- [x] Verification on \`540efb26a98c2fb9c4f0fe43148af56994abb996\`: 84 test files / 407 tests, build, lint (0 errors), production audit and desktop/mobile screenshot workflow passed.
+- [~] Latest warning-cleanup commit \`4a3f3e99a39eb6ee2ff55d5e09ead2e6084e1f71\` still needs final CI confirmation.
+- [ ] Deploy commit \`4a3f3e99a39eb6ee2ff55d5e09ead2e6084e1f71\` to **Shafek Derive Render** and confirm that exact commit is live. Current deploy record still points to \`746a34668aba7671713d151a6a827629e2f4e1de\`.
+- [ ] Add demo-only execution controller, explicit risk gate, idempotent order submission, broker SL/TP confirmation and position reconciliation. No live trading.
