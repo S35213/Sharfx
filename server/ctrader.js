@@ -720,7 +720,8 @@ export const placeCtraderOrder = async ({ environment, accountId, accessToken, f
     ...(order.limitPrice !== undefined ? { limitPrice: Number(order.limitPrice) } : {}),
     ...(order.stopPrice !== undefined ? { stopPrice: Number(order.stopPrice) } : {}),
     // cTrader does not support absolute SL/TP on a MARKET new-order request.
-    // The API route amends the filled position using ProtoOAAmendPositionSLTPReq.
+    // The API route supplies relativeStopLoss/relativeTakeProfit so the broker
+    // anchors protection to the actual fill price within the same market order.
     ...(order.type !== 'MARKET' && order.stopLoss !== undefined ? { stopLoss: Number(order.stopLoss) } : {}),
     ...(order.type !== 'MARKET' && order.takeProfit !== undefined ? { takeProfit: Number(order.takeProfit) } : {}),
     ...(order.type === 'MARKET' && order.relativeStopLoss !== undefined ? { relativeStopLoss: requirePositiveInt('relative stop loss distance', order.relativeStopLoss) } : {}),
