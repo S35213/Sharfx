@@ -2,6 +2,8 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { cloudflare } from '@cloudflare/vite-plugin'
 
+const includeVisualPreview = process.env.SHAFX_VISUAL_PREVIEW === '1'
+
 export default defineConfig({
   plugins: [react(), cloudflare()],
   base: process.env.GITHUB_ACTIONS ? '/Sharfx/' : '/',
@@ -12,6 +14,7 @@ export default defineConfig({
           input: {
             main: 'index.html',
             owner: 'owner.html',
+            ...(includeVisualPreview ? { visualPreview: 'visual-preview.html' } : {}),
           },
         },
       },
