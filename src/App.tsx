@@ -14,7 +14,7 @@ import { LiquidityPanel } from './components/market/LiquidityPanel'
 import { FXMoveMatrix } from './components/market/FXMoveMatrix'
 import { CandlestickChart, type ChartAnnotation, type ChartToolMode } from './components/chart/CandlestickChart'
 import type { TradeChartMarker } from './components/chart/buildTradeChartMarkers'
-import { buildOpenPositionChartLines } from './components/chart/buildPositionChartLines'
+import { buildOpenPositionsChartLines } from './components/chart/buildPositionChartLines'
 import { buildStructuralChartAnnotations } from './components/chart/buildAIChartAnnotations'
 import { Watchlist } from './components/watchlist/Watchlist'
 import { MarketAnalysisPanel } from './components/analysis/MarketAnalysis'
@@ -1207,11 +1207,13 @@ const TerminalContent: React.FC = () => {
     [liveOpenPositions, selectedSymbol],
   )
 
-  // Expose only the focused position to chart status/diagnostic attributes.
-  // The account still tracks all open positions; this collection is chart-only.
+  // Keep every open position for the selected symbol on the chart.
+  // The ticket can stay focused on the newest position, but its siblings must
+  // remain visible with their own entry / stop / target levels.
   const chartOpenPositions = useMemo(
-    () => selectedOpenPosition ? [selectedOpenPosition] : [],
-    [selectedOpenPosition],
+    () => liveOpenPositions.filter((position) =>
+      position.status === 'open' && providerSymbolsMatch(position.symbol, selectedSymbol)),
+    [liveOpenPositions, selectedSymbol],
   )
 
   const openPositionsOnOtherSymbols = useMemo(
@@ -1220,14 +1222,11 @@ const TerminalContent: React.FC = () => {
     [liveOpenPositions, selectedSymbol],
   )
 
-  // The blotter can contain several open positions for the same pair, but the
-  // chart shows one focused set of live levels for the selected/latest position.
-  // This prevents every new trade from adding another BID/exit, SL and TP label.
+  // Each open position gets its own entry/SL/TP levels. Shared Bid/Ask labels
+  // are rendered once by the chart; coincident SL/TP prices are grouped.
   const brokerPositionTradeLines = useMemo<ChartAnnotation[]>(
-    () => selectedOpenPosition
-      ? buildOpenPositionChartLines(selectedOpenPosition, chartBidPrice, chartAskPrice, accountData?.currency ?? 'USD')
-      : [],
-    [selectedOpenPosition, chartBidPrice, chartAskPrice, accountData?.currency],
+    () => buildOpenPositionsChartLines(chartOpenPositions, accountData?.currency ?? 'USD'),
+    [chartOpenPositions, accountData?.currency],
   )
 
   const combinedTradeLines = useMemo(() => {
