@@ -865,9 +865,11 @@ export const normalizeCtraderOrder = (event) => {
   const orderStatusMap = { 1: 'accepted', 2: 'filled', 3: 'rejected', 4: 'cancelled', 5: 'cancelled' }
   const executionTypeMap = { 2: 'accepted', 3: 'filled', 4: 'accepted', 5: 'cancelled', 6: 'cancelled', 7: 'rejected', 8: 'accepted', 11: 'accepted' }
   const executionType = Number(payload.executionType)
-  const status = item.orderStatus != null
-    ? (orderStatusMap[Number(item.orderStatus)] || 'pending')
-    : (executionTypeMap[executionType] || 'pending')
+  const status = payload.executionType != null
+    ? (executionTypeMap[executionType] || 'pending')
+    : (item.orderStatus != null
+      ? (orderStatusMap[Number(item.orderStatus)] || 'pending')
+      : 'pending')
   const providerOrderId = String(item.orderId || deal.orderId || '')
   const positionId = String(
     position.positionId ??
