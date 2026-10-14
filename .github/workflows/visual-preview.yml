@@ -12,7 +12,7 @@ jobs:
   visual-preview:
     name: Build and capture desktop/mobile previews
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - name: Check out experimental branch
         uses: actions/checkout@v4
@@ -25,8 +25,19 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Verify Render-root production build
-        run: env -u GITHUB_ACTIONS npm run build
+      - name: Verify normal production build excludes test preview
+        shell: bash
+        run: |
+          env -u GITHUB_ACTIONS -u SHAFX_VISUAL_PREVIEW npm run build
+          test ! -e dist/visual-preview.html
+          echo "SHAFX_NORMAL_BUILD_EXCLUDES_VISUAL_PREVIEW: PASS"
+          rm -rf dist
+
+      - name: Build the isolated workspace visual preview
+        run: env -u GITHUB_ACTIONS SHAFX_VISUAL_PREVIEW=1 npm run build
+
+      - name: Confirm the test-only preview entry exists
+        run: test -s dist/visual-preview.html
 
       - name: Install Chromium for screenshots
         run: npx --yes playwright install --with-deps chromium
@@ -37,7 +48,7 @@ jobs:
           mkdir -p artifacts
           (npm run preview -- --host 127.0.0.1 > artifacts/vite-preview.log 2>&1 & echo $! > artifacts/vite-preview.pid)
           for attempt in $(seq 1 45); do
-            if curl --fail --silent http://127.0.0.1:4173/ > /dev/null; then
+            if curl --fail --silent http://127.0.0.1:4173/visual-preview.html > /dev/null; then
               exit 0
             fi
             sleep 1
@@ -45,31 +56,31 @@ jobs:
           cat artifacts/vite-preview.log
           exit 1
 
-      - name: Capture desktop preview
+      - name: Capture desktop workspace preview
         run: >-
           npx --yes playwright screenshot
           --browser chromium
           --viewport-size "1440,1000"
           --full-page
           --wait-for-timeout 5000
-          http://127.0.0.1:4173/
-          artifacts/shafx-desktop.png
+          http://127.0.0.1:4173/visual-preview.html
+          artifacts/shafx-workspace-desktop.png
 
-      - name: Capture mobile preview
+      - name: Capture mobile workspace preview
         run: >-
           npx --yes playwright screenshot
           --browser chromium
           --viewport-size "390,844"
           --full-page
           --wait-for-timeout 5000
-          http://127.0.0.1:4173/
-          artifacts/shafx-mobile.png
+          http://127.0.0.1:4173/visual-preview.html
+          artifacts/shafx-workspace-mobile.png
 
       - name: Upload screenshots even if a capture fails
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: shafx-visual-preview
+          name: shafx-workspace-visual-preview
           path: artifacts/
           if-no-files-found: warn
           retention-days: 7
