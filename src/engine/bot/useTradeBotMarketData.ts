@@ -128,7 +128,10 @@ export const useTradeBotMarketData = (
     let inFlight = false
     if (!enabled) return () => { stopped = true }
 
-    const sourceError = tradeBotMarketSourceError(selectedSource)
+    const effectSource: TradeBotMarketSource | null = providerId
+      ? { providerId, connectionId, accountId, environment }
+      : null
+    const sourceError = tradeBotMarketSourceError(effectSource)
     if (sourceError) return () => { stopped = true }
 
     const refresh = async (): Promise<void> => {
@@ -142,7 +145,7 @@ export const useTradeBotMarketData = (
         error: null,
       }))
       try {
-        const result = await loadTradeBotFrames(symbol, selectedSource as TradeBotMarketSource)
+        const result = await loadTradeBotFrames(symbol, effectSource as TradeBotMarketSource)
         if (stopped) return
         const usable = TIMEFRAMES.filter((timeframe) => (result.frames[timeframe]?.length ?? 0) >= 8).length
         const status: TradeBotMarketStatus = usable === TIMEFRAMES.length ? 'ready' : usable > 0 ? 'partial' : 'error'
