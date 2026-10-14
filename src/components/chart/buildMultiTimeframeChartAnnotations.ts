@@ -177,8 +177,9 @@ export const buildMultiTimeframeStructuralAnnotations = (
     const sourceAnnotations = buildStructuralChartAnnotations(symbol, candles, sourceTimeframe)
     for (const annotation of sourceAnnotations) {
       const kind = parseStructuralKind(annotation)
-      if (!kind || !Number.isFinite(annotation.price) || annotation.price <= 0) continue
-      levels.push({ annotation, timeframe: sourceTimeframe, kind, price: annotation.price })
+      const parsedTimeframe = parseSourceTimeframe(annotation)
+      if (!kind || parsedTimeframe !== sourceTimeframe || !Number.isFinite(annotation.price) || annotation.price <= 0) continue
+      levels.push({ annotation, timeframe: parsedTimeframe, kind, price: annotation.price })
     }
   }
 
