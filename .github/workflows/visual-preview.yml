@@ -1,0 +1,75 @@
+name: SHAFX visual preview
+
+on:
+  push:
+    branches:
+      - test/rebuild-deriv-native-manual-20260930
+
+permissions:
+  contents: read
+
+jobs:
+  visual-preview:
+    name: Build and capture desktop/mobile previews
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out experimental branch
+        uses: actions/checkout@v4
+
+      - name: Set up the project's Node runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Verify production build
+        run: npm run build
+
+      - name: Install Chromium for screenshots
+        run: npx --yes playwright install --with-deps chromium
+
+      - name: Start Vite preview
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          (npm run preview -- --host 127.0.0.1 > artifacts/vite-preview.log 2>&1 & echo $! > artifacts/vite-preview.pid)
+          for attempt in $(seq 1 45); do
+            if curl --fail --silent http://127.0.0.1:4173/ > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat artifacts/vite-preview.log
+          exit 1
+
+      - name: Capture desktop preview
+        run: >-
+          npx --yes playwright screenshot
+          --browser chromium
+          --viewport-size "1440,1000"
+          --full-page
+          --wait-for-timeout 5000
+          http://127.0.0.1:4173/
+          artifacts/shafx-desktop.png
+
+      - name: Capture mobile preview
+        run: >-
+          npx --yes playwright screenshot
+          --browser chromium
+          --viewport-size "390,844"
+          --full-page
+          --wait-for-timeout 5000
+          http://127.0.0.1:4173/
+          artifacts/shafx-mobile.png
+
+      - name: Upload screenshots even if a capture fails
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shafx-visual-preview
+          path: artifacts/
+          if-no-files-found: warn
+          retention-days: 7
