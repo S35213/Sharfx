@@ -1159,14 +1159,19 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     const gesture = tapGestureRef.current
     if (!gesture) return
     if (Math.hypot(event.clientX - gesture.startX, event.clientY - gesture.startY) > 18) gesture.moved = true
+    // Keep price/time-anchored position badges glued to their entries during
+    // pinch zoom, drag zoom, and other gestures that move the vertical scale.
+    if (chartInteractionRef.current) openTradeMarkerSyncRef.current?.()
   }
   const handleChartPointerCancel = (): void => {
     chartInteractionRef.current = false
     lastTapRef.current = null
+    openTradeMarkerSyncRef.current?.()
   }
 
   const handleChartPointerUp = (event: React.PointerEvent<HTMLDivElement>): void => {
     chartInteractionRef.current = false
+    openTradeMarkerSyncRef.current?.()
 
     // Capture the range after a drag/pinch. This prevents the next live tick
     // from deciding to follow realtime unless the user actually finished at
