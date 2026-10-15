@@ -254,7 +254,7 @@ const TerminalContent: React.FC = () => {
   const [accountData, setAccountData] = useState<AccountData | null>(null)
   const [watchlist, setWatchlist] = useState<MarketPair[]>(() => mockWatchlist.map((pair) => ({ ...pair, price: 0, change: 0, changePercent: 0, status: 'closed' })))
   const [symbolSpec, setSymbolSpec] = useState<SymbolSpec>(() => SYMBOL_SPECS[selectedSymbol] ?? SYMBOL_SPECS['EUR/USD'])
-  const [tradeBotBrokerSpec, setTradeBotBrokerSpec] = useState<{ sourceKey: string; symbolSpec: SymbolSpec | null } | null>(null)
+  const [tradeBotBrokerSpec, setTradeBotBrokerSpec] = useState<{ sourceKey: string; symbolSpec: SymbolSpec | null; error?: string | null } | null>(null)
   const [openPositions, setOpenPositions] = useState<TradeOrder[]>([])
   const [pendingOrders] = useState<TradeOrder[]>([])
   const [tradeHistory, setTradeHistory] = useState<TradeOrder[]>([])
@@ -382,12 +382,15 @@ const TerminalContent: React.FC = () => {
           if (previous?.sourceKey === sourceKey && JSON.stringify(previous.symbolSpec) === JSON.stringify(resolved)) return previous
           return { sourceKey, symbolSpec: resolved }
         })
-      } catch {
+      } catch (error) {
         if (cancelled) return
         // Keep a valid specification already delivered by the quote stream.
         // Never replace a valid spec with a mock/default fallback on failure.
+        const message = error instanceof Error ? error.message : 'Unable to load cTrader instrument rules.'
         setTradeBotBrokerSpec((previous) =>
-          previous?.sourceKey === sourceKey ? previous : { sourceKey, symbolSpec: null },
+          previous?.sourceKey === sourceKey && previous.symbolSpec
+            ? previous
+            : { sourceKey, symbolSpec: null, error: message },
         )
       }
     }
@@ -1599,6 +1602,9 @@ const TerminalContent: React.FC = () => {
   const tradeBotSymbolSpec = tradeBotBrokerSpec?.sourceKey === expectedTradeBotSpecKey
     ? tradeBotBrokerSpec.symbolSpec
     : null
+  const tradeBotSymbolSpecError = tradeBotBrokerSpec?.sourceKey === expectedTradeBotSpecKey
+    ? tradeBotBrokerSpec.error ?? null
+    : null
 
   const dockContent = {
     insights: <div className="space-y-3">
@@ -1620,7 +1626,7 @@ const TerminalContent: React.FC = () => {
          : (activeProviderSelection?.providerId === 'ctrader' ? 'cTrader ' : 'Deriv ') + order.type + ' trade opened on ' + (order.chartTimeframe ?? timeframe) + '.')
     }} aiSetup={reviewSetup} />
     </div>,
-    bot: <div className="space-y-4"><ErrorBoundary><SignalDeskPanel symbol={selectedSymbol} timeframe={timeframe} marketSource={signalBotMarketSource} onReviewSetup={handleReviewSetup} /></ErrorBoundary><ErrorBoundary><TradeBotPanel symbol={selectedSymbol} timeframe={timeframe} marketSource={signalBotMarketSource} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={tradeBotSymbolSpec} onReviewSetup={handleReviewSetup} /></ErrorBoundary></div>,
+    bot: <div className="space-y-4"><ErrorBoundary><SignalDeskPanel symbol={selectedSymbol} timeframe={timeframe} marketSource={signalBotMarketSource} onReviewSetup={handleReviewSetup} /></ErrorBoundary><ErrorBoundary><TradeBotPanel symbol={selectedSymbol} timeframe={timeframe} marketSource={signalBotMarketSource} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={tradeBotSymbolSpec} symbolSpecError={tradeBotSymbolSpecError} onReviewSetup={handleReviewSetup} /></ErrorBoundary></div>,
     liquidity: <LiquidityPanel key={selectedSymbol} symbol={selectedSymbol} price={currentPrice} precision={symbolSpec.pricePrecision} pipSize={symbolSpec.pipSize} candles={liveCandles} />,
     orders: <OrderPanel providerSelection={activeProviderSelection} symbol={selectedSymbol} currentPrice={currentPrice} bidPrice={chartBidPrice} askPrice={chartAskPrice} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} timeframe={timeframe} connection={derivOrderConnection} activePosition={selectedOpenPosition} onTradeClosed={(id) => { void handleClosePosition(id) }} onTradeLinesChange={setTradeLines} onTradeOpened={(order) => {
       setOpenPositions((current) => [order, ...current.filter((item) => item.id !== order.id)])
@@ -1717,7 +1723,7 @@ const TerminalContent: React.FC = () => {
           'Verify the actual SL/TP in cTrader before relying on it.'
          : (activeProviderSelection?.providerId === 'ctrader' ? 'cTrader ' : 'SHAFX ') + order.type + ' trade opened on ' + (order.chartTimeframe ?? timeframe) + '.')
     }} aiSetup={reviewSetup} /></div></aside>}
-      <aside className={showBot ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-4"><ErrorBoundary><SignalDeskPanel symbol={selectedSymbol} timeframe={timeframe} marketSource={signalBotMarketSource} onReviewSetup={handleReviewSetup} /></ErrorBoundary><ErrorBoundary><TradeBotPanel symbol={selectedSymbol} timeframe={timeframe} marketSource={signalBotMarketSource} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={tradeBotSymbolSpec} onReviewSetup={handleReviewSetup} /></ErrorBoundary></div></aside>
+      <aside className={showBot ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-4"><ErrorBoundary><SignalDeskPanel symbol={selectedSymbol} timeframe={timeframe} marketSource={signalBotMarketSource} onReviewSetup={handleReviewSetup} /></ErrorBoundary><ErrorBoundary><TradeBotPanel symbol={selectedSymbol} timeframe={timeframe} marketSource={signalBotMarketSource} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={tradeBotSymbolSpec} symbolSpecError={tradeBotSymbolSpecError} onReviewSetup={handleReviewSetup} /></ErrorBoundary></div></aside>
       <aside className={showHistory ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="h-[calc(100svh-92px)] min-h-[520px]"><TradesPanel defaultTab="history" openPositions={liveOpenPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={currentPrice} selectedSymbol={selectedSymbol} onClosePosition={(id) => { void handleClosePosition(id) }} onBulkClose={handleBulkClose} currency={resolvedAccountData.currency} botPaperHistory={botPaperHistory} /></div></aside>
       <aside className={showFunds ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><DerivCashierLinks /></div></aside>
       <aside className={showAccount ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><AccountPanel account={resolvedAccountData} activeProviderSelection={activeProviderSelection} /></div></aside>
