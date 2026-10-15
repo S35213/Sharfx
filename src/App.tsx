@@ -22,6 +22,7 @@ import { AIAssistantPanel } from './components/ai/AIAssistantPanel'
 import { SignalDeskPanel } from './components/ai/SignalDeskPanel'
 import { TradeBotPanel } from './components/ai/TradeBotPanel'
 import { cTraderInstrumentToSymbolSpec } from './engine/bot/ctraderInstrumentSpec'
+import { reconcileCTraderPositionList } from './engine/bot/reconcileCTraderPositionList'
 import { tradeBotMarketSourceKey } from './engine/bot/useTradeBotMarketData'
 import { OrderPanel } from './components/order/OrderPanel'
 import { closeDerivContract } from './data/deriv/derivTrading'
@@ -821,24 +822,17 @@ const TerminalContent: React.FC = () => {
           }
           reconciled.push(providerPositionToTrade(position))
         }
-        if (reconciled.length === 0) return
-        setOpenPositions((current) => {
-          const consumed = new Set<string>()
-          const merged = reconciled.map((trade) => {
-            let previous = current.find((item) => !consumed.has(item.id) && (
-              item.id === trade.id || item.providerOrderId === trade.id || trade.providerOrderId === item.id ||
-              (Boolean(item.providerOrderId) && item.providerOrderId === trade.providerOrderId)
-            ))
-            if (!previous) {
-              const tolerance = trade.symbol.includes('JPY') ? 0.05 : 0.0005
-              const similar = current.filter((item) => !consumed.has(item.id) && item.providerId === 'ctrader' &&
-                item.providerConnectionId === String(selection.connectionId) && item.providerAccountId === String(selection.accountId) &&
-                item.type === trade.type &&
-                (isUnresolvedProviderSymbol(trade.symbol) || providerSymbolsMatch(item.symbol, trade.symbol)) &&
-                Math.abs(item.entryPrice - trade.entryPrice) <= tolerance)
-              if (similar.length === 1) previous = similar[0]
-            }
-            if (previous) consumed.add(previous.id)
+        setOpenPositions((current) => reconcileCTraderPositionList(
+          current,
+          reconciled,
+          {
+            connectionId: String(selection.connectionId),
+            accountId: String(selection.accountId),
+            nowMs: Date.now(),
+            symbolMatches: (localSymbol, brokerSymbol) =>
+              isUnresolvedProviderSymbol(brokerSymbol) || providerSymbolsMatch(localSymbol, brokerSymbol),
+          },
+          (trade, previous) => {
             const brokerQuote = latestCTraderQuoteForSymbol(latestCTraderQuotesRef.current, trade.symbol)
             const exitPrice = brokerQuote ? (trade.type === 'BUY' ? brokerQuote.bid : brokerQuote.ask) : null
             const pnlReferencePrice = positivePrice(exitPrice, trade.currentPrice, previous?.currentPrice, trade.entryPrice) ?? trade.entryPrice
@@ -860,12 +854,8 @@ const TerminalContent: React.FC = () => {
               commission: trade.commission ?? previous?.commission, payout: previous?.payout,
               brokerProtectionConfirmed: positivePrice(trade.stopLoss) !== null && positivePrice(trade.takeProfit) !== null,
             }
-          })
-          const recentLocal = current.filter((item) => !consumed.has(item.id) && item.providerId === 'ctrader' &&
-            item.providerConnectionId === String(selection.connectionId) && item.providerAccountId === String(selection.accountId) &&
-            Date.now() - Date.parse(item.openTime) < 120_000)
-          return [...merged, ...recentLocal].sort((a, b) => b.openTime.localeCompare(a.openTime))
-        })
+          },
+        ))
       } catch {
         // Keep the last good position data if the broker is temporarily unavailable.
       }
