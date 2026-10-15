@@ -23,6 +23,7 @@ import { SignalDeskPanel } from './components/ai/SignalDeskPanel'
 import { TradeBotPanel } from './components/ai/TradeBotPanel'
 import { cTraderInstrumentToSymbolSpec } from './engine/bot/ctraderInstrumentSpec'
 import { isCompleteCTraderPositionSnapshot, reconcileCTraderPositionList } from './engine/bot/reconcileCTraderPositionList'
+import { reconcileCTraderTradeHistory } from './engine/bot/reconcileCTraderTradeHistory'
 import { tradeBotMarketSourceKey } from './engine/bot/useTradeBotMarketData'
 import { OrderPanel } from './components/order/OrderPanel'
 import { closeDerivContract } from './data/deriv/derivTrading'
@@ -634,7 +635,13 @@ const TerminalContent: React.FC = () => {
         })
         const payload = await response.json().catch(() => ({})) as { ok?: boolean; history?: TradeOrder[] }
         if (cancelled || !response.ok || !payload.ok || !Array.isArray(payload.history)) return
-        setTradeHistory(payload.history)
+        // Broker history refreshes must not erase another provider/account's history
+        // or a locally confirmed close that the broker history page has not surfaced yet.
+        setTradeHistory((current) => reconcileCTraderTradeHistory(
+          current,
+          payload.history,
+          { connectionId: String(selection.connectionId), accountId: String(selection.accountId) },
+        ))
       } catch {
         // Keep any history already rendered when the broker history endpoint is temporarily unavailable.
       }

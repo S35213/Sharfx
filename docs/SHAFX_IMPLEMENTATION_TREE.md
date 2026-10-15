@@ -391,3 +391,11 @@ No broker-side protection has been changed, and no trade has been opened or clos
 - Successful `positions: []` clears stale local positions only after the original payload is proven fully parsed. Non-empty malformed payloads leave the last good positions unchanged.
 - Deployment `dep-db89f85g1s2s73fc1ph0` is live on the designated Shafek Derive Render service. Closed-trade history backfill and authenticated cTrader QA remain unchecked.
 - The initial import typo in commit `ae904bfc48e0280b6b1d7b93d9b156693c830140` failed build; corrected commit `f4b770bb7ea402be243121123e6d2205ece16862` is the verified code commit.
+
+
+## Trade Bot / cTrader history reconciliation checkpoint — 2026-10-15
+
+- [~] cTrader's backend deal-history endpoint and frontend polling already exist; the newly added `reconcileCTraderTradeHistory` helper now merges broker history into the shared journal without deleting other providers' history or unmatched locally confirmed closes. Regression tests cover account scope, lagging/malformed snapshots, duplicate rows, and ordering.
+- [ ] Await CI test/build verification and the Render deployment record for the commit adding this helper before marking it verified.
+- [ ] Authenticated cTrader end-to-end history validation remains outstanding; do not claim the user's historical broker trades are confirmed until tested in the authenticated account.
+- [ ] Next bot work: add source-scoped decision diagnostics. Keep automatic order execution disabled and do not merge this experiment to `main` without explicit user approval.
