@@ -441,3 +441,14 @@ No broker-side protection has been changed, and no trade has been opened or clos
 - [ ] Authenticated browser QA of the actual Bot panel; not performed yet.
 - [ ] Demo forward observation and comparison with historical replay; no profitability claims yet.
 - [ ] Automatic execution remains disabled.
+
+
+## Bot activation + scanner scan controls — 2026-10-15
+
+- [x] Signal Bot’s ready-state badge is no longer mislabeled SCANNING; the UI distinguishes AUTO-SCAN / SCANNING and clearly identifies latest candle close.
+- [x] Signal Bot has an explicit Scan now / Retry scan control that requests a fresh, selected-provider-only scan; automatic 15-second refresh remains.
+- [x] Trade Bot’s stopped/blocked state now surfaces the exact prerequisite instead of presenting only a greyed-out start button.
+- [x] cTrader broker instrument metadata is fetched independently of quote streaming via the authenticated instruments endpoint; strict symbol validation and risk-spec validation still apply.
+- [x] cTrader instrument fetch tests cover matching symbol, mismatch rejection, provider errors and malformed responses.
+- [~] Latest changes still require a fresh CI/build/deploy verification; authenticated QA of the actual mobile Bot tab is still outstanding.
+- [x] No auto-start or automatic orders introduced. No broker positions changed. main and Cloudflare production remain untouched.
