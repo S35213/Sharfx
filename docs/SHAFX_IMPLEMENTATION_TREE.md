@@ -428,3 +428,16 @@ No broker-side protection has been changed, and no trade has been opened or clos
 - [~] Screenshot review still shows fixed bottom navigation overlapping the chart in the mobile workspace capture; track separately for responsive-layout repair.
 - [ ] Authenticated browser QA of the actual Trade Bot tab at desktop/mobile sizes (not performed; no trades sent).
 - [ ] Longer historical/paper evaluation with adequate sample size; no profitability claim until completed.
+
+
+## Historical replay milestone — 2026-10-15
+
+- [x] Added a manual historical replay control to Trade Bot diagnostics.
+- [x] Replay reuses `evaluateTradeBotDecision` and slices all timeframe frames to bars closed by each historical signal time; latest potentially-forming selected-timeframe bar is excluded.
+- [x] Added tests for deterministic replay, newest-bar exclusion and missing broker specs.
+- [x] Exact code commit `3ee6adafd2ff1d230c5854ee1e6dd4ed9df58f38`: CI success, 91 test files passed, manual CFD branch verification success, visual preview build/capture success; Render deployment reports live.
+- [~] Render smoke retry pending after first attempt timed out waiting for `#root` during deployment transition.
+- [~] Mobile full-page screenshot still shows bottom navigation overlapping chart.
+- [ ] Authenticated browser QA of the actual Bot panel; not performed yet.
+- [ ] Demo forward observation and comparison with historical replay; no profitability claims yet.
+- [ ] Automatic execution remains disabled.
