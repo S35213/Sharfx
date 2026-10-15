@@ -147,7 +147,7 @@ export const SignalDeskPanel: React.FC<Props> = ({ symbol, timeframe, marketSour
 
       <div className="flex items-start gap-2 rounded-xl border border-shafx-border bg-shafx-bg/70 p-3">
         <RefreshCw className="mt-0.5 h-3.5 w-3.5 shrink-0 text-shafx-textMuted" />
-        <p className="text-[8px] leading-4 text-shafx-textMuted">Independent data loop • refresh target 15 seconds • source: {sourceLabel(marketSource)}. If this scanner fails, the separate Trade Bot remains unaffected.</p>
+        <p className="text-[8px] leading-4 text-shafx-textMuted">Read-only scanner • source: {sourceLabel(marketSource)} • auto-refresh target 15 seconds. “Scan now” requests fresh candles; row buttons review a setup, not a scan. Signal scores are not win probabilities.</p>
       </div>
     </section>
   )
