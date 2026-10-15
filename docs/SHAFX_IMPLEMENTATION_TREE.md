@@ -418,3 +418,13 @@ No broker-side protection has been changed, and no trade has been opened or clos
 - [ ] Authenticated cTrader browser QA of the actual Bot tab at desktop and mobile sizes.
 - [ ] Longer historical/paper evaluation with adequate sample size; no profitability claim until that exists.
 - [ ] Automatic execution remains disabled until separate explicit release gates and practice-account end-to-end checks pass.
+
+
+## Verification update — 2026-10-15
+
+- [x] Fixed closed-candle boundary after CI exposed three regression-test failures.
+- [x] Exact code commit `5accfc2afa14c20b52f75b010dccc42112ceb5b5`: CI passed; manual CFD branch verification passed; Render smoke passed; visual preview build/captures passed.
+- [x] Confirmed designated Render service reports the code commit live; public welcome page fetch succeeded.
+- [~] Screenshot review still shows fixed bottom navigation overlapping the chart in the mobile workspace capture; track separately for responsive-layout repair.
+- [ ] Authenticated browser QA of the actual Trade Bot tab at desktop/mobile sizes (not performed; no trades sent).
+- [ ] Longer historical/paper evaluation with adequate sample size; no profitability claim until completed.
