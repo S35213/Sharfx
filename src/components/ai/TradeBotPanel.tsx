@@ -1,9 +1,10 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { Activity, CircleStop, Play, ShieldCheck } from 'lucide-react'
 import type { SymbolSpec, Timeframe } from '../../types'
 import type { SetupCandidate } from '../../engine/setup/types'
 import { evaluateTradeBotDecision } from '../../engine/bot/tradeBotDecision'
-import { useTradeBotMarketData, type TradeBotMarketSource } from '../../engine/bot/useTradeBotMarketData'
+import { tradeBotMarketSourceKey, useTradeBotMarketData, type TradeBotMarketSource } from '../../engine/bot/useTradeBotMarketData'
+import { appendTradeBotDecisionTrace, createTradeBotDecisionTraceEntry, type TradeBotDecisionTraceEntry } from '../../engine/bot/tradeBotDecisionTrace'
 import { buildTradeBotDiagnosticSnapshot } from '../../engine/bot/tradeBotDiagnostics'
 import { formatCurrency, formatPrice } from '../../lib/format'
 
@@ -21,6 +22,7 @@ export const TradeBotPanel: React.FC<Props> = ({
   symbol, timeframe, marketSource, accountBalance, accountCurrency, symbolSpec, onReviewSetup,
 }) => {
   const [running, setRunning] = useState(false)
+  const [decisionTrace, setDecisionTrace] = useState<TradeBotDecisionTraceEntry[]>([])
   const market = useTradeBotMarketData(symbol, marketSource, running)
   const decision = useMemo(() => evaluateTradeBotDecision({
     frames: market.frames,
@@ -62,6 +64,28 @@ export const TradeBotPanel: React.FC<Props> = ({
     : diagnostics.summary === 'BLOCKED'
       ? 'text-shafx-danger'
       : 'text-shafx-textMuted'
+  const traceScopeKey = tradeBotMarketSourceKey(symbol, marketSource) + '|' + timeframe
+  const visibleDecisionTrace = useMemo(
+    () => decisionTrace.filter((entry) => entry.scopeKey === traceScopeKey).slice(0, 6),
+    [decisionTrace, traceScopeKey],
+  )
+
+  useEffect(() => {
+    if (!running || !market.updatedAt) return
+    const currentCandles = market.frames[timeframe] ?? []
+    const lastCandle = currentCandles[currentCandles.length - 1]
+    const entry = createTradeBotDecisionTraceEntry({
+      scopeKey: traceScopeKey,
+      symbol,
+      timeframe,
+      marketUpdatedAt: market.updatedAt,
+      candleTime: lastCandle?.time ?? null,
+      diagnostics,
+    })
+    if (!entry) return
+    setDecisionTrace((current) => appendTradeBotDecisionTrace(current, entry, 12))
+  }, [running, traceScopeKey, symbol, timeframe, market.updatedAt, market.frames, diagnostics])
+
   const statusLabel = !running ? 'STOPPED' : !symbolSpec ? 'BROKER SPECS NEEDED' : market.status === 'ready' ? 'MONITORING' : market.status === 'partial' ? 'PARTIAL DATA' : market.status === 'loading' ? 'LOADING' : market.status === 'unavailable' ? 'BLOCKED' : 'DATA ERROR'
   const statusTone = decision.status === 'READY' && running
     ? 'border-shafx-success/30 bg-shafx-success/10 text-shafx-success'
@@ -181,6 +205,33 @@ export const TradeBotPanel: React.FC<Props> = ({
                 </div>
               </div>
             ))}
+          </div>
+          <div className="rounded-lg border border-shafx-border bg-shafx-bg p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted">Recent analysis cycles</div>
+              <span className="font-mono text-[8px] text-shafx-textMuted">{visibleDecisionTrace.length} / 6 · memory only</span>
+            </div>
+            {visibleDecisionTrace.length === 0 ? (
+              <p className="mt-2 leading-4 text-shafx-textMuted">Start analysis to record successful refreshes for this selected account, market and timeframe. The trace clears on page reload and stores no credentials.</p>
+            ) : (
+              <div className="mt-2 space-y-2">
+                {visibleDecisionTrace.map((entry) => (
+                  <div key={entry.id} className="border-b border-shafx-border/70 pb-2 last:border-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-mono font-bold">{entry.status} · {entry.timeframe}</span>
+                      <span className="font-mono text-[8px] text-shafx-textMuted">{new Date(entry.observedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+                    </div>
+                    <div className="mt-1 text-[8px] text-shafx-textMuted">
+                      {entry.candleCount} candles · candle {entry.candleAt ? new Date(entry.candleAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'} · data age {entry.marketAgeSeconds === null ? '—' : entry.marketAgeSeconds + 's'} · HTF {entry.higherTimeframeBias}
+                    </div>
+                    <div className="mt-1 break-words leading-4 text-shafx-textMuted">{entry.reason}</div>
+                    <div className="mt-1 font-mono text-[8px] text-shafx-textMuted">
+                      Risk {formatCurrency(entry.riskBudget, accountCurrency)} · RR {entry.riskRewardRatio === null ? '—' : entry.riskRewardRatio.toFixed(2) + ':1'} · lots {entry.lots ?? '—'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           <p className="leading-4 text-shafx-textMuted">Diagnostics are for analysis and manual review only. They do not authorize or submit an order.</p>
         </div>
