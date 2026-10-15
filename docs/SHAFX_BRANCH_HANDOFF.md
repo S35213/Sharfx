@@ -752,3 +752,13 @@ On the experimental branch `test/rebuild-deriv-native-manual-20260930` and the R
 - **Regression tests:** `src/engine/bot/tradeBotShadowEvaluation.test.ts` covers invalid candidate refusal, per-candle deduplication, later-candle gating, BUY/SELL stops, targets, ambiguous bars, stable resolved records and bounded history.
 - **Verification status:** code and tests have been committed to the experimental branch; the final CI run for the exact latest commit must pass before treating this milestone as verified. Do not claim authenticated cTrader browser QA or profitable backtesting from this shadow-only evaluator.
 - **Next:** verify the latest branch CI/build/test run, then visually inspect the hosted Bot tab on desktop and mobile. After that, run an explicit historical/paper evaluation with sample-size and outcome caveats. Automatic execution remains disabled; do not merge to `main` or promote Cloudflare without explicit approval.
+
+
+### Verification follow-up — 2026-10-15 (latest shadow evaluator fix)
+
+- Initial CI caught three failures in `tradeBotShadowEvaluation.test.ts`: the closed-candle selector incorrectly treated the newest candle as closed and the fixtures exposed a boundary mistake. Fixed by treating only bars with a later bar in the supplied frame as closed; newest bar is excluded.
+- Verified exact code commit `5accfc2afa14c20b52f75b010dccc42112ceb5b5`: SHAFX CI passed; manual CFD branch verification passed; Render test smoke passed; visual preview build and desktop/mobile screenshot capture passed.
+- Render service `srv-dav8hrt9fdbs73d690s0` (`Shafek Derive Render` / `https://sharfx-deriv-render.onrender.com/`) reports this code commit live. Public read-only page fetch returns the SHAFX welcome screen successfully.
+- Screenshot review found a pre-existing/remaining mobile workspace issue: the fixed bottom navigation overlays the chart area in the full-page mobile capture. Track as a separate responsive-layout defect; do not treat the screenshot as proof of the authenticated Trade Bot panel's visual correctness.
+- Browser-driven authenticated inspection of the Bot tab remains unverified; no credentials were entered, and no trades were submitted. A browser automation session could not start because its separate automation wallet had a negative balance. The static preview artifact is available from Actions run [38757724475](https://github.com/S35213/Sharfx/actions/runs/38757724475).
+- Shadow outcome logic is still hypothetical, in-memory only, and not a broker trade ledger or profitability proof.
