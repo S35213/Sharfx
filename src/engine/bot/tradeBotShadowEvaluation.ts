@@ -83,9 +83,9 @@ export const advanceTradeBotShadowRecords = (
 ): TradeBotShadowRecord[] => current.map((record) => {
   if (record.status !== 'PENDING') return record
   const frame = frames[record.timeframe] ?? []
-  // The newest bar may still be forming. Only evaluate bars that have a following
-  // bar timestamp, which is the conservative signal available from this OHLC feed.
-  const closedBarTimes = new Set(frame.slice(1).map((bar) => bar.time))
+  // The final bar in a live OHLC frame may still be forming. Treat every earlier
+  // bar as closed only when the feed is chronological and a later bar follows it.
+  const closedBarTimes = new Set(frame.slice(0, -1).map((bar) => bar.time))
   const laterBars = frame
     .filter((bar) => Number.isFinite(bar.time) && bar.time > record.signalCandleTime && closedBarTimes.has(bar.time))
     .slice()
