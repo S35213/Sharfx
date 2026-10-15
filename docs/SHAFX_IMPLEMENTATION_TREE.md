@@ -383,3 +383,11 @@ No broker-side protection has been changed, and no trade has been opened or clos
 - Authoritative snapshots remove stale local positions only for the reconciled provider connection/account; recently opened unmatched local positions receive the existing 120-second grace window; foreign provider/account positions are preserved.
 - Code commit `279d0263b175c283cd9222960e39c966d2324511` passed build, lint (0 errors / 63 warnings), 86 test files / 425 tests, production dependency audit (0 vulnerabilities), manual verification, visual preview capture, and Render smoke. Render deployment `dep-db89cqdbedkc739udbs0` is live.
 - Remaining caveats: the UI screenshots are automated unauthenticated preview captures; this fix does not backfill closed-trade history. Installed-tree audit still reports 11 vulnerabilities (2 moderate, 9 high) requiring a separate dependency triage.
+
+
+### Final verification — cTrader position snapshot guard (2026-10-15)
+
+- `f4b770bb7ea402be243121123e6d2205ece16862`: build passed, lint 0 errors / 63 warnings, 86 test files / 428 tests passed, production-only dependency audit 0 vulnerabilities, manual CFD verification passed, visual preview capture passed, Render smoke passed.
+- Successful `positions: []` clears stale local positions only after the original payload is proven fully parsed. Non-empty malformed payloads leave the last good positions unchanged.
+- Deployment `dep-db89f85g1s2s73fc1ph0` is live on the designated Shafek Derive Render service. Closed-trade history backfill and authenticated cTrader QA remain unchecked.
+- The initial import typo in commit `ae904bfc48e0280b6b1d7b93d9b156693c830140` failed build; corrected commit `f4b770bb7ea402be243121123e6d2205ece16862` is the verified code commit.
