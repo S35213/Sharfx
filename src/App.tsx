@@ -22,7 +22,7 @@ import { AIAssistantPanel } from './components/ai/AIAssistantPanel'
 import { SignalDeskPanel } from './components/ai/SignalDeskPanel'
 import { TradeBotPanel } from './components/ai/TradeBotPanel'
 import { cTraderInstrumentToSymbolSpec } from './engine/bot/ctraderInstrumentSpec'
-import { reconcileCTraderPositionList } from './engine/bot/reconcileCTraderPositionList', isCompleteCTraderPositionSnapshot
+import { isCompleteCTraderPositionSnapshot, reconcileCTraderPositionList } from './engine/bot/reconcileCTraderPositionList'
 import { tradeBotMarketSourceKey } from './engine/bot/useTradeBotMarketData'
 import { OrderPanel } from './components/order/OrderPanel'
 import { closeDerivContract } from './data/deriv/derivTrading'
