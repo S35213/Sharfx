@@ -116,18 +116,39 @@ export const TradeBotPanel: React.FC<Props> = ({
     [shadowRecords, traceScopeKey],
   )
 
-  const statusLabel = !running ? 'STOPPED' : !symbolSpec ? 'BROKER SPECS NEEDED' : market.status === 'ready' ? 'MONITORING' : market.status === 'partial' ? 'PARTIAL DATA' : market.status === 'loading' ? 'LOADING' : market.status === 'unavailable' ? 'BLOCKED' : 'DATA ERROR'
+  const startBlockReason = !marketSource?.providerId
+    ? 'Select a market provider and account before starting analysis.'
+    : marketSource.providerId !== 'ctrader'
+      ? 'Trade Bot requires a cTrader practice account. The Signal Bot can scan supported market-data providers independently.'
+      : !marketSource.connectionId || !marketSource.accountId
+        ? 'Connect to cTrader and select a specific account.'
+        : marketSource.environment !== 'demo'
+          ? 'Trade Bot analysis is restricted to cTrader practice/demo accounts. Live accounts remain blocked.'
+          : !Number.isFinite(accountBalance) || accountBalance <= 0
+            ? 'A positive balance from the selected cTrader practice account is required.'
+            : !symbolSpec
+              ? 'Waiting for matching cTrader instrument rules. The bot will stay blocked until the broker supplies valid contract, pip and lot constraints.'
+              : null
+  const canStart = startBlockReason === null
+  const statusLabel = !running
+    ? (startBlockReason ? 'BLOCKED' : 'STOPPED')
+    : !symbolSpec
+      ? 'BROKER SPECS NEEDED'
+      : market.status === 'ready'
+        ? 'MONITORING'
+        : market.status === 'partial'
+          ? 'PARTIAL DATA'
+          : market.status === 'loading'
+            ? 'LOADING'
+            : market.status === 'unavailable'
+              ? 'BLOCKED'
+              : 'DATA ERROR'
   const statusTone = decision.status === 'READY' && running
     ? 'border-shafx-success/30 bg-shafx-success/10 text-shafx-success'
-    : decision.status === 'BLOCKED'
+    : decision.status === 'BLOCKED' || startBlockReason
       ? 'border-shafx-danger/30 bg-shafx-danger/10 text-shafx-danger'
       : 'border-shafx-border bg-shafx-bg text-shafx-textMuted'
   const updatedAt = market.updatedAt ? new Date(market.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'
-  const canStart = marketSource?.providerId === 'ctrader' &&
-    marketSource.environment === 'demo' &&
-    Boolean(marketSource.connectionId && marketSource.accountId) &&
-    accountBalance > 0 &&
-    Boolean(symbolSpec)
 
   const start = (): void => {
     setRunning(true)
@@ -330,6 +351,12 @@ export const TradeBotPanel: React.FC<Props> = ({
       <div className="rounded-lg border border-shafx-warning/25 bg-shafx-warning/[0.05] px-3 py-2 text-[9px] leading-4 text-shafx-textMuted">
         Execution is intentionally gated in this stage. A READY decision is not an order; the manual ticket must refresh the broker quote and re-check risk before any practice trade.
       </div>
+
+      {!running && startBlockReason && (
+        <div role="status" className="rounded-lg border border-shafx-danger/25 bg-shafx-danger/[0.05] px-3 py-2 text-[9px] leading-4 text-shafx-textMuted">
+          <span className="font-semibold text-shafx-danger">Start blocked: </span>{startBlockReason}
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2">
         {!running ? (
