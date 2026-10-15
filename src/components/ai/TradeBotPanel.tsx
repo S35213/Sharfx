@@ -22,7 +22,7 @@ interface Props {
 }
 
 export const TradeBotPanel: React.FC<Props> = ({
-  symbol, timeframe, marketSource, accountBalance, accountCurrency, symbolSpec, onReviewSetup,
+  symbol, timeframe, marketSource, accountBalance, accountCurrency, symbolSpec, symbolSpecError, onReviewSetup,
 }) => {
   const [running, setRunning] = useState(false)
   const [decisionTrace, setDecisionTrace] = useState<TradeBotDecisionTraceEntry[]>([])
