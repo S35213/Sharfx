@@ -404,3 +404,17 @@ No broker-side protection has been changed, and no trade has been opened or clos
 ### cTrader history merge build correction — 2026-10-15
 
 - [!] Initial merge commit `fd6efb020f1af2560d368654d118b76c42e52bb1` failed the Render build because an optional `payload.history` property lost TypeScript narrowing inside the state updater. The follow-up captures the validated array into a local constant. Do not treat either commit as verified until CI and Render results for the corrected commit are green.
+
+
+## Trade Bot shadow evaluation — 2026-10-15
+
+- [x] Independent Trade Bot decision diagnostics and bounded cycle trace exist (see the dated handoff entries).
+- [x] Hypothetical SL/TP shadow evaluator added at `src/engine/bot/tradeBotShadowEvaluation.ts`.
+- [x] Shadow samples are scoped by source/market/timeframe/candle and deduplicated; only one READY sample per candle is retained.
+- [x] Outcome evaluation waits for a following candle timestamp before treating a bar as closed.
+- [x] Same-bar SL+TP touches are marked AMBIGUOUS rather than assuming a favourable result.
+- [x] Shadow samples are bounded in volatile memory and are not broker positions/orders.
+- [~] Latest exact-commit CI verification is pending; do not mark this milestone fully verified until build and tests pass.
+- [ ] Authenticated cTrader browser QA of the actual Bot tab at desktop and mobile sizes.
+- [ ] Longer historical/paper evaluation with adequate sample size; no profitability claim until that exists.
+- [ ] Automatic execution remains disabled until separate explicit release gates and practice-account end-to-end checks pass.
