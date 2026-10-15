@@ -1,5 +1,6 @@
 import type { OHLCV, Timeframe } from '../../types'
 import { normalizeMarketCandles } from '../../lib/marketCandles'
+import { providerSymbolsMatch } from '../../lib/normalizeProviderSymbol'
 
 export interface CTraderLiveQuote {
   symbol: string
@@ -122,6 +123,42 @@ export const fetchCTraderHistoricalCandles = async (args: SubscribeArgs & { time
   }
   return normalizeCTraderHistoricalCandles(payload.candles as OHLCV[])
 }
+
+
+/**
+ * Loads broker-authoritative instrument rules independently of the live quote
+ * stream. The Trade Bot may use these rules for demo risk sizing only after
+ * cTrader returns a matching full instrument; incomplete/mismatched metadata
+ * remains blocked.
+ */
+export const fetchCTraderInstrument = async (args: SubscribeArgs): Promise<CTraderLiveInstrument> => {
+  const response = await fetch('/api/providers/ctrader', {
+    method: 'POST',
+    credentials: 'include',
+    cache: 'no-store',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      providerId: 'ctrader',
+      connectionId: args.connectionId,
+      accountId: args.accountId,
+      environment: args.environment,
+      action: 'instruments',
+      symbol: args.symbol,
+    }),
+  })
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok || !payload?.ok || !Array.isArray(payload.instruments)) {
+    throw new Error(typeof payload?.error === 'string' ? payload.error : 'SHAFX cTrader instrument specification request failed.')
+  }
+  const matching = (payload.instruments as unknown[]).find((value): value is CTraderLiveInstrument => {
+    if (!value || typeof value !== 'object') return false
+    const instrument = value as Partial<CTraderLiveInstrument>
+    return typeof instrument.symbol === 'string' && providerSymbolsMatch(args.symbol, instrument.symbol)
+  })
+  if (!matching) throw new Error('cTrader returned no matching instrument specification for ' + args.symbol + '.')
+  return matching
+}
+
 
 
 
