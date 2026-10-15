@@ -634,12 +634,15 @@ const TerminalContent: React.FC = () => {
           }),
         })
         const payload = await response.json().catch(() => ({})) as { ok?: boolean; history?: TradeOrder[] }
-        if (cancelled || !response.ok || !payload.ok || !Array.isArray(payload.history)) return
+        const historySnapshot = payload.history
+        if (cancelled || !response.ok || !payload.ok || !Array.isArray(historySnapshot)) return
+        // Keep the validated response in a local constant so TypeScript retains
+        // the array narrowing across the asynchronous state updater callback.
         // Broker history refreshes must not erase another provider/account's history
         // or a locally confirmed close that the broker history page has not surfaced yet.
         setTradeHistory((current) => reconcileCTraderTradeHistory(
           current,
-          payload.history,
+          historySnapshot,
           { connectionId: String(selection.connectionId), accountId: String(selection.accountId) },
         ))
       } catch {

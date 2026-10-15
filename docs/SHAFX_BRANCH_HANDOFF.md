@@ -701,3 +701,10 @@ On the experimental branch `test/rebuild-deriv-native-manual-20260930` and the R
 - **Regression coverage:** new `src/engine/bot/reconcileCTraderTradeHistory.test.ts` covers authoritative row updates, retention while broker history lags, account/provider ID isolation, duplicate/repeated snapshots, invalid payload rows, and newest-first sorting.
 - **Verification status at note creation:** implementation and tests are committed together; wait for branch CI and the target Render service's deployment record before treating them as verified/live. No authenticated cTrader session was exercised and no orders/positions were opened, amended, or closed by this change.
 - **Next bot task:** after this reconciliation gate passes, inspect the Trade Bot analysis loop and add persistent, source-scoped decision diagnostics (input candle timestamps, broker-spec identity, risk-gate result, and explicit READY/BLOCKED reasons). Keep auto-execution disabled until its separate cTrader practice-account certification is complete.
+
+
+### Build correction record — cTrader history merge (2026-10-15)
+
+- First implementation commit `fd6efb020f1af2560d368654d118b76c42e52bb1` correctly triggered CI and the intended Render service, but the Render TypeScript build failed at `src/App.tsx`: TypeScript did not retain the optional `payload.history` property narrowing inside the React state-updater callback.
+- Correction: copy the checked property into `historySnapshot`, verify that local is an array, and pass that narrowed snapshot into the reconciler. This is a compile-safety correction only; merge behavior and order/execution boundaries are unchanged.
+- Status: awaiting new CI and Render deployment results for the correction commit. The prior successful deployment remains the live build until a new deployment completes.

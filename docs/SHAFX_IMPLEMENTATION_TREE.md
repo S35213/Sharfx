@@ -399,3 +399,8 @@ No broker-side protection has been changed, and no trade has been opened or clos
 - [ ] Await CI test/build verification and the Render deployment record for the commit adding this helper before marking it verified.
 - [ ] Authenticated cTrader end-to-end history validation remains outstanding; do not claim the user's historical broker trades are confirmed until tested in the authenticated account.
 - [ ] Next bot work: add source-scoped decision diagnostics. Keep automatic order execution disabled and do not merge this experiment to `main` without explicit user approval.
+
+
+### cTrader history merge build correction — 2026-10-15
+
+- [!] Initial merge commit `fd6efb020f1af2560d368654d118b76c42e52bb1` failed the Render build because an optional `payload.history` property lost TypeScript narrowing inside the state updater. The follow-up captures the validated array into a local constant. Do not treat either commit as verified until CI and Render results for the corrected commit are green.
