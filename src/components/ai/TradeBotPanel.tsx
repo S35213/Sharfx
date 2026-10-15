@@ -17,6 +17,7 @@ interface Props {
   accountBalance: number
   accountCurrency: string
   symbolSpec: SymbolSpec | null
+  symbolSpecError?: string | null
   onReviewSetup?: (setup?: SetupCandidate | null) => void
 }
 
@@ -127,7 +128,9 @@ export const TradeBotPanel: React.FC<Props> = ({
           : !Number.isFinite(accountBalance) || accountBalance <= 0
             ? 'A positive balance from the selected cTrader practice account is required.'
             : !symbolSpec
-              ? 'Waiting for matching cTrader instrument rules. The bot will stay blocked until the broker supplies valid contract, pip and lot constraints.'
+              ? (symbolSpecError
+                ? 'cTrader instrument lookup failed: ' + symbolSpecError
+                : 'Waiting for matching cTrader instrument rules. The bot will stay blocked until the broker supplies valid contract, pip and lot constraints.')
               : null
   const canStart = startBlockReason === null
   const statusLabel = !running
