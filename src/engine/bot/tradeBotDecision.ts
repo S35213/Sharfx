@@ -40,11 +40,22 @@ export const evaluateTradeBotDecision = (input: {
   timeframe: Timeframe
   accountBalance: number
   accountCurrency: string
-  symbolSpec: SymbolSpec
+  symbolSpec: SymbolSpec | null
 }): TradeBotDecision => {
   const { frames, symbol, timeframe, accountBalance, accountCurrency, symbolSpec } = input
   const riskBudget = tradeBotRiskBudget(accountBalance)
   if (!riskBudget) return wait(timeframe, 'Account balance is unavailable; risk sizing is blocked.', 0)
+  if (!symbolSpec) {
+    return {
+      status: 'BLOCKED',
+      reason: 'Verified cTrader instrument contract data is unavailable; Trade Bot risk sizing is blocked.',
+      setup: null,
+      timeframe,
+      riskBudget,
+      riskPlan: null,
+      higherTimeframeBias: 'Unclear',
+    }
+  }
 
   const candles = frames[timeframe] ?? []
   if (candles.length < 8) return wait(timeframe, `Waiting for at least 8 ${timeframe} candles.`, riskBudget)

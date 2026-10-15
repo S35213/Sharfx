@@ -359,3 +359,11 @@ No broker-side protection has been changed, and no trade has been opened or clos
 - [~] Latest warning-cleanup commit \`4a3f3e99a39eb6ee2ff55d5e09ead2e6084e1f71\` still needs final CI confirmation.
 - [ ] Deploy commit \`4a3f3e99a39eb6ee2ff55d5e09ead2e6084e1f71\` to **Shafek Derive Render** and confirm that exact commit is live. Current deploy record still points to \`746a34668aba7671713d151a6a827629e2f4e1de\`.
 - [ ] Add demo-only execution controller, explicit risk gate, idempotent order submission, broker SL/TP confirmation and position reconciliation. No live trading.
+
+
+
+## 2026-10-15 — Trade Bot broker-spec provenance gate
+
+- New isolated helper `src/engine/bot/ctraderInstrumentSpec.ts` accepts only matching, tradable, complete cTrader contract metadata and builds the `SymbolSpec` used by Trade Bot risk sizing.
+- `src/App.tsx` now passes that instrument-derived spec to Trade Bot only; the existing manual ticket continues using its pre-existing workspace spec. Missing/unsupported metadata blocks Trade Bot risk sizing instead of using mock defaults.
+- Added spec-mapping tests and a decision-level regression test. CI status and Render deployment status must be checked separately; this does not enable bot order execution.

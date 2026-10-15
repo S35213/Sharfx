@@ -44,6 +44,21 @@ describe('independent Trade Bot guardrails', () => {
     expect(tradeBotRiskBudget(Number.NaN)).toBe(0)
   })
 
+  it('blocks risk sizing when broker-confirmed instrument specs are missing', () => {
+    const result = evaluateTradeBotDecision({
+      frames: {},
+      symbol: 'EUR/USD',
+      timeframe: 'M5',
+      accountBalance: 1000,
+      accountCurrency: 'USD',
+      symbolSpec: null,
+    })
+    expect(result.status).toBe('BLOCKED')
+    expect(result.setup).toBeNull()
+    expect(result.riskPlan).toBeNull()
+    expect(result.reason).toContain('Verified cTrader instrument contract data is unavailable')
+  })
+
   it('waits instead of inventing a setup when timeframe candles are missing', () => {
     const symbolSpec = getSymbolSpec('EUR/USD')
     const result = evaluateTradeBotDecision({

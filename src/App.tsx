@@ -21,6 +21,8 @@ import { MarketAnalysisPanel } from './components/analysis/MarketAnalysis'
 import { AIAssistantPanel } from './components/ai/AIAssistantPanel'
 import { SignalDeskPanel } from './components/ai/SignalDeskPanel'
 import { TradeBotPanel } from './components/ai/TradeBotPanel'
+import { cTraderInstrumentToSymbolSpec } from './engine/bot/ctraderInstrumentSpec'
+import { tradeBotMarketSourceKey } from './engine/bot/useTradeBotMarketData'
 import { OrderPanel } from './components/order/OrderPanel'
 import { closeDerivContract } from './data/deriv/derivTrading'
 import { AccountPanel } from './components/account/AccountPanel'
@@ -40,7 +42,7 @@ import { normalizeProviderSymbol, providerSymbolsMatch } from './lib/normalizePr
 import type { SetupCandidate } from './engine/setup/types'
 import { mockWatchlist } from './data/mock/watchlist'
 import { fetchDerivActiveForexSymbols, fetchDerivMultiTimeframeCandles, subscribeDerivForexQuotes } from './data/deriv/DerivPublicMarketFeed'
-import { applyCTraderQuoteToCandles, cTraderQuoteBucket, fetchCTraderHistoricalCandles, getRecentCTraderCandleGapSignature, isCTraderQuoteBucketCurrent, mergeCTraderHistoricalAndLiveCandles, shouldRepairCTraderHistoryForGap, subscribeCTraderLiveQuote } from './data/ctrader/CTraderLiveQuote'
+import { applyCTraderQuoteToCandles, cTraderQuoteBucket, fetchCTraderHistoricalCandles, getRecentCTraderCandleGapSignature, isCTraderQuoteBucketCurrent, mergeCTraderHistoricalAndLiveCandles, shouldRepairCTraderHistoryForGap, subscribeCTraderLiveQuote, type CTraderLiveInstrument } from './data/ctrader/CTraderLiveQuote'
 
 const EMPTY_STRUCTURAL_HISTORIES: Partial<Record<Timeframe, OHLCV[]>> = {}
 
@@ -250,6 +252,7 @@ const TerminalContent: React.FC = () => {
   const [accountData, setAccountData] = useState<AccountData | null>(null)
   const [watchlist, setWatchlist] = useState<MarketPair[]>(() => mockWatchlist.map((pair) => ({ ...pair, price: 0, change: 0, changePercent: 0, status: 'closed' })))
   const [symbolSpec, setSymbolSpec] = useState<SymbolSpec>(() => SYMBOL_SPECS[selectedSymbol] ?? SYMBOL_SPECS['EUR/USD'])
+  const [tradeBotBrokerSpec, setTradeBotBrokerSpec] = useState<{ sourceKey: string; symbolSpec: SymbolSpec | null } | null>(null)
   const [openPositions, setOpenPositions] = useState<TradeOrder[]>([])
   const [pendingOrders] = useState<TradeOrder[]>([])
   const [tradeHistory, setTradeHistory] = useState<TradeOrder[]>([])
@@ -335,6 +338,7 @@ const TerminalContent: React.FC = () => {
     setLiveBidPrice(0)
     setLiveAskPrice(0)
     setLiveMarketActive(false)
+    setTradeBotBrokerSpec(null)
     return () => {
       if (cTraderQuoteStaleTimerRef.current !== null) {
         window.clearTimeout(cTraderQuoteStaleTimerRef.current)
@@ -1071,8 +1075,23 @@ const TerminalContent: React.FC = () => {
       accountId: selection.accountId,
       environment: selection.environment === 'live' ? 'live' : 'demo',
       symbol: subscriptionSymbol,
-    }, (nextQuote, _nextInstrument, update) => {
+    }, (nextQuote, nextInstrument, update) => {
       if (cancelled || selectedSymbolRef.current !== subscriptionSymbol) return
+
+      // Use broker-reported contract constraints for Trade Bot sizing. The general
+      // workspace still uses its existing spec; this gate is scoped to Trade Bot.
+      const tradeBotSource = {
+        providerId: 'ctrader',
+        connectionId: selection.connectionId,
+        accountId: selection.accountId,
+        environment: selection.environment === 'live' ? 'live' as const : 'demo' as const,
+      }
+      const tradeBotSpecKey = tradeBotMarketSourceKey(subscriptionSymbol, tradeBotSource)
+      const resolvedTradeBotSpec = cTraderInstrumentToSymbolSpec(subscriptionSymbol, nextInstrument)
+      setTradeBotBrokerSpec((previous) => {
+        if (previous?.sourceKey === tradeBotSpecKey && JSON.stringify(previous.symbolSpec) === JSON.stringify(resolvedTradeBotSpec)) return previous
+        return { sourceKey: tradeBotSpecKey, symbolSpec: resolvedTradeBotSpec }
+      })
 
       // The quote stream belongs to the symbol/account; timeframe changes
       // only switch candle aggregation and must not interrupt Bid/Ask.
@@ -1520,6 +1539,10 @@ const TerminalContent: React.FC = () => {
     accountId: activeProviderSelection?.accountId ?? null,
     environment: activeProviderSelection?.environment ?? null,
   }
+  const expectedTradeBotSpecKey = tradeBotMarketSourceKey(selectedSymbol, signalBotMarketSource)
+  const tradeBotSymbolSpec = tradeBotBrokerSpec?.sourceKey === expectedTradeBotSpecKey
+    ? tradeBotBrokerSpec.symbolSpec
+    : null
 
   const dockContent = {
     insights: <div className="space-y-3">
@@ -1541,7 +1564,7 @@ const TerminalContent: React.FC = () => {
          : (activeProviderSelection?.providerId === 'ctrader' ? 'cTrader ' : 'Deriv ') + order.type + ' trade opened on ' + (order.chartTimeframe ?? timeframe) + '.')
     }} aiSetup={reviewSetup} />
     </div>,
-    bot: <div className="space-y-4"><ErrorBoundary><SignalDeskPanel symbol={selectedSymbol} timeframe={timeframe} marketSource={signalBotMarketSource} onReviewSetup={handleReviewSetup} /></ErrorBoundary><ErrorBoundary><TradeBotPanel symbol={selectedSymbol} timeframe={timeframe} marketSource={signalBotMarketSource} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} onReviewSetup={handleReviewSetup} /></ErrorBoundary></div>,
+    bot: <div className="space-y-4"><ErrorBoundary><SignalDeskPanel symbol={selectedSymbol} timeframe={timeframe} marketSource={signalBotMarketSource} onReviewSetup={handleReviewSetup} /></ErrorBoundary><ErrorBoundary><TradeBotPanel symbol={selectedSymbol} timeframe={timeframe} marketSource={signalBotMarketSource} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={tradeBotSymbolSpec} onReviewSetup={handleReviewSetup} /></ErrorBoundary></div>,
     liquidity: <LiquidityPanel key={selectedSymbol} symbol={selectedSymbol} price={currentPrice} precision={symbolSpec.pricePrecision} pipSize={symbolSpec.pipSize} candles={liveCandles} />,
     orders: <OrderPanel providerSelection={activeProviderSelection} symbol={selectedSymbol} currentPrice={currentPrice} bidPrice={chartBidPrice} askPrice={chartAskPrice} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} timeframe={timeframe} connection={derivOrderConnection} activePosition={selectedOpenPosition} onTradeClosed={(id) => { void handleClosePosition(id) }} onTradeLinesChange={setTradeLines} onTradeOpened={(order) => {
       setOpenPositions((current) => [order, ...current.filter((item) => item.id !== order.id)])
@@ -1638,7 +1661,7 @@ const TerminalContent: React.FC = () => {
           'Verify the actual SL/TP in cTrader before relying on it.'
          : (activeProviderSelection?.providerId === 'ctrader' ? 'cTrader ' : 'SHAFX ') + order.type + ' trade opened on ' + (order.chartTimeframe ?? timeframe) + '.')
     }} aiSetup={reviewSetup} /></div></aside>}
-      <aside className={showBot ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-4"><ErrorBoundary><SignalDeskPanel symbol={selectedSymbol} timeframe={timeframe} marketSource={signalBotMarketSource} onReviewSetup={handleReviewSetup} /></ErrorBoundary><ErrorBoundary><TradeBotPanel symbol={selectedSymbol} timeframe={timeframe} marketSource={signalBotMarketSource} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} onReviewSetup={handleReviewSetup} /></ErrorBoundary></div></aside>
+      <aside className={showBot ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-4"><ErrorBoundary><SignalDeskPanel symbol={selectedSymbol} timeframe={timeframe} marketSource={signalBotMarketSource} onReviewSetup={handleReviewSetup} /></ErrorBoundary><ErrorBoundary><TradeBotPanel symbol={selectedSymbol} timeframe={timeframe} marketSource={signalBotMarketSource} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={tradeBotSymbolSpec} onReviewSetup={handleReviewSetup} /></ErrorBoundary></div></aside>
       <aside className={showHistory ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="h-[calc(100svh-92px)] min-h-[520px]"><TradesPanel defaultTab="history" openPositions={liveOpenPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={currentPrice} selectedSymbol={selectedSymbol} onClosePosition={(id) => { void handleClosePosition(id) }} onBulkClose={handleBulkClose} currency={resolvedAccountData.currency} botPaperHistory={botPaperHistory} /></div></aside>
       <aside className={showFunds ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><DerivCashierLinks /></div></aside>
       <aside className={showAccount ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><AccountPanel account={resolvedAccountData} activeProviderSelection={activeProviderSelection} /></div></aside>

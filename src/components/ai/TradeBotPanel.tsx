@@ -12,7 +12,7 @@ interface Props {
   marketSource: TradeBotMarketSource | null
   accountBalance: number
   accountCurrency: string
-  symbolSpec: SymbolSpec
+  symbolSpec: SymbolSpec | null
   onReviewSetup?: (setup?: SetupCandidate | null) => void
 }
 
@@ -30,7 +30,7 @@ export const TradeBotPanel: React.FC<Props> = ({
     symbolSpec,
   }), [market.frames, symbol, timeframe, accountBalance, accountCurrency, symbolSpec])
 
-  const statusLabel = !running ? 'STOPPED' : market.status === 'ready' ? 'MONITORING' : market.status === 'partial' ? 'PARTIAL DATA' : market.status === 'loading' ? 'LOADING' : market.status === 'unavailable' ? 'BLOCKED' : 'DATA ERROR'
+  const statusLabel = !running ? 'STOPPED' : !symbolSpec ? 'BROKER SPECS NEEDED' : market.status === 'ready' ? 'MONITORING' : market.status === 'partial' ? 'PARTIAL DATA' : market.status === 'loading' ? 'LOADING' : market.status === 'unavailable' ? 'BLOCKED' : 'DATA ERROR'
   const statusTone = decision.status === 'READY' && running
     ? 'border-shafx-success/30 bg-shafx-success/10 text-shafx-success'
     : decision.status === 'BLOCKED'
@@ -40,7 +40,8 @@ export const TradeBotPanel: React.FC<Props> = ({
   const canStart = marketSource?.providerId === 'ctrader' &&
     marketSource.environment === 'demo' &&
     Boolean(marketSource.connectionId && marketSource.accountId) &&
-    accountBalance > 0
+    accountBalance > 0 &&
+    Boolean(symbolSpec)
 
   const start = (): void => {
     setRunning(true)
@@ -91,10 +92,10 @@ export const TradeBotPanel: React.FC<Props> = ({
             <div className="mt-3 grid grid-cols-2 gap-2 text-[9px]">
               <div><span className="block text-shafx-textMuted">Direction</span><b className={decision.setup.direction === 'BUY' ? 'text-shafx-success' : 'text-shafx-danger'}>{decision.setup.direction}</b></div>
               <div><span className="block text-shafx-textMuted">Setup score</span><b>{decision.setup.confidence} / 100</b></div>
-              <div><span className="block text-shafx-textMuted">Entry reference</span><b className="font-mono">{formatPrice(decision.setup.entryPrice, symbolSpec.pricePrecision)}</b></div>
+              <div><span className="block text-shafx-textMuted">Entry reference</span><b className="font-mono">{formatPrice(decision.setup.entryPrice, (symbolSpec?.pricePrecision ?? 5))}</b></div>
               <div><span className="block text-shafx-textMuted">Risk / reward</span><b className="font-mono">{decision.riskPlan?.riskRewardRatio.toFixed(2) ?? '—'} : 1</b></div>
-              <div><span className="block text-shafx-textMuted">Stop loss</span><b className="font-mono">{formatPrice(decision.setup.stopLoss, symbolSpec.pricePrecision)}</b></div>
-              <div><span className="block text-shafx-textMuted">Take profit</span><b className="font-mono">{formatPrice(decision.setup.takeProfit, symbolSpec.pricePrecision)}</b></div>
+              <div><span className="block text-shafx-textMuted">Stop loss</span><b className="font-mono">{formatPrice(decision.setup.stopLoss, (symbolSpec?.pricePrecision ?? 5))}</b></div>
+              <div><span className="block text-shafx-textMuted">Take profit</span><b className="font-mono">{formatPrice(decision.setup.takeProfit, (symbolSpec?.pricePrecision ?? 5))}</b></div>
             </div>
           )}
         </div>
