@@ -28,14 +28,21 @@ export const SignalDeskPanel: React.FC<Props> = ({ symbol, timeframe, marketSour
     ? '—'
     : new Date(marketData.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
   const statusLabel = marketData.status === 'ready'
-    ? 'SCANNING'
+    ? 'AUTO-SCAN'
     : marketData.status === 'partial'
       ? 'PARTIAL DATA'
       : marketData.status === 'loading'
-        ? 'LOADING'
+        ? 'SCANNING'
         : marketData.status === 'unavailable'
           ? 'UNAVAILABLE'
           : 'DATA ERROR'
+  const scanButtonLabel = marketData.status === 'loading'
+    ? 'Scanning…'
+    : marketData.status === 'error'
+      ? 'Retry scan'
+      : marketData.status === 'unavailable'
+        ? 'Unavailable'
+        : 'Scan now'
   const statusTone = marketData.status === 'ready'
     ? 'border-shafx-success/25 bg-shafx-success/10 text-shafx-success'
     : marketData.status === 'partial'
@@ -63,9 +70,9 @@ export const SignalDeskPanel: React.FC<Props> = ({ symbol, timeframe, marketSour
           <span className="mt-0.5 block text-[8px] text-shafx-textMuted">{sourceLabel(marketSource)} • {timeframe}</span>
         </div>
         <div className="rounded-xl border border-shafx-border bg-shafx-bg p-3">
-          <span className="block text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted">Scanner price</span>
+          <span className="block text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted">Latest candle close</span>
           <strong className="mt-1 block font-mono text-sm">{scannerPrice > 0 ? scannerPrice.toFixed(symbol.includes('JPY') ? 3 : 5) : '—'}</strong>
-          <span className="mt-0.5 block text-[8px] text-shafx-textMuted">Updated {lastUpdated}</span>
+          <span className="mt-0.5 block text-[8px] text-shafx-textMuted">Scan data updated {lastUpdated}</span>
         </div>
       </div>
 
@@ -75,6 +82,24 @@ export const SignalDeskPanel: React.FC<Props> = ({ symbol, timeframe, marketSour
           <span className="font-mono text-[8px] font-bold text-shafx-accent">{radar.alignment}% ALIGN</span>
         </div>
         <div className="mt-1 text-[8px] text-shafx-textMuted">{radar.scanned.length}/8 timeframes have enough candles • score is not a guaranteed win probability</div>
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <span className="text-[8px] leading-4 text-shafx-textMuted">
+            {marketData.status === 'loading'
+              ? 'Requesting fresh candles…'
+              : marketData.status === 'ready'
+                ? 'Automatic refresh every 15 seconds'
+                : 'Scan status: ' + marketData.status}
+          </span>
+          <button
+            type="button"
+            onClick={marketData.refreshNow}
+            disabled={marketData.status === 'loading' || marketData.status === 'unavailable'}
+            className="inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-md border border-shafx-accent/30 px-2.5 text-[8px] font-semibold text-shafx-accent disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <RefreshCw className={'h-3 w-3 ' + (marketData.status === 'loading' ? 'animate-spin' : '')} />
+            {scanButtonLabel}
+          </button>
+        </div>
         {marketData.error && (
           <div role="status" className="mt-2 rounded-lg border border-shafx-warning/25 bg-shafx-warning/[0.06] px-2.5 py-2 text-[8px] leading-4 text-shafx-textMuted">{marketData.error}</div>
         )}
