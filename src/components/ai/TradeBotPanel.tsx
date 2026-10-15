@@ -4,6 +4,7 @@ import type { SymbolSpec, Timeframe } from '../../types'
 import type { SetupCandidate } from '../../engine/setup/types'
 import { evaluateTradeBotDecision } from '../../engine/bot/tradeBotDecision'
 import { useTradeBotMarketData, type TradeBotMarketSource } from '../../engine/bot/useTradeBotMarketData'
+import { buildTradeBotDiagnosticSnapshot } from '../../engine/bot/tradeBotDiagnostics'
 import { formatCurrency, formatPrice } from '../../lib/format'
 
 interface Props {
@@ -30,6 +31,37 @@ export const TradeBotPanel: React.FC<Props> = ({
     symbolSpec,
   }), [market.frames, symbol, timeframe, accountBalance, accountCurrency, symbolSpec])
 
+  const diagnostics = useMemo(() => buildTradeBotDiagnosticSnapshot({
+    source: marketSource,
+    symbol,
+    timeframe,
+    frames: market.frames,
+    marketStatus: market.status,
+    marketUpdatedAt: market.updatedAt,
+    accountBalance,
+    accountCurrency,
+    symbolSpec,
+    decision,
+  }), [
+    marketSource?.providerId,
+    marketSource?.connectionId,
+    marketSource?.accountId,
+    marketSource?.environment,
+    symbol,
+    timeframe,
+    market.frames,
+    market.status,
+    market.updatedAt,
+    accountBalance,
+    accountCurrency,
+    symbolSpec,
+    decision,
+  ])
+  const diagnosticsTone = diagnostics.summary === 'READY_FOR_REVIEW'
+    ? 'text-shafx-success'
+    : diagnostics.summary === 'BLOCKED'
+      ? 'text-shafx-danger'
+      : 'text-shafx-textMuted'
   const statusLabel = !running ? 'STOPPED' : !symbolSpec ? 'BROKER SPECS NEEDED' : market.status === 'ready' ? 'MONITORING' : market.status === 'partial' ? 'PARTIAL DATA' : market.status === 'loading' ? 'LOADING' : market.status === 'unavailable' ? 'BLOCKED' : 'DATA ERROR'
   const statusTone = decision.status === 'READY' && running
     ? 'border-shafx-success/30 bg-shafx-success/10 text-shafx-success'
@@ -100,6 +132,59 @@ export const TradeBotPanel: React.FC<Props> = ({
           )}
         </div>
       </div>
+
+      <details className="rounded-xl border border-shafx-border bg-shafx-bg/70 p-3">
+        <summary className="cursor-pointer list-none flex items-center justify-between gap-2 text-[9px] font-semibold uppercase tracking-[0.13em]">
+          <span>Decision diagnostics</span>
+          <span className={'font-mono ' + diagnosticsTone}>{diagnostics.summary.replace(/_/g, ' ')}</span>
+        </summary>
+        <div className="mt-3 space-y-3 text-[9px]">
+          <div className="rounded-lg border border-shafx-border bg-shafx-bg p-3">
+            <div className="text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted">Data source scope</div>
+            <div className="mt-1 break-words font-mono">{diagnostics.sourceLabel}</div>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <div><span className="block text-shafx-textMuted">Candle history</span><b>{diagnostics.candleCount} / 8 bars ({timeframe})</b></div>
+              <div><span className="block text-shafx-textMuted">Market refresh</span><b>{diagnostics.marketAgeSeconds === null ? 'never' : diagnostics.marketAgeSeconds + 's ago'} · {diagnostics.marketFresh ? 'fresh' : 'stale'}</b></div>
+              <div><span className="block text-shafx-textMuted">Last candle time</span><b className="font-mono">{diagnostics.lastCandleAt ? new Date(diagnostics.lastCandleAt).toLocaleString() : '—'}</b></div>
+              <div><span className="block text-shafx-textMuted">Last candle close</span><b className="font-mono">{diagnostics.lastCandleClose === null ? '—' : formatPrice(diagnostics.lastCandleClose, symbolSpec?.pricePrecision ?? 5)}</b></div>
+            </div>
+            <div className="mt-2"><span className="text-shafx-textMuted">Frames with at least 8 candles: </span><b>{diagnostics.loadedTimeframes.length ? diagnostics.loadedTimeframes.join(', ') : 'none'}</b></div>
+          </div>
+          <div className="rounded-lg border border-shafx-border bg-shafx-bg p-3">
+            <div className="text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted">Broker contract metadata</div>
+            <div className="mt-1">{diagnostics.brokerSpec.available && diagnostics.brokerSpec.matchesSymbol ? 'Verified contract matches ' + symbol : 'Missing or mismatched for ' + symbol}</div>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <div><span className="block text-shafx-textMuted">Contract size</span><b className="font-mono">{diagnostics.brokerSpec.contractSize ?? '—'}</b></div>
+              <div><span className="block text-shafx-textMuted">Pip size</span><b className="font-mono">{diagnostics.brokerSpec.pipSize ?? '—'}</b></div>
+              <div><span className="block text-shafx-textMuted">Lot minimum / step</span><b className="font-mono">{diagnostics.brokerSpec.minLotSize ?? '—'} / {diagnostics.brokerSpec.lotStep ?? '—'}</b></div>
+              <div><span className="block text-shafx-textMuted">Lot maximum</span><b className="font-mono">{diagnostics.brokerSpec.maxLotSize ?? '—'}</b></div>
+            </div>
+          </div>
+          <div className="rounded-lg border border-shafx-border bg-shafx-bg p-3">
+            <div className="text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted">Risk gate</div>
+            <div className="mt-1 grid grid-cols-2 gap-2">
+              <div><span className="block text-shafx-textMuted">Risk ceiling</span><b>{formatCurrency(diagnostics.riskBudget, accountCurrency)}</b></div>
+              <div><span className="block text-shafx-textMuted">Estimated stop loss</span><b>{diagnostics.estimatedLoss === null ? '—' : formatCurrency(diagnostics.estimatedLoss, accountCurrency)}</b></div>
+              <div><span className="block text-shafx-textMuted">Estimated target</span><b>{diagnostics.estimatedReward === null ? '—' : formatCurrency(diagnostics.estimatedReward, accountCurrency)}</b></div>
+              <div><span className="block text-shafx-textMuted">Planned lot size</span><b>{diagnostics.lots === null ? '—' : diagnostics.lots}</b></div>
+              <div><span className="block text-shafx-textMuted">Risk / reward</span><b>{diagnostics.riskRewardRatio === null ? '—' : diagnostics.riskRewardRatio.toFixed(2) + ':1'}</b></div>
+              <div><span className="block text-shafx-textMuted">Higher-timeframe bias</span><b>{diagnostics.higherTimeframeBias}</b></div>
+            </div>
+          </div>
+          <div className="space-y-2">
+            {diagnostics.gates.map((gate) => (
+              <div key={gate.id} className="flex items-start gap-2 border-b border-shafx-border/70 pb-2 last:border-0">
+                <span className={'mt-px min-w-10 font-mono font-bold ' + (gate.passed ? 'text-shafx-success' : 'text-shafx-warning')}>{gate.passed ? 'PASS' : 'HOLD'}</span>
+                <div className="min-w-0">
+                  <div className="font-semibold">{gate.label}</div>
+                  <div className="mt-0.5 break-words leading-4 text-shafx-textMuted">{gate.detail}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="leading-4 text-shafx-textMuted">Diagnostics are for analysis and manual review only. They do not authorize or submit an order.</p>
+        </div>
+      </details>
 
       <div className="rounded-lg border border-shafx-warning/25 bg-shafx-warning/[0.05] px-3 py-2 text-[9px] leading-4 text-shafx-textMuted">
         Execution is intentionally gated in this stage. A READY decision is not an order; the manual ticket must refresh the broker quote and re-check risk before any practice trade.
