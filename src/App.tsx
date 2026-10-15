@@ -44,7 +44,7 @@ import { normalizeProviderSymbol, providerSymbolsMatch } from './lib/normalizePr
 import type { SetupCandidate } from './engine/setup/types'
 import { mockWatchlist } from './data/mock/watchlist'
 import { fetchDerivActiveForexSymbols, fetchDerivMultiTimeframeCandles, subscribeDerivForexQuotes } from './data/deriv/DerivPublicMarketFeed'
-import { applyCTraderQuoteToCandles, cTraderQuoteBucket, fetchCTraderHistoricalCandles, getRecentCTraderCandleGapSignature, isCTraderQuoteBucketCurrent, mergeCTraderHistoricalAndLiveCandles, shouldRepairCTraderHistoryForGap, subscribeCTraderLiveQuote } from './data/ctrader/CTraderLiveQuote'
+import { applyCTraderQuoteToCandles, cTraderQuoteBucket, fetchCTraderHistoricalCandles, fetchCTraderInstrument, getRecentCTraderCandleGapSignature, isCTraderQuoteBucketCurrent, mergeCTraderHistoricalAndLiveCandles, shouldRepairCTraderHistoryForGap, subscribeCTraderLiveQuote } from './data/ctrader/CTraderLiveQuote'
 
 const EMPTY_STRUCTURAL_HISTORIES: Partial<Record<Timeframe, OHLCV[]>> = {}
 
@@ -348,6 +348,58 @@ const TerminalContent: React.FC = () => {
       }
     }
   }, [selectedSymbol, activeProviderSelection?.providerId, activeProviderSelection?.accountId, activeProviderSelection?.connectionId, activeProviderSelection?.environment])
+
+  // Load cTrader's verified instrument contract independently from the live
+  // quote loop. A quote-stream outage must not silently make demo analysis
+  // impossible when the provider can still return instrument metadata.
+  useEffect(() => {
+    const selection = activeProviderSelection
+    if (
+      selection?.providerId !== 'ctrader' ||
+      !selection.connectionId ||
+      !selection.accountId
+    ) return
+
+    let cancelled = false
+    const source = {
+      providerId: 'ctrader',
+      connectionId: selection.connectionId,
+      accountId: selection.accountId,
+      environment: selection.environment,
+    }
+    const sourceKey = tradeBotMarketSourceKey(selectedSymbol, source)
+    const resolveInstrument = async (): Promise<void> => {
+      try {
+        const instrument = await fetchCTraderInstrument({
+          connectionId: selection.connectionId,
+          accountId: selection.accountId as string,
+          environment: selection.environment,
+          symbol: selectedSymbol,
+        })
+        const resolved = cTraderInstrumentToSymbolSpec(selectedSymbol, instrument)
+        if (cancelled) return
+        setTradeBotBrokerSpec((previous) => {
+          if (previous?.sourceKey === sourceKey && JSON.stringify(previous.symbolSpec) === JSON.stringify(resolved)) return previous
+          return { sourceKey, symbolSpec: resolved }
+        })
+      } catch {
+        if (cancelled) return
+        // Keep a valid specification already delivered by the quote stream.
+        // Never replace a valid spec with a mock/default fallback on failure.
+        setTradeBotBrokerSpec((previous) =>
+          previous?.sourceKey === sourceKey ? previous : { sourceKey, symbolSpec: null },
+        )
+      }
+    }
+    void resolveInstrument()
+    return () => { cancelled = true }
+  }, [
+    selectedSymbol,
+    activeProviderSelection?.providerId,
+    activeProviderSelection?.connectionId,
+    activeProviderSelection?.accountId,
+    activeProviderSelection?.environment,
+  ])
 
   const pushToast = useCallback((text: string) => {
     toastId.current += 1
