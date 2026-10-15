@@ -6,6 +6,7 @@ import { evaluateTradeBotDecision } from '../../engine/bot/tradeBotDecision'
 import { tradeBotMarketSourceKey, useTradeBotMarketData, type TradeBotMarketSource } from '../../engine/bot/useTradeBotMarketData'
 import { appendTradeBotDecisionTrace, createTradeBotDecisionTraceEntry, type TradeBotDecisionTraceEntry } from '../../engine/bot/tradeBotDecisionTrace'
 import { buildTradeBotDiagnosticSnapshot } from '../../engine/bot/tradeBotDiagnostics'
+import { advanceTradeBotShadowRecords, appendTradeBotShadowRecord, createTradeBotShadowRecord, type TradeBotShadowRecord } from '../../engine/bot/tradeBotShadowEvaluation'
 import { formatCurrency, formatPrice } from '../../lib/format'
 
 interface Props {
@@ -23,6 +24,7 @@ export const TradeBotPanel: React.FC<Props> = ({
 }) => {
   const [running, setRunning] = useState(false)
   const [decisionTrace, setDecisionTrace] = useState<TradeBotDecisionTraceEntry[]>([])
+  const [shadowRecords, setShadowRecords] = useState<TradeBotShadowRecord[]>([])
   const market = useTradeBotMarketData(symbol, marketSource, running)
   const decision = useMemo(() => evaluateTradeBotDecision({
     frames: market.frames,
@@ -85,6 +87,32 @@ export const TradeBotPanel: React.FC<Props> = ({
     if (!entry) return
     setDecisionTrace((current) => appendTradeBotDecisionTrace(current, entry, 12))
   }, [running, traceScopeKey, symbol, timeframe, market.updatedAt, market.frames, diagnostics])
+
+  useEffect(() => {
+    if (!running || !market.updatedAt) return
+    const candles = market.frames[timeframe] ?? []
+    const lastCandle = candles[candles.length - 1]
+    setShadowRecords((current) => {
+      const advanced = advanceTradeBotShadowRecords(current, market.frames)
+      if (decision.status !== 'READY' || !decision.setup || !lastCandle) return advanced
+      const candidate = createTradeBotShadowRecord({
+        scopeKey: traceScopeKey,
+        symbol,
+        timeframe,
+        signalCandleTime: lastCandle.time,
+        setup: decision.setup,
+        riskBudget: decision.riskBudget,
+        estimatedLoss: decision.riskPlan?.valid ? decision.riskPlan.estimatedLossAtStop : null,
+        estimatedReward: decision.riskPlan?.valid ? decision.riskPlan.estimatedRewardAtTarget : null,
+      })
+      return candidate ? appendTradeBotShadowRecord(advanced, candidate, 24) : advanced
+    })
+  }, [running, market.updatedAt, market.frames, timeframe, decision, traceScopeKey, symbol])
+
+  const visibleShadowRecords = useMemo(
+    () => shadowRecords.filter((record) => record.scopeKey === traceScopeKey).slice(0, 6),
+    [shadowRecords, traceScopeKey],
+  )
 
   const statusLabel = !running ? 'STOPPED' : !symbolSpec ? 'BROKER SPECS NEEDED' : market.status === 'ready' ? 'MONITORING' : market.status === 'partial' ? 'PARTIAL DATA' : market.status === 'loading' ? 'LOADING' : market.status === 'unavailable' ? 'BLOCKED' : 'DATA ERROR'
   const statusTone = decision.status === 'READY' && running
@@ -228,6 +256,28 @@ export const TradeBotPanel: React.FC<Props> = ({
                     <div className="mt-1 font-mono text-[8px] text-shafx-textMuted">
                       Risk {formatCurrency(entry.riskBudget, accountCurrency)} · RR {entry.riskRewardRatio === null ? '—' : entry.riskRewardRatio.toFixed(2) + ':1'} · lots {entry.lots ?? '—'}
                     </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="rounded-lg border border-shafx-border bg-shafx-bg p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted">Shadow outcomes · no orders</div>
+              <span className="font-mono text-[8px] text-shafx-textMuted">{visibleShadowRecords.length} / 6 · memory only</span>
+            </div>
+            {visibleShadowRecords.length === 0 ? (
+              <p className="mt-2 leading-4 text-shafx-textMuted">A READY setup is recorded once per candle. Later candles test the planned stop and target; these are hypothetical outcomes, not broker trades or a profitability claim.</p>
+            ) : (
+              <div className="mt-2 space-y-2">
+                {visibleShadowRecords.map((record) => (
+                  <div key={record.id} className="border-b border-shafx-border/70 pb-2 last:border-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-mono font-bold">{record.direction} · {record.timeframe}</span>
+                      <span className={'font-mono text-[8px] font-bold ' + (record.status === 'TARGET' ? 'text-shafx-success' : record.status === 'STOP' ? 'text-shafx-danger' : 'text-shafx-textMuted')}>{record.status}</span>
+                    </div>
+                    <div className="mt-1 font-mono text-[8px] text-shafx-textMuted">Entry {formatPrice(record.entryPrice, symbolSpec?.pricePrecision ?? 5)} · SL {formatPrice(record.stopLoss, symbolSpec?.pricePrecision ?? 5)} · TP {formatPrice(record.takeProfit, symbolSpec?.pricePrecision ?? 5)}</div>
+                    <div className="mt-1 break-words leading-4 text-shafx-textMuted">{record.resolutionNote}</div>
                   </div>
                 ))}
               </div>
