@@ -450,5 +450,7 @@ No broker-side protection has been changed, and no trade has been opened or clos
 - [x] Trade Bot’s stopped/blocked state now surfaces the exact prerequisite instead of presenting only a greyed-out start button.
 - [x] cTrader broker instrument metadata is fetched independently of quote streaming via the authenticated instruments endpoint; strict symbol validation and risk-spec validation still apply.
 - [x] cTrader instrument fetch tests cover matching symbol, mismatch rejection, provider errors and malformed responses.
-- [~] Latest changes still require a fresh CI/build/deploy verification; authenticated QA of the actual mobile Bot tab is still outstanding.
+- [x] CI run 38762737065 (run #1988) passed build, Render static-server smoke, lint, tests and production dependency audit. Render deployment dep-db8f8t49v7es73buiha0 for commit f4c5ea8fe51a0b910b9b25918dbb4eb9e908e5d5 reports live; authenticated Bot-tab QA remains outstanding.
 - [x] No auto-start or automatic orders introduced. No broker positions changed. main and Cloudflare production remain untouched.
+
+- [x] Added the experimental branch to SHAFX CI push triggers so subsequent feature commits receive the full test suite without requiring a pull request.
