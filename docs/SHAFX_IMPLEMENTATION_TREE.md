@@ -395,8 +395,8 @@ No broker-side protection has been changed, and no trade has been opened or clos
 
 ## Trade Bot / cTrader history reconciliation checkpoint — 2026-10-15
 
-- [~] cTrader's backend deal-history endpoint and frontend polling already exist; the newly added `reconcileCTraderTradeHistory` helper now merges broker history into the shared journal without deleting other providers' history or unmatched locally confirmed closes. Regression tests cover account scope, lagging/malformed snapshots, duplicate rows, and ordering.
-- [ ] Await CI test/build verification and the Render deployment record for the commit adding this helper before marking it verified.
+- [x] cTrader's backend deal-history endpoint and frontend polling already exist; `reconcileCTraderTradeHistory` merges broker history into the shared journal without deleting other providers' history or unmatched locally confirmed closes. Regression tests cover account scope, lagging/malformed snapshots, duplicate rows, invalid records, and ordering. Verified on `940db5240bfe91fc573341c7f78ee6ac30eeef64`: 87 test files / 434 tests pass; production build and Render deployment pass; production-only audit is clean.
+- [x] Target Render deployment verified LIVE: `dep-db8e475bedkc73a4ol20` on **Shafek Derive Render**. CI `38751123017`, manual CFD `38751109921`, preview `38751109466`, and smoke `38751109827` all passed.
 - [ ] Authenticated cTrader end-to-end history validation remains outstanding; do not claim the user's historical broker trades are confirmed until tested in the authenticated account.
 - [ ] Next bot work: add source-scoped decision diagnostics. Keep automatic order execution disabled and do not merge this experiment to `main` without explicit user approval.
 
