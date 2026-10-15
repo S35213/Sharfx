@@ -67,28 +67,41 @@ describe('Trade Bot shadow evaluation', () => {
 
   it('waits until a candle after the signal candle and resolves a target', () => {
     const record = makeRecord()
-    expect(advanceTradeBotShadowRecords([record], { M5: [bar(record.signalCandleTime, 1.13, 1.095)] })[0].status).toBe('PENDING')
-    const result = advanceTradeBotShadowRecords([record], { M5: [bar(record.signalCandleTime + 300_000, 1.121, 1.095)] })
+    expect(advanceTradeBotShadowRecords([record], { M5: [bar(record.signalCandleTime, 1.13, 1.095), bar(record.signalCandleTime + 300_000, 1.121, 1.095)] })[0].status).toBe('PENDING')
+    const result = advanceTradeBotShadowRecords([record], { M5: [
+      bar(record.signalCandleTime, 1.13, 1.095),
+      bar(record.signalCandleTime + 300_000, 1.121, 1.095),
+      bar(record.signalCandleTime + 600_000, 1.115, 1.105),
+    ] })
     expect(result[0]).toMatchObject({ status: 'TARGET', resolvedAt: record.signalCandleTime + 300_000 })
   })
 
   it('resolves a stop for BUY and SELL candidates', () => {
     const buy = makeRecord()
-    const buyStop = advanceTradeBotShadowRecords([buy], { M5: [bar(buy.signalCandleTime + 300_000, 1.105, 1.089)] })
+    const buyStop = advanceTradeBotShadowRecords([buy], { M5: [
+      bar(buy.signalCandleTime + 300_000, 1.105, 1.089),
+      bar(buy.signalCandleTime + 600_000, 1.105, 1.095),
+    ] })
     expect(buyStop[0].status).toBe('STOP')
 
     const sellSetup: SetupCandidate = {
       ...setup, direction: 'SELL', entryPrice: 1.1, stopLoss: 1.11, takeProfit: 1.08,
     }
     const sell = makeRecord({ setup: sellSetup })
-    const sellStop = advanceTradeBotShadowRecords([sell], { M5: [bar(sell.signalCandleTime + 300_000, 1.111, 1.095)] })
+    const sellStop = advanceTradeBotShadowRecords([sell], { M5: [
+      bar(sell.signalCandleTime + 300_000, 1.111, 1.095),
+      bar(sell.signalCandleTime + 600_000, 1.105, 1.095),
+    ] })
     expect(sellStop[0].status).toBe('STOP')
   })
 
   it('marks same-candle stop and target touches ambiguous rather than assuming a win', () => {
     const record = makeRecord()
     const result = advanceTradeBotShadowRecords([record], {
-      M5: [bar(record.signalCandleTime + 300_000, 1.125, 1.085)],
+      M5: [
+        bar(record.signalCandleTime + 300_000, 1.125, 1.085),
+        bar(record.signalCandleTime + 600_000, 1.105, 1.095),
+      ],
     })
     expect(result[0].status).toBe('AMBIGUOUS')
     expect(result[0].resolutionNote).toContain('intrabar order is unknown')
