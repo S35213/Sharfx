@@ -375,3 +375,11 @@ No broker-side protection has been changed, and no trade has been opened or clos
 - CI passed; production build passed; lint 0 errors / 63 warnings; 85 test files / 420 tests passed; production-only dependency audit 0 vulnerabilities. The install output still lists 11 vulnerabilities across the installed dependency tree (2 moderate, 9 high), tracked separately.
 - Manual CFD verification, desktop/mobile visual-preview capture, and Render smoke workflows passed. The screenshots were inspected, but they are unauthenticated preview captures, not authenticated cTrader workflow QA.
 - `Shafek Derive Render` auto-deployed `c718be6b5ec08726b56f32cbb36935e76c0a647f`; deployment `dep-db89995g1s2s73fbqmh0` is `live`. This gate only prevents Trade Bot sizing from using unconfirmed mock contract specs; it does not enable automated orders.
+
+
+### 2026-10-15 — cTrader position snapshot reconciliation
+
+- Removed the empty-snapshot early return from the cTrader reconciliation flow by routing successful snapshots (including `[]`) through `reconcileCTraderPositionList`.
+- Authoritative snapshots remove stale local positions only for the reconciled provider connection/account; recently opened unmatched local positions receive the existing 120-second grace window; foreign provider/account positions are preserved.
+- Code commit `279d0263b175c283cd9222960e39c966d2324511` passed build, lint (0 errors / 63 warnings), 86 test files / 425 tests, production dependency audit (0 vulnerabilities), manual verification, visual preview capture, and Render smoke. Render deployment `dep-db89cqdbedkc739udbs0` is live.
+- Remaining caveats: the UI screenshots are automated unauthenticated preview captures; this fix does not backfill closed-trade history. Installed-tree audit still reports 11 vulnerabilities (2 moderate, 9 high) requiring a separate dependency triage.
