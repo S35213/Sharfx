@@ -20,6 +20,11 @@ export interface SignalBotMarketDataState {
   error: string | null
 }
 
+export interface SignalBotMarketDataHookState extends SignalBotMarketDataState {
+  /** Immediately starts a fresh scan cycle, still using the selected provider only. */
+  refreshNow: () => void
+}
+
 interface FetchResult {
   frames: Partial<Record<Timeframe, OHLCV[]>>
   errors: string[]
@@ -139,9 +144,11 @@ const readableErrors = (errors: string[]): string | null => {
 export const useSignalBotMarketData = (
   symbol: string,
   source: SignalBotMarketSource | null,
-): SignalBotMarketDataState => {
+): SignalBotMarketDataHookState => {
   const sourceKey = signalBotMarketSourceKey(symbol, source)
   const [state, setState] = useState<SignalBotMarketDataState>(() => emptyState(sourceKey))
+  const [manualRefreshToken, setManualRefreshToken] = useState(0)
+  const refreshNow = (): void => setManualRefreshToken((current) => current + 1)
 
   useEffect(() => {
     let stopped = false
@@ -206,12 +213,12 @@ export const useSignalBotMarketData = (
       stopped = true
       if (timer !== null) window.clearTimeout(timer)
     }
-  }, [sourceKey, symbol, source?.providerId, source?.connectionId, source?.accountId, source?.environment])
+  }, [sourceKey, symbol, source?.providerId, source?.connectionId, source?.accountId, source?.environment, manualRefreshToken])
 
   const matchingFrames = signalBotFramesForSource(state, sourceKey)
   if (state.sourceKey !== sourceKey) {
     const unavailableReason = signalBotMarketSourceError(source)
-    return emptyState(sourceKey, unavailableReason ? 'unavailable' : 'loading', unavailableReason)
+    return { ...emptyState(sourceKey, unavailableReason ? 'unavailable' : 'loading', unavailableReason), refreshNow }
   }
-  return { ...state, frames: matchingFrames }
+  return { ...state, frames: matchingFrames, refreshNow }
 }
