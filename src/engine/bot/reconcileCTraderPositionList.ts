@@ -91,3 +91,12 @@ export const reconcileCTraderPositionList = (
   return [...otherAccountPositions, ...merged, ...recentUnmatchedLocal]
     .sort((left, right) => right.openTime.localeCompare(left.openTime))
 }
+
+/**
+ * An empty provider array is a complete snapshot. A non-empty array whose rows
+ * could not all be normalized is incomplete and must not remove last-known state.
+ */
+export const isCompleteCTraderPositionSnapshot = (
+  reportedPositions: readonly unknown[],
+  normalizedPositions: readonly TradeOrder[],
+): boolean => reportedPositions.length === normalizedPositions.length

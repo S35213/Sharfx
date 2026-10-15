@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { TradeOrder } from '../../types'
-import { reconcileCTraderPositionList } from './reconcileCTraderPositionList'
+import { isCompleteCTraderPositionSnapshot, reconcileCTraderPositionList } from './reconcileCTraderPositionList'
 
 const NOW = Date.parse('2026-10-15T09:00:00.000Z')
 
@@ -32,6 +32,18 @@ const options = {
 }
 
 describe('reconcileCTraderPositionList', () => {
+  it('accepts a genuinely empty provider snapshot as complete', () => {
+    expect(isCompleteCTraderPositionSnapshot([], [])).toBe(true)
+  })
+
+  it('rejects a non-empty provider snapshot when a row failed normalization', () => {
+    expect(isCompleteCTraderPositionSnapshot([{ id: 'bad-position' }], [])).toBe(false)
+  })
+
+  it('accepts a snapshot only when every reported row was normalized', () => {
+    expect(isCompleteCTraderPositionSnapshot([{ id: 'position-1' }], [trade()])).toBe(true)
+  })
+
   it('removes stale local positions when a successful broker snapshot is empty', () => {
     const stale = trade({ id: 'stale-position', providerOrderId: 'stale-position' })
     const recent = trade({

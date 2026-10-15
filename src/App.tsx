@@ -22,7 +22,7 @@ import { AIAssistantPanel } from './components/ai/AIAssistantPanel'
 import { SignalDeskPanel } from './components/ai/SignalDeskPanel'
 import { TradeBotPanel } from './components/ai/TradeBotPanel'
 import { cTraderInstrumentToSymbolSpec } from './engine/bot/ctraderInstrumentSpec'
-import { reconcileCTraderPositionList } from './engine/bot/reconcileCTraderPositionList'
+import { reconcileCTraderPositionList } from './engine/bot/reconcileCTraderPositionList', isCompleteCTraderPositionSnapshot
 import { tradeBotMarketSourceKey } from './engine/bot/useTradeBotMarketData'
 import { OrderPanel } from './components/order/OrderPanel'
 import { closeDerivContract } from './data/deriv/derivTrading'
@@ -822,6 +822,10 @@ const TerminalContent: React.FC = () => {
           }
           reconciled.push(providerPositionToTrade(position))
         }
+        // Only clear stale positions for a confirmed empty snapshot. If any broker
+        // row failed normalization, keep the last good state rather than treating
+        // malformed provider data as an empty account.
+        if (!isCompleteCTraderPositionSnapshot(payload.positions, reconciled)) return
         setOpenPositions((current) => reconcileCTraderPositionList(
           current,
           reconciled,
