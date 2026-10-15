@@ -7,6 +7,7 @@ import { tradeBotMarketSourceKey, useTradeBotMarketData, type TradeBotMarketSour
 import { appendTradeBotDecisionTrace, createTradeBotDecisionTraceEntry, type TradeBotDecisionTraceEntry } from '../../engine/bot/tradeBotDecisionTrace'
 import { buildTradeBotDiagnosticSnapshot } from '../../engine/bot/tradeBotDiagnostics'
 import { advanceTradeBotShadowRecords, appendTradeBotShadowRecord, createTradeBotShadowRecord, type TradeBotShadowRecord } from '../../engine/bot/tradeBotShadowEvaluation'
+import { runTradeBotHistoricalReplay, type TradeBotHistoricalReplayResult } from '../../engine/bot/tradeBotHistoricalReplay'
 import { formatCurrency, formatPrice } from '../../lib/format'
 
 interface Props {
@@ -25,6 +26,7 @@ export const TradeBotPanel: React.FC<Props> = ({
   const [running, setRunning] = useState(false)
   const [decisionTrace, setDecisionTrace] = useState<TradeBotDecisionTraceEntry[]>([])
   const [shadowRecords, setShadowRecords] = useState<TradeBotShadowRecord[]>([])
+  const [historicalReplay, setHistoricalReplay] = useState<TradeBotHistoricalReplayResult | null>(null)
   const market = useTradeBotMarketData(symbol, marketSource, running)
   const decision = useMemo(() => evaluateTradeBotDecision({
     frames: market.frames,
@@ -131,6 +133,23 @@ export const TradeBotPanel: React.FC<Props> = ({
     setRunning(true)
   }
   const stop = (): void => setRunning(false)
+  const runHistoricalReplay = (): void => {
+    if (!symbolSpec || !market.frames[timeframe] || market.frames[timeframe]!.length < 9) return
+    const result = runTradeBotHistoricalReplay({
+      scopeKey: traceScopeKey,
+      symbol,
+      timeframe,
+      frames: market.frames,
+      accountBalance,
+      accountCurrency,
+      symbolSpec,
+    })
+    setHistoricalReplay(result)
+  }
+  const canRunHistoricalReplay = Boolean(
+    symbolSpec && market.frames[timeframe] && market.frames[timeframe]!.length >= 9 &&
+    (market.status === 'ready' || market.status === 'partial'),
+  )
 
   return (
     <section className="space-y-4 rounded-2xl border border-shafx-border bg-shafx-surface p-4 shadow-[0_14px_36px_rgba(0,0,0,.16)]">
@@ -261,6 +280,27 @@ export const TradeBotPanel: React.FC<Props> = ({
               </div>
             )}
           </div>
+          {historicalReplay && historicalReplay.records.length >= 0 && (
+            <div className="rounded-lg border border-shafx-accent/25 bg-shafx-bg p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-[8px] uppercase tracking-[0.12em] text-shafx-accent">Historical replay · {historicalReplay.timeframe}</div>
+                <span className="font-mono text-[8px] text-shafx-textMuted">{historicalReplay.candlesReviewed} candles</span>
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <div><span className="block text-shafx-textMuted">READY candidates</span><b>{historicalReplay.readyCandidates}</b></div>
+                <div><span className="block text-shafx-textMuted">Target / stop</span><b>{historicalReplay.target} / {historicalReplay.stop}</b></div>
+                <div><span className="block text-shafx-textMuted">Ambiguous</span><b>{historicalReplay.ambiguous}</b></div>
+                <div><span className="block text-shafx-textMuted">Unresolved</span><b>{historicalReplay.pending}</b></div>
+              </div>
+              <div className="mt-2 text-[8px] leading-4 text-shafx-textMuted">
+                Target rate among resolved non-ambiguous samples: {historicalReplay.conservativeTargetRatePercent === null ? 'not available' : historicalReplay.conservativeTargetRatePercent + '%'}.
+                This is a historical candle replay, not broker execution or proof of profitability.
+              </div>
+              <ul className="mt-2 list-disc space-y-1 pl-4 text-[8px] leading-4 text-shafx-textMuted">
+                {historicalReplay.notes.slice(1).map((note) => <li key={note}>{note}</li>)}
+              </ul>
+            </div>
+          )}
           <div className="rounded-lg border border-shafx-border bg-shafx-bg p-3">
             <div className="flex items-center justify-between gap-2">
               <div className="text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted">Shadow outcomes · no orders</div>
@@ -306,6 +346,9 @@ export const TradeBotPanel: React.FC<Props> = ({
             Review in trade ticket
           </button>
         )}
+        <button type="button" onClick={runHistoricalReplay} disabled={!canRunHistoricalReplay} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-shafx-border px-3 text-[9px] font-bold text-shafx-text disabled:cursor-not-allowed disabled:opacity-40">
+          Run historical replay
+        </button>
       </div>
       <p className="text-[8px] leading-4 text-shafx-textMuted">Refresh target 15 seconds • last update {updatedAt} • no auto-start • no automatic orders</p>
     </section>
