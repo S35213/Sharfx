@@ -55,7 +55,7 @@ describe('cTrader Trade Bot instrument specification', () => {
     expect(cTraderInstrumentToSymbolSpec('EUR/USD', instrument({ tradable: false }))).toBeNull()
   })
 
-  it.each([
+  const invalidInstrumentCases: Array<[string, Partial<CTraderLiveInstrument>]> = [
     ['contract size', { contractSize: undefined }],
     ['pip size', { pipSize: undefined }],
     ['minimum volume', { quantityMin: undefined }],
@@ -63,7 +63,9 @@ describe('cTrader Trade Bot instrument specification', () => {
     ['volume step', { quantityStep: 0 }],
     ['price increment', { priceIncrement: Number.NaN }],
     ['inverted volume bounds', { quantityMin: 1, quantityMax: 0.1 }],
-  ])('rejects incomplete or invalid broker field: %s', (_field, overrides) => {
+  ]
+
+  it.each(invalidInstrumentCases)('rejects incomplete or invalid broker field: %s', (_field, overrides) => {
     expect(cTraderInstrumentToSymbolSpec('EUR/USD', instrument(overrides))).toBeNull()
   })
 

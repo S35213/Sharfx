@@ -42,7 +42,7 @@ import { normalizeProviderSymbol, providerSymbolsMatch } from './lib/normalizePr
 import type { SetupCandidate } from './engine/setup/types'
 import { mockWatchlist } from './data/mock/watchlist'
 import { fetchDerivActiveForexSymbols, fetchDerivMultiTimeframeCandles, subscribeDerivForexQuotes } from './data/deriv/DerivPublicMarketFeed'
-import { applyCTraderQuoteToCandles, cTraderQuoteBucket, fetchCTraderHistoricalCandles, getRecentCTraderCandleGapSignature, isCTraderQuoteBucketCurrent, mergeCTraderHistoricalAndLiveCandles, shouldRepairCTraderHistoryForGap, subscribeCTraderLiveQuote, type CTraderLiveInstrument } from './data/ctrader/CTraderLiveQuote'
+import { applyCTraderQuoteToCandles, cTraderQuoteBucket, fetchCTraderHistoricalCandles, getRecentCTraderCandleGapSignature, isCTraderQuoteBucketCurrent, mergeCTraderHistoricalAndLiveCandles, shouldRepairCTraderHistoryForGap, subscribeCTraderLiveQuote } from './data/ctrader/CTraderLiveQuote'
 
 const EMPTY_STRUCTURAL_HISTORIES: Partial<Record<Timeframe, OHLCV[]>> = {}
 
