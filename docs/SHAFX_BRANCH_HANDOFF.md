@@ -762,3 +762,15 @@ On the experimental branch `test/rebuild-deriv-native-manual-20260930` and the R
 - Screenshot review found a pre-existing/remaining mobile workspace issue: the fixed bottom navigation overlays the chart area in the full-page mobile capture. Track as a separate responsive-layout defect; do not treat the screenshot as proof of the authenticated Trade Bot panel's visual correctness.
 - Browser-driven authenticated inspection of the Bot tab remains unverified; no credentials were entered, and no trades were submitted. A browser automation session could not start because its separate automation wallet had a negative balance. The static preview artifact is available from Actions run [38757724475](https://github.com/S35213/Sharfx/actions/runs/38757724475).
 - Shadow outcome logic is still hypothetical, in-memory only, and not a broker trade ledger or profitability proof.
+
+
+### Historical replay milestone — 2026-10-15
+
+- Added `src/engine/bot/tradeBotHistoricalReplay.ts` and `src/engine/bot/tradeBotHistoricalReplay.test.ts`; the Trade Bot diagnostics now expose an explicit **Run historical replay** control.
+- The replay calls the same `evaluateTradeBotDecision` logic used by the live analysis panel. For each historical signal time it only passes candles that had closed by that time, using each timeframe's known duration, to avoid higher-timeframe look-ahead. The newest potentially-forming selected-timeframe candle is excluded.
+- Outcomes are hypothetical OHLC checks through the existing shadow evaluator. Same-candle SL+TP is AMBIGUOUS; unresolved records remain pending. It is not a broker execution simulator: spread, commission, slippage, gaps, and fill latency are not modelled. Results are not a profitability guarantee.
+- Latest code commit `3ee6adafd2ff1d230c5854ee1e6dd4ed9df58f38`: CI passed (91 test files; lint 0 errors / 66 warnings; production dependency audit 0 vulnerabilities); manual CFD verification passed; visual preview build and screenshots passed. The Render deployment for this code commit reports live on the designated `Shafek Derive Render` service.
+- The Render smoke check failed on its first attempt while waiting for the page's `#root` selector during deployment transition; a retry is in progress after the service reported live. Do not record smoke as passed until retry concludes.
+- Desktop/mobile preview review still shows the fixed bottom navigation overlapping the chart in the full-page mobile capture. The preview is not an authenticated interaction test of the Trade Bot panel.
+- Authenticated browser QA remains outstanding. Browser automation was not started because its separate wallet had insufficient balance; no credentials were entered and no trades were sent.
+- Next: confirm smoke retry, add a dedicated visual preview for the actual Trade Bot panel if practical, fix mobile chart/navigation overlap separately, then run demo forward observation and compare with historical replay. Keep auto-execution disabled; do not merge `main` or promote Cloudflare without explicit approval.
