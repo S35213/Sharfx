@@ -367,3 +367,11 @@ No broker-side protection has been changed, and no trade has been opened or clos
 - New isolated helper `src/engine/bot/ctraderInstrumentSpec.ts` accepts only matching, tradable, complete cTrader contract metadata and builds the `SymbolSpec` used by Trade Bot risk sizing.
 - `src/App.tsx` now passes that instrument-derived spec to Trade Bot only; the existing manual ticket continues using its pre-existing workspace spec. Missing/unsupported metadata blocks Trade Bot risk sizing instead of using mock defaults.
 - Added spec-mapping tests and a decision-level regression test. CI status and Render deployment status must be checked separately; this does not enable bot order execution.
+
+
+### Verification record — 2026-10-15 (Trade Bot broker-spec gate)
+
+- Code commit: `c718be6b5ec08726b56f32cbb36935e76c0a647f`.
+- CI passed; production build passed; lint 0 errors / 63 warnings; 85 test files / 420 tests passed; production-only dependency audit 0 vulnerabilities. The install output still lists 11 vulnerabilities across the installed dependency tree (2 moderate, 9 high), tracked separately.
+- Manual CFD verification, desktop/mobile visual-preview capture, and Render smoke workflows passed. The screenshots were inspected, but they are unauthenticated preview captures, not authenticated cTrader workflow QA.
+- `Shafek Derive Render` auto-deployed `c718be6b5ec08726b56f32cbb36935e76c0a647f`; deployment `dep-db89995g1s2s73fbqmh0` is `live`. This gate only prevents Trade Bot sizing from using unconfirmed mock contract specs; it does not enable automated orders.
