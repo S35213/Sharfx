@@ -417,7 +417,7 @@ jobs:
                     try {
                       await page.waitForFunction(() => {
                         const body = document.body.innerText || '';
-                        return /Cycle \d+:|no demo order sent|DEMO ORDER FILLED|Fetching a fresh cTrader history snapshot/i.test(body);
+                        return /Cycle \d+:|no demo order sent|DEMO ORDER FILLED/i.test(body);
                       }, null, { timeout: 45_000 });
                     } catch {}
                     const botBody = await page.locator('body').innerText().catch(() => '');
@@ -430,6 +430,7 @@ jobs:
                     const stopButton = page.getByRole('button', { name: /Stop bot/i }).first();
                     if (await stopButton.isVisible().catch(() => false)) await stopButton.click();
                     interactionReport.tradeBotRun.stoppedAfterCheck = true;
+                    if (!interactionReport.tradeBotRun.completedCycleObserved) hasFatalIssue = true;
                   } else {
                     interactionReport.tradeBotRun.note = 'Start demo bot was unavailable or blocked; no gate was bypassed.';
                   }
