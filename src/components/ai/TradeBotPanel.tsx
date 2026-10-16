@@ -193,7 +193,9 @@ export const TradeBotPanel: React.FC<Props> = ({
         <div className="rounded-xl border border-shafx-border bg-shafx-bg p-3">
           <span className="block text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted">Selected market</span>
           <strong className="mt-1 block font-mono text-sm">{symbol}</strong>
-          <span className="mt-0.5 block text-[8px] text-shafx-textMuted">{timeframe} • cTrader practice only</span>
+          <span className="mt-0.5 block text-[8px] text-shafx-textMuted">
+            {timeframe} • cTrader {marketSource?.environment === 'demo' ? 'practice' : marketSource?.environment === 'live' ? 'live (blocked)' : 'environment unknown'}
+          </span>
         </div>
         <div className="rounded-xl border border-shafx-border bg-shafx-bg p-3">
           <span className="block text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted">Risk ceiling</span>
