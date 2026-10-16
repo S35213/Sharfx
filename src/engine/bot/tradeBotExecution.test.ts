@@ -64,6 +64,12 @@ const filledOrder = {
     raw: { position: { positionId: 'position-1', price: 1.1001, stopLoss: 1.0991, takeProfit: 1.1021 } },
   },
 }
+const validAccount = {
+  ok: true,
+  account: { balance: 10_000, freeMargin: 5_000, currency: 'USD' },
+  positions: [],
+  orders: [],
+}
 const input = () => ({
   source,
   symbol: 'EUR/USD',
@@ -80,7 +86,7 @@ const input = () => ({
 const createPost = (overrides: Partial<Record<string, unknown>> = {}): CTraderApiPost => vi.fn(async (body) => {
   const action = String(body.action)
   if (action === 'quote') return (overrides.quote ?? validQuote) as Record<string, unknown>
-  if (action === 'reconcile') return (overrides.reconcile ?? { ok: true, positions: [], orders: [] }) as Record<string, unknown>
+  if (action === 'account') return (overrides.account ?? validAccount) as Record<string, unknown>
   if (action === 'margin') return (overrides.margin ?? { ok: true, margin: { buyMargin: 100, sellMargin: 100 } }) as Record<string, unknown>
   if (action === 'placeOrder') return (overrides.placeOrder ?? filledOrder) as Record<string, unknown>
   throw new Error('Unexpected action: ' + action)
@@ -99,7 +105,7 @@ describe('Trade Bot cTrader demo execution', () => {
     expect(result.riskPlan.riskRewardRatio).toBeGreaterThanOrEqual(1.5)
     expect(result.marginRequired).toBe(100)
     const actions = vi.mocked(post).mock.calls.map(([body]) => body.action)
-    expect(actions).toEqual(['quote', 'reconcile', 'margin', 'placeOrder'])
+    expect(actions).toEqual(['quote', 'account', 'margin', 'placeOrder'])
     const calls = vi.mocked(post).mock.calls
     const placed = calls[calls.length - 1]?.[0]
     expect(placed?.environment).toBe('demo')
@@ -124,9 +130,9 @@ describe('Trade Bot cTrader demo execution', () => {
   })
 
   it('does not stack another position on the same symbol', async () => {
-    const post = createPost({ reconcile: { ok: true, positions: [{ symbol: 'EURUSD', metadata: {} }] } })
+    const post = createPost({ account: { ...validAccount, positions: [{ symbol: 'EURUSD', metadata: {} }] } })
     await expect(executeTradeBotDemoOrder({ ...input(), post })).rejects.toThrow(/open cTrader position already exists/i)
-    expect(vi.mocked(post).mock.calls.map(([body]) => body.action)).toEqual(['quote', 'reconcile'])
+    expect(vi.mocked(post).mock.calls.map(([body]) => body.action)).toEqual(['quote', 'account'])
   })
 
   it('blocks a stale quote and sends no order', async () => {
@@ -149,6 +155,43 @@ describe('Trade Bot cTrader demo execution', () => {
   it('blocks orders when the broker margin exceeds free margin', async () => {
     const post = createPost({ margin: { ok: true, margin: { buyMargin: 10_000, sellMargin: 10_000 } } })
     await expect(executeTradeBotDemoOrder({ ...input(), post })).rejects.toThrow(/exceeds current free margin/i)
-    expect(vi.mocked(post).mock.calls.map(([body]) => body.action)).toEqual(['quote', 'reconcile', 'margin'])
+    expect(vi.mocked(post).mock.calls.map(([body]) => body.action)).toEqual(['quote', 'account', 'margin'])
   })
+  it('uses current broker balance and free margin instead of stale UI values', async () => {
+    const post = createPost({
+      account: { ok: true, account: { balance: 1_000, freeMargin: 5_000, currency: 'USD' }, positions: [], orders: [] },
+    })
+    const result = await executeTradeBotDemoOrder({
+      ...input(),
+      accountBalance: 100_000,
+      accountFreeMargin: 1,
+      post,
+    })
+
+    expect(result.trade.riskAmount).toBeLessThanOrEqual(5.01)
+    expect(result.trade.lotSize).toBeCloseTo(0.05, 2)
+  })
+
+  it('does not submit an order if Stop is pressed while broker margin is loading', async () => {
+    let active = true
+    const post: CTraderApiPost = vi.fn(async (body) => {
+      const action = String(body.action)
+      if (action === 'quote') return validQuote
+      if (action === 'account') return validAccount
+      if (action === 'margin') {
+        active = false
+        return { ok: true, margin: { buyMargin: 100, sellMargin: 100 } }
+      }
+      if (action === 'placeOrder') return filledOrder
+      throw new Error('Unexpected action: ' + action)
+    })
+
+    await expect(executeTradeBotDemoOrder({
+      ...input(),
+      post,
+      shouldContinue: () => active,
+    })).rejects.toThrow(/bot was stopped.*no order was sent/i)
+    expect(vi.mocked(post).mock.calls.map(([body]) => body.action)).toEqual(['quote', 'account', 'margin'])
+  })
+
 })
