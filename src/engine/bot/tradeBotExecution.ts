@@ -104,10 +104,6 @@ export const executeTradeBotDemoOrder = async (
   if (setup.status !== 'candidate' || (setup.direction !== 'BUY' && setup.direction !== 'SELL')) {
     throw new Error('The current setup is not a valid directional candidate.')
   }
-  if (!isPositive(accountFreeMargin)) {
-    throw new Error('Current cTrader free margin is unavailable; no order was sent.')
-  }
-
   const ensureContinued = (): void => {
     if (shouldContinue && !shouldContinue()) {
       throw new Error('The bot was stopped or its selection changed before order submission; no order was sent.')
