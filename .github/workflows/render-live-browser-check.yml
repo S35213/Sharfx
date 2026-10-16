@@ -52,7 +52,7 @@ jobs:
           const report = {
             targetUrl,
             capturedAt: new Date().toISOString(),
-            note: 'Uses dedicated GitHub environment secrets to sign in, captures workspace/Bot panels, and never places or changes trades.',
+            note: 'Uses dedicated GitHub environment secrets. Signal Bot is checked for manual-only scans. Trade Bot order submission is intercepted in-browser as dry-run QA; no broker trade is submitted.',
             viewports: [],
           };
 
@@ -73,6 +73,25 @@ jobs:
                 hasTouch: config.hasTouch,
               });
               const page = await context.newPage();
+              const blockedDemoOrderRequests = [];
+              // Dry-run safety rail: prove the Trade Bot reaches its order-submit path,
+              // but reject every placeOrder in Playwright before it reaches Render/cTrader.
+              await page.route('**/api/providers/ctrader', async (route) => {
+                let requestBody = {};
+                try { requestBody = route.request().postDataJSON() || {}; } catch {}
+                if (requestBody?.action === 'placeOrder') {
+                  const order = requestBody?.order && typeof requestBody.order === 'object' ? requestBody.order : {};
+                  blockedDemoOrderRequests.push({
+                    symbol: typeof order.symbol === 'string' ? order.symbol : null,
+                    side: typeof order.side === 'string' ? order.side : null,
+                    interceptedBeforeNetwork: true,
+                  });
+                  await route.fulfill({ status: 409, contentType: 'application/json',
+                    body: JSON.stringify({ ok: false, error: 'QA dry-run intercepted this demo order; no broker order was submitted.' }) });
+                  return;
+                }
+                await route.continue();
+              });
               const cTraderInstrumentResponses = [];
               page.on('response', async (response) => {
                 try {
@@ -294,6 +313,29 @@ jobs:
                 // Wait for the Signal Bot scan control to become actionable, click it,
                 // and inspect the transient scanning state as well as the returned state.
                 const scanButton = page.getByRole('button', { name: /Scan all timeframes now|Retry full scan|Scanning all 8 timeframes/i }).first();
+                // The scanner must be idle until the user clicks. Wait longer than
+                // the removed 15-second loop and compare scan number/timestamp.
+                interactionReport.signalScan.idleBeforeClick = {
+                  buttonText: await scanButton.innerText().catch(() => ''),
+                  enabled: !(await scanButton.isDisabled().catch(() => true)),
+                };
+                const idleBeforeBody = await page.locator('body').innerText().catch(() => '');
+                const idleBeforeScanNumber = (idleBeforeBody.match(/Scan #(\\d+)/i) || [])[1] ?? null;
+                const idleBeforeFinishedAt = (idleBeforeBody.match(/Last scan finished\\s+([^\\n]+)/i) || [])[1] ?? null;
+                await page.waitForTimeout(17_000);
+                const idleAfterBody = await page.locator('body').innerText().catch(() => '');
+                const idleAfterScanNumber = (idleAfterBody.match(/Scan #(\\d+)/i) || [])[1] ?? null;
+                const idleAfterFinishedAt = (idleAfterBody.match(/Last scan finished\\s+([^\\n]+)/i) || [])[1] ?? null;
+                interactionReport.signalScan.idleOnlyUntilManualClick = {
+                  beforeScanNumber: idleBeforeScanNumber,
+                  afterScanNumber: idleAfterScanNumber,
+                  beforeFinishedAt: idleBeforeFinishedAt,
+                  afterFinishedAt: idleAfterFinishedAt,
+                  noScanningState: !/Scanning all 8 timeframes|Scanning M1, M5, M15, M30, H1, H4, D1 and W1/i.test(idleAfterBody),
+                  passed: idleBeforeScanNumber === idleAfterScanNumber && idleBeforeFinishedAt === idleAfterFinishedAt &&
+                    !/Scanning all 8 timeframes|Scanning M1, M5, M15, M30, H1, H4, D1 and W1/i.test(idleAfterBody),
+                };
+                if (!interactionReport.signalScan.idleOnlyUntilManualClick.passed) hasFatalIssue = true;
                 const scanWaitStarted = Date.now();
                 try {
                   await scanButton.waitFor({ state: 'visible', timeout: 12000 });
@@ -338,6 +380,22 @@ jobs:
                       hasScanFinishedTimestamp: !/Last scan finished\s+—/i.test(bodyAfterScan),
                       scanText: bodyAfterScan.split('\n').filter((line) => /Scan #|DATA READY|PARTIAL DATA|SCANNING|DATA ERROR|UNAVAILABLE|last scan finished|Latest candle close|cTrader returned/i.test(line)).slice(0, 40),
                     };
+                    const completedScanNumber = (bodyAfterScan.match(/Scan #(\\d+)/i) || [])[1] ?? null;
+                    const completedScanAt = (bodyAfterScan.match(/Last scan finished\\s+([^\\n]+)/i) || [])[1] ?? null;
+                    await page.waitForTimeout(17_000);
+                    const postCooldownBody = await page.locator('body').innerText().catch(() => '');
+                    const postCooldownScanNumber = (postCooldownBody.match(/Scan #(\\d+)/i) || [])[1] ?? null;
+                    const postCooldownFinishedAt = (postCooldownBody.match(/Last scan finished\\s+([^\\n]+)/i) || [])[1] ?? null;
+                    interactionReport.signalScan.noAutomaticRescanAfterClick = {
+                      scanNumberBeforeCooldown: completedScanNumber,
+                      scanNumberAfterCooldown: postCooldownScanNumber,
+                      finishedAtBeforeCooldown: completedScanAt,
+                      finishedAtAfterCooldown: postCooldownFinishedAt,
+                      noScanningState: !/Scanning all 8 timeframes|Scanning M1, M5, M15, M30, H1, H4, D1 and W1/i.test(postCooldownBody),
+                      passed: completedScanNumber === postCooldownScanNumber && completedScanAt === postCooldownFinishedAt &&
+                        !/Scanning all 8 timeframes|Scanning M1, M5, M15, M30, H1, H4, D1 and W1/i.test(postCooldownBody),
+                    };
+                    if (!interactionReport.signalScan.noAutomaticRescanAfterClick.passed) hasFatalIssue = true;
                   } else {
                     interactionReport.signalScan.note = 'Scan button stayed disabled while browser waited up to 45 seconds; exact displayed state recorded.';
                   }
@@ -345,6 +403,39 @@ jobs:
                   interactionReport.signalScan.error = String(error?.stack || error).slice(0, 1000);
                 }
 
+                // Click Run behind the local placeOrder interceptor. This exercises
+                // actual market cycles and risk gates without submitting a broker order.
+                interactionReport.tradeBotRun = {};
+                const startDemoBotButton = page.getByRole('button', { name: /Start demo bot/i }).first();
+                try {
+                  interactionReport.tradeBotRun.startButtonVisible = await startDemoBotButton.isVisible().catch(() => false);
+                  interactionReport.tradeBotRun.startButtonEnabled = !(await startDemoBotButton.isDisabled().catch(() => true));
+                  if (interactionReport.tradeBotRun.startButtonVisible && interactionReport.tradeBotRun.startButtonEnabled) {
+                    await startDemoBotButton.click();
+                    interactionReport.tradeBotRun.clickedStart = true;
+                    try {
+                      await page.waitForFunction(() => {
+                        const body = document.body.innerText || '';
+                        return /Cycle \\d+:|no demo order sent|DEMO ORDER FILLED|Fetching a fresh cTrader history snapshot/i.test(body);
+                      }, null, { timeout: 45_000 });
+                    } catch {}
+                    const botBody = await page.locator('body').innerText().catch(() => '');
+                    interactionReport.tradeBotRun.completedCycleObserved = /Cycle \\d+:/.test(botBody);
+                    interactionReport.tradeBotRun.activityText = botBody.split('\\n').filter((line) =>
+                      /SHAFX Trade Bot|MONITORING|LOADING|PARTIAL DATA|BLOCKED|Cycle \\d+:|Fetching a fresh cTrader|DEMO ORDER FILLED|no demo order sent|SETUP READY/i.test(line),
+                    ).slice(-32);
+                    interactionReport.tradeBotRun.interceptedOrderCount = blockedDemoOrderRequests.length;
+                    interactionReport.tradeBotRun.interceptedOrders = blockedDemoOrderRequests;
+                    const stopButton = page.getByRole('button', { name: /Stop bot/i }).first();
+                    if (await stopButton.isVisible().catch(() => false)) await stopButton.click();
+                    interactionReport.tradeBotRun.stoppedAfterCheck = true;
+                  } else {
+                    interactionReport.tradeBotRun.note = 'Start demo bot was unavailable or blocked; no gate was bypassed.';
+                  }
+                } catch (error) {
+                  interactionReport.tradeBotRun.error = String(error?.stack || error).slice(0, 1000);
+                }
+                interactionReport.blockedDemoOrderRequests = blockedDemoOrderRequests;
                 interactionReport.tradeBotRuntimeProps = await page.locator('section').filter({ hasText: 'SHAFX Trade Bot' }).evaluateAll((sections) => sections.slice(0, 4).map((element) => {
                   const fiberKey = Object.keys(element).find((key) => key.includes('reactFiber'));
                   if (!fiberKey) return { fiberFound: false };
