@@ -167,7 +167,6 @@ export const TradeBotPanel: React.FC<Props> = ({
     const currentScope = traceScopeKey
     runningScopeKeyRef.current = currentScope
     runStartedAtRef.current = Date.now()
-    attemptedSignalRef.current = null
     setCycleMessage('Started. Waiting for a fresh completed market-history cycle before making any decision.')
     setRunning(true)
   }
@@ -268,6 +267,7 @@ export const TradeBotPanel: React.FC<Props> = ({
       accountFreeMargin,
       accountCurrency,
       symbolSpec,
+      shouldContinue: () => runningScopeKeyRef.current === traceScopeKey,
     }).then((result) => {
       onTradeOpened({ ...result.trade, chartTimeframe: timeframe })
       const message = result.protectionConfirmed
