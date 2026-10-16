@@ -1,4 +1,5 @@
 name: Render live browser check
+# Fast, bot-focused mobile regression test after the manual-scan/Run fix.
 # Retest after manual-scan and Trade Bot run fix deployment.
 # Live retest after cTrader verified-spec cache fix deployment.
 # Sanitized cTrader contract fields captured after the Trade Bot specification blocker.
@@ -58,7 +59,8 @@ jobs:
           };
 
           const configurations = [
-            { name: 'desktop', viewport: { width: 1440, height: 1000 }, isMobile: false, hasTouch: false },
+            // The earlier chart suite already verifies desktop/tablet-style layout;
+            // this targeted retest focuses on the user's mobile bot workflow.
             { name: 'mobile', viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true },
           ];
 
@@ -258,45 +260,10 @@ jobs:
                   };
                 };
 
-                // Change from EUR/USD to GBP/USD and back so we verify symbol selection in both directions.
-                for (const market of ['GBP/USD', 'EUR/USD']) {
-                  try {
-                    const marketToggle = nav.getByRole('button').first();
-                    await marketToggle.click({ timeout: 7000 });
-                    const search = page.getByPlaceholder(/Search Deriv symbol/i).first();
-                    await search.waitFor({ state: 'visible', timeout: 7000 });
-                    await search.fill(market);
-                    const marketOption = page.getByRole('button', { name: new RegExp(market.replace('/', '\\/')) }).last();
-                    await marketOption.waitFor({ state: 'visible', timeout: 7000 });
-                    await marketOption.click();
-                    await page.waitForTimeout(4500);
-                    const headerText = await nav.innerText().catch(() => '');
-                    interactionReport.marketChanges.push({
-                      requestedMarket: market,
-                      confirmedInHeader: headerText.includes(market),
-                      headerText: headerText.split('\n').slice(0, 6).join(' | '),
-                      chart: await readChartState(null),
-                    });
-                  } catch (error) {
-                    interactionReport.marketChanges.push({ requestedMarket: market, error: String(error?.stack || error).slice(0, 800) });
-                  }
-                }
-
-                // Exercise the eight supported timeframes one by one and record the active selection and chart dimensions.
-                for (const tf of ['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1', 'W1']) {
-                  try {
-                    const control = page.locator('.shafx-timeframe-bar').getByRole('button', { name: tf, exact: true });
-                    await control.waitFor({ state: 'visible', timeout: 7000 });
-                    await control.click();
-                    await page.waitForTimeout(3500);
-                    const state = await readChartState(tf);
-                    state.selectedCorrectly = state.activeTimeframe.split(',').includes(tf);
-                    interactionReport.timeframeChecks.push(state);
-                  } catch (error) {
-                    interactionReport.timeframeChecks.push({ requestedTimeframe: tf, error: String(error?.stack || error).slice(0, 800) });
-                  }
-                }
-
+                // This focused run targets the bot bug directly; the previously completed
+                // live suite already verified market and timeframe switching on both viewports.
+                interactionReport.chartChecksSkipped = 'Bot-focused retest; prior live suite covers chart switching.';
+                
                 // Capture the actual UI after all timeframe changes, then open Bots.
                 // Open the actual Bot workspace using the real navigation controls:
                 // desktop's workspace rail and mobile's fixed bottom navigation both label it "Bots".
