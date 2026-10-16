@@ -320,12 +320,12 @@ jobs:
                   enabled: !(await scanButton.isDisabled().catch(() => true)),
                 };
                 const idleBeforeBody = await page.locator('body').innerText().catch(() => '');
-                const idleBeforeScanNumber = (idleBeforeBody.match(/Scan #(\\d+)/i) || [])[1] ?? null;
-                const idleBeforeFinishedAt = (idleBeforeBody.match(/Last scan finished\\s+([^\\n]+)/i) || [])[1] ?? null;
+                const idleBeforeScanNumber = (idleBeforeBody.match(/Scan #(\d+)/i) || [])[1] ?? null;
+                const idleBeforeFinishedAt = (idleBeforeBody.match(/Last scan finished\s+([^\n]+)/i) || [])[1] ?? null;
                 await page.waitForTimeout(17_000);
                 const idleAfterBody = await page.locator('body').innerText().catch(() => '');
-                const idleAfterScanNumber = (idleAfterBody.match(/Scan #(\\d+)/i) || [])[1] ?? null;
-                const idleAfterFinishedAt = (idleAfterBody.match(/Last scan finished\\s+([^\\n]+)/i) || [])[1] ?? null;
+                const idleAfterScanNumber = (idleAfterBody.match(/Scan #(\d+)/i) || [])[1] ?? null;
+                const idleAfterFinishedAt = (idleAfterBody.match(/Last scan finished\s+([^\n]+)/i) || [])[1] ?? null;
                 interactionReport.signalScan.idleOnlyUntilManualClick = {
                   beforeScanNumber: idleBeforeScanNumber,
                   afterScanNumber: idleAfterScanNumber,
@@ -362,9 +362,9 @@ jobs:
                       interactionReport.signalScan.progressSamples.push({
                         elapsedMs: elapsedAfterClick,
                         buttonText: await scanButton.innerText().catch(() => ''),
-                        ready: (progressBody.match(/\\b(?:M1|M5|M15|M30|H1|H4|D1|W1)\\s+OK\\b/g) || []).length,
-                        scanning: (progressBody.match(/\\b(?:M1|M5|M15|M30|H1|H4|D1|W1)\\s+SCAN\\b/g) || []).length,
-                        waiting: (progressBody.match(/\\b(?:M1|M5|M15|M30|H1|H4|D1|W1)\\s+WAIT\\b/g) || []).length,
+                        ready: (progressBody.match(/\b(?:M1|M5|M15|M30|H1|H4|D1|W1)\s+OK\b/g) || []).length,
+                        scanning: (progressBody.match(/\b(?:M1|M5|M15|M30|H1|H4|D1|W1)\s+SCAN\b/g) || []).length,
+                        waiting: (progressBody.match(/\b(?:M1|M5|M15|M30|H1|H4|D1|W1)\s+WAIT\b/g) || []).length,
                       });
                     }
                     interactionReport.signalScan.waitedForCompletionMs = elapsedAfterClick;
@@ -380,12 +380,12 @@ jobs:
                       hasScanFinishedTimestamp: !/Last scan finished\s+—/i.test(bodyAfterScan),
                       scanText: bodyAfterScan.split('\n').filter((line) => /Scan #|DATA READY|PARTIAL DATA|SCANNING|DATA ERROR|UNAVAILABLE|last scan finished|Latest candle close|cTrader returned/i.test(line)).slice(0, 40),
                     };
-                    const completedScanNumber = (bodyAfterScan.match(/Scan #(\\d+)/i) || [])[1] ?? null;
-                    const completedScanAt = (bodyAfterScan.match(/Last scan finished\\s+([^\\n]+)/i) || [])[1] ?? null;
+                    const completedScanNumber = (bodyAfterScan.match(/Scan #(\d+)/i) || [])[1] ?? null;
+                    const completedScanAt = (bodyAfterScan.match(/Last scan finished\s+([^\n]+)/i) || [])[1] ?? null;
                     await page.waitForTimeout(17_000);
                     const postCooldownBody = await page.locator('body').innerText().catch(() => '');
-                    const postCooldownScanNumber = (postCooldownBody.match(/Scan #(\\d+)/i) || [])[1] ?? null;
-                    const postCooldownFinishedAt = (postCooldownBody.match(/Last scan finished\\s+([^\\n]+)/i) || [])[1] ?? null;
+                    const postCooldownScanNumber = (postCooldownBody.match(/Scan #(\d+)/i) || [])[1] ?? null;
+                    const postCooldownFinishedAt = (postCooldownBody.match(/Last scan finished\s+([^\n]+)/i) || [])[1] ?? null;
                     interactionReport.signalScan.noAutomaticRescanAfterClick = {
                       scanNumberBeforeCooldown: completedScanNumber,
                       scanNumberAfterCooldown: postCooldownScanNumber,
@@ -416,13 +416,13 @@ jobs:
                     try {
                       await page.waitForFunction(() => {
                         const body = document.body.innerText || '';
-                        return /Cycle \\d+:|no demo order sent|DEMO ORDER FILLED|Fetching a fresh cTrader history snapshot/i.test(body);
+                        return /Cycle \d+:|no demo order sent|DEMO ORDER FILLED|Fetching a fresh cTrader history snapshot/i.test(body);
                       }, null, { timeout: 45_000 });
                     } catch {}
                     const botBody = await page.locator('body').innerText().catch(() => '');
-                    interactionReport.tradeBotRun.completedCycleObserved = /Cycle \\d+:/.test(botBody);
-                    interactionReport.tradeBotRun.activityText = botBody.split('\\n').filter((line) =>
-                      /SHAFX Trade Bot|MONITORING|LOADING|PARTIAL DATA|BLOCKED|Cycle \\d+:|Fetching a fresh cTrader|DEMO ORDER FILLED|no demo order sent|SETUP READY/i.test(line),
+                    interactionReport.tradeBotRun.completedCycleObserved = /Cycle \d+:/.test(botBody);
+                    interactionReport.tradeBotRun.activityText = botBody.split('\n').filter((line) =>
+                      /SHAFX Trade Bot|MONITORING|LOADING|PARTIAL DATA|BLOCKED|Cycle \d+:|Fetching a fresh cTrader|DEMO ORDER FILLED|no demo order sent|SETUP READY/i.test(line),
                     ).slice(-32);
                     interactionReport.tradeBotRun.interceptedOrderCount = blockedDemoOrderRequests.length;
                     interactionReport.tradeBotRun.interceptedOrders = blockedDemoOrderRequests;
