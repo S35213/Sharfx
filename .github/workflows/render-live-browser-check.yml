@@ -8,7 +8,7 @@ on:
       - .github/workflows/render-live-browser-check.yml
   pull_request:
     branches:
-      - main
+      - qa/render-live-browser-base-20261016
     paths:
       - .github/workflows/render-live-browser-check.yml
 
