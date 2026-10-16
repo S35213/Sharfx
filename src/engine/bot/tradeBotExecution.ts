@@ -3,7 +3,8 @@ import type { SetupCandidate } from '../setup/types'
 import { calculateCfdRiskPlan, type CfdRiskPlan } from '../../lib/cfdRiskEngine'
 import { providerSymbolsMatch } from '../../lib/normalizeProviderSymbol'
 import type { CTraderLiveInstrument, CTraderLiveQuote } from '../../data/ctrader/CTraderLiveQuote'
-import { tradeBotRiskBudget, type TradeBotMarketSource } from './tradeBotDecision'
+import { tradeBotRiskBudget } from './tradeBotDecision'
+import type { TradeBotMarketSource } from './useTradeBotMarketData'
 
 export type CTraderApiPost = (body: Record<string, unknown>) => Promise<Record<string, unknown>>
 
