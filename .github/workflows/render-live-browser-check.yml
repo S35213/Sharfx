@@ -1,4 +1,5 @@
 name: Render live browser check
+# Target M5 for live Trade Bot cycle / gated-entry regression test.
 # Fast, bot-focused mobile regression test after the manual-scan/Run fix.
 # Retest after manual-scan and Trade Bot run fix deployment.
 # Live retest after cTrader verified-spec cache fix deployment.
@@ -263,8 +264,20 @@ jobs:
                 // This focused run targets the bot bug directly; the previously completed
                 // live suite already verified market and timeframe switching on both viewports.
                 interactionReport.chartChecksSkipped = 'Bot-focused retest; prior live suite covers chart switching.';
-                
-                // Capture the actual UI after all timeframe changes, then open Bots.
+                // Use M5 for the Trade Bot cycle test instead of relying on the default
+                // higher-timeframe selection; this is still a no-order-intercepted QA run.
+                try {
+                  const m5Control = page.locator('.shafx-timeframe-bar').getByRole('button', { name: 'M5', exact: true });
+                  if (await m5Control.isVisible().catch(() => false)) {
+                    await m5Control.click();
+                    await page.waitForTimeout(3500);
+                    interactionReport.tradeBotRunTimeframe = (await page.locator('.shafx-timeframe-bar button[aria-pressed="true"]').allTextContents().catch(() => [])).join(',');
+                  }
+                } catch (error) {
+                  interactionReport.tradeBotRunTimeframeError = String(error).slice(0, 500);
+                }
+
+                // Open Bots after explicitly selecting M5 for the Trade Bot run check.
                 // Open the actual Bot workspace using the real navigation controls:
                 // desktop's workspace rail and mobile's fixed bottom navigation both label it "Bots".
                 const botsNav = config.isMobile
