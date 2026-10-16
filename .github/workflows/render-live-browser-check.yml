@@ -1,4 +1,5 @@
 name: Render live browser check
+# Sanitized cTrader contract fields captured after the Trade Bot specification blocker.
 # QA rerun after cTrader instrument fallback deployment on 2026-10-16.
 
 on:
@@ -71,6 +72,44 @@ jobs:
                 hasTouch: config.hasTouch,
               });
               const page = await context.newPage();
+              const cTraderInstrumentResponses = [];
+              page.on('response', async (response) => {
+                try {
+                  if (!response.url().includes('/api/providers/ctrader')) return;
+                  const requestBody = response.request().postDataJSON();
+                  if (requestBody?.action !== 'instruments') return;
+                  const payload = await response.json();
+                  const instruments = Array.isArray(payload?.instruments) ? payload.instruments : [];
+                  cTraderInstrumentResponses.push({
+                    status: response.status(),
+                    requestedSymbol: typeof requestBody.symbol === 'string' ? requestBody.symbol : null,
+                    ok: payload?.ok === true,
+                    error: typeof payload?.error === 'string' ? payload.error.slice(0, 300) : null,
+                    instruments: instruments.slice(0, 3).map((item) => ({
+                      symbol: typeof item?.symbol === 'string' ? item.symbol : null,
+                      providerSymbol: typeof item?.providerSymbol === 'string' ? item.providerSymbol : null,
+                      tradable: typeof item?.tradable === 'boolean' ? item.tradable : null,
+                      contractSize: Number.isFinite(Number(item?.contractSize)) ? Number(item.contractSize) : null,
+                      pipSize: Number.isFinite(Number(item?.pipSize)) ? Number(item.pipSize) : null,
+                      quantityMin: Number.isFinite(Number(item?.quantityMin)) ? Number(item.quantityMin) : null,
+                      quantityMax: Number.isFinite(Number(item?.quantityMax)) ? Number(item.quantityMax) : null,
+                      quantityStep: Number.isFinite(Number(item?.quantityStep)) ? Number(item.quantityStep) : null,
+                      priceIncrement: Number.isFinite(Number(item?.priceIncrement)) ? Number(item.priceIncrement) : null,
+                      metadata: item?.metadata && typeof item.metadata === 'object' ? {
+                        symbolId: typeof item.metadata.symbolId === 'string' ? item.metadata.symbolId : null,
+                        lotSizeProtocol: typeof item.metadata.lotSizeProtocol === 'string' ? item.metadata.lotSizeProtocol : null,
+                        minVolumeProtocol: typeof item.metadata.minVolumeProtocol === 'string' ? item.metadata.minVolumeProtocol : null,
+                        maxVolumeProtocol: typeof item.metadata.maxVolumeProtocol === 'string' ? item.metadata.maxVolumeProtocol : null,
+                        stepVolumeProtocol: typeof item.metadata.stepVolumeProtocol === 'string' ? item.metadata.stepVolumeProtocol : null,
+                        digits: typeof item.metadata.digits === 'string' ? item.metadata.digits : null,
+                        pipPosition: typeof item.metadata.pipPosition === 'string' ? item.metadata.pipPosition : null,
+                      } : null,
+                    })),
+                  });
+                } catch {
+                  // Ignore non-JSON, unrelated, or already-consumed responses.
+                }
+              });
               const browserErrors = [];
               const failedRequests = [];
               const badResponses = [];
@@ -305,6 +344,7 @@ jobs:
                   interactionReport.signalScan.error = String(error?.stack || error).slice(0, 1000);
                 }
 
+                interactionReport.cTraderInstrumentResponses = cTraderInstrumentResponses;
                 report.interactions = report.interactions || {};
                 report.interactions[config.name] = interactionReport;
                 const visibleHeadings = await page.getByRole('heading').allTextContents().catch(() => []);
