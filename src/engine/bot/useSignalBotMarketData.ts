@@ -10,7 +10,7 @@ export interface SignalBotMarketSource {
   environment?: 'demo' | 'live' | null
 }
 
-export type SignalBotMarketDataStatus = 'loading' | 'ready' | 'partial' | 'error' | 'unavailable'
+export type SignalBotMarketDataStatus = 'idle' | 'loading' | 'ready' | 'partial' | 'error' | 'unavailable'
 
 export interface SignalBotMarketDataState {
   sourceKey: string
@@ -36,7 +36,6 @@ interface FetchResult {
   errors: string[]
 }
 
-const REFRESH_INTERVAL_MS = 15_000
 const HISTORY_COUNT = 300
 
 export const signalBotMarketSourceKey = (symbol: string, source: SignalBotMarketSource | null): string => [
@@ -193,38 +192,51 @@ const readableErrors = (errors: string[]): string | null => {
 }
 
 /**
- * Independent Signal Bot market-data loop.
- * It uses only the explicitly selected provider, refreshes at a controlled 15s cadence,
- * never falls back to another broker, and ignores late responses after source switches.
+ * Manual-only Signal Bot market data.
+ * Nothing is fetched on mount or in the background; each user click starts exactly one scan.
+ * It uses only the explicitly selected provider and ignores late responses after source switches.
  */
 export const useSignalBotMarketData = (
   symbol: string,
   source: SignalBotMarketSource | null,
 ): SignalBotMarketDataHookState => {
   const sourceKey = signalBotMarketSourceKey(symbol, source)
-  const [state, setState] = useState<SignalBotMarketDataState>(() => emptyState(sourceKey))
+  const [state, setState] = useState<SignalBotMarketDataState>(() => emptyState(sourceKey, 'idle'))
   const stateRef = useRef(state)
   stateRef.current = state
-  const [manualRefreshToken, setManualRefreshToken] = useState(0)
+  const [scanRequest, setScanRequest] = useState<{ token: number; sourceKey: string } | null>(null)
   const [timeframeProgress, setTimeframeProgress] = useState<SignalBotTimeframeProgress>(createInitialTimeframeProgress)
   const [scanNumber, setScanNumber] = useState(0)
   const [lastScanDataChanged, setLastScanDataChanged] = useState<boolean | null>(null)
-  const refreshNow = (): void => setManualRefreshToken((current) => current + 1)
+  const refreshNow = (): void => setScanRequest((current) => ({ token: (current?.token ?? 0) + 1, sourceKey }))
 
   useEffect(() => {
     let stopped = false
-    let timer: number | null = null
     let inFlight = false
     const sourceError = signalBotMarketSourceError(source)
 
     if (sourceError) {
       setState(emptyState(sourceKey, 'unavailable', sourceError))
       setTimeframeProgress(createInitialTimeframeProgress())
+      setScanNumber(0)
       setLastScanDataChanged(null)
       return () => { stopped = true }
     }
 
-    const refresh = async (forceFresh = false): Promise<void> => {
+    // Mounting, switching markets, or switching accounts must never trigger a
+    // scan. A request is honoured only for the exact source key captured by
+    // the user's click; old requests cannot silently scan a newly selected market.
+    if (!scanRequest || scanRequest.sourceKey !== sourceKey) {
+      if (stateRef.current.sourceKey !== sourceKey) {
+        setState(emptyState(sourceKey, 'idle'))
+        setTimeframeProgress(createInitialTimeframeProgress())
+        setScanNumber(0)
+        setLastScanDataChanged(null)
+      }
+      return () => { stopped = true }
+    }
+
+    const refresh = async (): Promise<void> => {
       if (stopped || inFlight) return
       inFlight = true
       setTimeframeProgress(createInitialTimeframeProgress())
@@ -242,7 +254,9 @@ export const useSignalBotMarketData = (
       }
 
       try {
-        const result = await loadSignalBotFrames(symbol, source as SignalBotMarketSource, forceFresh, reportProgress)
+        // Every explicit click requests fresh Deriv history instead of waiting
+        // for the shared market cache or a background timer.
+        const result = await loadSignalBotFrames(symbol, source as SignalBotMarketSource, true, reportProgress)
         if (stopped) return
         const usableTimeframes = TIMEFRAMES.filter((timeframe) => (result.frames[timeframe]?.length ?? 0) >= 8).length
         const status: SignalBotMarketDataStatus = usableTimeframes === TIMEFRAMES.length
@@ -279,22 +293,27 @@ export const useSignalBotMarketData = (
         })
       } finally {
         inFlight = false
-        if (!stopped) timer = window.setTimeout(() => { void refresh() }, REFRESH_INTERVAL_MS)
       }
     }
 
-    void refresh(manualRefreshToken > 0)
-    return () => {
-      stopped = true
-      if (timer !== null) window.clearTimeout(timer)
-    }
-  }, [sourceKey, symbol, source?.providerId, source?.connectionId, source?.accountId, source?.environment, manualRefreshToken])
+    void refresh()
+    return () => { stopped = true }
+  }, [
+    sourceKey,
+    symbol,
+    source?.providerId,
+    source?.connectionId,
+    source?.accountId,
+    source?.environment,
+    scanRequest?.token,
+    scanRequest?.sourceKey,
+  ])
 
   const matchingFrames = signalBotFramesForSource(state, sourceKey)
   if (state.sourceKey !== sourceKey) {
     const unavailableReason = signalBotMarketSourceError(source)
     return {
-      ...emptyState(sourceKey, unavailableReason ? 'unavailable' : 'loading', unavailableReason),
+      ...emptyState(sourceKey, unavailableReason ? 'unavailable' : 'idle', unavailableReason),
       refreshNow,
       timeframeProgress,
       scanNumber,
