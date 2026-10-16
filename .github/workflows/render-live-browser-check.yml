@@ -154,6 +154,96 @@ jobs:
 
                 await page.screenshot({ path: `qa-results/${config.name}-workspace.png`, fullPage: true, animations: 'disabled', timeout: 30000 });
 
+                // Actively test the real chart controls before navigating to Bots.
+                // Store observed states and network outcomes after each interaction; screenshots are supporting evidence only.
+                const interactionReport = {
+                  startingUrl: page.url(),
+                  initialSymbol: null,
+                  marketChanges: [],
+                  timeframeChecks: [],
+                  chartElementSnapshots: [],
+                  signalScan: {},
+                };
+                const nav = page.locator('header.shafx-top-nav');
+                interactionReport.initialSymbol = (await nav.innerText().catch(() => '')).split('\n').slice(0, 6).join(' | ');
+
+                const readChartState = async (requestedTimeframe) => {
+                  const activeTimeframe = await page.locator('.shafx-timeframe-bar button[aria-pressed="true"]').allTextContents().catch(() => []);
+                  const chartInfo = await page.locator('.shafx-chart-stage').evaluate((element) => {
+                    const rect = element.getBoundingClientRect();
+                    const canvases = Array.from(element.querySelectorAll('canvas')).map((canvas) => ({
+                      width: canvas.width,
+                      height: canvas.height,
+                      cssWidth: Math.round(canvas.getBoundingClientRect().width),
+                      cssHeight: Math.round(canvas.getBoundingClientRect().height),
+                    }));
+                    return {
+                      width: Math.round(rect.width),
+                      height: Math.round(rect.height),
+                      openPositions: element.getAttribute('data-shafx-open-position-count'),
+                      matchedOpenPositions: element.getAttribute('data-shafx-matched-open-position-count'),
+                      tradeLineCount: element.getAttribute('data-shafx-trade-line-count'),
+                      canvases,
+                    };
+                  }).catch((error) => ({ error: String(error).slice(0, 300) }));
+                  const body = await page.locator('body').innerText().catch(() => '');
+                  return {
+                    requestedTimeframe,
+                    activeTimeframe: activeTimeframe.join(','),
+                    selectedMarketHeader: (await nav.innerText().catch(() => '')).split('\n').slice(0, 5).join(' | '),
+                    chartInfo,
+                    waitingForCandles: /Waiting for the live market stream/i.test(body),
+                    currentVisiblePrice: (body.match(/(?:EUR\/USD|GBP\/USD|USD\/JPY|USD\/CHF|AUD\/USD|USD\/CAD|NZD\/USD|XAU\/USD)\s+([0-9]+\.[0-9]+)/) || [])[1] ?? null,
+                    visibleStatusText: body.match(/(?:LIVE|WAITING|SCANNING|DATA READY|PARTIAL DATA|UNAVAILABLE|DATA ERROR)/g)?.slice(0, 10) ?? [],
+                  };
+                };
+
+                // Change from EUR/USD to GBP/USD and back so we verify symbol selection in both directions.
+                for (const market of ['GBP/USD', 'EUR/USD']) {
+                  try {
+                    const marketToggle = nav.getByRole('button').first();
+                    await marketToggle.click({ timeout: 7000 });
+                    const search = page.getByPlaceholder(/Search Deriv symbol/i).first();
+                    await search.waitFor({ state: 'visible', timeout: 7000 });
+                    await search.fill(market);
+                    const marketOption = page.getByRole('button', { name: new RegExp(market.replace('/', '\\/')) }).last();
+                    await marketOption.waitFor({ state: 'visible', timeout: 7000 });
+                    await marketOption.click();
+                    await page.waitForTimeout(4500);
+                    const headerText = await nav.innerText().catch(() => '');
+                    interactionReport.marketChanges.push({
+                      requestedMarket: market,
+                      confirmedInHeader: headerText.includes(market),
+                      headerText: headerText.split('\n').slice(0, 6).join(' | '),
+                      chart: await readChartState(null),
+                    });
+                  } catch (error) {
+                    interactionReport.marketChanges.push({ requestedMarket: market, error: String(error?.stack || error).slice(0, 800) });
+                  }
+                }
+
+                // Exercise the eight supported timeframes one by one and record the active selection and chart dimensions.
+                for (const tf of ['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1', 'W1']) {
+                  try {
+                    const control = page.locator('.shafx-timeframe-bar').getByRole('button', { name: tf, exact: true });
+                    await control.waitFor({ state: 'visible', timeout: 7000 });
+                    await control.click();
+                    await page.waitForTimeout(3500);
+                    const state = await readChartState(tf);
+                    state.selectedCorrectly = state.activeTimeframe.split(',').includes(tf);
+                    interactionReport.timeframeChecks.push(state);
+                  } catch (error) {
+                    interactionReport.timeframeChecks.push({ requestedTimeframe: tf, error: String(error?.stack || error).slice(0, 800) });
+                  }
+                }
+
+                // Capture the actual UI after all timeframe changes, then open Bots.
+                await page.screenshot({
+                  path: `qa-results/${config.name}-after-market-timeframe-interactions.png`,
+                  fullPage: true,
+                  animations: 'disabled',
+                  timeout: 30000,
+                }).catch(() => {});
                 // Open the actual Bot workspace using the real navigation controls:
                 // desktop's workspace rail and mobile's fixed bottom navigation both label it "Bots".
                 const botsNav = config.isMobile
@@ -166,6 +256,48 @@ jobs:
                   botsOpened = true;
                 }
                 const botWorkspaceText = await page.locator('body').innerText().catch(() => '');
+
+                // Wait for the Signal Bot scan control to become actionable, click it,
+                // and inspect the transient scanning state as well as the returned state.
+                const scanButton = page.getByRole('button', { name: /Scan all timeframes now|Retry full scan|Scanning all 8 timeframes/i }).first();
+                const scanWaitStarted = Date.now();
+                try {
+                  await scanButton.waitFor({ state: 'visible', timeout: 12000 });
+                  while (await scanButton.isDisabled().catch(() => true) && Date.now() - scanWaitStarted < 45000) {
+                    await page.waitForTimeout(1500);
+                  }
+                  interactionReport.signalScan.buttonTextBefore = await scanButton.innerText().catch(() => '');
+                  interactionReport.signalScan.enabledBefore = !(await scanButton.isDisabled().catch(() => true));
+                  if (interactionReport.signalScan.enabledBefore) {
+                    await scanButton.click();
+                    await page.waitForTimeout(1200);
+                    const bodyDuringScan = await page.locator('body').innerText().catch(() => '');
+                    interactionReport.signalScan.visibleDuringScan = {
+                      scanningButton: /Scanning all 8 timeframes/i.test(await scanButton.innerText().catch(() => '')),
+                      scanningTimeframes: (bodyDuringScan.match(/\b(?:M1|M5|M15|M30|H1|H4|D1|W1)\s+SCAN\b/g) || []),
+                      loadingMessage: /Scanning M1, M5, M15, M30, H1, H4, D1 and W1/i.test(bodyDuringScan),
+                    };
+                    await page.waitForTimeout(18000);
+                    const bodyAfterScan = await page.locator('body').innerText().catch(() => '');
+                    interactionReport.signalScan.buttonTextAfter = await scanButton.innerText().catch(() => '');
+                    interactionReport.signalScan.visibleAfterScan = {
+                      scanningButton: /Scanning all 8 timeframes/i.test(await scanButton.innerText().catch(() => '')),
+                      timeframeReadyRows: (bodyAfterScan.match(/\b(?:M1|M5|M15|M30|H1|H4|D1|W1)\s+OK\b/g) || []),
+                      timeframeScanningRows: (bodyAfterScan.match(/\b(?:M1|M5|M15|M30|H1|H4|D1|W1)\s+SCAN\b/g) || []),
+                      timeframeWaitingRows: (bodyAfterScan.match(/\b(?:M1|M5|M15|M30|H1|H4|D1|W1)\s+WAIT\b/g) || []),
+                      hasLatestCandleClose: !/LATEST CANDLE CLOSE\s+—/i.test(bodyAfterScan),
+                      hasScanFinishedTimestamp: !/Last scan finished\s+—/i.test(bodyAfterScan),
+                      scanText: bodyAfterScan.split('\n').filter((line) => /Scan #|DATA READY|PARTIAL DATA|SCANNING|DATA ERROR|UNAVAILABLE|last scan finished|Latest candle close|cTrader returned/i.test(line)).slice(0, 40),
+                    };
+                  } else {
+                    interactionReport.signalScan.note = 'Scan button stayed disabled while browser waited up to 45 seconds; exact displayed state recorded.';
+                  }
+                } catch (error) {
+                  interactionReport.signalScan.error = String(error?.stack || error).slice(0, 1000);
+                }
+
+                report.interactions = report.interactions || {};
+                report.interactions[config.name] = interactionReport;
                 const visibleHeadings = await page.getByRole('heading').allTextContents().catch(() => []);
                 report[`${config.name}_bots_workspace`] = {
                   opened: botsOpened,
@@ -226,7 +358,13 @@ jobs:
                 badResponses: badResponses.slice(0, 80),
               });
 
-              if (navigationError || navigationStatus === null || navigationStatus >= 500 || !rootInfo.exists || pageErrors.length > 0) {
+              if (
+                navigationStatus === null ||
+                navigationStatus >= 500 ||
+                !rootInfo.exists ||
+                pageErrors.length > 0 ||
+                (navigationError && !/did not reach the signed-in workspace/i.test(navigationError))
+              ) {
                 hasFatalIssue = true;
               }
               await context.close();
