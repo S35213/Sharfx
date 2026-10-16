@@ -1164,10 +1164,16 @@ const TerminalContent: React.FC = () => {
       }
       const tradeBotSpecKey = tradeBotMarketSourceKey(subscriptionSymbol, tradeBotSource)
       const resolvedTradeBotSpec = cTraderInstrumentToSymbolSpec(subscriptionSymbol, nextInstrument)
-      setTradeBotBrokerSpec((previous) => {
-        if (previous?.sourceKey === tradeBotSpecKey && JSON.stringify(previous.symbolSpec) === JSON.stringify(resolvedTradeBotSpec)) return previous
-        return { sourceKey: tradeBotSpecKey, symbolSpec: resolvedTradeBotSpec }
-      })
+      // The quote stream can emit quotes without a full instrument payload.
+      // Only a complete, verified specification may update the cache; a null
+      // stream payload must not erase the complete HTTP instrument result.
+      if (resolvedTradeBotSpec) {
+        setTradeBotBrokerSpecs((previous) => updateCTraderBrokerSpecCache(
+          previous,
+          tradeBotSpecKey,
+          { symbolSpec: resolvedTradeBotSpec, error: null },
+        ))
+      }
 
       // The quote stream belongs to the symbol/account; timeframe changes
       // only switch candle aggregation and must not interrupt Bid/Ask.
