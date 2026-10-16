@@ -37,6 +37,8 @@ jobs:
       - name: Capture the actual deployed Render page
         env:
           TARGET_URL: https://sharfx-deriv-render.onrender.com/
+          SHAFX_QA_EMAIL: ${{ secrets.SHAFX_QA_EMAIL }}
+          SHAFX_QA_PASSWORD: ${{ secrets.SHAFX_QA_PASSWORD }}
         run: |
           mkdir -p qa-results
           node --input-type=module <<'NODE'
@@ -101,11 +103,27 @@ jobs:
               let navigationStatus = null;
               let navigationError = null;
               try {
-                const response = await page.goto(targetUrl, {
-                  waitUntil: 'domcontentloaded',
-                  timeout: 90000,
-                });
-                navigationStatus = response?.status() ?? null;
+                // Render's free service can return a temporary 503 while the instance wakes up.
+                // Retry actual navigation before deciding the deployed app is unavailable.
+                let response = null;
+                for (let attempt = 0; attempt < 5; attempt += 1) {
+                  response = await page.goto(targetUrl, {
+                    waitUntil: 'domcontentloaded',
+                    timeout: 90000,
+                  }).catch((error) => {
+                    navigationError = String(error?.stack || error).slice(0, 1200);
+                    return null;
+                  });
+                  navigationStatus = response?.status() ?? null;
+                  if (navigationStatus !== null && navigationStatus < 500) {
+                    navigationError = null;
+                    break;
+                  }
+                  await page.waitForTimeout(5000 + attempt * 3000);
+                }
+                if (navigationStatus === null || navigationStatus >= 500) {
+                  throw new Error(`Render page unavailable after wake-up retries (HTTP ${navigationStatus ?? 'no response'}).`);
+                }
                 // Allow the client app to hydrate and render, without requiring WebSocket/network idle.
                 await page.waitForTimeout(5000);
 
