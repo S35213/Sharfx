@@ -1,4 +1,5 @@
 name: Render live browser check
+# Live retest after cTrader verified-spec cache fix deployment.
 # Sanitized cTrader contract fields captured after the Trade Bot specification blocker.
 # QA rerun after cTrader instrument fallback deployment on 2026-10-16.
 
