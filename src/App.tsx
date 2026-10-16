@@ -426,6 +426,16 @@ const TerminalContent: React.FC = () => {
     setToast({ id: toastId.current, text })
   }, [])
 
+  const handleTradeBotOrderOpened = useCallback((order: TradeOrder): void => {
+    setOpenPositions((current) => [order, ...current.filter((item) => item.id !== order.id)])
+    setTradeHistory((current) => current.filter((item) => item.id !== order.id))
+    setTradeLines([])
+    setReviewSetup(null)
+    pushToast(order.brokerProtectionConfirmed === false
+      ? 'Trade Bot DEMO order filled, but broker SL/TP is not confirmed. The bot stopped. Verify the position in cTrader.'
+      : 'Trade Bot DEMO order filled: ' + order.type + ' ' + order.symbol + ' · ' + (order.volumeLots ?? order.lotSize) + ' lots.')
+  }, [pushToast])
+
   const pushStreamToast = useCallback((text: string): void => {
     const now = Date.now()
     if (text === lastStreamToastText.current && now - lastStreamToastAt.current < 15000) return
@@ -1646,7 +1656,7 @@ const TerminalContent: React.FC = () => {
          : (activeProviderSelection?.providerId === 'ctrader' ? 'cTrader ' : 'Deriv ') + order.type + ' trade opened on ' + (order.chartTimeframe ?? timeframe) + '.')
     }} aiSetup={reviewSetup} />
     </div>,
-    bot: <div className="space-y-4"><ErrorBoundary><SignalDeskPanel symbol={selectedSymbol} timeframe={timeframe} marketSource={signalBotMarketSource} onReviewSetup={handleReviewSetup} /></ErrorBoundary><ErrorBoundary><TradeBotPanel symbol={selectedSymbol} timeframe={timeframe} marketSource={signalBotMarketSource} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={tradeBotSymbolSpec} symbolSpecError={tradeBotSymbolSpecError} onReviewSetup={handleReviewSetup} /></ErrorBoundary></div>,
+    bot: <div className="space-y-4"><ErrorBoundary><SignalDeskPanel symbol={selectedSymbol} timeframe={timeframe} marketSource={signalBotMarketSource} onReviewSetup={handleReviewSetup} /></ErrorBoundary><ErrorBoundary><TradeBotPanel symbol={selectedSymbol} timeframe={timeframe} marketSource={signalBotMarketSource} accountBalance={resolvedAccountData.balance} accountFreeMargin={resolvedAccountData.freeMargin} accountCurrency={resolvedAccountData.currency} symbolSpec={tradeBotSymbolSpec} symbolSpecError={tradeBotSymbolSpecError} onTradeOpened={handleTradeBotOrderOpened} onReviewSetup={handleReviewSetup} /></ErrorBoundary></div>,
     liquidity: <LiquidityPanel key={selectedSymbol} symbol={selectedSymbol} price={currentPrice} precision={symbolSpec.pricePrecision} pipSize={symbolSpec.pipSize} candles={liveCandles} />,
     orders: <OrderPanel providerSelection={activeProviderSelection} symbol={selectedSymbol} currentPrice={currentPrice} bidPrice={chartBidPrice} askPrice={chartAskPrice} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={symbolSpec} timeframe={timeframe} connection={derivOrderConnection} activePosition={selectedOpenPosition} onTradeClosed={(id) => { void handleClosePosition(id) }} onTradeLinesChange={setTradeLines} onTradeOpened={(order) => {
       setOpenPositions((current) => [order, ...current.filter((item) => item.id !== order.id)])
@@ -1743,7 +1753,7 @@ const TerminalContent: React.FC = () => {
           'Verify the actual SL/TP in cTrader before relying on it.'
          : (activeProviderSelection?.providerId === 'ctrader' ? 'cTrader ' : 'SHAFX ') + order.type + ' trade opened on ' + (order.chartTimeframe ?? timeframe) + '.')
     }} aiSetup={reviewSetup} /></div></aside>}
-      <aside className={showBot ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-4"><ErrorBoundary><SignalDeskPanel symbol={selectedSymbol} timeframe={timeframe} marketSource={signalBotMarketSource} onReviewSetup={handleReviewSetup} /></ErrorBoundary><ErrorBoundary><TradeBotPanel symbol={selectedSymbol} timeframe={timeframe} marketSource={signalBotMarketSource} accountBalance={resolvedAccountData.balance} accountCurrency={resolvedAccountData.currency} symbolSpec={tradeBotSymbolSpec} symbolSpecError={tradeBotSymbolSpecError} onReviewSetup={handleReviewSetup} /></ErrorBoundary></div></aside>
+      <aside className={showBot ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-4"><ErrorBoundary><SignalDeskPanel symbol={selectedSymbol} timeframe={timeframe} marketSource={signalBotMarketSource} onReviewSetup={handleReviewSetup} /></ErrorBoundary><ErrorBoundary><TradeBotPanel symbol={selectedSymbol} timeframe={timeframe} marketSource={signalBotMarketSource} accountBalance={resolvedAccountData.balance} accountFreeMargin={resolvedAccountData.freeMargin} accountCurrency={resolvedAccountData.currency} symbolSpec={tradeBotSymbolSpec} symbolSpecError={tradeBotSymbolSpecError} onTradeOpened={handleTradeBotOrderOpened} onReviewSetup={handleReviewSetup} /></ErrorBoundary></div></aside>
       <aside className={showHistory ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="h-[calc(100svh-92px)] min-h-[520px]"><TradesPanel defaultTab="history" openPositions={liveOpenPositions} pendingOrders={pendingOrders} tradeHistory={tradeHistory} currentPrice={currentPrice} selectedSymbol={selectedSymbol} onClosePosition={(id) => { void handleClosePosition(id) }} onBulkClose={handleBulkClose} currency={resolvedAccountData.currency} botPaperHistory={botPaperHistory} /></div></aside>
       <aside className={showFunds ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><DerivCashierLinks /></div></aside>
       <aside className={showAccount ? 'w-full flex-shrink-0 overflow-visible p-3 pb-4 lg:hidden' : 'hidden'}><div className="space-y-3"><AccountPanel account={resolvedAccountData} activeProviderSelection={activeProviderSelection} /></div></aside>
