@@ -415,14 +415,42 @@ const handlePost = async (req, res, user, body) => {
 
   if (action === 'instruments') {
     const requested = String(body.symbol || '').trim()
+
+    // For a requested symbol use the same authoritative resolver as candle and
+    // quote requests. Filtering the lightweight symbol catalog first is fragile:
+    // cTrader catalog rows can carry provider IDs/names in different fields from
+    // the normalized full instrument, which previously returned { instruments: [] }
+    // even when the candle endpoint could resolve EUR/USD successfully.
+    if (requested) {
+      const full = await resolveCtraderSymbol({
+        environment: context.environment,
+        accountId,
+        accessToken: tokens.accessToken,
+        symbol: requested,
+      })
+      return json(res, 200, {
+        ok: true,
+        instruments: [normalizeCtraderInstrument(full)],
+      })
+    }
+
     const symbols = await getCtraderSymbols({ environment: context.environment, accountId, accessToken: tokens.accessToken })
-    const selected = requested ? symbols.filter((item) => { const n = String(item.name || item.symbolName || '').toUpperCase(); return n === requested.toUpperCase() || n.replace('/', '') === requested.toUpperCase().replace('/', '') }) : symbols.slice(0, 25)
     const instruments = []
-    for (const light of selected.slice(0, requested ? 2 : 25)) {
+    for (const light of symbols.slice(0, 25)) {
       try {
-        const full = await resolveCtraderSymbol({ environment: context.environment, accountId, accessToken: tokens.accessToken, symbol: String(light.name || requested) })
+        const requestedName = String(light.name || light.symbolName || '').trim()
+        if (!requestedName) continue
+        const full = await resolveCtraderSymbol({
+          environment: context.environment,
+          accountId,
+          accessToken: tokens.accessToken,
+          symbol: requestedName,
+        })
         instruments.push(normalizeCtraderInstrument(full))
-      } catch {}
+      } catch {
+        // An unavailable catalog row should not hide valid instrument metadata
+        // for other rows in the browse-all response.
+      }
     }
     return json(res, 200, { ok: true, instruments })
   }
