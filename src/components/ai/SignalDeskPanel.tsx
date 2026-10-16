@@ -67,7 +67,7 @@ export const SignalDeskPanel: React.FC<Props> = ({ symbol, timeframe, marketSour
         <div className="rounded-xl border border-shafx-border bg-shafx-bg p-3">
           <span className="block text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted">Latest candle close</span>
           <strong className="mt-1 block font-mono text-sm">{scannerPrice > 0 ? scannerPrice.toFixed(symbol.includes('JPY') ? 3 : 5) : '—'}</strong>
-          <span className="mt-0.5 block text-[8px] text-shafx-textMuted">Scan data updated {lastUpdated}</span>
+          <span className="mt-0.5 block text-[8px] text-shafx-textMuted">Last scan finished {lastUpdated}</span>
         </div>
       </div>
 
