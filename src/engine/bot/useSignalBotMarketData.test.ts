@@ -3,6 +3,7 @@ import {
   signalBotFramesForSource,
   signalBotMarketSourceError,
   signalBotMarketSourceKey,
+  signalBotFramesSignature,
   type SignalBotMarketDataState,
   type SignalBotMarketSource,
 } from './useSignalBotMarketData'
@@ -22,6 +23,27 @@ describe('Signal Bot provider isolation', () => {
     expect(signalBotMarketSourceKey('EUR/USD', { ...source, accountId: 'account-b' })).not.toBe(original)
     expect(signalBotMarketSourceKey('EUR/USD', { ...source, environment: 'live' })).not.toBe(original)
     expect(signalBotMarketSourceKey('EUR/USD', { ...source, providerId: 'deriv' })).not.toBe(original)
+  })
+
+  it('detects whether a fresh scan returned changed candle data', () => {
+    const originalFrames = {
+      M1: [
+        { time: 60, open: 1.1, high: 1.2, low: 1.0, close: 1.15 },
+        { time: 120, open: 1.15, high: 1.21, low: 1.14, close: 1.2 },
+      ],
+    }
+    const sameFrames = {
+      M1: originalFrames.M1.map((candle) => ({ ...candle })),
+    }
+    const changedFrames = {
+      M1: [
+        ...originalFrames.M1.slice(0, -1),
+        { ...originalFrames.M1[1], close: 1.205 },
+      ],
+    }
+
+    expect(signalBotFramesSignature(sameFrames)).toBe(signalBotFramesSignature(originalFrames))
+    expect(signalBotFramesSignature(changedFrames)).not.toBe(signalBotFramesSignature(originalFrames))
   })
 
   it('never returns cached candles for a different provider/account source key', () => {
