@@ -154,24 +154,32 @@ jobs:
 
                 await page.screenshot({ path: `qa-results/${config.name}-workspace.png`, fullPage: true, animations: 'disabled', timeout: 30000 });
 
-                // Inspect bot tabs by visible accessible text; record screenshots after each click if available.
-                for (const [panel, pattern] of [['signal-bot', /Signal Bot|Signal Desk|Signals/i], ['trade-bot', /Trade Bot/i]]) {
-                  const tab = page.getByRole('tab', { name: pattern }).first();
-                  const button = page.getByRole('button', { name: pattern }).first();
-                  const target = await tab.count() ? tab : button;
-                  if (await target.count() && await target.isVisible().catch(() => false)) {
-                    await target.click().catch(() => {});
-                    await page.waitForTimeout(3500);
-                    const panelText = await page.locator('body').innerText().catch(() => '');
-                    report[`${config.name}_${panel}`] = {
-                      clicked: true,
-                      visibleText: panelText.slice(-7000),
-                    };
-                    await page.screenshot({ path: `qa-results/${config.name}-${panel}.png`, fullPage: true, animations: 'disabled', timeout: 30000 }).catch(() => {});
-                  } else {
-                    report[`${config.name}_${panel}`] = { clicked: false, reason: 'Visible tab/button not found by accessible name.' };
-                  }
+                // Open the actual Bot workspace using the real navigation controls:
+                // desktop's workspace rail and mobile's fixed bottom navigation both label it "Bots".
+                const botsNav = config.isMobile
+                  ? page.getByRole('navigation', { name: 'Terminal navigation' }).getByRole('button', { name: 'Bots', exact: true }).first()
+                  : page.getByRole('button', { name: 'Bots', exact: true }).first();
+                let botsOpened = false;
+                if (await botsNav.count() && await botsNav.isVisible().catch(() => false)) {
+                  await botsNav.click();
+                  await page.waitForTimeout(5000);
+                  botsOpened = true;
                 }
+                const botWorkspaceText = await page.locator('body').innerText().catch(() => '');
+                const visibleHeadings = await page.getByRole('heading').allTextContents().catch(() => []);
+                report[`${config.name}_bots_workspace`] = {
+                  opened: botsOpened,
+                  botHeadingVisible: /SHAFX Signal Bot/i.test(botWorkspaceText),
+                  tradeBotHeadingVisible: /Trade Bot/i.test(botWorkspaceText),
+                  visibleHeadings: visibleHeadings.slice(-40),
+                  visibleText: botWorkspaceText.slice(-10000),
+                };
+                await page.screenshot({
+                  path: `qa-results/${config.name}-bot-workspace.png`,
+                  fullPage: true,
+                  animations: 'disabled',
+                  timeout: 30000,
+                }).catch(() => {});
               } catch (error) {
                 navigationError = String(error?.stack || error).slice(0, 3000);
               }
