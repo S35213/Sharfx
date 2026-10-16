@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CTraderLiveInstrument } from '../../data/ctrader/CTraderLiveQuote'
-import { cTraderInstrumentToSymbolSpec } from './ctraderInstrumentSpec'
+import { cTraderInstrumentToSymbolSpec, updateCTraderBrokerSpecCache } from './ctraderInstrumentSpec'
 
 const instrument = (overrides: Partial<CTraderLiveInstrument> = {}): CTraderLiveInstrument => ({
   symbol: 'EURUSD',
@@ -71,5 +71,43 @@ describe('cTrader Trade Bot instrument specification', () => {
 
   it('fails closed when the selected CFD name does not identify base and quote currencies', () => {
     expect(cTraderInstrumentToSymbolSpec('US30', instrument({ symbol: 'US30' }))).toBeNull()
+  })
+})
+
+describe('cTrader instrument specification cache', () => {
+  const keyEur = 'EUR/USD|ctrader|connection-a|account-a|demo'
+  const keyGbp = 'GBP/USD|ctrader|connection-a|account-a|demo'
+  const eurSpec = cTraderInstrumentToSymbolSpec('EUR/USD', instrument())!
+
+  it('keeps asynchronous instrument specifications isolated by exact source key', () => {
+    const first = updateCTraderBrokerSpecCache({}, keyEur, { symbolSpec: eurSpec, error: null })
+    const second = updateCTraderBrokerSpecCache(first, keyGbp, {
+      symbolSpec: cTraderInstrumentToSymbolSpec('GBP/USD', instrument({ symbol: 'GBPUSD' })),
+      error: null,
+    })
+
+    expect(second[keyEur]?.symbolSpec).toEqual(eurSpec)
+    expect(second[keyGbp]?.symbolSpec?.symbol).toBe('GBP/USD')
+  })
+
+  it('does not let a failed refresh erase a verified spec for the same account and symbol', () => {
+    const cached = updateCTraderBrokerSpecCache({}, keyEur, { symbolSpec: eurSpec, error: null })
+    const afterFailure = updateCTraderBrokerSpecCache(cached, keyEur, {
+      symbolSpec: null,
+      error: 'temporary request failure',
+    })
+
+    expect(afterFailure).toBe(cached)
+    expect(afterFailure[keyEur]?.symbolSpec).toEqual(eurSpec)
+  })
+
+  it('bounds the cache while retaining the newest exact-key result', () => {
+    let cache = {}
+    for (let index = 0; index < 5; index += 1) {
+      cache = updateCTraderBrokerSpecCache(cache, 'symbol-' + index, { symbolSpec: eurSpec, error: null }, 3)
+    }
+    expect(Object.keys(cache)).toHaveLength(3)
+    expect(cache['symbol-4']?.symbolSpec).toEqual(eurSpec)
+    expect(cache['symbol-0']).toBeUndefined()
   })
 })
