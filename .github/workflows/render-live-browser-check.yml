@@ -1,4 +1,5 @@
 name: Render live browser check
+# QA rerun after cTrader instrument fallback deployment on 2026-10-16.
 
 on:
   push:
