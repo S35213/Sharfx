@@ -349,6 +349,8 @@ jobs:
                   if (!fiberKey) return { fiberFound: false };
                   let fiber = element[fiberKey];
                   let panelProps = null;
+                  let panelConnectionId = null;
+                  let panelAccountId = null;
                   let appSpecState = null;
                   let guard = 0;
                   while (fiber && guard < 100) {
@@ -356,6 +358,8 @@ jobs:
                     const props = fiber.memoizedProps;
                     if (!panelProps && props && typeof props === 'object' && Object.prototype.hasOwnProperty.call(props, 'symbolSpec') && Object.prototype.hasOwnProperty.call(props, 'symbolSpecError') && Object.prototype.hasOwnProperty.call(props, 'marketSource')) {
                       const spec = props.symbolSpec;
+                      panelConnectionId = props.marketSource?.connectionId ?? null;
+                      panelAccountId = props.marketSource?.accountId ?? null;
                       panelProps = {
                         symbol: String(props.symbol || ''),
                         timeframe: String(props.timeframe || ''),
@@ -382,6 +386,9 @@ jobs:
                           storedEnvironment: parts[4] || '',
                           storedKeyMatchesPanelSymbol: Boolean(panelProps && parts[0] === panelProps.symbol.trim().toUpperCase()),
                           storedKeyMatchesPanelProvider: Boolean(panelProps && parts[1] === panelProps.provider),
+                          storedKeyMatchesPanelConnection: Boolean(panelProps && parts[2] === (panelConnectionId ? String(panelConnectionId) : 'no-connection')),
+                          storedKeyMatchesPanelAccount: Boolean(panelProps && parts[3] === (panelAccountId ? String(panelAccountId) : 'no-account')),
+                          storedKeyMatchesPanelEnvironment: Boolean(panelProps && parts[4] === (panelProps.environment || 'no-environment')),
                           storedSpecPresent: Boolean(value.symbolSpec),
                           storedSpecSymbol: value.symbolSpec?.symbol ? String(value.symbolSpec.symbol) : null,
                           hasStoredError: Boolean(value.error),
