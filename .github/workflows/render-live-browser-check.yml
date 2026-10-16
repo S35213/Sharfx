@@ -17,6 +17,7 @@ permissions:
 
 jobs:
   capture-live-render:
+    environment: shafx-live-qa
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -46,7 +47,7 @@ jobs:
           const report = {
             targetUrl,
             capturedAt: new Date().toISOString(),
-            note: 'This check visits the public deployed URL without signing in. It never places or changes trades.',
+            note: 'Uses dedicated GitHub environment secrets to sign in, captures workspace/Bot panels, and never places or changes trades.',
             viewports: [],
           };
 
@@ -106,7 +107,53 @@ jobs:
                 });
                 navigationStatus = response?.status() ?? null;
                 // Allow the client app to hydrate and render, without requiring WebSocket/network idle.
-                await page.waitForTimeout(9000);
+                await page.waitForTimeout(5000);
+
+                const email = process.env.SHAFX_QA_EMAIL;
+                const password = process.env.SHAFX_QA_PASSWORD;
+                if (!email || !password) throw new Error('QA login secrets are missing from the shafx-live-qa GitHub environment.');
+
+                // PublicWelcome opens the login form from the welcome screen.
+                const loginTab = page.getByRole('button', { name: /^Login$/i });
+                if (await loginTab.count() && await loginTab.first().isVisible().catch(() => false)) {
+                  await loginTab.first().click();
+                }
+                const emailField = page.getByPlaceholder('Email address').first();
+                await emailField.waitFor({ state: 'visible', timeout: 20000 });
+                await emailField.fill(email);
+                const passwordField = page.getByPlaceholder('Password', { exact: true }).first();
+                await passwordField.fill(password);
+                await page.getByRole('button', { name: /Login to SHARFX/i }).click();
+                await page.waitForTimeout(8000);
+                const postLoginText = await page.locator('body').innerText().catch(() => '');
+                const authFailure = /invalid login credentials|invalid email or password|email not confirmed|too many requests|sign in failed/i.test(postLoginText);
+                report.authentication = {
+                  attempted: true,
+                  signedIn: !/Welcome to SHARFX|Login to SHARFX|Sign in with your email and password/i.test(postLoginText) && !authFailure,
+                  visibleAuthError: authFailure ? postLoginText.match(/.{0,100}(?:invalid login credentials|invalid email or password|email not confirmed|too many requests|sign in failed).{0,160}/i)?.[0] : null,
+                };
+                if (!report.authentication.signedIn) throw new Error('QA browser did not reach the signed-in workspace. See authentication diagnostics; credentials are not printed.');
+
+                await page.screenshot({ path: `qa-results/${config.name}-workspace.png`, fullPage: true, animations: 'disabled', timeout: 30000 });
+
+                // Inspect bot tabs by visible accessible text; record screenshots after each click if available.
+                for (const [panel, pattern] of [['signal-bot', /Signal Bot|Signal Desk|Signals/i], ['trade-bot', /Trade Bot/i]]) {
+                  const tab = page.getByRole('tab', { name: pattern }).first();
+                  const button = page.getByRole('button', { name: pattern }).first();
+                  const target = await tab.count() ? tab : button;
+                  if (await target.count() && await target.isVisible().catch(() => false)) {
+                    await target.click().catch(() => {});
+                    await page.waitForTimeout(3500);
+                    const panelText = await page.locator('body').innerText().catch(() => '');
+                    report[`${config.name}_${panel}`] = {
+                      clicked: true,
+                      visibleText: panelText.slice(-7000),
+                    };
+                    await page.screenshot({ path: `qa-results/${config.name}-${panel}.png`, fullPage: true, animations: 'disabled', timeout: 30000 }).catch(() => {});
+                  } else {
+                    report[`${config.name}_${panel}`] = { clicked: false, reason: 'Visible tab/button not found by accessible name.' };
+                  }
+                }
               } catch (error) {
                 navigationError = String(error?.stack || error).slice(0, 3000);
               }
