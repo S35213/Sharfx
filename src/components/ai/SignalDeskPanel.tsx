@@ -150,7 +150,12 @@ export const SignalDeskPanel: React.FC<Props> = ({ symbol, timeframe, marketSour
         </div>
       </div>
 
-      {radar.botPlan.opportunity ? (
+      {marketData.status === 'loading' ? (
+        <div className="rounded-xl border border-shafx-accent/25 bg-shafx-accent/[0.05] p-3 text-center text-[9px] text-shafx-accent">
+          <RefreshCw className="mx-auto mb-2 h-4 w-4 animate-spin" />
+          Rechecking market structure and liquidity after the candle refresh…
+        </div>
+      ) : radar.botPlan.opportunity ? (
         <div className="rounded-xl border border-shafx-accent/25 bg-shafx-accent/[0.05] p-3">
           <div className="flex items-center gap-2 text-[9px] font-semibold uppercase tracking-[0.13em] text-shafx-accent"><Sparkles className="h-3.5 w-3.5" /> Highest-ranked setup</div>
           <div className="mt-2 grid grid-cols-3 gap-2 text-[9px]">
