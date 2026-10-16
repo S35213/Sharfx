@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CTraderLiveInstrument } from '../../data/ctrader/CTraderLiveQuote'
-import { cTraderInstrumentToSymbolSpec, updateCTraderBrokerSpecCache } from './ctraderInstrumentSpec'
+import { cTraderInstrumentToSymbolSpec, updateCTraderBrokerSpecCache, type CTraderBrokerSpecCache } from './ctraderInstrumentSpec'
 
 const instrument = (overrides: Partial<CTraderLiveInstrument> = {}): CTraderLiveInstrument => ({
   symbol: 'EURUSD',
@@ -102,7 +102,7 @@ describe('cTrader instrument specification cache', () => {
   })
 
   it('bounds the cache while retaining the newest exact-key result', () => {
-    let cache = {}
+    let cache: CTraderBrokerSpecCache = {}
     for (let index = 0; index < 5; index += 1) {
       cache = updateCTraderBrokerSpecCache(cache, 'symbol-' + index, { symbolSpec: eurSpec, error: null }, 3)
     }
