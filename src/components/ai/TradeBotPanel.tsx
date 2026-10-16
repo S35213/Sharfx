@@ -370,10 +370,35 @@ export const TradeBotPanel: React.FC<Props> = ({
         </div>
       </div>
 
+      <section className="rounded-xl border border-shafx-border bg-shafx-bg p-3" aria-live="polite" role="status">
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-[9px] font-semibold uppercase tracking-[0.13em] text-shafx-textMuted">Bot activity</div>
+          <span className="font-mono text-[8px] text-shafx-textMuted">{running ? 'CYCLE ' + String(market.cycleNumber) : 'IDLE'}</span>
+        </div>
+        <div className="mt-2 flex items-center gap-2">
+          {running && (market.status === 'loading' || executionPending)
+            ? <Activity className="h-3.5 w-3.5 shrink-0 animate-pulse text-shafx-accent" />
+            : <span className={'h-2 w-2 shrink-0 rounded-full ' + (running ? decision.status === 'READY' ? 'bg-shafx-success' : 'bg-shafx-accent' : 'bg-shafx-border')} />}
+          <p className="text-[9px] leading-4 text-shafx-text">{cycleMessage}</p>
+        </div>
+        {running && market.cycleNumber > 0 && (
+          <div className="mt-2 text-[8px] leading-4 text-shafx-textMuted">
+            {market.lastDataChanged === true
+              ? 'New candle snapshot received on the latest cycle.'
+              : market.lastDataChanged === false
+                ? 'The latest response contained the same candles; rules were still re-evaluated.'
+                : 'Waiting for the next candle snapshot comparison.'}
+            {market.updatedAt ? ' Last refresh ' + updatedAt + '.' : ''}
+          </div>
+        )}
+      </section>
+
       <details className="rounded-xl border border-shafx-border bg-shafx-bg/70 p-3">
         <summary className="cursor-pointer list-none flex items-center justify-between gap-2 text-[9px] font-semibold uppercase tracking-[0.13em]">
           <span>Decision diagnostics</span>
-          <span className={'font-mono ' + diagnosticsTone}>{diagnostics.summary.replace(/_/g, ' ')}</span>
+          <span className={'font-mono ' + diagnosticsTone}>
+            {diagnostics.summary === 'READY_FOR_REVIEW' && running ? 'SETUP READY · CHECKING BROKER' : diagnostics.summary.replace(/_/g, ' ')}
+          </span>
         </summary>
         <div className="mt-3 space-y-3 text-[9px]">
           <div className="rounded-lg border border-shafx-border bg-shafx-bg p-3">
@@ -425,7 +450,7 @@ export const TradeBotPanel: React.FC<Props> = ({
               <span className="font-mono text-[8px] text-shafx-textMuted">{visibleDecisionTrace.length} / 6 · memory only</span>
             </div>
             {visibleDecisionTrace.length === 0 ? (
-              <p className="mt-2 leading-4 text-shafx-textMuted">Start analysis to record successful refreshes for this selected account, market and timeframe. The trace clears on page reload and stores no credentials.</p>
+              <p className="mt-2 leading-4 text-shafx-textMuted">Start demo bot to record real monitoring cycles for this selected account, market and timeframe. The trace clears on page reload and stores no credentials.</p>
             ) : (
               <div className="mt-2 space-y-2">
                 {visibleDecisionTrace.map((entry) => (
