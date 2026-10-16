@@ -100,7 +100,8 @@ describe('Trade Bot cTrader demo execution', () => {
     expect(result.marginRequired).toBe(100)
     const actions = vi.mocked(post).mock.calls.map(([body]) => body.action)
     expect(actions).toEqual(['quote', 'reconcile', 'margin', 'placeOrder'])
-    const placed = vi.mocked(post).mock.calls.at(-1)?.[0]
+    const calls = vi.mocked(post).mock.calls
+    const placed = calls[calls.length - 1]?.[0]
     expect(placed?.environment).toBe('demo')
     expect(placed?.order).toMatchObject({
       symbol: 'EUR/USD',
