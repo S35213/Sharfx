@@ -20,6 +20,8 @@ export interface TradeBotDemoExecutionInput {
   symbolSpec: SymbolSpec | null
   nowMs?: number
   post?: CTraderApiPost
+  /** Allows Stop/source changes to cancel preflight before any market order is submitted. */
+  shouldContinue?: () => boolean
 }
 
 export interface TradeBotDemoExecutionResult {
@@ -85,8 +87,8 @@ export const executeTradeBotDemoOrder = async (
 ): Promise<TradeBotDemoExecutionResult> => {
   const {
     source, symbol, timeframe, signalCandleTime, setup,
-    accountBalance, accountFreeMargin, accountCurrency, symbolSpec,
-    nowMs = Date.now(), post = defaultPost,
+    accountCurrency, symbolSpec,
+    nowMs = Date.now(), post = defaultPost, shouldContinue,
   } = input
 
   if (source?.providerId !== 'ctrader' || source.environment !== 'demo' ||
@@ -106,6 +108,11 @@ export const executeTradeBotDemoOrder = async (
     throw new Error('Current cTrader free margin is unavailable; no order was sent.')
   }
 
+  const ensureContinued = (): void => {
+    if (shouldContinue && !shouldContinue()) {
+      throw new Error('The bot was stopped or its selection changed before order submission; no order was sent.')
+    }
+  }
   const sourceKey = [
     symbol.trim().toUpperCase(),
     source.providerId,
@@ -116,12 +123,12 @@ export const executeTradeBotDemoOrder = async (
     Math.trunc(signalCandleTime),
     setup.direction,
   ].join('|')
-  const riskBudget = tradeBotRiskBudget(accountBalance)
-  if (!isPositive(riskBudget)) throw new Error('A positive account balance is required for automatic sizing.')
+  ensureContinued()
 
   // Every entry uses a fresh broker quote. A chart candle close is never used as
   // an executable market price.
   const quotePayload = await apiRequest(post, source, 'quote', { symbol })
+  ensureContinued()
   const quote = asObject(quotePayload.quote) as unknown as CTraderLiveQuote
   const instrument = asObject(quotePayload.instrument) as unknown as CTraderLiveInstrument
   const bid = Number(quote.bid)
@@ -140,10 +147,21 @@ export const executeTradeBotDemoOrder = async (
     throw new Error('cTrader did not return complete tradable instrument rules; no order was sent.')
   }
 
+  // Read account balance/free margin and open positions from a current broker
+  // snapshot rather than relying on possibly stale UI values from the previous cycle.
+  const accountPayload = await apiRequest(post, source, 'account')
+  ensureContinued()
+  const brokerAccount = asObject(accountPayload.account)
+  const currentBalance = Number(brokerAccount.balance)
+  const currentFreeMargin = Number(brokerAccount.freeMargin)
+  const currentCurrency = String(brokerAccount.currency ?? accountCurrency)
+  if (!isPositive(currentBalance) || !isPositive(currentFreeMargin) || !currentCurrency.trim()) {
+    throw new Error('cTrader did not return a positive current balance and free margin; no order was sent.')
+  }
+
   // Refuse to stack another open trade on the same market. The bot can continue
   // monitoring and report the gate, but it must not pyramid into existing exposure.
-  const reconcile = await apiRequest(post, source, 'reconcile')
-  const positions = Array.isArray(reconcile.positions) ? reconcile.positions.map(asObject) : []
+  const positions = Array.isArray(accountPayload.positions) ? accountPayload.positions.map(asObject) : []
   const alreadyOpen = positions.some((position) => {
     const positionSymbol = String(position.symbol ?? '')
     const symbolId = String(asObject(position.metadata).symbolId ?? '')
@@ -153,6 +171,8 @@ export const executeTradeBotDemoOrder = async (
   if (alreadyOpen) {
     throw new Error('An open cTrader position already exists for ' + symbol + '. The bot will not stack another entry on the same market.')
   }
+  const riskBudget = tradeBotRiskBudget(currentBalance)
+  if (!isPositive(riskBudget)) throw new Error('A positive cTrader broker balance is required for automatic sizing.')
 
   const entryPrice = setup.direction === 'BUY' ? ask : bid
   const pipSize = symbolSpec.pipSize
@@ -193,8 +213,8 @@ export const executeTradeBotDemoOrder = async (
   const takeProfit = roundToTick(targetPriceRaw, priceTick, setup.direction === 'BUY' ? 'up' : 'down')
 
   const riskPlan = calculateCfdRiskPlan({
-    accountBalance,
-    accountCurrency,
+    accountBalance: currentBalance,
+    accountCurrency: currentCurrency,
     symbol: symbolSpec,
     side: setup.direction,
     entryPrice,
@@ -207,7 +227,7 @@ export const executeTradeBotDemoOrder = async (
     throw new Error(
       'Broker minimum volume would exceed the risk ceiling (' +
       riskPlan.estimatedLossAtStop.toFixed(2) + ' > ' + riskBudget.toFixed(2) +
-      ' ' + accountCurrency + '); no order was sent.',
+      ' ' + currentCurrency + '); no order was sent.',
     )
   }
   if (riskPlan.riskRewardRatio < 1.5) {
@@ -228,7 +248,8 @@ export const executeTradeBotDemoOrder = async (
   if (!isPositive(marginRequired)) {
     throw new Error('cTrader did not return a valid broker-margin estimate; no order was sent.')
   }
-  if (marginRequired > accountFreeMargin) {
+  ensureContinued()
+  if (marginRequired > currentFreeMargin) {
     throw new Error('The required broker margin exceeds current free margin; no order was sent.')
   }
 
@@ -240,6 +261,7 @@ export const executeTradeBotDemoOrder = async (
     setup.direction.toLowerCase(),
   ].join('-').slice(0, 50)
 
+  ensureContinued()
   const placedPayload = await apiRequest(post, source, 'placeOrder', {
     symbolId: instrument.providerSymbol,
     order: {
@@ -299,7 +321,7 @@ export const executeTradeBotDemoOrder = async (
     takeProfit: effectiveTakeProfit,
     plannedStopLossPrice: effectiveStopLoss,
     plannedTakeProfitPrice: effectiveTakeProfit,
-    riskPercent: accountBalance > 0 ? riskPlan.estimatedLossAtStop / accountBalance * 100 : 0,
+    riskPercent: currentBalance > 0 ? riskPlan.estimatedLossAtStop / currentBalance * 100 : 0,
     riskAmount: riskPlan.estimatedLossAtStop,
     rewardAmount: riskPlan.estimatedRewardAtTarget,
     riskRewardRatio: riskPlan.riskRewardRatio,
