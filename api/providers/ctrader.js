@@ -428,9 +428,18 @@ const handlePost = async (req, res, user, body) => {
         accessToken: tokens.accessToken,
         symbol: requested,
       })
+      const normalized = normalizeCtraderInstrument(full)
+      // The requested symbol has already been resolved against cTrader's
+      // authoritative symbol catalogue and full symbol ID. Some broker/API
+      // payloads omit name/symbolName on the full-symbol response, which used
+      // to serialize symbol as an empty string and make the client reject the
+      // otherwise valid instrument as "no matching instrument specification".
+      // In that case only, retain the exact requested alias as the display key;
+      // never use this fallback when symbol resolution itself failed.
+      if (!String(normalized.symbol || '').trim()) normalized.symbol = requested
       return json(res, 200, {
         ok: true,
-        instruments: [normalizeCtraderInstrument(full)],
+        instruments: [normalized],
       })
     }
 
