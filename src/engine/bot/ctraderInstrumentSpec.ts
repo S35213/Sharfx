@@ -52,3 +52,39 @@ export const cTraderInstrumentToSymbolSpec = (
     pricePrecision,
   }
 }
+
+export interface CTraderBrokerSpecEntry {
+  sourceKey: string
+  symbolSpec: SymbolSpec | null
+  error?: string | null
+}
+
+export type CTraderBrokerSpecCache = Record<string, CTraderBrokerSpecEntry>
+
+/**
+ * Keep asynchronously resolved specs under their exact provider/account/
+ * symbol key. A response from a previous selection must not overwrite the
+ * current selection, and a transient failed refresh must not erase a verified
+ * spec that was already cached for the same key.
+ */
+export const updateCTraderBrokerSpecCache = (
+  cache: CTraderBrokerSpecCache,
+  sourceKey: string,
+  entry: Omit<CTraderBrokerSpecEntry, 'sourceKey'>,
+  maxEntries = 24,
+): CTraderBrokerSpecCache => {
+  const previous = cache[sourceKey]
+  if (previous?.symbolSpec && !entry.symbolSpec) return cache
+
+  const next = Object.fromEntries(
+    Object.entries(cache).filter(([key]) => key !== sourceKey),
+  ) as CTraderBrokerSpecCache
+  next[sourceKey] = { sourceKey, ...entry }
+
+  const keys = Object.keys(next)
+  const limit = Math.max(1, Math.floor(maxEntries))
+  for (const oldestKey of keys.slice(0, Math.max(0, keys.length - limit))) {
+    delete next[oldestKey]
+  }
+  return next
+}

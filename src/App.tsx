@@ -21,7 +21,7 @@ import { MarketAnalysisPanel } from './components/analysis/MarketAnalysis'
 import { AIAssistantPanel } from './components/ai/AIAssistantPanel'
 import { SignalDeskPanel } from './components/ai/SignalDeskPanel'
 import { TradeBotPanel } from './components/ai/TradeBotPanel'
-import { cTraderInstrumentToSymbolSpec } from './engine/bot/ctraderInstrumentSpec'
+import { cTraderInstrumentToSymbolSpec, updateCTraderBrokerSpecCache, type CTraderBrokerSpecCache } from './engine/bot/ctraderInstrumentSpec'
 import { isCompleteCTraderPositionSnapshot, reconcileCTraderPositionList } from './engine/bot/reconcileCTraderPositionList'
 import { reconcileCTraderTradeHistory } from './engine/bot/reconcileCTraderTradeHistory'
 import { tradeBotMarketSourceKey } from './engine/bot/useTradeBotMarketData'
@@ -254,7 +254,7 @@ const TerminalContent: React.FC = () => {
   const [accountData, setAccountData] = useState<AccountData | null>(null)
   const [watchlist, setWatchlist] = useState<MarketPair[]>(() => mockWatchlist.map((pair) => ({ ...pair, price: 0, change: 0, changePercent: 0, status: 'closed' })))
   const [symbolSpec, setSymbolSpec] = useState<SymbolSpec>(() => SYMBOL_SPECS[selectedSymbol] ?? SYMBOL_SPECS['EUR/USD'])
-  const [tradeBotBrokerSpec, setTradeBotBrokerSpec] = useState<{ sourceKey: string; symbolSpec: SymbolSpec | null; error?: string | null } | null>(null)
+  const [tradeBotBrokerSpecs, setTradeBotBrokerSpecs] = useState<CTraderBrokerSpecCache>({})
   const [openPositions, setOpenPositions] = useState<TradeOrder[]>([])
   const [pendingOrders] = useState<TradeOrder[]>([])
   const [tradeHistory, setTradeHistory] = useState<TradeOrder[]>([])
@@ -340,7 +340,6 @@ const TerminalContent: React.FC = () => {
     setLiveBidPrice(0)
     setLiveAskPrice(0)
     setLiveMarketActive(false)
-    setTradeBotBrokerSpec(null)
     return () => {
       if (cTraderQuoteStaleTimerRef.current !== null) {
         window.clearTimeout(cTraderQuoteStaleTimerRef.current)
@@ -360,7 +359,6 @@ const TerminalContent: React.FC = () => {
       !selection.accountId
     ) return
 
-    let cancelled = false
     const source = {
       providerId: 'ctrader',
       connectionId: selection.connectionId,
@@ -395,25 +393,26 @@ const TerminalContent: React.FC = () => {
             '.',
           )
         }
-        if (cancelled) return
-        setTradeBotBrokerSpec((previous) => {
-          if (previous?.sourceKey === sourceKey && JSON.stringify(previous.symbolSpec) === JSON.stringify(resolved) && !previous.error) return previous
-          return { sourceKey, symbolSpec: resolved, error: null }
-        })
+        // Store results under their own key even if the selection changed while
+        // the request was in flight. The render path only reads the current key,
+        // so a late response cannot be applied to the wrong market/account.
+        setTradeBotBrokerSpecs((previous) => updateCTraderBrokerSpecCache(
+          previous,
+          sourceKey,
+          { symbolSpec: resolved, error: null },
+        ))
       } catch (error) {
-        if (cancelled) return
-        // Keep a valid specification already delivered by the quote stream.
-        // Never replace a valid spec with a mock/default fallback on failure.
+        // A late failure is cached only for its own source key, and the cache
+        // helper preserves any verified spec already available for that key.
         const message = error instanceof Error ? error.message : 'Unable to load cTrader instrument rules.'
-        setTradeBotBrokerSpec((previous) =>
-          previous?.sourceKey === sourceKey && previous.symbolSpec
-            ? previous
-            : { sourceKey, symbolSpec: null, error: message },
-        )
+        setTradeBotBrokerSpecs((previous) => updateCTraderBrokerSpecCache(
+          previous,
+          sourceKey,
+          { symbolSpec: null, error: message },
+        ))
       }
     }
     void resolveInstrument()
-    return () => { cancelled = true }
   }, [
     selectedSymbol,
     activeProviderSelection?.providerId,
@@ -1165,10 +1164,16 @@ const TerminalContent: React.FC = () => {
       }
       const tradeBotSpecKey = tradeBotMarketSourceKey(subscriptionSymbol, tradeBotSource)
       const resolvedTradeBotSpec = cTraderInstrumentToSymbolSpec(subscriptionSymbol, nextInstrument)
-      setTradeBotBrokerSpec((previous) => {
-        if (previous?.sourceKey === tradeBotSpecKey && JSON.stringify(previous.symbolSpec) === JSON.stringify(resolvedTradeBotSpec)) return previous
-        return { sourceKey: tradeBotSpecKey, symbolSpec: resolvedTradeBotSpec }
-      })
+      // The quote stream can emit quotes without a full instrument payload.
+      // Only a complete, verified specification may update the cache; a null
+      // stream payload must not erase the complete HTTP instrument result.
+      if (resolvedTradeBotSpec) {
+        setTradeBotBrokerSpecs((previous) => updateCTraderBrokerSpecCache(
+          previous,
+          tradeBotSpecKey,
+          { symbolSpec: resolvedTradeBotSpec, error: null },
+        ))
+      }
 
       // The quote stream belongs to the symbol/account; timeframe changes
       // only switch candle aggregation and must not interrupt Bid/Ask.
@@ -1617,12 +1622,9 @@ const TerminalContent: React.FC = () => {
     environment: activeProviderSelection?.environment ?? null,
   }
   const expectedTradeBotSpecKey = tradeBotMarketSourceKey(selectedSymbol, signalBotMarketSource)
-  const tradeBotSymbolSpec = tradeBotBrokerSpec?.sourceKey === expectedTradeBotSpecKey
-    ? tradeBotBrokerSpec.symbolSpec
-    : null
-  const tradeBotSymbolSpecError = tradeBotBrokerSpec?.sourceKey === expectedTradeBotSpecKey
-    ? tradeBotBrokerSpec.error ?? null
-    : null
+  const tradeBotBrokerSpec = tradeBotBrokerSpecs[expectedTradeBotSpecKey] ?? null
+  const tradeBotSymbolSpec = tradeBotBrokerSpec?.symbolSpec ?? null
+  const tradeBotSymbolSpecError = tradeBotBrokerSpec?.error ?? null
 
   const dockContent = {
     insights: <div className="space-y-3">
