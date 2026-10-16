@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { TIMEFRAMES, type OHLCV, type Timeframe } from '../../types'
 import { fetchCTraderHistoricalCandles } from '../../data/ctrader/CTraderLiveQuote'
 import { fetchDerivMultiTimeframeCandles } from '../../data/deriv/DerivPublicMarketFeed'
@@ -20,9 +20,15 @@ export interface SignalBotMarketDataState {
   error: string | null
 }
 
+export type SignalBotTimeframeProgressStatus = 'waiting' | 'loading' | 'ready' | 'failed'
+export type SignalBotTimeframeProgress = Record<Timeframe, SignalBotTimeframeProgressStatus>
+
 export interface SignalBotMarketDataHookState extends SignalBotMarketDataState {
-  /** Immediately starts a fresh scan cycle, still using the selected provider only. */
+  /** Immediately starts a fresh scan cycle, bypassing the shared Deriv history cache. */
   refreshNow: () => void
+  timeframeProgress: SignalBotTimeframeProgress
+  scanNumber: number
+  lastScanDataChanged: boolean | null
 }
 
 interface FetchResult {
@@ -58,9 +64,30 @@ export const signalBotFramesForSource = (
   requestedSourceKey: string,
 ): Partial<Record<Timeframe, OHLCV[]>> => framesState.sourceKey === requestedSourceKey ? framesState.frames : {}
 
+type ReportTimeframeProgress = (timeframe: Timeframe, status: SignalBotTimeframeProgressStatus) => void
+
+const createInitialTimeframeProgress = (): SignalBotTimeframeProgress =>
+  Object.fromEntries(TIMEFRAMES.map((timeframe) => [timeframe, 'waiting'])) as SignalBotTimeframeProgress
+
+export const signalBotFramesSignature = (frames: Partial<Record<Timeframe, readonly OHLCV[]>>): string =>
+  TIMEFRAMES.map((timeframe) => {
+    const candles = frames[timeframe] ?? []
+    const last = candles[candles.length - 1]
+    return [
+      timeframe,
+      candles.length,
+      last?.time ?? '',
+      last?.open ?? '',
+      last?.high ?? '',
+      last?.low ?? '',
+      last?.close ?? '',
+    ].join(':')
+  }).join('|')
+
 const loadCTraderFrames = async (
   symbol: string,
   source: SignalBotMarketSource,
+  reportProgress: ReportTimeframeProgress,
 ): Promise<FetchResult> => {
   if (!source.connectionId || !source.accountId || !source.environment) {
     throw new Error(signalBotMarketSourceError(source) ?? 'A complete cTrader account selection is required.')
@@ -81,6 +108,7 @@ const loadCTraderFrames = async (
     while (true) {
       const timeframe = queue[nextIndex++]
       if (!timeframe) return
+      reportProgress(timeframe, 'loading')
       try {
         const candles = await fetchCTraderHistoricalCandles({
           connectionId,
@@ -91,9 +119,11 @@ const loadCTraderFrames = async (
           count: HISTORY_COUNT,
         })
         if (candles.length) frames[timeframe] = candles
+        reportProgress(timeframe, candles.length >= 8 ? 'ready' : 'failed')
         if (candles.length < 8) errors.push(timeframe + ': fewer than 8 historical candles returned')
       } catch (error) {
         const reason = error instanceof Error ? error.message : 'history request failed'
+        reportProgress(timeframe, 'failed')
         errors.push(timeframe + ': ' + reason)
       }
     }
@@ -106,16 +136,42 @@ const loadCTraderFrames = async (
 const loadSignalBotFrames = async (
   symbol: string,
   source: SignalBotMarketSource,
+  forceFresh: boolean,
+  reportProgress: ReportTimeframeProgress,
 ): Promise<FetchResult> => {
   const sourceError = signalBotMarketSourceError(source)
   if (sourceError) throw new Error(sourceError)
 
-  if (source.providerId === 'ctrader') return loadCTraderFrames(symbol, source)
+  if (source.providerId === 'ctrader') return loadCTraderFrames(symbol, source, reportProgress)
   if (source.providerId === 'deriv') {
-    const frames = await fetchDerivMultiTimeframeCandles(symbol, TIMEFRAMES)
+    const sourceGroups: Record<'M1' | 'H1' | 'D1', Timeframe[]> = {
+      M1: ['M1', 'M5', 'M15', 'M30'],
+      H1: ['H1', 'H4'],
+      D1: ['D1', 'W1'],
+    }
+    const frames = await fetchDerivMultiTimeframeCandles(symbol, TIMEFRAMES, {
+      forceRefresh: forceFresh,
+      onSourceProgress: (sourceTimeframe, status) => {
+        const group = sourceGroups[sourceTimeframe]
+        for (const timeframe of group) {
+          const isAnchor = timeframe === sourceTimeframe
+          reportProgress(
+            timeframe,
+            status === 'loading' || (!isAnchor && status === 'ready')
+              ? 'loading'
+              : status === 'ready'
+                ? 'ready'
+                : 'failed',
+          )
+        }
+      },
+    })
     const errors = TIMEFRAMES
       .filter((timeframe) => (frames[timeframe]?.length ?? 0) < 8)
       .map((timeframe) => timeframe + ': insufficient historical candles')
+    for (const timeframe of TIMEFRAMES) {
+      reportProgress(timeframe, (frames[timeframe]?.length ?? 0) >= 8 ? 'ready' : 'failed')
+    }
     return { frames, errors }
   }
 
@@ -147,7 +203,12 @@ export const useSignalBotMarketData = (
 ): SignalBotMarketDataHookState => {
   const sourceKey = signalBotMarketSourceKey(symbol, source)
   const [state, setState] = useState<SignalBotMarketDataState>(() => emptyState(sourceKey))
+  const stateRef = useRef(state)
+  stateRef.current = state
   const [manualRefreshToken, setManualRefreshToken] = useState(0)
+  const [timeframeProgress, setTimeframeProgress] = useState<SignalBotTimeframeProgress>(createInitialTimeframeProgress)
+  const [scanNumber, setScanNumber] = useState(0)
+  const [lastScanDataChanged, setLastScanDataChanged] = useState<boolean | null>(null)
   const refreshNow = (): void => setManualRefreshToken((current) => current + 1)
 
   useEffect(() => {
@@ -158,12 +219,16 @@ export const useSignalBotMarketData = (
 
     if (sourceError) {
       setState(emptyState(sourceKey, 'unavailable', sourceError))
+      setTimeframeProgress(createInitialTimeframeProgress())
+      setLastScanDataChanged(null)
       return () => { stopped = true }
     }
 
-    const refresh = async (): Promise<void> => {
+    const refresh = async (forceFresh = false): Promise<void> => {
       if (stopped || inFlight) return
       inFlight = true
+      setTimeframeProgress(createInitialTimeframeProgress())
+      const previousFrames = stateRef.current.sourceKey === sourceKey ? stateRef.current.frames : {}
       setState((previous) => ({
         sourceKey,
         frames: previous.sourceKey === sourceKey ? previous.frames : {},
@@ -171,9 +236,13 @@ export const useSignalBotMarketData = (
         updatedAt: previous.sourceKey === sourceKey ? previous.updatedAt : null,
         error: null,
       }))
+      const reportProgress: ReportTimeframeProgress = (timeframe, status) => {
+        if (stopped) return
+        setTimeframeProgress((current) => ({ ...current, [timeframe]: status }))
+      }
 
       try {
-        const result = await loadSignalBotFrames(symbol, source as SignalBotMarketSource)
+        const result = await loadSignalBotFrames(symbol, source as SignalBotMarketSource, forceFresh, reportProgress)
         if (stopped) return
         const usableTimeframes = TIMEFRAMES.filter((timeframe) => (result.frames[timeframe]?.length ?? 0) >= 8).length
         const status: SignalBotMarketDataStatus = usableTimeframes === TIMEFRAMES.length
@@ -188,8 +257,14 @@ export const useSignalBotMarketData = (
           updatedAt: Date.now(),
           error: readableErrors(result.errors) ?? (status === 'error' ? 'No timeframe has enough candles to scan.' : null),
         })
+        const hadPreviousFrames = TIMEFRAMES.some((timeframe) => (previousFrames[timeframe]?.length ?? 0) > 0)
+        setLastScanDataChanged(hadPreviousFrames ? signalBotFramesSignature(previousFrames) !== signalBotFramesSignature(result.frames) : null)
+        setScanNumber((current) => current + 1)
       } catch (error) {
         if (stopped) return
+        setTimeframeProgress(Object.fromEntries(TIMEFRAMES.map((timeframe) => [timeframe, 'failed'])) as SignalBotTimeframeProgress)
+        setLastScanDataChanged(null)
+        setScanNumber((current) => current + 1)
         setState((previous) => {
           const oldFrames = previous.sourceKey === sourceKey ? previous.frames : {}
           const usable = TIMEFRAMES.some((timeframe) => (oldFrames[timeframe]?.length ?? 0) >= 8)
@@ -208,7 +283,7 @@ export const useSignalBotMarketData = (
       }
     }
 
-    void refresh()
+    void refresh(manualRefreshToken > 0)
     return () => {
       stopped = true
       if (timer !== null) window.clearTimeout(timer)
@@ -218,7 +293,13 @@ export const useSignalBotMarketData = (
   const matchingFrames = signalBotFramesForSource(state, sourceKey)
   if (state.sourceKey !== sourceKey) {
     const unavailableReason = signalBotMarketSourceError(source)
-    return { ...emptyState(sourceKey, unavailableReason ? 'unavailable' : 'loading', unavailableReason), refreshNow }
+    return {
+      ...emptyState(sourceKey, unavailableReason ? 'unavailable' : 'loading', unavailableReason),
+      refreshNow,
+      timeframeProgress,
+      scanNumber,
+      lastScanDataChanged,
+    }
   }
-  return { ...state, frames: matchingFrames, refreshNow }
+  return { ...state, frames: matchingFrames, refreshNow, timeframeProgress, scanNumber, lastScanDataChanged }
 }
