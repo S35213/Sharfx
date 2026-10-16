@@ -377,10 +377,28 @@ const TerminalContent: React.FC = () => {
           symbol: selectedSymbol,
         })
         const resolved = cTraderInstrumentToSymbolSpec(selectedSymbol, instrument)
+        if (!resolved) {
+          const invalidFields = [
+            instrument.tradable !== true ? 'instrument is not tradable' : null,
+            !(Number(instrument.contractSize) > 0) ? 'contract size' : null,
+            !(Number(instrument.pipSize) > 0) ? 'pip size' : null,
+            !(Number(instrument.quantityMin) > 0) ? 'minimum lot' : null,
+            !(Number(instrument.quantityMax) > 0) ? 'maximum lot' : null,
+            !(Number(instrument.quantityStep) > 0) ? 'lot step' : null,
+            !(Number(instrument.priceIncrement) > 0) ? 'price increment' : null,
+            Number(instrument.quantityMax) < Number(instrument.quantityMin) ? 'lot limits are inverted' : null,
+          ].filter((field): field is string => Boolean(field))
+          throw new Error(
+            'cTrader returned ' + String(instrument.symbol || selectedSymbol) +
+            ' but its instrument rules cannot be used for risk sizing' +
+            (invalidFields.length ? ': ' + invalidFields.join(', ') : ': symbol name or metadata did not match the selected market') +
+            '.',
+          )
+        }
         if (cancelled) return
         setTradeBotBrokerSpec((previous) => {
-          if (previous?.sourceKey === sourceKey && JSON.stringify(previous.symbolSpec) === JSON.stringify(resolved)) return previous
-          return { sourceKey, symbolSpec: resolved }
+          if (previous?.sourceKey === sourceKey && JSON.stringify(previous.symbolSpec) === JSON.stringify(resolved) && !previous.error) return previous
+          return { sourceKey, symbolSpec: resolved, error: null }
         })
       } catch (error) {
         if (cancelled) return
