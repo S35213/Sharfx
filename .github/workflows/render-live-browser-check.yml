@@ -1,0 +1,193 @@
+name: Render live browser check
+
+on:
+  push:
+    branches:
+      - qa/render-live-browser-main-pr-20261016
+    paths:
+      - .github/workflows/render-live-browser-check.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/render-live-browser-check.yml
+
+permissions:
+  contents: read
+
+jobs:
+  capture-live-render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out isolated QA branch
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Install Chromium automation
+        run: |
+          npm install --no-save --package-lock=false playwright
+          npx playwright install --with-deps chromium
+
+      - name: Capture the actual deployed Render page
+        env:
+          TARGET_URL: https://sharfx-deriv-render.onrender.com/
+        run: |
+          mkdir -p qa-results
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import { chromium } from 'playwright';
+
+          const targetUrl = process.env.TARGET_URL;
+          const report = {
+            targetUrl,
+            capturedAt: new Date().toISOString(),
+            note: 'This check visits the public deployed URL without signing in. It never places or changes trades.',
+            viewports: [],
+          };
+
+          const configurations = [
+            { name: 'desktop', viewport: { width: 1440, height: 1000 }, isMobile: false, hasTouch: false },
+            { name: 'mobile', viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true },
+          ];
+
+          const browser = await chromium.launch({ headless: true });
+          let hasFatalIssue = false;
+
+          try {
+            for (const config of configurations) {
+              const context = await browser.newContext({
+                viewport: config.viewport,
+                deviceScaleFactor: 1,
+                isMobile: config.isMobile,
+                hasTouch: config.hasTouch,
+              });
+              const page = await context.newPage();
+              const browserErrors = [];
+              const failedRequests = [];
+              const badResponses = [];
+              const pageErrors = [];
+
+              page.on('console', (message) => {
+                if (message.type() === 'error') {
+                  browserErrors.push({ type: 'console', text: message.text().slice(0, 1200) });
+                }
+              });
+              page.on('pageerror', (error) => {
+                pageErrors.push(String(error?.stack || error).slice(0, 2000));
+              });
+              page.on('requestfailed', (request) => {
+                failedRequests.push({
+                  url: request.url(),
+                  method: request.method(),
+                  error: request.failure()?.errorText ?? 'unknown request failure',
+                });
+              });
+              page.on('response', (response) => {
+                if (response.status() >= 400) {
+                  badResponses.push({
+                    status: response.status(),
+                    url: response.url(),
+                    resourceType: response.request().resourceType(),
+                  });
+                }
+              });
+
+              let navigationStatus = null;
+              let navigationError = null;
+              try {
+                const response = await page.goto(targetUrl, {
+                  waitUntil: 'domcontentloaded',
+                  timeout: 90000,
+                });
+                navigationStatus = response?.status() ?? null;
+                // Allow the client app to hydrate and render, without requiring WebSocket/network idle.
+                await page.waitForTimeout(9000);
+              } catch (error) {
+                navigationError = String(error?.stack || error).slice(0, 3000);
+              }
+
+              const title = await page.title().catch(() => '');
+              const finalUrl = page.url();
+              const bodyText = await page.locator('body').innerText({ timeout: 10000 }).catch(() => '');
+              const rootInfo = await page.locator('#root').evaluate((element) => ({
+                exists: true,
+                textLength: (element.innerText || '').length,
+                width: Math.round(element.getBoundingClientRect().width),
+                height: Math.round(element.getBoundingClientRect().height),
+              })).catch(() => ({ exists: false, textLength: 0, width: 0, height: 0 }));
+
+              await page.screenshot({
+                path: `qa-results/${config.name}-viewport.png`,
+                fullPage: false,
+                animations: 'disabled',
+                timeout: 30000,
+              }).catch((error) => {
+                browserErrors.push({ type: 'screenshot', text: String(error).slice(0, 1200) });
+              });
+              await page.screenshot({
+                path: `qa-results/${config.name}-fullpage.png`,
+                fullPage: true,
+                animations: 'disabled',
+                timeout: 30000,
+              }).catch((error) => {
+                browserErrors.push({ type: 'fullpage-screenshot', text: String(error).slice(0, 1200) });
+              });
+
+              report.viewports.push({
+                name: config.name,
+                viewport: config.viewport,
+                navigationStatus,
+                navigationError,
+                finalUrl,
+                title,
+                rootInfo,
+                bodyPreview: bodyText.slice(0, 4000),
+                browserErrors: browserErrors.slice(0, 80),
+                pageErrors: pageErrors.slice(0, 40),
+                failedRequests: failedRequests.slice(0, 80),
+                badResponses: badResponses.slice(0, 80),
+              });
+
+              if (navigationError || navigationStatus === null || navigationStatus >= 500 || !rootInfo.exists || pageErrors.length > 0) {
+                hasFatalIssue = true;
+              }
+              await context.close();
+            }
+          } finally {
+            await browser.close();
+          }
+
+          fs.writeFileSync('qa-results/report.json', JSON.stringify(report, null, 2));
+          fs.writeFileSync(
+            'qa-results/report.txt',
+            report.viewports.map((view) => [
+              `=== ${view.name.toUpperCase()} ===`,
+              `Navigation status: ${view.navigationStatus}`,
+              `Final URL: ${view.finalUrl}`,
+              `Title: ${view.title}`,
+              `Root: ${JSON.stringify(view.rootInfo)}`,
+              `Page errors: ${view.pageErrors.length}`,
+              `Console errors: ${view.browserErrors.length}`,
+              `Failed requests: ${view.failedRequests.length}`,
+              `HTTP responses >= 400: ${view.badResponses.length}`,
+              `Body preview: ${view.bodyPreview.replace(/\s+/g, ' ').slice(0, 1000)}`,
+            ].join('\n')).join('\n\n'),
+          );
+
+          console.log(fs.readFileSync('qa-results/report.txt', 'utf8'));
+          if (hasFatalIssue) process.exitCode = 1;
+          NODE
+
+      - name: Upload actual Render screenshots and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: shafx-render-live-browser-check
+          path: qa-results/
+          if-no-files-found: warn
+          retention-days: 3
