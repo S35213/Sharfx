@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Activity, CircleStop, Play, ShieldCheck } from 'lucide-react'
-import type { SymbolSpec, Timeframe } from '../../types'
+import type { SymbolSpec, Timeframe, TradeOrder } from '../../types'
 import type { SetupCandidate } from '../../engine/setup/types'
 import { evaluateTradeBotDecision } from '../../engine/bot/tradeBotDecision'
 import { tradeBotMarketSourceKey, useTradeBotMarketData, type TradeBotMarketSource } from '../../engine/bot/useTradeBotMarketData'
@@ -8,6 +8,7 @@ import { appendTradeBotDecisionTrace, createTradeBotDecisionTraceEntry, type Tra
 import { buildTradeBotDiagnosticSnapshot } from '../../engine/bot/tradeBotDiagnostics'
 import { advanceTradeBotShadowRecords, appendTradeBotShadowRecord, createTradeBotShadowRecord, type TradeBotShadowRecord } from '../../engine/bot/tradeBotShadowEvaluation'
 import { runTradeBotHistoricalReplay, type TradeBotHistoricalReplayResult } from '../../engine/bot/tradeBotHistoricalReplay'
+import { executeTradeBotDemoOrder } from '../../engine/bot/tradeBotExecution'
 import { formatCurrency, formatPrice } from '../../lib/format'
 
 interface Props {
@@ -18,13 +19,22 @@ interface Props {
   accountCurrency: string
   symbolSpec: SymbolSpec | null
   symbolSpecError?: string | null
+  accountFreeMargin: number
+  onTradeOpened: (order: TradeOrder) => void
   onReviewSetup?: (setup?: SetupCandidate | null) => void
 }
 
 export const TradeBotPanel: React.FC<Props> = ({
-  symbol, timeframe, marketSource, accountBalance, accountCurrency, symbolSpec, symbolSpecError, onReviewSetup,
+  symbol, timeframe, marketSource, accountBalance, accountCurrency, symbolSpec, symbolSpecError,
+  accountFreeMargin, onTradeOpened, onReviewSetup,
 }) => {
   const [running, setRunning] = useState(false)
+  const [executionPending, setExecutionPending] = useState(false)
+  const [cycleMessage, setCycleMessage] = useState('Stopped. Press Start demo bot to begin monitoring the selected cTrader practice account.')
+  const runStartedAtRef = useRef(0)
+  const runningScopeKeyRef = useRef<string | null>(null)
+  const attemptedSignalRef = useRef<{ key: string; message: string } | null>(null)
+  const executionInFlightRef = useRef(false)
   const [decisionTrace, setDecisionTrace] = useState<TradeBotDecisionTraceEntry[]>([])
   const [shadowRecords, setShadowRecords] = useState<TradeBotShadowRecord[]>([])
   const [historicalReplay, setHistoricalReplay] = useState<TradeBotHistoricalReplayResult | null>(null)
@@ -132,7 +142,7 @@ export const TradeBotPanel: React.FC<Props> = ({
                 ? 'cTrader instrument lookup failed: ' + symbolSpecError
                 : 'Waiting for matching cTrader instrument rules. The bot will stay blocked until the broker supplies valid contract, pip and lot constraints.')
               : null
-  const canStart = startBlockReason === null
+  const canStart = startBlockReason === null && market.status !== 'unavailable'
   const statusLabel = !running
     ? (startBlockReason ? 'BLOCKED' : 'STOPPED')
     : !symbolSpec
@@ -154,9 +164,139 @@ export const TradeBotPanel: React.FC<Props> = ({
   const updatedAt = market.updatedAt ? new Date(market.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'
 
   const start = (): void => {
+    const currentScope = traceScopeKey
+    runningScopeKeyRef.current = currentScope
+    runStartedAtRef.current = Date.now()
+    setCycleMessage('Started. Waiting for a fresh completed market-history cycle before making any decision.')
     setRunning(true)
   }
-  const stop = (): void => setRunning(false)
+  const stop = (): void => {
+    runningScopeKeyRef.current = null
+    setRunning(false)
+    setExecutionPending(false)
+    setCycleMessage('Stopped by you. No further demo entries will be attempted.')
+  }
+
+  // A running session is pinned to the exact market/timeframe/account the user
+  // started. Changing any of these stops it rather than moving an active bot
+  // silently onto a new market.
+  useEffect(() => {
+    if (!running || !runningScopeKeyRef.current || runningScopeKeyRef.current === traceScopeKey) return
+    runningScopeKeyRef.current = null
+    setRunning(false)
+    setExecutionPending(false)
+    setCycleMessage('Bot stopped because the selected market, timeframe or account changed. Press Start demo bot to start a new session.')
+  }, [running, traceScopeKey])
+
+  const executionSource = useMemo<TradeBotMarketSource | null>(() => marketSource ? ({
+    providerId: marketSource.providerId,
+    connectionId: marketSource.connectionId,
+    accountId: marketSource.accountId,
+    environment: marketSource.environment,
+  }) : null, [
+    marketSource?.providerId,
+    marketSource?.connectionId,
+    marketSource?.accountId,
+    marketSource?.environment,
+  ])
+
+  // "Run" means active demo-only monitoring and guarded automatic entries. We
+  // only act on a fresh cycle after the user started this session, and only
+  // once per signal candle. A failed preflight is surfaced visibly and is not
+  // retried on the same candle, preventing rapid duplicate orders.
+  useEffect(() => {
+    if (!running) return
+    if (runningScopeKeyRef.current !== traceScopeKey) return
+    if (market.status === 'loading') {
+      setCycleMessage('Fetching a fresh cTrader history snapshot for this monitoring cycle…')
+      return
+    }
+    if (market.status === 'unavailable' || market.status === 'error' || !market.updatedAt) {
+      setCycleMessage('Cycle ' + market.cycleNumber + ': no valid market update. ' +
+        (market.error || 'Waiting for cTrader practice history. No order was sent.'))
+      return
+    }
+    if (market.updatedAt < runStartedAtRef.current) {
+      setCycleMessage('Waiting for the first market-history cycle started by this Run session. No order was sent.')
+      return
+    }
+    if (market.status !== 'ready' && market.status !== 'partial') {
+      setCycleMessage('Cycle ' + market.cycleNumber + ': market history is not ready. No order was sent.')
+      return
+    }
+    if (decision.status !== 'READY' || !decision.setup) {
+      setCycleMessage(
+        'Cycle ' + market.cycleNumber + ': monitoring ' + timeframe + '; no entry qualified. ' +
+        decision.reason + (market.lastDataChanged === false ? ' Candle history was unchanged this cycle.' : ''),
+      )
+      return
+    }
+    if (diagnostics.summary !== 'READY_FOR_REVIEW') {
+      setCycleMessage('Cycle ' + market.cycleNumber + ': a setup candidate exists, but one or more source, freshness or risk gates are not clear. No order was sent.')
+      return
+    }
+    const lastCandle = market.frames[timeframe]?.[market.frames[timeframe]!.length - 1]
+    if (!lastCandle || !Number.isFinite(lastCandle.time) || lastCandle.time <= 0) {
+      setCycleMessage('Cycle ' + market.cycleNumber + ': signal candle timestamp is missing. No order was sent.')
+      return
+    }
+    const signalKey = [
+      traceScopeKey,
+      String(lastCandle.time),
+      decision.setup.direction,
+    ].join('|')
+    if (attemptedSignalRef.current?.key === signalKey) {
+      setCycleMessage(attemptedSignalRef.current.message)
+      return
+    }
+    if (executionInFlightRef.current) return
+
+    executionInFlightRef.current = true
+    setExecutionPending(true)
+    const preflightMessage = 'Cycle ' + market.cycleNumber + ': setup qualified. Checking a fresh broker quote, risk sizing, current exposure and free margin before submitting one cTrader DEMO order.'
+    attemptedSignalRef.current = { key: signalKey, message: preflightMessage }
+    setCycleMessage(preflightMessage)
+
+    void executeTradeBotDemoOrder({
+      source: executionSource,
+      symbol,
+      timeframe,
+      signalCandleTime: Number(lastCandle.time),
+      setup: decision.setup,
+      accountBalance,
+      accountFreeMargin,
+      accountCurrency,
+      symbolSpec,
+      shouldContinue: () => runningScopeKeyRef.current === traceScopeKey,
+    }).then((result) => {
+      onTradeOpened({ ...result.trade, chartTimeframe: timeframe })
+      const message = result.protectionConfirmed
+        ? 'DEMO ORDER FILLED: ' + result.trade.type + ' ' + symbol + ' · ' +
+          result.trade.lotSize + ' lots · estimated stop risk ' +
+          formatCurrency(result.trade.riskAmount ?? 0, accountCurrency) +
+          '. cTrader confirmed the broker-side stop loss and take profit.'
+        : 'DEMO ORDER FILLED, BUT BROKER PROTECTION IS NOT CONFIRMED. The bot has stopped. Check this position in cTrader now.'
+      attemptedSignalRef.current = { key: signalKey, message }
+      setCycleMessage(message)
+      if (!result.protectionConfirmed) {
+        runningScopeKeyRef.current = null
+        setRunning(false)
+      }
+    }).catch((error: unknown) => {
+      const reason = error instanceof Error ? error.message : 'Unknown cTrader demo order error.'
+      const message = 'Cycle ' + market.cycleNumber + ': no demo order sent — ' + reason
+      attemptedSignalRef.current = { key: signalKey, message }
+      setCycleMessage(message)
+    }).finally(() => {
+      executionInFlightRef.current = false
+      setExecutionPending(false)
+    })
+  }, [
+    running, traceScopeKey, market.status, market.updatedAt, market.cycleNumber,
+    market.error, market.lastDataChanged, market.frames, timeframe, decision,
+    diagnostics.summary, executionSource, symbol, accountBalance, accountFreeMargin,
+    accountCurrency, symbolSpec, onTradeOpened,
+  ])
   const runHistoricalReplay = (): void => {
     if (!symbolSpec || !market.frames[timeframe] || market.frames[timeframe]!.length < 9) return
     const result = runTradeBotHistoricalReplay({
@@ -230,10 +370,35 @@ export const TradeBotPanel: React.FC<Props> = ({
         </div>
       </div>
 
+      <section className="rounded-xl border border-shafx-border bg-shafx-bg p-3" aria-live="polite" role="status">
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-[9px] font-semibold uppercase tracking-[0.13em] text-shafx-textMuted">Bot activity</div>
+          <span className="font-mono text-[8px] text-shafx-textMuted">{running ? 'CYCLE ' + String(market.cycleNumber) : 'IDLE'}</span>
+        </div>
+        <div className="mt-2 flex items-center gap-2">
+          {running && (market.status === 'loading' || executionPending)
+            ? <Activity className="h-3.5 w-3.5 shrink-0 animate-pulse text-shafx-accent" />
+            : <span className={'h-2 w-2 shrink-0 rounded-full ' + (running ? decision.status === 'READY' ? 'bg-shafx-success' : 'bg-shafx-accent' : 'bg-shafx-border')} />}
+          <p className="text-[9px] leading-4 text-shafx-text">{cycleMessage}</p>
+        </div>
+        {running && market.cycleNumber > 0 && (
+          <div className="mt-2 text-[8px] leading-4 text-shafx-textMuted">
+            {market.lastDataChanged === true
+              ? 'New candle snapshot received on the latest cycle.'
+              : market.lastDataChanged === false
+                ? 'The latest response contained the same candles; rules were still re-evaluated.'
+                : 'Waiting for the next candle snapshot comparison.'}
+            {market.updatedAt ? ' Last refresh ' + updatedAt + '.' : ''}
+          </div>
+        )}
+      </section>
+
       <details className="rounded-xl border border-shafx-border bg-shafx-bg/70 p-3">
         <summary className="cursor-pointer list-none flex items-center justify-between gap-2 text-[9px] font-semibold uppercase tracking-[0.13em]">
           <span>Decision diagnostics</span>
-          <span className={'font-mono ' + diagnosticsTone}>{diagnostics.summary.replace(/_/g, ' ')}</span>
+          <span className={'font-mono ' + diagnosticsTone}>
+            {diagnostics.summary === 'READY_FOR_REVIEW' && running ? 'SETUP READY · CHECKING BROKER' : diagnostics.summary.replace(/_/g, ' ')}
+          </span>
         </summary>
         <div className="mt-3 space-y-3 text-[9px]">
           <div className="rounded-lg border border-shafx-border bg-shafx-bg p-3">
@@ -285,7 +450,7 @@ export const TradeBotPanel: React.FC<Props> = ({
               <span className="font-mono text-[8px] text-shafx-textMuted">{visibleDecisionTrace.length} / 6 · memory only</span>
             </div>
             {visibleDecisionTrace.length === 0 ? (
-              <p className="mt-2 leading-4 text-shafx-textMuted">Start analysis to record successful refreshes for this selected account, market and timeframe. The trace clears on page reload and stores no credentials.</p>
+              <p className="mt-2 leading-4 text-shafx-textMuted">Start demo bot to record real monitoring cycles for this selected account, market and timeframe. The trace clears on page reload and stores no credentials.</p>
             ) : (
               <div className="mt-2 space-y-2">
                 {visibleDecisionTrace.map((entry) => (
@@ -354,7 +519,7 @@ export const TradeBotPanel: React.FC<Props> = ({
       </details>
 
       <div className="rounded-lg border border-shafx-warning/25 bg-shafx-warning/[0.05] px-3 py-2 text-[9px] leading-4 text-shafx-textMuted">
-        Execution is intentionally gated in this stage. A READY decision is not an order; the manual ticket must refresh the broker quote and re-check risk before any practice trade.
+        Starting this bot enables guarded automatic entries on the selected cTrader PRACTICE account only. Live accounts remain blocked. Every entry must pass fresh-quote, exposure, risk, protection and free-margin checks.
       </div>
 
       {!running && startBlockReason && (
@@ -366,7 +531,7 @@ export const TradeBotPanel: React.FC<Props> = ({
       <div className="flex flex-wrap gap-2">
         {!running ? (
           <button type="button" onClick={start} disabled={!canStart} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-shafx-accent px-3 text-[9px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">
-            <Play className="h-3.5 w-3.5" /> Start analysis
+            <Play className="h-3.5 w-3.5" /> Start demo bot
           </button>
         ) : (
           <button type="button" onClick={stop} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-shafx-danger/35 bg-shafx-danger/10 px-3 text-[9px] font-bold text-shafx-danger">
@@ -382,7 +547,7 @@ export const TradeBotPanel: React.FC<Props> = ({
           Run historical replay
         </button>
       </div>
-      <p className="text-[8px] leading-4 text-shafx-textMuted">Refresh target 15 seconds • last update {updatedAt} • no auto-start • no automatic orders</p>
+      <p className="text-[8px] leading-4 text-shafx-textMuted">Monitoring cycle every 15 seconds • last update {updatedAt} • auto-entry only while you keep this demo bot running</p>
     </section>
   )
 }
