@@ -29,8 +29,10 @@ export const SignalDeskPanel: React.FC<Props> = ({ symbol, timeframe, marketSour
   const lastUpdated = marketData.updatedAt === null
     ? '—'
     : new Date(marketData.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-  const statusLabel = marketData.status === 'ready'
-    ? 'DATA READY'
+  const statusLabel = marketData.status === 'idle'
+    ? 'READY TO SCAN'
+    : marketData.status === 'ready'
+      ? 'DATA READY'
     : marketData.status === 'partial'
       ? 'PARTIAL DATA'
       : marketData.status === 'loading'
@@ -67,7 +69,7 @@ export const SignalDeskPanel: React.FC<Props> = ({ symbol, timeframe, marketSour
         <div className="rounded-xl border border-shafx-border bg-shafx-bg p-3">
           <span className="block text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted">Latest candle close</span>
           <strong className="mt-1 block font-mono text-sm">{scannerPrice > 0 ? scannerPrice.toFixed(symbol.includes('JPY') ? 3 : 5) : '—'}</strong>
-          <span className="mt-0.5 block text-[8px] text-shafx-textMuted">Last scan finished {lastUpdated}</span>
+          <span className="mt-0.5 block text-[8px] text-shafx-textMuted">{marketData.updatedAt === null ? 'Not scanned yet' : 'Last scan finished ' + lastUpdated}</span>
         </div>
       </div>
 
@@ -113,7 +115,9 @@ export const SignalDeskPanel: React.FC<Props> = ({ symbol, timeframe, marketSour
                 ? 'Choose a supported data source/account before scanning.'
                 : marketData.status === 'error'
                   ? 'Scan failed. Read the provider error above, then retry.'
-                  : marketData.lastScanDataChanged === false
+                  : marketData.status === 'idle'
+                    ? 'Idle by design. The bot only fetches history and analyses signals after you press Scan.'
+                    : marketData.lastScanDataChanged === false
                     ? 'Scan #' + marketData.scanNumber + ' completed. Candle data was unchanged, so the same qualified signals remain; the scanner does not randomize results.'
                     : marketData.lastScanDataChanged === true
                       ? 'Scan #' + marketData.scanNumber + ' completed with changed candle data; signals were recalculated from the new snapshot.'
@@ -138,9 +142,11 @@ export const SignalDeskPanel: React.FC<Props> = ({ symbol, timeframe, marketSour
           ))}
           {marketData.status !== 'loading' && !radar.opportunities.length && (
             <div className="rounded-lg border border-shafx-border bg-shafx-bg px-2.5 py-2 text-[8px] text-shafx-textMuted">
-              {marketData.status === 'unavailable'
-                ? 'WAIT — a supported provider/account selection is required.'
-                : marketData.status === 'error'
+              {marketData.status === 'idle'
+                ? 'WAIT — no scan is running. Press Scan when you are ready.'
+                : marketData.status === 'unavailable'
+                  ? 'WAIT — a supported provider/account selection is required.'
+                  : marketData.status === 'error'
                   ? 'WAIT — no reliable timeframe history is available. No signal has been invented.'
                   : 'WAIT — no qualified setup across the available timeframes.'}
             </div>
@@ -174,7 +180,7 @@ export const SignalDeskPanel: React.FC<Props> = ({ symbol, timeframe, marketSour
 
       <div className="flex items-start gap-2 rounded-xl border border-shafx-border bg-shafx-bg/70 p-3">
         <RefreshCw className="mt-0.5 h-3.5 w-3.5 shrink-0 text-shafx-textMuted" />
-        <p className="text-[8px] leading-4 text-shafx-textMuted">Read-only scanner • source: {sourceLabel(marketSource)} • automatic background refresh target 15 seconds. Each scan evaluates real returned candles; scores are relative signal-strength scores, not win probabilities.</p>
+        <p className="text-[8px] leading-4 text-shafx-textMuted">Manual-only scanner • source: {sourceLabel(marketSource)} • no automatic scans or background refresh. Each click runs one fresh scan of all 8 timeframes; scores are relative signal-strength scores, not win probabilities.</p>
       </div>
 
       <button
