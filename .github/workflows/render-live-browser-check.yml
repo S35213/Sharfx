@@ -152,10 +152,9 @@ jobs:
                 };
                 if (!report.authentication.signedIn) throw new Error('QA browser did not reach the signed-in workspace. See authentication diagnostics; credentials are not printed.');
 
-                await page.screenshot({ path: `qa-results/${config.name}-workspace.png`, fullPage: true, animations: 'disabled', timeout: 30000 });
 
                 // Actively test the real chart controls before navigating to Bots.
-                // Store observed states and network outcomes after each interaction; screenshots are supporting evidence only.
+                // Store observed state and network outcomes after each interaction.
                 const interactionReport = {
                   startingUrl: page.url(),
                   initialSymbol: null,
@@ -238,12 +237,6 @@ jobs:
                 }
 
                 // Capture the actual UI after all timeframe changes, then open Bots.
-                await page.screenshot({
-                  path: `qa-results/${config.name}-after-market-timeframe-interactions.png`,
-                  fullPage: true,
-                  animations: 'disabled',
-                  timeout: 30000,
-                }).catch(() => {});
                 // Open the actual Bot workspace using the real navigation controls:
                 // desktop's workspace rail and mobile's fixed bottom navigation both label it "Bots".
                 const botsNav = config.isMobile
@@ -277,7 +270,22 @@ jobs:
                       scanningTimeframes: (bodyDuringScan.match(/\b(?:M1|M5|M15|M30|H1|H4|D1|W1)\s+SCAN\b/g) || []),
                       loadingMessage: /Scanning M1, M5, M15, M30, H1, H4, D1 and W1/i.test(bodyDuringScan),
                     };
-                    await page.waitForTimeout(18000);
+                    interactionReport.signalScan.progressSamples = [];
+                    let elapsedAfterClick = 0;
+                    while (elapsedAfterClick < 60000 && await scanButton.isDisabled().catch(() => false)) {
+                      await page.waitForTimeout(3000);
+                      elapsedAfterClick += 3000;
+                      const progressBody = await page.locator('body').innerText().catch(() => '');
+                      interactionReport.signalScan.progressSamples.push({
+                        elapsedMs: elapsedAfterClick,
+                        buttonText: await scanButton.innerText().catch(() => ''),
+                        ready: (progressBody.match(/\\b(?:M1|M5|M15|M30|H1|H4|D1|W1)\\s+OK\\b/g) || []).length,
+                        scanning: (progressBody.match(/\\b(?:M1|M5|M15|M30|H1|H4|D1|W1)\\s+SCAN\\b/g) || []).length,
+                        waiting: (progressBody.match(/\\b(?:M1|M5|M15|M30|H1|H4|D1|W1)\\s+WAIT\\b/g) || []).length,
+                      });
+                    }
+                    interactionReport.signalScan.waitedForCompletionMs = elapsedAfterClick;
+                    interactionReport.signalScan.completedWithinTimeout = !(await scanButton.isDisabled().catch(() => true));
                     const bodyAfterScan = await page.locator('body').innerText().catch(() => '');
                     interactionReport.signalScan.buttonTextAfter = await scanButton.innerText().catch(() => '');
                     interactionReport.signalScan.visibleAfterScan = {
@@ -306,12 +314,6 @@ jobs:
                   visibleHeadings: visibleHeadings.slice(-40),
                   visibleText: botWorkspaceText.slice(-10000),
                 };
-                await page.screenshot({
-                  path: `qa-results/${config.name}-bot-workspace.png`,
-                  fullPage: true,
-                  animations: 'disabled',
-                  timeout: 30000,
-                }).catch(() => {});
               } catch (error) {
                 navigationError = String(error?.stack || error).slice(0, 3000);
               }
@@ -325,23 +327,6 @@ jobs:
                 width: Math.round(element.getBoundingClientRect().width),
                 height: Math.round(element.getBoundingClientRect().height),
               })).catch(() => ({ exists: false, textLength: 0, width: 0, height: 0 }));
-
-              await page.screenshot({
-                path: `qa-results/${config.name}-viewport.png`,
-                fullPage: false,
-                animations: 'disabled',
-                timeout: 30000,
-              }).catch((error) => {
-                browserErrors.push({ type: 'screenshot', text: String(error).slice(0, 1200) });
-              });
-              await page.screenshot({
-                path: `qa-results/${config.name}-fullpage.png`,
-                fullPage: true,
-                animations: 'disabled',
-                timeout: 30000,
-              }).catch((error) => {
-                browserErrors.push({ type: 'fullpage-screenshot', text: String(error).slice(0, 1200) });
-              });
 
               report.viewports.push({
                 name: config.name,
@@ -391,10 +376,12 @@ jobs:
           );
 
           console.log(fs.readFileSync('qa-results/report.txt', 'utf8'));
+          console.log('=== INTERACTIVE ACTION RESULTS ===');
+          console.log(JSON.stringify({ interactions: report.interactions ?? {}, desktopBots: report.desktop_bots_workspace ?? null, mobileBots: report.mobile_bots_workspace ?? null }, null, 2));
           if (hasFatalIssue) process.exitCode = 1;
           NODE
 
-      - name: Upload actual Render screenshots and diagnostics
+      - name: Upload live interaction diagnostics
         if: always()
         uses: actions/upload-artifact@v6
         with:
