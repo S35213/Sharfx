@@ -149,7 +149,7 @@ describe('Trade Bot cTrader demo execution', () => {
     const wideSetup = { ...setup, stopLoss: 1.09, takeProfit: 1.1201 }
     const post = createPost()
     await expect(executeTradeBotDemoOrder({ ...input(), setup: wideSetup, post })).rejects.toThrow(/exceed the risk ceiling/i)
-    expect(vi.mocked(post).mock.calls.map(([body]) => body.action)).toEqual(['quote', 'reconcile'])
+    expect(vi.mocked(post).mock.calls.map(([body]) => body.action)).toEqual(['quote', 'account'])
   })
 
   it('blocks orders when the broker margin exceeds free margin', async () => {
