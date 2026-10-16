@@ -138,13 +138,11 @@ export const SignalDeskPanel: React.FC<Props> = ({ symbol, timeframe, marketSour
           ))}
           {marketData.status !== 'loading' && !radar.opportunities.length && (
             <div className="rounded-lg border border-shafx-border bg-shafx-bg px-2.5 py-2 text-[8px] text-shafx-textMuted">
-              {marketData.status === 'loading'
-                ? 'WAIT — loading this provider’s timeframe histories.'
-                : marketData.status === 'unavailable'
-                  ? 'WAIT — a supported provider/account selection is required.'
-                  : marketData.status === 'error'
-                    ? 'WAIT — no reliable timeframe history is available. No signal has been invented.'
-                    : 'WAIT — no qualified setup across the available timeframes.'}
+              {marketData.status === 'unavailable'
+                ? 'WAIT — a supported provider/account selection is required.'
+                : marketData.status === 'error'
+                  ? 'WAIT — no reliable timeframe history is available. No signal has been invented.'
+                  : 'WAIT — no qualified setup across the available timeframes.'}
             </div>
           )}
         </div>
