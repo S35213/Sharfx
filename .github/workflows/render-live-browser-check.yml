@@ -557,12 +557,3 @@ jobs:
           console.log(JSON.stringify({ interactions: report.interactions ?? {}, desktopBots: report.desktop_bots_workspace ?? null, mobileBots: report.mobile_bots_workspace ?? null }, null, 2));
           if (hasFatalIssue) process.exitCode = 1;
           NODE
-
-      - name: Upload live interaction diagnostics
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: shafx-render-live-browser-check
-          path: qa-results/
-          if-no-files-found: warn
-          retention-days: 3
