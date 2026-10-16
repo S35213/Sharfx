@@ -91,6 +91,7 @@ export interface ProviderPosition {
   takeProfit?: number | null
   unrealizedPL?: number
   currency?: string
+  metadata?: Record<string, unknown>
 }
 
 export interface ProviderOrderRequest {

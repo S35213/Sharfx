@@ -116,7 +116,7 @@
 - [x] OANDA — implemented account/market-data adapter with server-side personal-token storage and multi-account discovery.
 - [ ] Interactive Brokers — concrete adapter implementation; provider-specific session/Gateway requirements remain.
 - [~] Binance — read-only Spot account/market-data adapter implemented; provider sandbox credentials have not yet been exercised.
-- [ ] cTrader Open API — adapter implementation.
+- [~] cTrader Open API — server OAuth/Open API gateway, normalized adapter, account discovery, quotes, margin, demo order/modify/close routes and SHAFX CFD ticket are implemented; real practice-account execution is not yet exercised.
 - [ ] MT4/MT5 bridge/gateway adapter — architecture only; broker terminal bridge still required.
 - [ ] Additional broker-specific adapters as needed.
 
@@ -156,8 +156,8 @@
 - [x] Client-order correlation/idempotency field exists.
 - [x] Live execution remains fail-closed.
 - [x] Server-side execution gateway exists and is fail-closed for external providers.
-- [ ] Provider-specific order adapters.
-- [ ] End-to-end demo/paper execution validation.
+- [~] Provider-specific order adapters — cTrader demo adapter is implemented behind a live-execution release gate; end-to-end certification remains pending.
+- [~] End-to-end demo/paper execution validation — deterministic CFD risk tests and Render build pass; real cTrader practice execution still requires an approved cTrader app and account.
 - [ ] Live execution certification/release gate.
 
 ## 9. Funding
@@ -205,16 +205,272 @@
 - [ ] Multiple Deriv accounts pass simultaneously.
 - [ ] Second provider passes a full sandbox/paper connection flow (code + CI verified; real OANDA practice credentials have not yet been exercised in production).
 - [x] Provider-agnostic concurrent runtime manager is tested with isolated connection/account streams; real multi-provider external credentials remain untested.
-- [ ] Final security/runtime diagnostic passes.
+- [~] Final security/runtime diagnostic passes — secrets remain server-side and Render starts cleanly; browser/external HTTP probing is unavailable from this execution environment, so visual runtime QA remains outstanding.
 
-## Current checkpoint
+## Experimental branch checkpoint — 2026-10-06
 
-**Last verified:** 2026-09-22
+**Current branch:** `test/rebuild-deriv-native-manual-20260930`
 
-**Current main:** `326bcb0585bfdf6403df09bd097da4592882c299` (runtime-warning cleanup, dependency upgrade, WHATWG request-query changes, and simplified Vercel install step; latest production deployment is READY).
+**Destination:** **SHAFX Manual CFD via Deriv cTrader** first. Deriv Multiplier is legacy/secondary. Bot changes are frozen until manual CFD passes its gates.
 
-**Current branch for continuation:** `main`
+**Latest verified deployment:** Render service `sharfx-deriv-render` is live on commit `a5b7577f657799e910371a4d1fe4ffe1db717a39`. The Render build passed `tsc -b && vite build`.
 
-**Current state:** Provider foundation, Supabase registry, Deriv, OANDA, generic connector/onboarding primitives, Binance read-only pack, concurrent account streaming/cache/retry, health/telemetry primitives, funding dispatcher, FIX/custom gateway boundaries, synchronized simulator realtime chart feed, bot-instance stabilization, and the current dependency/runtime cleanup are present on `main`. Remaining hard gates are real external provider credentials/sandbox tests, concrete IBKR/cTrader/MT4/MT5 provider packs, production telemetry/alert delivery, and live provider execution certification.
+**Current blockers:** cTrader Open API client credentials/redirect URI and a real Deriv cTrader practice account have not yet been exercised through SHAFX. Live cTrader execution remains explicitly disabled. Direct browser-style HTTP probing was unavailable from this execution environment, so do not claim visual runtime QA is complete.
 
-**Handoff rule:** Never replace this tree with a new checklist. Update this file in the same branch/commit chain as work progresses. Only mark an item `[x]` after verification.
+**Do not merge to `main`.** Promotion requires every handoff gate in `docs/SHAFX_BRANCH_HANDOFF.md` and explicit user approval.
+
+**Persistence rule:** update this tree and `docs/SHAFX_BRANCH_HANDOFF.md` whenever the direction changes, a build fails, a blocker is found, or a gate passes. Future agents must continue from the latest checkpoint rather than restarting the project.
+
+
+
+## Experimental chart/ticket checkpoint — 2026-10-12
+
+**Current branch:** `test/rebuild-deriv-native-manual-20260930`  
+**Target service:** Render `sharfx-deriv-render`, ID `srv-dav8hrt9fdbs73d690s0`  
+**Current head:** `58ee1c945f6c537ea13caa2d62bfe3de63fe65f9`  
+**Current deployment:** `dep-db6a93gae00c73aejea0` — **LIVE** at https://sharfx-deriv-render.onrender.com
+
+- [x] The diagnostic component stack for the intermittent `insertBefore` error pointed to the left Watchlist button/span during live quote rerenders.
+- [x] Watchlist quote direction/percentage now renders as a single stable text child; TinyFish watched the build with this change for ~130 seconds, observed live Watchlist updates and an M5 → H1 → M5 roundtrip, and did not reproduce the error during that window. Continue monitoring; this is not an absolute guarantee.
+- [x] Chart time-axis and price-line label hosts use stable keyed React children instead of manual insert/remove calls.
+- [x] The countdown calculation is isolated in `src/components/chart/candleCountdown.ts`, driven by a 1-second UTC clock; 4 new helper tests passed.
+- [x] Latest Render build, GitHub build, static-server check and lint pass.
+- [!] Last post-Watchlist TinyFish test found the countdown frozen at the same display for six sequential readings. The UTC-clock fix is now deployed, but it has **not** been visually verified on the newest deployment because TinyFish credit was depleted. Do not claim live countdown acceptance yet.
+- [~] Square BUY/SELL tiles remove the white selection ring, keep quote text neutral, allow each side to follow its own Ask/Bid direction, and use higher-specificity square CSS. White-ring removal and quote direction were seen in prior browser checks; final square-corner appearance after the latest CSS override remains unverified.
+- [!] Current test suite is 360 passed, 2 failed of 362. Only the same existing unrelated failures remain: cTrader order-status normalization (expected `rejected`, got `filled`) and CFD quote-currency conversion (expected `null`, got `10`). Do not alter those paths as part of the chart task.
+- [x] No trade placement/closure, provider settings, credentials, or account settings were changed during this work.
+
+**Next step:** when TinyFish browser automation credit is available, repeat the M5 countdown readout at one-second intervals on this exact deployment, confirm square BUY/SELL corners/selection underline, then watch M5 for at least 100 seconds with live quotes and switch M5 → H1 → M5. Keep PR #58 in draft; do not merge or promote without all required gates and explicit user approval.
+
+
+## Latest ticket/chart cleanup checkpoint — 2026-10-12
+
+- [x] MT5-inspired palette: blue uptick/red downtick on quote digits only; neutral light digits while loading/no quote/no price change for 15 seconds. BUY follows Ask; SELL follows Bid.
+- [x] Square dark BUY/SELL ticket cards enlarged to 70px minimum height and quote digits reduced to 10px monospace; no diluted red/green tile fills.
+- [x] Top-right duplicate chart quote strip removed; one custom BID and one custom ASK tag when connected. Native axis tags for quote/position overlays are hidden to avoid duplicates.
+- [x] Current BID/ASK overlays hide during historical scroll and return near the latest candles, so they do not compete with old support/resistance/liquidity levels.
+- [x] Current live header/chart price is gated by a fresh quote stream; 15 seconds of stream silence clears it to WAITING instead of falling back to the last candle close.
+- [x] Draft ticket SL/TP lines are excluded until a real open position exists; Equity/Floating P/L is larger and currency amounts use 2dp.
+- [!] Build/lint/test status for the final 10px sizing and notes commit must be confirmed. Last completed full suite had 361 passing and two existing unrelated failures (cTrader status expected rejected/got filled; CFD conversion expected null/got 10).
+- [!] Final browser visual acceptance pending because TinyFish automation credit is depleted. No false claim of visual verification.
+- Safety: isolated branch only; no trades/accounts changed and no main/Cloudflare/sibling Render promotion.
+
+
+## Final ticket/chart verification status — 2026-10-12
+
+- [x] Render latest app commit 48124ac477062fe361549c970e408274a85c1b3f is LIVE; production build and static-server startup checks passed.
+- [x] GitHub Actions build, static-server check and lint passed.
+- [x] 4 countdown-helper tests passed; full suite reports 361 passed and 2 existing unrelated failures (cTrader status expects rejected/got filled; CFD currency conversion expects null/got 10).
+- [x] Quote digits use MT5-style blue/red/neutral semantics; dark square 70px cards and 10px price digits; no artificial blink.
+- [x] Duplicate quote banner/native line-axis tags removed; one custom BID/ASK label only when live; hide current quote rails/tags when scrolled into history.
+- [x] No draft SL/TP lines when no actual position is open; account values use 2dp and Floating P/L has readable label/value.
+- [!] Final visual acceptance is still pending because TinyFish browser automation credit is depleted. Do not claim the newest appearance is screenshot-verified.
+- Safety: experimental branch only; no trade/account actions, no main or Cloudflare promotion, no sibling Render service changes.
+
+
+## Chart duplicate-label and floating-P/L correction — 2026-10-13
+
+**Scope:** experimental branch `test/rebuild-deriv-native-manual-20260930`; Render service `sharfx-deriv-render` only. Do not merge to `main`, deploy Cloudflare production, or change either sibling Render test service.
+
+**Source finding:** `src/components/chart/CandlestickChart.tsx` was rendering each `tradeLines` item twice at the price scale: Lightweight Charts' native axis tag was enabled while SHAFX also rendered its custom in-chart label. This affected entry/current-exit/SL/TP values and made identical prices look like stacked designs.
+
+**Correction committed for verification:**
+- Disable the native price-axis label for trade lines, matching the single custom-tag system already used by support/resistance/liquidity.
+- Keep trade prices as actual lines; the custom in-chart labels display one price each.
+- The entry line now displays `OPEN P/L +$x.xx` / `OPEN P/L −$x.xx` in the account currency, with positive/negative/neutral color based on the current position P/L. It displays a dash and neutral color when the broker hasn't supplied P/L rather than inventing zero.
+- The live exit-price tag is presented neutrally as `LIVE PRICE`; BUY/SELL remains internal metadata for selecting Bid versus Ask and hiding the matching quote rail.
+- Unit tests cover positive USD P/L, negative EUR P/L, missing P/L, current exit quote side, and closed-position suppression.
+
+**Verification status:** awaiting the Render auto-deploy/build and focused unit-test result for this commit. Authenticated visual browser acceptance is still blocked by insufficient TinyFish automation-wallet credit; do not claim the new visual treatment or the user's existing trade has been visually verified. No orders were placed/closed; no provider credentials/account settings were changed.
+
+## Chart quote-tag and collision polish — 2026-10-13
+
+Scope remains the experimental branch `test/rebuild-deriv-native-manual-20260930` and Render service `sharfx-deriv-render` only. No trade actions, provider/account settings, sibling Render services, `main`, or Cloudflare production are touched.
+
+- Replaced the generic “LIVE PRICE” tag with compact **BID** for the BUY exit (Bid) and **ASK** for the SELL exit (Ask), matching the existing quote-tag size.
+- Fixed chart quote colors to blue for Bid and red for Ask. Active position exit lines use the same side colors rather than inheriting the floating-P/L green/red color. Quote rails and current-exit rails are dashed; SL remains dashed, TP is blue, and entry line stays neutral.
+- The entry line now has a small centered `OPEN +$0.50 · 1.11913`-style tag (using the actual position profit and entry price). Its y coordinate is anchored to the fixed entry price and is excluded from right-edge label stacking so it does not jump when Ask/Bid tags move. P/L amount color still reflects positive/negative result, while the price-line itself stays neutral.
+- Added quote-proximity suppression for trade entry/SL/TP levels as well as structural levels. These secondary lines and edge labels hide when within 7 chart pixels of a live quote and restore beyond a 12-pixel hysteresis threshold; the centered OPEN/P&L readout remains available even while its entry line is hidden. Current BID/ASK exit lines are exempt so the active exit remains visible.
+- Fixed the existing cTrader ticket render-purity lint error by deriving quote age from the state-backed clock, synchronized on receipt and on the one-second clock. No order logic changed.
+
+Verification notes: code/build/tests must be checked for this commit. Authenticated visual inspection still requires a signed-in browser; the previous attempt could not start because TinyFish browser automation credit was exhausted. Do not claim visual acceptance until the account's existing position has been inspected without opening or closing trades. Keep PR #58 experimental; do not merge into `main` or promote Cloudflare.
+
+
+## Chart declutter and candle-gap recovery — 2026-10-13
+
+- While a matching broker position is open, automatic support/resistance/liquidity overlays are hidden from the chart canvas while the separate analysis panels remain available. Broker entry, stop-loss, take-profit, and live Bid/Ask retain priority; actual broker protection prices are not altered or hidden near a quote.
+- Open trades no longer get a candle-edge BUY/SELL arrow that can appear detached from the exact entry price. Their true entry/P&L line is shown instead; completed historical trades retain their time markers.
+- When following live data, the chart scrolls to the latest bar after accepted candle updates without changing zoom or overriding an intentional history pan.
+- Recent small intraday gaps in cTrader candle history trigger a broker-history refresh. SHAFX does not fabricate flat candles; if the broker still omits a timestamp, the missing bar remains honest.
+- Keep the experiment on `test/rebuild-deriv-native-manual-20260930`; do not merge into main or promote Cloudflare production. Visual screenshot acceptance is still required after deployment.
+
+
+## Chart history, Trend toggle and manual-ticket clarity — 2026-10-13
+
+Scope remains the experimental branch `test/rebuild-deriv-native-manual-20260930` and the Render service **Shafek Derive Render** only. No trade was opened or closed, no broker-side protection was modified, and no sibling Render service, `main`, or Cloudflare production was targeted.
+
+- Candle autoscaling no longer expands to distant SL/TP prices; broker entry/SL/TP prices remain unchanged as overlays with true-price labels.
+- Live quote ticks no longer trigger an unnecessary scroll to the newest candle. Historical viewport restoration prefers the actual time range over logical bar indexes. Dynamic trade/structure lines and edge labels hide while browsing history; timestamp-mapped trade markers stay on their candles.
+- Added a **Trend** toggle for support, resistance and liquidity, with on-demand recomputation from latest cached candle data; normal candle updates continue to refresh analysis. Detailed chart tools remain in the adjacent drawer.
+- Manual cTrader risk/lot and pip-distance fields start blank with visible editing affordances and **AUTO / EDIT** stop/target controls. A plan-review checkbox explicitly gates the practice BUY/SELL action; order mechanics and broker protection values are unchanged.
+
+Verification remains pending. Run lint, build and tests; verify only the correct Render service and inspect the existing open position in an authenticated session without placing or closing any trade. Keep changes on the experiment until visual acceptance; do not merge into `main` or promote Cloudflare.
+
+
+## Trend header placement and ticket follow-up — 2026-10-13
+
+Follow-up remains on the experimental branch `test/rebuild-deriv-native-manual-20260930` and Render service **Shafek Derive Render** only. The green `cTrader LIVE` badge is removed from the chart header; the Trend ON/OFF switch for support, resistance and liquidity now occupies that location. The misplaced separate Trend row is removed and the mobile Chart tools row is restored. The Deriv live-feed component remains mounted for Deriv mode.
+
+Manual ticket: BUY and SELL price tiles use one midpoint direction and complementary colors together (baseline BUY blue / SELL red; on downward ticks colors swap; they cannot both be blue or both red). Stop/Target AUTO controls are always tappable: use distance from a valid selected AI setup or defaults of 10/20 pips until one is loaded; EDIT returns to editable pip inputs. The separate review checkbox is removed. The final BUY/SELL button activates when a cTrader demo connection, fresh quotes, size input and protection distances form a valid plan; users still make an explicit final BUY/SELL tap, and selecting a side alone does not submit an order.
+
+No broker-side protection has been changed, and no trade has been opened or closed. Verification pending.
+
+
+## Structural overlay isolation / Trend toggle — final verification checkpoint, 2026-10-14
+
+- Latest branch commit: `15952361fa48dd401d5dfc42c0ac6b9a85253748` — [commit](https://github.com/S35213/Sharfx/commit/15952361fa48dd401d5dfc42c0ac6b9a85253748).
+- Render service **Shafek Derive Render** (`srv-dav8hrt9fdbs73d690s0`) is live on deployment `dep-db7la5qjnfac73de3c2g`.
+- Verification: production build passed; static server check passed; lint passed; **82 test files / 399 tests passed**; production dependency audit reported 0 vulnerabilities; Render smoke and manual CFD branch verification passed.
+- Structural annotations show the selected timeframe when zoomed in; higher-timeframe context is added only when the user zooms out. A weekly chart cannot import lower-timeframe structure; cached candle histories are validated by observed timestamp cadence. Zone IDs include source timeframe, concept, and price to avoid map/label collisions.
+- Trend is controlled by an explicit chart-level structural-overlay gate. Turning it off removes support/resistance/liquidity lines and labels while preserving broker-confirmed entry, SL/TP and Bid/Ask overlays.
+- Authenticated visual review of the user's live session has not been independently performed. Please refresh the Render chart and check zoom/toggle behavior on the actual session; if anything remains, record that specific state for a targeted follow-up.
+- No broker-side protection was changed; no trade was opened or closed. All changes remain on the experimental branch. Do not merge to `main` or promote Cloudflare production without acceptance.
+
+
+## Signal Bot / Trade Bot independence checkpoint — 2026-10-14
+
+- [x] Signal Bot uses a provider-scoped historical-data loop with a 15-second, non-overlapping refresh target and no cross-provider fallback.
+- [x] Signal Bot runtime is separated from the paper-trading panel; errors are contained within its component boundary.
+- [x] Provider/source cache isolation regressions added and verified in CI.
+- [x] Build, lint, 402 tests across 83 files, dependency audit and Render verification passed on commit `37c283f8af1717e7836f19fabffe98c2c820fa77`.
+- [~] Authenticated live visual acceptance remains pending.
+- [ ] Build the Trade Bot as a separate controller with its own data pipeline, analysis state, risk/eligibility checks and cTrader-practice reconciliation. It must not consume Signal Bot output or share lifecycle state.
+- [ ] Keep real-money execution disabled until practice account acceptance and release gates are complete.
+
+
+
+## Independent Trade Bot baseline — 2026-10-15
+
+- [x] Added separate opt-in Trade Bot candle loader and source-scoped state (cTrader practice only, 15-second refresh target).
+- [x] Added independent structure/liquidity decision path and conservative risk ceiling; it does not consume Signal Bot output.
+- [x] Mounted separate Trade Bot panel with its own error boundary in desktop/mobile Bots dock; starts stopped.
+- [x] Added five regression tests for source isolation, practice-only gating, risk ceiling and missing history.
+- [x] Verification on \`540efb26a98c2fb9c4f0fe43148af56994abb996\`: 84 test files / 407 tests, build, lint (0 errors), production audit and desktop/mobile screenshot workflow passed.
+- [~] Latest warning-cleanup commit \`4a3f3e99a39eb6ee2ff55d5e09ead2e6084e1f71\` still needs final CI confirmation.
+- [ ] Deploy commit \`4a3f3e99a39eb6ee2ff55d5e09ead2e6084e1f71\` to **Shafek Derive Render** and confirm that exact commit is live. Current deploy record still points to \`746a34668aba7671713d151a6a827629e2f4e1de\`.
+- [ ] Add demo-only execution controller, explicit risk gate, idempotent order submission, broker SL/TP confirmation and position reconciliation. No live trading.
+
+
+
+## 2026-10-15 — Trade Bot broker-spec provenance gate
+
+- New isolated helper `src/engine/bot/ctraderInstrumentSpec.ts` accepts only matching, tradable, complete cTrader contract metadata and builds the `SymbolSpec` used by Trade Bot risk sizing.
+- `src/App.tsx` now passes that instrument-derived spec to Trade Bot only; the existing manual ticket continues using its pre-existing workspace spec. Missing/unsupported metadata blocks Trade Bot risk sizing instead of using mock defaults.
+- Added spec-mapping tests and a decision-level regression test. CI status and Render deployment status must be checked separately; this does not enable bot order execution.
+
+
+### Verification record — 2026-10-15 (Trade Bot broker-spec gate)
+
+- Code commit: `c718be6b5ec08726b56f32cbb36935e76c0a647f`.
+- CI passed; production build passed; lint 0 errors / 63 warnings; 85 test files / 420 tests passed; production-only dependency audit 0 vulnerabilities. The install output still lists 11 vulnerabilities across the installed dependency tree (2 moderate, 9 high), tracked separately.
+- Manual CFD verification, desktop/mobile visual-preview capture, and Render smoke workflows passed. The screenshots were inspected, but they are unauthenticated preview captures, not authenticated cTrader workflow QA.
+- `Shafek Derive Render` auto-deployed `c718be6b5ec08726b56f32cbb36935e76c0a647f`; deployment `dep-db89995g1s2s73fbqmh0` is `live`. This gate only prevents Trade Bot sizing from using unconfirmed mock contract specs; it does not enable automated orders.
+
+
+### 2026-10-15 — cTrader position snapshot reconciliation
+
+- Removed the empty-snapshot early return from the cTrader reconciliation flow by routing successful snapshots (including `[]`) through `reconcileCTraderPositionList`.
+- Authoritative snapshots remove stale local positions only for the reconciled provider connection/account; recently opened unmatched local positions receive the existing 120-second grace window; foreign provider/account positions are preserved.
+- Code commit `279d0263b175c283cd9222960e39c966d2324511` passed build, lint (0 errors / 63 warnings), 86 test files / 425 tests, production dependency audit (0 vulnerabilities), manual verification, visual preview capture, and Render smoke. Render deployment `dep-db89cqdbedkc739udbs0` is live.
+- Remaining caveats: the UI screenshots are automated unauthenticated preview captures; this fix does not backfill closed-trade history. Installed-tree audit still reports 11 vulnerabilities (2 moderate, 9 high) requiring a separate dependency triage.
+
+
+### Final verification — cTrader position snapshot guard (2026-10-15)
+
+- `f4b770bb7ea402be243121123e6d2205ece16862`: build passed, lint 0 errors / 63 warnings, 86 test files / 428 tests passed, production-only dependency audit 0 vulnerabilities, manual CFD verification passed, visual preview capture passed, Render smoke passed.
+- Successful `positions: []` clears stale local positions only after the original payload is proven fully parsed. Non-empty malformed payloads leave the last good positions unchanged.
+- Deployment `dep-db89f85g1s2s73fc1ph0` is live on the designated Shafek Derive Render service. Closed-trade history backfill and authenticated cTrader QA remain unchecked.
+- The initial import typo in commit `ae904bfc48e0280b6b1d7b93d9b156693c830140` failed build; corrected commit `f4b770bb7ea402be243121123e6d2205ece16862` is the verified code commit.
+
+
+## Trade Bot / cTrader history reconciliation checkpoint — 2026-10-15
+
+- [x] cTrader's backend deal-history endpoint and frontend polling already exist; `reconcileCTraderTradeHistory` merges broker history into the shared journal without deleting other providers' history or unmatched locally confirmed closes. Regression tests cover account scope, lagging/malformed snapshots, duplicate rows, invalid records, and ordering. Verified on `940db5240bfe91fc573341c7f78ee6ac30eeef64`: 87 test files / 434 tests pass; production build and Render deployment pass; production-only audit is clean.
+- [x] Target Render deployment verified LIVE: `dep-db8e475bedkc73a4ol20` on **Shafek Derive Render**. CI `38751123017`, manual CFD `38751109921`, preview `38751109466`, and smoke `38751109827` all passed.
+- [ ] Authenticated cTrader end-to-end history validation remains outstanding; do not claim the user's historical broker trades are confirmed until tested in the authenticated account.
+- [ ] Next bot work: add source-scoped decision diagnostics. Keep automatic order execution disabled and do not merge this experiment to `main` without explicit user approval.
+
+
+### cTrader history merge build correction — 2026-10-15
+
+- [!] Initial merge commit `fd6efb020f1af2560d368654d118b76c42e52bb1` failed the Render build because an optional `payload.history` property lost TypeScript narrowing inside the state updater. The follow-up captures the validated array into a local constant. Do not treat either commit as verified until CI and Render results for the corrected commit are green.
+
+
+## Trade Bot shadow evaluation — 2026-10-15
+
+- [x] Independent Trade Bot decision diagnostics and bounded cycle trace exist (see the dated handoff entries).
+- [x] Hypothetical SL/TP shadow evaluator added at `src/engine/bot/tradeBotShadowEvaluation.ts`.
+- [x] Shadow samples are scoped by source/market/timeframe/candle and deduplicated; only one READY sample per candle is retained.
+- [x] Outcome evaluation waits for a following candle timestamp before treating a bar as closed.
+- [x] Same-bar SL+TP touches are marked AMBIGUOUS rather than assuming a favourable result.
+- [x] Shadow samples are bounded in volatile memory and are not broker positions/orders.
+- [~] Latest exact-commit CI verification is pending; do not mark this milestone fully verified until build and tests pass.
+- [ ] Authenticated cTrader browser QA of the actual Bot tab at desktop and mobile sizes.
+- [ ] Longer historical/paper evaluation with adequate sample size; no profitability claim until that exists.
+- [ ] Automatic execution remains disabled until separate explicit release gates and practice-account end-to-end checks pass.
+
+
+## Verification update — 2026-10-15
+
+- [x] Fixed closed-candle boundary after CI exposed three regression-test failures.
+- [x] Exact code commit `5accfc2afa14c20b52f75b010dccc42112ceb5b5`: CI passed; manual CFD branch verification passed; Render smoke passed; visual preview build/captures passed.
+- [x] Confirmed designated Render service reports the code commit live; public welcome page fetch succeeded.
+- [~] Screenshot review still shows fixed bottom navigation overlapping the chart in the mobile workspace capture; track separately for responsive-layout repair.
+- [ ] Authenticated browser QA of the actual Trade Bot tab at desktop/mobile sizes (not performed; no trades sent).
+- [ ] Longer historical/paper evaluation with adequate sample size; no profitability claim until completed.
+
+
+## Historical replay milestone — 2026-10-15
+
+- [x] Added a manual historical replay control to Trade Bot diagnostics.
+- [x] Replay reuses `evaluateTradeBotDecision` and slices all timeframe frames to bars closed by each historical signal time; latest potentially-forming selected-timeframe bar is excluded.
+- [x] Added tests for deterministic replay, newest-bar exclusion and missing broker specs.
+- [x] Exact code commit `3ee6adafd2ff1d230c5854ee1e6dd4ed9df58f38`: CI success, 91 test files passed, manual CFD branch verification success, visual preview build/capture success; Render deployment reports live.
+- [~] Render smoke retry pending after first attempt timed out waiting for `#root` during deployment transition.
+- [~] Mobile full-page screenshot still shows bottom navigation overlapping chart.
+- [ ] Authenticated browser QA of the actual Bot panel; not performed yet.
+- [ ] Demo forward observation and comparison with historical replay; no profitability claims yet.
+- [ ] Automatic execution remains disabled.
+
+
+## Bot activation + scanner scan controls — 2026-10-15
+
+- [x] Signal Bot’s ready-state badge is no longer mislabeled SCANNING; the UI distinguishes AUTO-SCAN / SCANNING and clearly identifies latest candle close.
+- [x] Signal Bot has an explicit Scan now / Retry scan control that requests a fresh, selected-provider-only scan; automatic 15-second refresh remains.
+- [x] Trade Bot’s stopped/blocked state now surfaces the exact prerequisite instead of presenting only a greyed-out start button.
+- [x] cTrader broker instrument metadata is fetched independently of quote streaming via the authenticated instruments endpoint; strict symbol validation and risk-spec validation still apply.
+- [x] cTrader instrument fetch tests cover matching symbol, mismatch rejection, provider errors and malformed responses.
+- [x] CI run 38762737065 (run #1988) passed build, Render static-server smoke, lint, tests and production dependency audit. Render deployment dep-db8f8t49v7es73buiha0 for commit f4c5ea8fe51a0b910b9b25918dbb4eb9e908e5d5 reports live; authenticated Bot-tab QA remains outstanding.
+- [x] No auto-start or automatic orders introduced. No broker positions changed. main and Cloudflare production remain untouched.
+
+- [x] Added the experimental branch to SHAFX CI push triggers so subsequent feature commits receive the full test suite without requiring a pull request.
+
+
+## Bot activation + real scan progress verification — 2026-10-16
+
+- [x] Reproduced and traced the screenshot's Trade Bot start blocker to the cTrader `instruments` action filtering the light symbol catalog before resolving the full requested instrument.
+- [x] Changed the requested-symbol instruments action to use `resolveCtraderSymbol`, the same resolver used by the working candles/quote paths.
+- [x] Added a backend route unit test at `api/providers/ctrader.instruments.test.js` for normalized EUR/USD instrument metadata and no catalog pre-filter.
+- [x] Added a force-refresh option to the Deriv multi-timeframe history loader so a user-triggered scan bypasses the 60-second anchor-history cache.
+- [x] Added progress state for M1/M5/M15/M30/H1/H4/D1/W1; source progress is grounded in the raw requests (M1/H1/D1 for Deriv; requested timeframes for cTrader), with derived timeframes labelled after the fetch completes.
+- [x] Moved the scan action to the bottom of the Signal Bot panel, added animated per-timeframe progress, and made the panel explicitly distinguish a completed scan with unchanged candles from a scan whose candle snapshot changed.
+- [x] Fixed the initial TS2367 status-narrowing error introduced by the scanner progress UI and then reran the full build/tests.
+- [x] Exact code/test head `ee658a129b5fbeede5858dccc27a7c25e3a6acf6`: [SHAFX CI run 38921235766](https://github.com/S35213/Sharfx/actions/runs/38921235766) succeeded, including npm build, static-server smoke, lint, unit tests, production dependency audit and live Render smoke.
+- [x] [Manual CFD branch verification 38921229277](https://github.com/S35213/Sharfx/actions/runs/38921229277) succeeded.
+- [x] [Render smoke run 38921229330](https://github.com/S35213/Sharfx/actions/runs/38921229330) succeeded.
+- [x] Render deployment `dep-db93qtrrjlhs73aiiobg` reports LIVE for `sharfx-deriv-render`.
+- [~] [Visual preview run 38921229327](https://github.com/S35213/Sharfx/actions/runs/38921229327) had desktop/mobile captures complete but workflow cleanup was still in progress at last check; verify final conclusion.
+- [ ] Authenticated in-session test that cTrader returns usable EUR/USD instrument contract metadata for the user's selected account. Static CI cannot prove the provider session/account itself.
+- [ ] Authenticated desktop/mobile QA of the Trade Bot tab and observed scan interaction in the user's own session.
+- [ ] Longer demo forward observation versus historical replay; no profitability claim until adequate samples are reviewed.
+- [x] No automatic execution was introduced; no broker order/position was submitted, modified or closed. The Trade Bot remains opt-in and demo-only, with validated instrument and risk guards unchanged. `main`, Cloudflare production and sibling Render services remain untouched.
