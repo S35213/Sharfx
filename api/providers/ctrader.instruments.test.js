@@ -86,6 +86,51 @@ describe('cTrader instrument metadata route', () => {
     })
   })
 
+  it('falls back to the already-resolved requested symbol when cTrader omits the full-symbol display name', async () => {
+    mocks.normalizeCtraderInstrument.mockReturnValueOnce({
+      symbol: '',
+      providerSymbol: '17',
+      contractSize: 1000,
+      pipSize: 0.0001,
+      quantityMin: 0.01,
+      quantityMax: 50,
+      quantityStep: 0.01,
+      priceIncrement: 0.00001,
+      tradable: true,
+    })
+
+    const res = {
+      statusCode: 0,
+      body: null,
+      status(code) {
+        this.statusCode = code
+        return this
+      },
+      json(body) {
+        this.body = body
+        return this
+      },
+    }
+
+    await handler({
+      method: 'POST',
+      url: '/api/providers/ctrader',
+      headers: {},
+      body: {
+        connectionId: 'connection-demo',
+        accountId: '123456',
+        action: 'instruments',
+        symbol: 'EUR/USD',
+      },
+    }, res)
+
+    expect(res.statusCode).toBe(200)
+    expect(res.body).toMatchObject({
+      ok: true,
+      instruments: [{ symbol: 'EUR/USD', providerSymbol: '17', tradable: true }],
+    })
+  })
+
   it('uses the same requested-symbol resolver as candles and returns its instrument rules', async () => {
     const res = {
       statusCode: 0,
