@@ -17,6 +17,10 @@ export interface TradeBotMarketState {
   status: TradeBotMarketStatus
   updatedAt: number | null
   error: string | null
+  /** Number of completed market-history checks in the current Start/Stop session. */
+  cycleNumber: number
+  /** Whether the latest cycle's returned candle snapshot differed from the previous one. */
+  lastDataChanged: boolean | null
 }
 
 interface FetchResult {
@@ -26,6 +30,13 @@ interface FetchResult {
 
 const REFRESH_MS = 15_000
 const HISTORY_COUNT = 300
+
+export const tradeBotFramesSignature = (frames: Partial<Record<Timeframe, readonly OHLCV[]>>): string =>
+  TIMEFRAMES.map((timeframe) => {
+    const candles = frames[timeframe] ?? []
+    const last = candles[candles.length - 1]
+    return [timeframe, candles.length, last?.time ?? '', last?.open ?? '', last?.high ?? '', last?.low ?? '', last?.close ?? ''].join(':')
+  }).join('|')
 
 export const tradeBotMarketSourceKey = (symbol: string, source: TradeBotMarketSource | null): string => [
   symbol.trim().toUpperCase(),
@@ -94,7 +105,7 @@ const emptyState = (
   sourceKey: string,
   status: TradeBotMarketStatus,
   error: string | null = null,
-): TradeBotMarketState => ({ sourceKey, frames: {}, status, updatedAt: null, error })
+): TradeBotMarketState => ({ sourceKey, frames: {}, status, updatedAt: null, error, cycleNumber: 0, lastDataChanged: null })
 
 const shortError = (errors: string[]): string | null => {
   if (!errors.length) return null
@@ -103,9 +114,9 @@ const shortError = (errors: string[]): string | null => {
 }
 
 /**
- * Trade Bot owns its own opt-in refresh loop and candle state.
- * It is stopped on mount, requires a cTrader practice account, and never
- * imports or consumes Signal Bot runtime state.
+ * Trade Bot's explicitly started monitoring loop. Each cycle requests fresh
+ * cTrader practice history, publishes a visible cycle number/data-change result,
+ * and stops on Stop or when the selected account/market changes.
  */
 export const useTradeBotMarketData = (
   symbol: string,
@@ -126,6 +137,8 @@ export const useTradeBotMarketData = (
     let stopped = false
     let timer: number | null = null
     let inFlight = false
+    let cycleNumber = 0
+    let previousSignature: string | null = null
     if (!enabled) return () => { stopped = true }
 
     const effectSource: TradeBotMarketSource | null = providerId
@@ -143,22 +156,31 @@ export const useTradeBotMarketData = (
         status: 'loading',
         updatedAt: previous.sourceKey === sourceKey ? previous.updatedAt : null,
         error: null,
+        cycleNumber: previous.sourceKey === sourceKey ? previous.cycleNumber : 0,
+        lastDataChanged: previous.sourceKey === sourceKey ? previous.lastDataChanged : null,
       }))
       try {
         const result = await loadTradeBotFrames(symbol, effectSource as TradeBotMarketSource)
         if (stopped) return
         const usable = TIMEFRAMES.filter((timeframe) => (result.frames[timeframe]?.length ?? 0) >= 8).length
         const status: TradeBotMarketStatus = usable === TIMEFRAMES.length ? 'ready' : usable > 0 ? 'partial' : 'error'
+        const nextSignature = tradeBotFramesSignature(result.frames)
+        const lastDataChanged = previousSignature === null ? null : previousSignature !== nextSignature
+        previousSignature = nextSignature
+        cycleNumber += 1
         setState({
           sourceKey,
           frames: result.frames,
           status,
           updatedAt: Date.now(),
           error: shortError(result.errors) ?? (status === 'error' ? 'No timeframe has enough candles to evaluate a trade plan.' : null),
+          cycleNumber,
+          lastDataChanged,
         })
       } catch (error) {
         if (stopped) return
-        setState(emptyState(sourceKey, 'error', error instanceof Error ? error.message : 'Unable to load cTrader practice candles.'))
+        cycleNumber += 1
+        setState({ ...emptyState(sourceKey, 'error', error instanceof Error ? error.message : 'Unable to load cTrader practice candles.'), cycleNumber, lastDataChanged: null })
       } finally {
         inFlight = false
         if (!stopped) timer = window.setTimeout(() => { void refresh() }, REFRESH_MS)
