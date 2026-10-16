@@ -454,3 +454,23 @@ No broker-side protection has been changed, and no trade has been opened or clos
 - [x] No auto-start or automatic orders introduced. No broker positions changed. main and Cloudflare production remain untouched.
 
 - [x] Added the experimental branch to SHAFX CI push triggers so subsequent feature commits receive the full test suite without requiring a pull request.
+
+
+## Bot activation + real scan progress verification — 2026-10-16
+
+- [x] Reproduced and traced the screenshot's Trade Bot start blocker to the cTrader `instruments` action filtering the light symbol catalog before resolving the full requested instrument.
+- [x] Changed the requested-symbol instruments action to use `resolveCtraderSymbol`, the same resolver used by the working candles/quote paths.
+- [x] Added a backend route unit test at `api/providers/ctrader.instruments.test.js` for normalized EUR/USD instrument metadata and no catalog pre-filter.
+- [x] Added a force-refresh option to the Deriv multi-timeframe history loader so a user-triggered scan bypasses the 60-second anchor-history cache.
+- [x] Added progress state for M1/M5/M15/M30/H1/H4/D1/W1; source progress is grounded in the raw requests (M1/H1/D1 for Deriv; requested timeframes for cTrader), with derived timeframes labelled after the fetch completes.
+- [x] Moved the scan action to the bottom of the Signal Bot panel, added animated per-timeframe progress, and made the panel explicitly distinguish a completed scan with unchanged candles from a scan whose candle snapshot changed.
+- [x] Fixed the initial TS2367 status-narrowing error introduced by the scanner progress UI and then reran the full build/tests.
+- [x] Exact code/test head `ee658a129b5fbeede5858dccc27a7c25e3a6acf6`: [SHAFX CI run 38921235766](https://github.com/S35213/Sharfx/actions/runs/38921235766) succeeded, including npm build, static-server smoke, lint, unit tests, production dependency audit and live Render smoke.
+- [x] [Manual CFD branch verification 38921229277](https://github.com/S35213/Sharfx/actions/runs/38921229277) succeeded.
+- [x] [Render smoke run 38921229330](https://github.com/S35213/Sharfx/actions/runs/38921229330) succeeded.
+- [x] Render deployment `dep-db93qtrrjlhs73aiiobg` reports LIVE for `sharfx-deriv-render`.
+- [~] [Visual preview run 38921229327](https://github.com/S35213/Sharfx/actions/runs/38921229327) had desktop/mobile captures complete but workflow cleanup was still in progress at last check; verify final conclusion.
+- [ ] Authenticated in-session test that cTrader returns usable EUR/USD instrument contract metadata for the user's selected account. Static CI cannot prove the provider session/account itself.
+- [ ] Authenticated desktop/mobile QA of the Trade Bot tab and observed scan interaction in the user's own session.
+- [ ] Longer demo forward observation versus historical replay; no profitability claim until adequate samples are reviewed.
+- [x] No automatic execution was introduced; no broker order/position was submitted, modified or closed. The Trade Bot remains opt-in and demo-only, with validated instrument and risk guards unchanged. `main`, Cloudflare production and sibling Render services remain untouched.
