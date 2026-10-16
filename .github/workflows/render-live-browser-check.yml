@@ -352,6 +352,7 @@ jobs:
                   let panelConnectionId = null;
                   let panelAccountId = null;
                   let appSpecState = null;
+                  let stateOwner = null;
                   let guard = 0;
                   while (fiber && guard < 100) {
                     guard += 1;
@@ -381,6 +382,9 @@ jobs:
                       if (!appSpecState && value && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, 'sourceKey') && Object.prototype.hasOwnProperty.call(value, 'symbolSpec')) {
                         const parts = String(value.sourceKey || '').split('|');
                         appSpecState = {
+                          ownerComponent: fiber.type?.displayName || fiber.type?.name || 'unknown',
+                          hasErrorField: Object.prototype.hasOwnProperty.call(value, 'error'),
+                          errorFieldType: typeof value.error,
                           storedSymbol: parts[0] || '',
                           storedProvider: parts[1] || '',
                           storedEnvironment: parts[4] || '',
