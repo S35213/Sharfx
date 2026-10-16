@@ -345,7 +345,57 @@ jobs:
                 }
 
                 interactionReport.tradeBotRuntimeProps = await page.locator('section').filter({ hasText: 'SHAFX Trade Bot' }).evaluateAll((sections) => sections.slice(0, 4).map((element) => {
-                  const fiberKey = Object.keys(element).find((key) => key.startsWith('__reactFiber                report.interactions = report.interactions || {};
+                  const fiberKey = Object.keys(element).find((key) => key.includes('reactFiber'));
+                  if (!fiberKey) return { fiberFound: false };
+                  let fiber = element[fiberKey];
+                  let panelProps = null;
+                  let appSpecState = null;
+                  let guard = 0;
+                  while (fiber && guard < 100) {
+                    guard += 1;
+                    const props = fiber.memoizedProps;
+                    if (!panelProps && props && typeof props === 'object' && Object.prototype.hasOwnProperty.call(props, 'symbolSpec') && Object.prototype.hasOwnProperty.call(props, 'symbolSpecError') && Object.prototype.hasOwnProperty.call(props, 'marketSource')) {
+                      const spec = props.symbolSpec;
+                      panelProps = {
+                        symbol: String(props.symbol || ''),
+                        timeframe: String(props.timeframe || ''),
+                        provider: String(props.marketSource?.providerId || ''),
+                        environment: String(props.marketSource?.environment || ''),
+                        hasConnection: Boolean(props.marketSource?.connectionId),
+                        hasAccount: Boolean(props.marketSource?.accountId),
+                        specPresent: Boolean(spec),
+                        specSymbol: spec?.symbol ? String(spec.symbol) : null,
+                        specFields: spec ? { contractSize: spec.contractSize, pipSize: spec.pipSize, minLotSize: spec.minLotSize, maxLotSize: spec.maxLotSize, lotStep: spec.lotStep, pricePrecision: spec.pricePrecision } : null,
+                        hasSpecError: Boolean(props.symbolSpecError),
+                        specError: typeof props.symbolSpecError === 'string' ? props.symbolSpecError.slice(0, 240) : null,
+                      };
+                    }
+                    let hook = fiber.memoizedState;
+                    let hookIndex = 0;
+                    while (hook && hookIndex < 500) {
+                      const value = hook.memoizedState;
+                      if (!appSpecState && value && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, 'sourceKey') && Object.prototype.hasOwnProperty.call(value, 'symbolSpec')) {
+                        const parts = String(value.sourceKey || '').split('|');
+                        appSpecState = {
+                          storedSymbol: parts[0] || '',
+                          storedProvider: parts[1] || '',
+                          storedEnvironment: parts[4] || '',
+                          storedKeyMatchesPanelSymbol: Boolean(panelProps && parts[0] === panelProps.symbol.trim().toUpperCase()),
+                          storedKeyMatchesPanelProvider: Boolean(panelProps && parts[1] === panelProps.provider),
+                          storedSpecPresent: Boolean(value.symbolSpec),
+                          storedSpecSymbol: value.symbolSpec?.symbol ? String(value.symbolSpec.symbol) : null,
+                          hasStoredError: Boolean(value.error),
+                          storedError: typeof value.error === 'string' ? value.error.slice(0, 240) : null,
+                        };
+                      }
+                      hook = hook.next;
+                      hookIndex += 1;
+                    }
+                    fiber = fiber.return;
+                  }
+                  return { fiberFound: true, panelProps, appSpecState };
+                })).catch((error) => [{ error: String(error).slice(0, 500) }]);
+                report.interactions = report.interactions || {};
                 report.interactions[config.name] = interactionReport;
                 const visibleHeadings = await page.getByRole('heading').allTextContents().catch(() => []);
                 report[`${config.name}_bots_workspace`] = {
