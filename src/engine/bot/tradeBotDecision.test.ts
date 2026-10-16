@@ -32,6 +32,8 @@ describe('independent Trade Bot guardrails', () => {
       status: 'ready',
       updatedAt: 123,
       error: null,
+      cycleNumber: 1,
+      lastDataChanged: null,
     }
     expect(tradeBotFramesForSource(oldState, 'EUR/USD|ctrader|c2|a1|demo')).toEqual({})
   })
