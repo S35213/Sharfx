@@ -4,7 +4,7 @@ import type { SetupCandidate } from '../setup/types'
 import type { CTraderApiPost } from './tradeBotExecution'
 import { executeTradeBotDemoOrder } from './tradeBotExecution'
 
-const NOW = Date.parse('2026-10-16T19:30:00.000Z')
+const NOW = Date.now()
 const source = {
   providerId: 'ctrader',
   connectionId: 'connection-demo',
