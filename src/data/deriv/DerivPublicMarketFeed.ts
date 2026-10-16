@@ -190,14 +190,24 @@ const feedHistoryCache = new Map<string, { candles: OHLCV[]; price: number; epoc
 
 const historyCacheKey = (symbol: string, timeframe: Timeframe): string => toDerivSymbol(symbol) + ':' + timeframe
 
+export type DerivHistorySourceTimeframe = 'M1' | 'H1' | 'D1'
+export type DerivHistorySourceStatus = 'loading' | 'ready' | 'empty'
+
+export interface DerivMultiTimeframeFetchOptions {
+  /** Bypass the 60-second shared candle cache for a user-requested fresh scan. */
+  forceRefresh?: boolean
+  onSourceProgress?: (timeframe: DerivHistorySourceTimeframe, status: DerivHistorySourceStatus) => void
+}
+
 const fetchAnchorHistory = async (
   symbol: string,
   timeframe: Timeframe,
   count: number,
+  forceRefresh = false,
 ): Promise<OHLCV[]> => {
   const key = historyCacheKey(symbol, timeframe)
   const cached = anchorHistoryCache.get(key)
-  if (cached && Date.now() - cached.receivedAt < HISTORY_CACHE_TTL_MS && cached.candles.length > 0) {
+  if (!forceRefresh && cached && Date.now() - cached.receivedAt < HISTORY_CACHE_TTL_MS && cached.candles.length > 0) {
     return cached.candles.slice(-count)
   }
 
@@ -254,6 +264,7 @@ const fetchAnchorHistory = async (
 export const fetchDerivMultiTimeframeCandles = async (
   symbol: string,
   timeframes: Timeframe[],
+  options: DerivMultiTimeframeFetchOptions = {},
 ): Promise<Partial<Record<Timeframe, OHLCV[]>>> => {
   const requested = Array.from(new Set(timeframes))
   if (!requested.length) return {}
@@ -262,12 +273,19 @@ export const fetchDerivMultiTimeframeCandles = async (
   const needsHourly = requested.some((timeframe) => ['H1', 'H4'].includes(timeframe))
   const needsDaily = requested.some((timeframe) => ['D1', 'W1'].includes(timeframe))
 
-  // Use independent sockets so M1, H1 and D1 responses cannot overwrite one
-  // another's message handler. They arrive in parallel within the scanner window.
+  const loadAnchor = async (timeframe: DerivHistorySourceTimeframe, count: number): Promise<OHLCV[]> => {
+    options.onSourceProgress?.(timeframe, 'loading')
+    const candles = await fetchAnchorHistory(symbol, timeframe, count, options.forceRefresh === true)
+    options.onSourceProgress?.(timeframe, candles.length ? 'ready' : 'empty')
+    return candles
+  }
+
+  // Independent anchor sockets let the UI show actual source-history progress.
+  // Derived M5/M15/M30, H4 and W1 bars are computed from these anchor series.
   const [m1, h1, d1] = await Promise.all([
-    needsLower ? fetchAnchorHistory(symbol, 'M1', 600) : Promise.resolve([]),
-    needsHourly ? fetchAnchorHistory(symbol, 'H1', 400) : Promise.resolve([]),
-    needsDaily ? fetchAnchorHistory(symbol, 'D1', 700) : Promise.resolve([]),
+    needsLower ? loadAnchor('M1', 600) : Promise.resolve([]),
+    needsHourly ? loadAnchor('H1', 400) : Promise.resolve([]),
+    needsDaily ? loadAnchor('D1', 700) : Promise.resolve([]),
   ])
 
   const results: Partial<Record<Timeframe, OHLCV[]>> = {}
