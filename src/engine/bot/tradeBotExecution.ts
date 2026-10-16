@@ -258,6 +258,9 @@ export const executeTradeBotDemoOrder = async (
   ].join('-').slice(0, 50)
 
   ensureContinued()
+  if (Date.now() - quoteAt > 15_000) {
+    throw new Error('The broker quote became stale during risk/margin checks; no order was sent.')
+  }
   const placedPayload = await apiRequest(post, source, 'placeOrder', {
     symbolId: instrument.providerSymbol,
     order: {
