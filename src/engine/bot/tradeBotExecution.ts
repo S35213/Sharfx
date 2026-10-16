@@ -285,6 +285,7 @@ export const executeTradeBotDemoOrder = async (
   const trade: TradeOrder = {
     id: positionId || providerOrderId,
     symbol,
+    chartTimeframe: timeframe,
     type: setup.direction,
     lotSize: riskPlan.lotSize,
     volumeLots: riskPlan.lotSize,
