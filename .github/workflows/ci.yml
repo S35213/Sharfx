@@ -2,7 +2,7 @@ name: SHAFX CI
 
 on:
   push:
-    branches: [main, fix/market-feed-test-syntax-20260927, test/rebuild-deriv-native-manual-20260930]
+    branches: [main, fix/market-feed-test-syntax-20260927, test/rebuild-deriv-native-manual-20260930, fix/ctrader-instrument-spec-fallback-20261016]
   pull_request:
 
 permissions:
