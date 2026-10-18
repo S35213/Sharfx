@@ -249,12 +249,12 @@ jobs:
                 // so it should show a paused/waiting state rather than an active CLOSE countdown.
                 await page.waitForTimeout(3500);
                 const countdownBody = await page.locator('body').innerText().catch(() => '');
-                const countdownLines = countdownBody.split('\\n').filter((line) =>
-                  /^CLOSE\\s+\\d|MARKET PAUSED · NO FRESH QUOTE|WAITING FOR LIVE QUOTE/i.test(line.trim()),
+                const countdownLines = countdownBody.split('\n').filter((line) =>
+                  /^CLOSE\s+\d|MARKET PAUSED · NO FRESH QUOTE|WAITING FOR LIVE QUOTE/i.test(line.trim()),
                 );
                 interactionReport.candleCountdown = {
                   labels: countdownLines,
-                  activeCloseCountdownVisible: /\\bCLOSE\\s+\\d/.test(countdownBody),
+                  activeCloseCountdownVisible: /\bCLOSE\s+\d/.test(countdownBody),
                   pausedForStaleQuoteVisible: /MARKET PAUSED · NO FRESH QUOTE/i.test(countdownBody),
                   waitingForQuoteVisible: /WAITING FOR LIVE QUOTE/i.test(countdownBody),
                 };
