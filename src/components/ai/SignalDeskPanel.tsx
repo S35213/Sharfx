@@ -2,6 +2,7 @@ import React, { useMemo } from 'react'
 import { Activity, BrainCircuit, RefreshCw, ShieldCheck, Sparkles } from 'lucide-react'
 import type { Timeframe } from '../../types'
 import { useSignalBotMarketData, type SignalBotMarketSource } from '../../engine/bot/useSignalBotMarketData'
+import { getWeekendMarketStatus } from '../../lib/marketHours'
 import { buildSignalRadar } from '../../engine/bot/signalRadar'
 
 interface Props {
@@ -21,6 +22,7 @@ const sourceLabel = (source: SignalBotMarketSource | null): string => {
 
 export const SignalDeskPanel: React.FC<Props> = ({ symbol, timeframe, marketSource, onReviewSetup }) => {
   const marketData = useSignalBotMarketData(symbol, marketSource)
+  const weekendMarket = getWeekendMarketStatus(symbol)
   const radarFrames = marketData.frames
   const scannerPrice = radarFrames[timeframe]?.[radarFrames[timeframe]!.length - 1]?.close
     ?? radarFrames.M1?.[radarFrames.M1.length - 1]?.close
@@ -59,6 +61,17 @@ export const SignalDeskPanel: React.FC<Props> = ({ symbol, timeframe, marketSour
         </div>
         <span className={'rounded-full border px-2 py-1 font-mono text-[8px] font-bold ' + statusTone}>{statusLabel}</span>
       </div>
+
+      {weekendMarket.isClosed && (
+        <div role="status" className="rounded-xl border border-shafx-warning/35 bg-shafx-warning/[0.06] px-3 py-2">
+          <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-shafx-warning">
+            {weekendMarket.kind === 'metal' ? 'METALS MARKET CLOSED · WEEKEND' : 'FX MARKET CLOSED · WEEKEND'}
+          </div>
+          <p className="mt-1 text-[9px] leading-4 text-shafx-textMuted">
+            {weekendMarket.reason} Manual scans are still available, but they use the last available historical candles and are not live-price signals. {weekendMarket.scheduleNote}
+          </p>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-2">
         <div className="rounded-xl border border-shafx-border bg-shafx-bg p-3">
