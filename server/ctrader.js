@@ -455,6 +455,26 @@ export const ctraderProtocolVolumeToLots = (volume, fullSymbol) => {
   return Number(volume) / lotSizeCents
 }
 
+/**
+ * cTrader spot events are subscribed with subscribeToSpotTimestamp=true.
+ * If the protocol omits that source timestamp, do not replace it with local
+ * receipt time: doing so can make a Friday/weekend quote appear live.
+ */
+export const normalizeCtraderSpotTimestamp = (value, nowMs = Date.now()) => {
+  if (value == null || (typeof value === 'string' && !value.trim())) {
+    throw new Error('cTrader spot event omitted its source timestamp; refusing to mark the quote as live.')
+  }
+  const timestampMs = Number(value)
+  if (!Number.isFinite(timestampMs) || timestampMs <= 0) {
+    throw new Error('cTrader spot event has an invalid source timestamp; refusing to mark the quote as live.')
+  }
+  const date = new Date(timestampMs)
+  if (!Number.isFinite(date.getTime()) || timestampMs > nowMs + 300_000) {
+    throw new Error('cTrader spot event timestamp is invalid or unexpectedly in the future.')
+  }
+  return date.toISOString()
+}
+
 const closeCtraderQuoteStream = async (key, stream) => {
   try { stream.socket.close() } catch {}
   if (ctraderQuoteStreams.get(key) === stream) ctraderQuoteStreams.delete(key)
@@ -514,11 +534,12 @@ const createCtraderQuoteStream = async ({ environment, account, accessToken, id,
         if (Number(body.ctidTraderAccountId) !== account || Number(body.symbolId) !== id) return
         if (body.bid == null && body.ask == null) return
 
+        const sourceTimestamp = normalizeCtraderSpotTimestamp(body.timestamp)
         const quote = {
           symbolId: Number(body.symbolId),
           bid: body.bid == null ? undefined : decodePrice(body.bid),
           ask: body.ask == null ? undefined : decodePrice(body.ask),
-          timestamp: body.timestamp ? new Date(Number(body.timestamp)).toISOString() : new Date().toISOString(),
+          timestamp: sourceTimestamp,
         }
         stream.quote = quote
         stream.lastQuoteAt = Date.now()
