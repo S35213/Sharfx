@@ -44,7 +44,7 @@ import { normalizeProviderSymbol, providerSymbolsMatch } from './lib/normalizePr
 import type { SetupCandidate } from './engine/setup/types'
 import { mockWatchlist } from './data/mock/watchlist'
 import { fetchDerivActiveForexSymbols, fetchDerivMultiTimeframeCandles, subscribeDerivForexQuotes } from './data/deriv/DerivPublicMarketFeed'
-import { applyCTraderQuoteToCandles, cTraderQuoteBucket, fetchCTraderHistoricalCandles, fetchCTraderInstrument, getRecentCTraderCandleGapSignature, isCTraderQuoteBucketCurrent, mergeCTraderHistoricalAndLiveCandles, shouldRepairCTraderHistoryForGap, subscribeCTraderLiveQuote } from './data/ctrader/CTraderLiveQuote'
+import { applyCTraderQuoteToCandles, cTraderQuoteBucket, fetchCTraderHistoricalCandles, fetchCTraderInstrument, getCTraderQuoteTimestampMs, getRecentCTraderCandleGapSignature, isCTraderQuoteTimestampFresh, isCTraderQuoteBucketCurrent, mergeCTraderHistoricalAndLiveCandles, shouldRepairCTraderHistoryForGap, subscribeCTraderLiveQuote } from './data/ctrader/CTraderLiveQuote'
 
 const EMPTY_STRUCTURAL_HISTORIES: Partial<Record<Timeframe, OHLCV[]>> = {}
 
@@ -1196,15 +1196,19 @@ const TerminalContent: React.FC = () => {
           ? ask
           : 0
       if (!price) return
-      const epochMs = Date.parse(nextQuote.timestamp)
-      const timestamp = Number.isFinite(epochMs) ? epochMs : Date.now()
+      // Use the broker's real timestamp. Never replace a missing/invalid
+      // provider timestamp with Date.now(), because that would make a stale or
+      // malformed quote appear live to the chart countdown and workspace status.
+      const timestampMs = getCTraderQuoteTimestampMs(nextQuote.timestamp)
+      if (timestampMs === null || !isCTraderQuoteTimestampFresh(nextQuote.timestamp)) return
+      const timestamp = timestampMs / 1000
       latestCTraderQuotesRef.current[normalizeProviderSymbol(subscriptionSymbol)] = {
         symbol: subscriptionSymbol,
         bid: Number.isFinite(bid) && bid > 0 ? bid : price,
         ask: Number.isFinite(ask) && ask > 0 ? ask : price,
         updatedAt: Date.now(),
       }
-      const bucket = cTraderQuoteBucket(timestamp, subscriptionTimeframe)
+      const bucket = cTraderQuoteBucket(timestamp * 1000, subscriptionTimeframe)
 
       // Quote freshness and candle timestamp validity are separate concerns.
       // A successful current quote should always feed the Bid/Ask rails, even if
@@ -1254,7 +1258,7 @@ const TerminalContent: React.FC = () => {
       setLiveBidPrice(Number.isFinite(bid) && bid > 0 ? bid : price)
       setLiveAskPrice(Number.isFinite(ask) && ask > 0 ? ask : price)
       setCurrentPrice(price)
-      setMarketTimestamp(Math.floor(timestamp / 1000))
+      setMarketTimestamp(Math.floor(timestamp))
       setLiveMarketActive(true)
       if (cTraderQuoteStaleTimerRef.current !== null) window.clearTimeout(cTraderQuoteStaleTimerRef.current)
       cTraderQuoteStaleTimerRef.current = window.setTimeout(() => {
