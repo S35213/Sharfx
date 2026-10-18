@@ -169,6 +169,7 @@ export const TradeBotPanel: React.FC<Props> = ({
       ? 'border-shafx-danger/30 bg-shafx-danger/10 text-shafx-danger'
       : 'border-shafx-border bg-shafx-bg text-shafx-textMuted'
   const updatedAt = market.updatedAt ? new Date(market.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'
+  const lastDataChangedAt = market.lastDataChangedAt ? new Date(market.lastDataChangedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'
 
   const start = (): void => {
     const currentScope = traceScopeKey
@@ -422,9 +423,9 @@ export const TradeBotPanel: React.FC<Props> = ({
             {market.lastDataChanged === true
               ? 'New candle snapshot received on the latest cycle.'
               : market.lastDataChanged === false
-                ? 'The latest response contained the same candles; rules were still re-evaluated.'
-                : 'Waiting for the next candle snapshot comparison.'}
-            {market.updatedAt ? ' Last refresh ' + updatedAt + '.' : ''}
+                ? 'The latest response contained unchanged candle history; that does not prove the market is live.'
+                : 'Waiting for the first candle snapshot comparison.'}
+            {' Last history check ' + updatedAt + ' · last snapshot change ' + lastDataChangedAt + '.'}
           </div>
         )}
       </section>
