@@ -1,4 +1,5 @@
 name: Render live browser check
+# Retest weekend quote-freshness badge and countdown after cTrader heartbeat fix.
 # Verify weekend stale-quote countdown alongside bot status after the fix deployment.
 # Target M5 for live Trade Bot cycle / gated-entry regression test.
 # Fast, bot-focused mobile regression test after the manual-scan/Run fix.
