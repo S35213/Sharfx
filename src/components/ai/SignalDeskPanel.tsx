@@ -36,22 +36,26 @@ export const SignalDeskPanel: React.FC<Props> = ({ symbol, timeframe, marketSour
   const lastUpdated = marketData.updatedAt === null
     ? '—'
     : new Date(marketData.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-  const statusLabel = marketData.status === 'idle'
-    ? 'READY TO SCAN'
+  const statusLabel = fxWeekendClosed
+    ? 'MARKET CLOSED'
+    : marketData.status === 'idle'
+      ? 'READY TO SCAN'
+      : marketData.status === 'ready'
+        ? 'DATA READY'
+        : marketData.status === 'partial'
+          ? 'PARTIAL DATA'
+          : marketData.status === 'loading'
+            ? 'SCANNING'
+            : marketData.status === 'unavailable'
+              ? 'UNAVAILABLE'
+              : 'DATA ERROR'
+  const statusTone = fxWeekendClosed
+    ? 'border-shafx-warning/30 bg-shafx-warning/10 text-shafx-warning'
     : marketData.status === 'ready'
-      ? 'DATA READY'
-    : marketData.status === 'partial'
-      ? 'PARTIAL DATA'
-      : marketData.status === 'loading'
-        ? 'SCANNING'
-        : marketData.status === 'unavailable'
-          ? 'UNAVAILABLE'
-          : 'DATA ERROR'
-  const statusTone = marketData.status === 'ready'
-    ? 'border-shafx-success/25 bg-shafx-success/10 text-shafx-success'
-    : marketData.status === 'partial'
-      ? 'border-shafx-warning/25 bg-shafx-warning/10 text-shafx-warning'
-      : 'border-shafx-border bg-shafx-bg text-shafx-textMuted'
+      ? 'border-shafx-success/25 bg-shafx-success/10 text-shafx-success'
+      : marketData.status === 'partial'
+        ? 'border-shafx-warning/25 bg-shafx-warning/10 text-shafx-warning'
+        : 'border-shafx-border bg-shafx-bg text-shafx-textMuted'
 
   return (
     <section className="space-y-4 rounded-2xl border border-shafx-border bg-shafx-surface p-4 shadow-[0_14px_36px_rgba(0,0,0,.16)]">
