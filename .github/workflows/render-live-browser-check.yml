@@ -1,4 +1,5 @@
 name: Render live browser check
+# Verify weekend stale-quote countdown alongside bot status after the fix deployment.
 # Target M5 for live Trade Bot cycle / gated-entry regression test.
 # Fast, bot-focused mobile regression test after the manual-scan/Run fix.
 # Retest after manual-scan and Trade Bot run fix deployment.
@@ -228,6 +229,24 @@ jobs:
                   signalScan: {},
                 };
                 const nav = page.locator('header.shafx-top-nav');
+                // Verify the deployed candle timer follows actual quote freshness.
+                // The default EUR/USD market is closed at this Sunday test time,
+                // so it should show a paused/waiting state rather than an active CLOSE countdown.
+                await page.waitForTimeout(3500);
+                const countdownBody = await page.locator('body').innerText().catch(() => '');
+                const countdownLines = countdownBody.split('\\n').filter((line) =>
+                  /^CLOSE\\s+\\d|MARKET PAUSED · NO FRESH QUOTE|WAITING FOR LIVE QUOTE/i.test(line.trim()),
+                );
+                interactionReport.candleCountdown = {
+                  labels: countdownLines,
+                  activeCloseCountdownVisible: /\\bCLOSE\\s+\\d/.test(countdownBody),
+                  pausedForStaleQuoteVisible: /MARKET PAUSED · NO FRESH QUOTE/i.test(countdownBody),
+                  waitingForQuoteVisible: /WAITING FOR LIVE QUOTE/i.test(countdownBody),
+                };
+                interactionReport.botIssueFeedbackCopy = {
+                  persistentIssueLabelExpected: true,
+                  countdownFeedTimestampProbe: 'The app hides active close timers when the last broker quote is older than 60 seconds.',
+                };
                 interactionReport.initialSymbol = (await nav.innerText().catch(() => '')).split('\n').slice(0, 6).join(' | ');
 
                 const readChartState = async (requestedTimeframe) => {
