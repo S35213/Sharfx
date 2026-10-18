@@ -8,6 +8,7 @@ import {
   normalizeCtraderInstrument,
   normalizeCtraderOrder,
   normalizeCtraderPosition,
+  normalizeCtraderSpotTimestamp,
 } from './ctrader.js'
 
 describe('cTrader request error normalization', () => {
@@ -152,5 +153,34 @@ describe('cTrader SHAFX normalization', () => {
     })
     expect(filled.status).toBe('filled')
     expect(rejected.status).toBe('rejected')
+  })
+})
+
+
+describe('cTrader spot quote source timestamps', () => {
+  const now = Date.parse('2026-10-18T11:48:00.000Z')
+
+  it('uses the supplied broker timestamp instead of local receipt time', () => {
+    expect(normalizeCtraderSpotTimestamp(now - 30_000, now))
+      .toBe('2026-10-18T11:47:30.000Z')
+  })
+
+  it('preserves an old Friday timestamp so freshness checks can pause the market', () => {
+    expect(normalizeCtraderSpotTimestamp(Date.parse('2026-10-16T20:59:00.000Z'), now))
+      .toBe('2026-10-16T20:59:00.000Z')
+  })
+
+  it('rejects missing source timestamps rather than fabricating fresh quotes', () => {
+    expect(() => normalizeCtraderSpotTimestamp(undefined, now))
+      .toThrow(/omitted its source timestamp/i)
+    expect(() => normalizeCtraderSpotTimestamp('', now))
+      .toThrow(/omitted its source timestamp/i)
+  })
+
+  it('rejects invalid and implausibly future timestamps', () => {
+    expect(() => normalizeCtraderSpotTimestamp('not-a-time', now))
+      .toThrow(/invalid source timestamp/i)
+    expect(() => normalizeCtraderSpotTimestamp(now + 600_000, now))
+      .toThrow(/future/i)
   })
 })

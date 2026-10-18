@@ -4,6 +4,7 @@ import { calculateCfdRiskPlan, type CfdRiskPlan } from '../../lib/cfdRiskEngine'
 import { providerSymbolsMatch } from '../../lib/normalizeProviderSymbol'
 import type { CTraderLiveInstrument, CTraderLiveQuote } from '../../data/ctrader/CTraderLiveQuote'
 import { tradeBotRiskBudget } from './tradeBotDecision'
+import { getWeekendMarketStatus } from '../../lib/marketHours'
 import type { TradeBotMarketSource } from './useTradeBotMarketData'
 
 export type CTraderApiPost = (body: Record<string, unknown>) => Promise<Record<string, unknown>>
@@ -19,6 +20,7 @@ export interface TradeBotDemoExecutionInput {
   accountCurrency: string
   symbolSpec: SymbolSpec | null
   nowMs?: number
+  clock?: () => number
   post?: CTraderApiPost
   /** Allows Stop/source changes to cancel preflight before any market order is submitted. */
   shouldContinue?: () => boolean
@@ -88,12 +90,17 @@ export const executeTradeBotDemoOrder = async (
   const {
     source, symbol, timeframe, signalCandleTime, setup,
     accountCurrency, symbolSpec,
-    nowMs = Date.now(), post = defaultPost, shouldContinue,
+    nowMs = Date.now(), clock = Date.now, post = defaultPost, shouldContinue,
   } = input
 
   if (source?.providerId !== 'ctrader' || source.environment !== 'demo' ||
       !source.connectionId || !source.accountId) {
     throw new Error('Automatic entries require the explicitly selected cTrader practice account. Live accounts are blocked.')
+  }
+  const weekendStatus = getWeekendMarketStatus(symbol, nowMs)
+  if (weekendStatus.isClosed) {
+    throw new Error((weekendStatus.reason ?? 'The market is closed for the weekend.') + ' ' +
+      weekendStatus.scheduleNote + ' No demo order was sent.')
   }
   if (!symbolSpec || !providerSymbolsMatch(symbol, symbolSpec.symbol)) {
     throw new Error('A matching verified broker specification is required before automatic sizing.')
@@ -258,7 +265,12 @@ export const executeTradeBotDemoOrder = async (
   ].join('-').slice(0, 50)
 
   ensureContinued()
-  if (Date.now() - quoteAt > 15_000) {
+  const preSubmitMarket = getWeekendMarketStatus(symbol, clock())
+  if (preSubmitMarket.isClosed) {
+    throw new Error((preSubmitMarket.reason ?? 'The market closed during Trade Bot preflight.') + ' ' +
+      preSubmitMarket.scheduleNote + ' No demo order was sent.')
+  }
+  if (clock() - quoteAt > 15_000) {
     throw new Error('The broker quote became stale during risk/margin checks; no order was sent.')
   }
   const placedPayload = await apiRequest(post, source, 'placeOrder', {
