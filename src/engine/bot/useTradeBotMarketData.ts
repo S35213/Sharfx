@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { TIMEFRAMES, type OHLCV, type Timeframe } from '../../types'
-import { fetchCTraderHistoricalCandles } from '../../data/ctrader/CTraderLiveQuote'
+import { fetchCTraderHistoricalCandles, fetchCTraderQuote, getCTraderQuoteTimestampMs, isCTraderQuoteTimestampFresh } from '../../data/ctrader/CTraderLiveQuote'
 
 export interface TradeBotMarketSource {
   providerId: string | null
@@ -15,7 +15,14 @@ export interface TradeBotMarketState {
   sourceKey: string
   frames: Partial<Record<Timeframe, OHLCV[]>>
   status: TradeBotMarketStatus
+  /** Wall-clock time when the latest history request cycle completed. This is NOT proof of live market data. */
   updatedAt: number | null
+  /** Timestamp supplied by cTrader for the actual quote; used to gate live-market readiness. */
+  quoteTimestamp: number | null
+  /** Why the latest quote is absent or fails the freshness check, if applicable. */
+  quoteError: string | null
+  /** Most recent time the returned candle snapshot actually changed. */
+  lastDataChangedAt: number | null
   error: string | null
   /** Number of completed market-history checks in the current Start/Stop session. */
   cycleNumber: number
@@ -26,6 +33,8 @@ export interface TradeBotMarketState {
 interface FetchResult {
   frames: Partial<Record<Timeframe, OHLCV[]>>
   errors: string[]
+  quoteTimestamp: number | null
+  quoteError: string | null
 }
 
 const REFRESH_MS = 15_000
@@ -72,6 +81,23 @@ const loadCTraderFrames = async (symbol: string, source: TradeBotMarketSource): 
   const environment = source.environment
   const frames: Partial<Record<Timeframe, OHLCV[]>> = {}
   const errors: string[] = []
+  // History can be re-fetched successfully over a weekend while the underlying
+  // broker quote remains frozen. Check cTrader's own quote timestamp separately.
+  const quotePromise = fetchCTraderQuote({ connectionId, accountId, environment, symbol })
+    .then((quote) => {
+      const quoteTimestamp = getCTraderQuoteTimestampMs(quote.timestamp)
+      const fresh = isCTraderQuoteTimestampFresh(quote.timestamp)
+      return {
+        quoteTimestamp,
+        quoteError: fresh
+          ? null
+          : 'cTrader returned a stale or invalid quote timestamp. History polling does not mean the market is live.',
+      }
+    })
+    .catch((error: unknown) => ({
+      quoteTimestamp: null,
+      quoteError: error instanceof Error ? error.message : 'The cTrader broker quote could not be refreshed.',
+    }))
   const queue = [...TIMEFRAMES]
   let nextIndex = 0
 
@@ -91,7 +117,9 @@ const loadCTraderFrames = async (symbol: string, source: TradeBotMarketSource): 
     }
   }
   await Promise.all([worker(), worker()])
-  return { frames, errors }
+  const quoteResult = await quotePromise
+  if (quoteResult.quoteError) errors.push('Broker quote: ' + quoteResult.quoteError)
+  return { frames, errors, ...quoteResult }
 }
 
 const loadTradeBotFrames = async (symbol: string, source: TradeBotMarketSource): Promise<FetchResult> => {
@@ -105,7 +133,18 @@ const emptyState = (
   sourceKey: string,
   status: TradeBotMarketStatus,
   error: string | null = null,
-): TradeBotMarketState => ({ sourceKey, frames: {}, status, updatedAt: null, error, cycleNumber: 0, lastDataChanged: null })
+): TradeBotMarketState => ({
+  sourceKey,
+  frames: {},
+  status,
+  updatedAt: null,
+  quoteTimestamp: null,
+  quoteError: null,
+  lastDataChangedAt: null,
+  error,
+  cycleNumber: 0,
+  lastDataChanged: null,
+})
 
 const shortError = (errors: string[]): string | null => {
   if (!errors.length) return null
@@ -132,13 +171,15 @@ export const useTradeBotMarketData = (
     : null
   const sourceKey = tradeBotMarketSourceKey(symbol, selectedSource)
   const [state, setState] = useState<TradeBotMarketState>(() => emptyState(sourceKey, 'stopped'))
+  // Preserve the most recently observed candle signature across Stop/Start sessions.
+  // Otherwise the first poll after restarting would be mistaken for a new candle.
+  const previousSnapshotRef = useRef<{ sourceKey: string; signature: string } | null>(null)
 
   useEffect(() => {
     let stopped = false
     let timer: number | null = null
     let inFlight = false
     let cycleNumber = 0
-    let previousSignature: string | null = null
     if (!enabled) return () => { stopped = true }
 
     const effectSource: TradeBotMarketSource | null = providerId
@@ -155,6 +196,9 @@ export const useTradeBotMarketData = (
         frames: previous.sourceKey === sourceKey ? previous.frames : {},
         status: 'loading',
         updatedAt: previous.sourceKey === sourceKey ? previous.updatedAt : null,
+        quoteTimestamp: previous.sourceKey === sourceKey ? previous.quoteTimestamp : null,
+        quoteError: previous.sourceKey === sourceKey ? previous.quoteError : null,
+        lastDataChangedAt: previous.sourceKey === sourceKey ? previous.lastDataChangedAt : null,
         error: null,
         cycleNumber: previous.sourceKey === sourceKey ? previous.cycleNumber : 0,
         lastDataChanged: previous.sourceKey === sourceKey ? previous.lastDataChanged : null,
@@ -165,22 +209,39 @@ export const useTradeBotMarketData = (
         const usable = TIMEFRAMES.filter((timeframe) => (result.frames[timeframe]?.length ?? 0) >= 8).length
         const status: TradeBotMarketStatus = usable === TIMEFRAMES.length ? 'ready' : usable > 0 ? 'partial' : 'error'
         const nextSignature = tradeBotFramesSignature(result.frames)
-        const lastDataChanged = previousSignature === null ? null : previousSignature !== nextSignature
-        previousSignature = nextSignature
+        const previousSnapshot = previousSnapshotRef.current
+        const lastDataChanged = previousSnapshot?.sourceKey === sourceKey
+          ? previousSnapshot.signature !== nextSignature
+          : null
+        previousSnapshotRef.current = { sourceKey, signature: nextSignature }
         cycleNumber += 1
-        setState({
+        const checkedAt = Date.now()
+        setState((previous) => ({
           sourceKey,
           frames: result.frames,
           status,
-          updatedAt: Date.now(),
+          // This timestamp means "history request completed", not "quote is live".
+          updatedAt: checkedAt,
+          quoteTimestamp: result.quoteTimestamp,
+          quoteError: result.quoteError,
+          lastDataChangedAt: lastDataChanged === false && previous.sourceKey === sourceKey
+            ? previous.lastDataChangedAt
+            : checkedAt,
           error: shortError(result.errors) ?? (status === 'error' ? 'No timeframe has enough candles to evaluate a trade plan.' : null),
           cycleNumber,
           lastDataChanged,
-        })
+        }))
       } catch (error) {
         if (stopped) return
         cycleNumber += 1
-        setState({ ...emptyState(sourceKey, 'error', error instanceof Error ? error.message : 'Unable to load cTrader practice candles.'), cycleNumber, lastDataChanged: null })
+        setState((previous) => ({
+          ...emptyState(sourceKey, 'error', error instanceof Error ? error.message : 'Unable to load cTrader practice candles.'),
+          cycleNumber,
+          lastDataChanged: null,
+          quoteTimestamp: previous.sourceKey === sourceKey ? previous.quoteTimestamp : null,
+          quoteError: error instanceof Error ? error.message : 'Unable to refresh the cTrader broker quote.',
+          lastDataChangedAt: previous.sourceKey === sourceKey ? previous.lastDataChangedAt : null,
+        }))
       } finally {
         inFlight = false
         if (!stopped) timer = window.setTimeout(() => { void refresh() }, REFRESH_MS)

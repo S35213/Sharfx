@@ -10,6 +10,7 @@ import {
   shouldRepairCTraderHistoryForGap,
   getRecentCTraderCandleGapSignature,
   isCTraderQuoteTimestampFresh,
+  getCTraderQuoteTimestampMs,
 } from './CTraderLiveQuote'
 
 const candle = (time: number, open = 1.1, high = 1.12, low = 1.09, close = 1.11) => ({
@@ -285,7 +286,15 @@ describe('cTrader broker quote freshness', () => {
     expect(isCTraderQuoteTimestampFresh('2026-10-18T11:56:40.000Z', sunday)).toBe(true)
   })
 
-  it('normalizes numeric seconds and milliseconds timestamps', () => {
+  it('normalizes numeric seconds, numeric strings, milliseconds and ISO timestamps to epoch ms', () => {
+    expect(getCTraderQuoteTimestampMs(sunday / 1000 - 10)).toBe(sunday - 10_000)
+    expect(getCTraderQuoteTimestampMs(String(sunday / 1000 - 10))).toBe(sunday - 10_000)
+    expect(getCTraderQuoteTimestampMs(sunday - 10_000)).toBe(sunday - 10_000)
+    expect(getCTraderQuoteTimestampMs('2026-10-18T11:56:50.000Z')).toBe(sunday - 10_000)
+    expect(getCTraderQuoteTimestampMs('not-a-time')).toBeNull()
+  })
+
+  it('normalizes numeric seconds and milliseconds timestamps for freshness checks', () => {
     expect(isCTraderQuoteTimestampFresh(sunday / 1000 - 10, sunday)).toBe(true)
     expect(isCTraderQuoteTimestampFresh(sunday - 10_000, sunday)).toBe(true)
   })

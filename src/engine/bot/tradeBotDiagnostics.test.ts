@@ -55,6 +55,7 @@ const baseInput = (overrides: Partial<TradeBotDiagnosticInput> = {}): TradeBotDi
   frames: { M5: candles },
   marketStatus: 'ready',
   marketUpdatedAt: NOW,
+  marketQuoteTimestamp: NOW,
   accountBalance: 1000,
   accountCurrency: 'USD',
   symbolSpec,
@@ -84,14 +85,30 @@ describe('Trade Bot diagnostics', () => {
     expect(result.gates.find((gate) => gate.id === 'source')?.detail).toContain('Live')
   })
 
-  it('waits when there are too few candles or the market refresh is stale', () => {
+  it('waits when history is too short or the broker quote timestamp is stale', () => {
     const tooFew = buildTradeBotDiagnosticSnapshot(baseInput({ frames: { M5: candles.slice(0, 4) } }))
     expect(tooFew.summary).toBe('WAITING')
     expect(tooFew.enoughCandles).toBe(false)
 
-    const stale = buildTradeBotDiagnosticSnapshot(baseInput({ marketUpdatedAt: NOW - 60_000 }))
-    expect(stale.summary).toBe('WAITING')
-    expect(stale.marketFresh).toBe(false)
+    // A history poll completed just now; its completion cannot refresh a stale broker quote.
+    const staleQuote = buildTradeBotDiagnosticSnapshot(baseInput({
+      marketUpdatedAt: NOW,
+      marketQuoteTimestamp: NOW - 60_000,
+    }))
+    expect(staleQuote.summary).toBe('WAITING')
+    expect(staleQuote.marketFresh).toBe(false)
+    expect(staleQuote.marketRefreshAgeSeconds).toBe(0)
+    expect(staleQuote.gates.find((gate) => gate.id === 'freshness')?.detail).toContain('polling does not make a stale quote live')
+  })
+
+  it('explains a missing quote even when historical candle loading succeeds', () => {
+    const missingQuote = buildTradeBotDiagnosticSnapshot(baseInput({
+      marketQuoteTimestamp: null,
+      marketQuoteError: 'Broker quote unavailable for this market session.',
+    }))
+    expect(missingQuote.summary).toBe('WAITING')
+    expect(missingQuote.marketFresh).toBe(false)
+    expect(missingQuote.gates.find((gate) => gate.id === 'freshness')?.detail).toContain('Broker quote unavailable')
   })
 
   it('blocks incomplete or mismatched broker metadata rather than accepting a fallback spec', () => {

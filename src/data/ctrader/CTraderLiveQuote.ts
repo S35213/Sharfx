@@ -61,21 +61,50 @@ const streamKey = ({ connectionId, accountId, environment, symbol }: SubscribeAr
 
 const MAX_FRESH_QUOTE_AGE_MS = 60_000
 
+/** Normalize broker quote timestamps (ISO strings, Unix seconds or milliseconds) to epoch ms. */
+export const getCTraderQuoteTimestampMs = (
+  timestamp: string | number | null | undefined,
+): number | null => {
+  if (timestamp == null) return null
+  const numeric = typeof timestamp === 'number'
+    ? timestamp
+    : /^\d+(?:\.\d+)?$/.test(timestamp.trim()) ? Number(timestamp) : Number.NaN
+  const quoteAt = Number.isFinite(numeric)
+    ? (numeric > 100_000_000_000 ? numeric : numeric * 1000)
+    : typeof timestamp === 'string' ? Date.parse(timestamp) : Number.NaN
+  return Number.isFinite(quoteAt) && quoteAt > 0 ? quoteAt : null
+}
+
 /** True only when cTrader's own quote timestamp is recent, not merely re-polled. */
 export const isCTraderQuoteTimestampFresh = (
   timestamp: string | number | null | undefined,
   nowMs = Date.now(),
   maxAgeMs = MAX_FRESH_QUOTE_AGE_MS,
 ): boolean => {
-  if (timestamp == null || !Number.isFinite(nowMs) || nowMs <= 0 ||
+  if (!Number.isFinite(nowMs) || nowMs <= 0 ||
       !Number.isFinite(maxAgeMs) || maxAgeMs < 0) return false
-  const numericTimestamp = typeof timestamp === 'number' ? timestamp : Number.NaN
-  const quoteAt = typeof timestamp === 'number'
-    ? (numericTimestamp > 100_000_000_000 ? numericTimestamp : numericTimestamp * 1000)
-    : Date.parse(timestamp)
-  if (!Number.isFinite(quoteAt) || quoteAt <= 0) return false
+  const quoteAt = getCTraderQuoteTimestampMs(timestamp)
+  if (quoteAt === null) return false
   const ageMs = nowMs - quoteAt
   return ageMs >= -5_000 && ageMs <= maxAgeMs
+}
+
+/**
+ * Fetch one broker quote snapshot for non-streaming consumers such as the
+ * Trade Bot monitor. Freshness remains a separate decision so a stale broker
+ * timestamp can be reported to the user instead of being hidden by polling.
+ */
+export const fetchCTraderQuote = async (args: SubscribeArgs): Promise<CTraderLiveQuote> => {
+  const { quote } = await requestQuote(args)
+  if (!providerSymbolsMatch(args.symbol, quote.symbol)) {
+    throw new Error('cTrader quote symbol does not match the selected market.')
+  }
+  const bid = Number(quote.bid)
+  const ask = Number(quote.ask)
+  if (!Number.isFinite(bid) || bid <= 0 || !Number.isFinite(ask) || ask < bid) {
+    throw new Error('cTrader returned an invalid bid/ask quote.')
+  }
+  return quote
 }
 
 const requestQuote = async (args: SubscribeArgs): Promise<{ quote: CTraderLiveQuote; instrument: CTraderLiveInstrument }> => {
@@ -206,8 +235,8 @@ const poll = async (key: string, args: SubscribeArgs, state: StreamState): Promi
       if (!isCTraderQuoteTimestampFresh(result.quote.timestamp, observedAt)) return
       const bid = Number(result.quote.bid)
       const ask = Number(result.quote.ask)
-      const quoteTimestampMs = Date.parse(result.quote.timestamp)
-      const quoteMinuteBucket = Number.isFinite(quoteTimestampMs) ? Math.floor(quoteTimestampMs / 60_000) : null
+      const quoteTimestampMs = getCTraderQuoteTimestampMs(result.quote.timestamp)
+      const quoteMinuteBucket = quoteTimestampMs !== null ? Math.floor(quoteTimestampMs / 60_000) : null
       const pricesChanged = state.lastBid !== bid || state.lastAsk !== ask
       const quoteClockAdvanced = quoteMinuteBucket !== null &&
         state.lastMinuteBucket !== null &&
