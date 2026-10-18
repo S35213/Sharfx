@@ -4,7 +4,7 @@ import type { SetupCandidate } from '../setup/types'
 import type { CTraderApiPost } from './tradeBotExecution'
 import { executeTradeBotDemoOrder } from './tradeBotExecution'
 
-const NOW = Date.now()
+const NOW = Date.parse('2026-10-19T11:00:00.000Z')
 const source = {
   providerId: 'ctrader',
   connectionId: 'connection-demo',
@@ -81,6 +81,7 @@ const input = () => ({
   accountCurrency: 'USD',
   symbolSpec,
   nowMs: NOW,
+  clock: () => NOW,
 })
 
 const createPost = (overrides: Partial<Record<string, unknown>> = {}): CTraderApiPost => vi.fn(async (body) => {
@@ -117,6 +118,39 @@ describe('Trade Bot cTrader demo execution', () => {
       stopLoss: expect.any(Number),
       takeProfit: expect.any(Number),
     })
+  })
+
+  it('blocks demo entries during the standard FX weekend closure before requesting quotes', async () => {
+    const post = createPost()
+    await expect(executeTradeBotDemoOrder({
+      ...input(),
+      nowMs: Date.parse('2026-10-18T11:48:00.000Z'),
+      clock: () => Date.parse('2026-10-18T11:48:00.000Z'),
+      post,
+    })).rejects.toThrow(/FX market is closed for the weekend/i)
+    expect(post).not.toHaveBeenCalled()
+  })
+
+  it('rechecks the market session immediately before submit if the weekend close arrives during preflight', async () => {
+    let clockMs = NOW
+    const post: CTraderApiPost = vi.fn(async (body) => {
+      const action = String(body.action)
+      if (action === 'quote') return validQuote
+      if (action === 'account') return validAccount
+      if (action === 'margin') {
+        clockMs = Date.parse('2026-10-18T21:00:00.000Z')
+        return { ok: true, margin: { buyMargin: 100, sellMargin: 100 } }
+      }
+      if (action === 'placeOrder') return filledOrder
+      throw new Error('Unexpected action: ' + action)
+    })
+
+    await expect(executeTradeBotDemoOrder({
+      ...input(),
+      post,
+      clock: () => clockMs,
+    })).rejects.toThrow(/market closed during Trade Bot preflight/i)
+    expect(vi.mocked(post).mock.calls.map(([body]) => body.action)).toEqual(['quote', 'account', 'margin'])
   })
 
   it('refuses live accounts before making any API request', async () => {
