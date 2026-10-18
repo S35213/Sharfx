@@ -22,7 +22,7 @@ const sourceLabel = (source: SignalBotMarketSource | null): string => {
 
 export const SignalDeskPanel: React.FC<Props> = ({ symbol, timeframe, marketSource, onReviewSetup }) => {
   const marketData = useSignalBotMarketData(symbol, marketSource)
-  const [sessionClockMs, setSessionClockMs] = useState(0)
+  const [sessionClockMs, setSessionClockMs] = useState(() => Date.now())
   useEffect(() => {
     // Session status refresh only; this clock never loads history or triggers Scan.
     const update = (): void => setSessionClockMs(Date.now())
