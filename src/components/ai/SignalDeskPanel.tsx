@@ -57,14 +57,14 @@ export const SignalDeskPanel: React.FC<Props> = ({ symbol, timeframe, marketSour
             <h3 className="text-sm font-semibold">SHAFX Signal Bot</h3>
             <span className="rounded-md border border-shafx-accent/25 bg-shafx-accent/10 px-2 py-0.5 font-mono text-[8px] font-bold uppercase tracking-[0.14em] text-shafx-accent">INDEPENDENT</span>
           </div>
-          <p className="mt-1 text-[9px] leading-4 text-shafx-textMuted">Read-only market scanner. It never opens, modifies or closes trades and does not feed the Trade Bot.</p>
+          <p className="mt-1 text-xs leading-5 text-shafx-textMuted">Read-only market scanner. It never opens, modifies or closes trades and does not feed the Trade Bot.</p>
         </div>
         <span className={'rounded-full border px-2 py-1 font-mono text-[8px] font-bold ' + statusTone}>{statusLabel}</span>
       </div>
 
       {weekendMarket.isClosed && (
         <div role="status" className="rounded-xl border border-shafx-warning/35 bg-shafx-warning/[0.06] px-3 py-2">
-          <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-shafx-warning">
+          <div className="text-xs font-bold uppercase tracking-[0.12em] text-shafx-warning">
             {weekendMarket.kind === 'metal' ? 'METALS MARKET CLOSED · WEEKEND' : 'FX MARKET CLOSED · WEEKEND'}
           </div>
           <p className="mt-1 text-[9px] leading-4 text-shafx-textMuted">
