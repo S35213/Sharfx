@@ -30,7 +30,7 @@ export const TradeBotPanel: React.FC<Props> = ({
   accountFreeMargin, onTradeOpened, onReviewSetup,
 }) => {
   const [running, setRunning] = useState(false)
-  const [sessionClockMs, setSessionClockMs] = useState(0)
+  const [sessionClockMs, setSessionClockMs] = useState(() => Date.now())
   const weekendMarket = getWeekendMarketStatus(symbol, sessionClockMs)
   const [executionPending, setExecutionPending] = useState(false)
   const [cycleMessage, setCycleMessage] = useState('Stopped. Press Start demo bot to begin monitoring the selected cTrader practice account.')
