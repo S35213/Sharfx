@@ -235,7 +235,7 @@ const poll = async (key: string, args: SubscribeArgs, state: StreamState): Promi
       if (!isCTraderQuoteTimestampFresh(result.quote.timestamp, observedAt)) return
       const bid = Number(result.quote.bid)
       const ask = Number(result.quote.ask)
-      const quoteTimestampMs = Date.parse(result.quote.timestamp)
+      const quoteTimestampMs = getCTraderQuoteTimestampMs(result.quote.timestamp)
       const quoteMinuteBucket = Number.isFinite(quoteTimestampMs) ? Math.floor(quoteTimestampMs / 60_000) : null
       const pricesChanged = state.lastBid !== bid || state.lastAsk !== ask
       const quoteClockAdvanced = quoteMinuteBucket !== null &&
