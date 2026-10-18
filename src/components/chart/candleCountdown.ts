@@ -30,3 +30,22 @@ export const getCandleCloseCountdown = (timestamp: number, timeframe: Timeframe)
   const elapsed = now % duration
   return elapsed === 0 ? duration : duration - elapsed
 }
+/**
+ * Normalizes a market timestamp to seconds and tests whether it represents a
+ * genuinely recent update. Historical candle timestamps can be old while the
+ * wall clock keeps moving, so they must not drive a live candle countdown.
+ */
+export const isMarketTimestampFresh = (
+  marketTimestamp: number | null | undefined,
+  nowSeconds: number,
+  maxAgeSeconds = 60,
+): boolean => {
+  if (!Number.isFinite(marketTimestamp) || Number(marketTimestamp) <= 0 ||
+      !Number.isFinite(nowSeconds) || nowSeconds <= 0 ||
+      !Number.isFinite(maxAgeSeconds) || maxAgeSeconds < 0) return false
+  const raw = Number(marketTimestamp)
+  const timestampSeconds = raw > 1_000_000_000_000 ? raw / 1000 : raw
+  const ageSeconds = nowSeconds - timestampSeconds
+  return ageSeconds >= -5 && ageSeconds <= maxAgeSeconds
+}
+

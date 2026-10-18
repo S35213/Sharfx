@@ -6,7 +6,7 @@ import { TIMEFRAMES, type OHLCV, type Timeframe } from '../../types'
 import { buildOpenTradeEntryMarkers, buildTradeChartMarkers, type TradeChartMarker } from './buildTradeChartMarkers'
 import { isPriceLevelOccludedByQuote } from './priceLineVisibility'
 import { resolvePriceLabelY } from './priceLineLabelLayout'
-import { getCandleCloseCountdown } from './candleCountdown'
+import { getCandleCloseCountdown, isMarketTimestampFresh } from './candleCountdown'
 import { getQuoteTickColor, getQuoteTickDirection, type QuoteTickDirection } from '../order/quoteTickDirection'
 
 export interface ChartAnnotation { id: string; price: number; label: string; color: string; labelColor?: string; lineWidth?: 1 | 2 | 3 | 4; priceTagOnly?: boolean }
@@ -121,7 +121,7 @@ const structuralOverlayKind = (annotation: ChartAnnotation): OverlayKind | null 
   return null
 }
 
-export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, symbol, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [], tradeMarkers = [], candleTheme = 'shafx', chartMode = 'candles', quoteReady = false, onTimeframeChange, replayMode = false, showStructuralOverlays = true, onVisibleBarCountChange }) => {
+export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height = '100%', annotations = [], timeframe, symbol, toolMode = 'cursor', pipSize = 0.0001, onToolNotice, showGrid = true, showPriceLabels = true, bidPrice, askPrice, tradeLines = [], tradeMarkers = [], candleTheme = 'shafx', chartMode = 'candles', quoteReady = false, onTimeframeChange, replayMode = false, showStructuralOverlays = true, onVisibleBarCountChange, marketTimestamp }) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const visibleBarCountCallbackRef = useRef(onVisibleBarCountChange)
   useEffect(() => { visibleBarCountCallbackRef.current = onVisibleBarCountChange }, [onVisibleBarCountChange])
@@ -1367,8 +1367,9 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const quotePrecision = pricePrecision
   const [countdownNowSeconds, setCountdownNowSeconds] = useState(0)
 
-  // Candle boundaries follow UTC market time. Drive the display from a local
-  // one-second clock so a quiet or delayed provider feed cannot freeze it.
+  // The clock may tick continuously, but the candle countdown is shown only
+  // while the selected market has delivered a fresh quote. Historical candles
+  // do not prove a new candle is forming during a weekend, holiday or feed outage.
   useEffect(() => {
     const updateClock = (): void => setCountdownNowSeconds(Math.floor(Date.now() / 1000))
     updateClock()
@@ -1376,9 +1377,14 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     return () => window.clearInterval(timer)
   }, [])
 
+  const marketQuoteFresh = isMarketTimestampFresh(marketTimestamp, countdownNowSeconds)
   const countdown = timeframe && countdownNowSeconds > 0
     ? getCandleCloseCountdown(countdownNowSeconds, timeframe)
     : null
+  const showLiveCountdown = !replayMode && quoteReady && marketQuoteFresh && countdown !== null
+  const countdownStatusLabel = marketTimestamp && !marketQuoteFresh
+    ? 'MARKET PAUSED · NO FRESH QUOTE'
+    : 'WAITING FOR LIVE QUOTE'
 
   useEffect(() => {
     const bid = Number(bidPrice)
@@ -1498,7 +1504,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       })}
     </div>
     <div className="pointer-events-none absolute left-3 top-3 z-30 flex items-center gap-2 rounded-xl border border-shafx-border/70 bg-shafx-surface/88 px-2.5 py-1.5 shadow-md backdrop-blur">
-      {!replayMode && countdown !== null && <span className="font-mono text-[8px] font-semibold tabular text-shafx-accent">CLOSE {formatCountdown(countdown)}</span>}
+      {showLiveCountdown && <span className="font-mono text-[8px] font-semibold tabular text-shafx-accent">CLOSE {formatCountdown(countdown!)}</span>}
+      {!replayMode && !showLiveCountdown && <span className="font-mono text-[8px] font-semibold tabular text-shafx-textMuted">{countdownStatusLabel}</span>}
       {replayMode && <span className="font-mono text-[8px] font-semibold tabular text-shafx-accent">HISTORICAL</span>}
     </div>
     {hoverCandle && (

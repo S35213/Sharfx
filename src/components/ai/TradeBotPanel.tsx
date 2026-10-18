@@ -31,6 +31,8 @@ export const TradeBotPanel: React.FC<Props> = ({
   const [running, setRunning] = useState(false)
   const [executionPending, setExecutionPending] = useState(false)
   const [cycleMessage, setCycleMessage] = useState('Stopped. Press Start demo bot to begin monitoring the selected cTrader practice account.')
+  const [lastBotIssue, setLastBotIssue] = useState<string | null>(null)
+  const runSessionRef = useRef(0)
   const runStartedAtRef = useRef(0)
   const runningScopeKeyRef = useRef<string | null>(null)
   const attemptedSignalRef = useRef<{ key: string; message: string } | null>(null)
@@ -165,16 +167,22 @@ export const TradeBotPanel: React.FC<Props> = ({
 
   const start = (): void => {
     const currentScope = traceScopeKey
+    runSessionRef.current += 1
     runningScopeKeyRef.current = currentScope
     runStartedAtRef.current = Date.now()
+    setLastBotIssue(null)
     setCycleMessage('Started. Waiting for a fresh completed market-history cycle before making any decision.')
     setRunning(true)
   }
   const stop = (): void => {
+    // Invalidate any in-flight preflight. Its next awaited checkpoint must see
+    // this new session number and refuse to submit an order.
+    runSessionRef.current += 1
     runningScopeKeyRef.current = null
     setRunning(false)
-    setExecutionPending(false)
-    setCycleMessage('Stopped by you. No further demo entries will be attempted.')
+    setCycleMessage(executionInFlightRef.current
+      ? 'Stop requested. The current preflight is being cancelled before order submission; wait for it to settle before restarting.'
+      : 'Stopped by you. No further demo entries will be attempted.')
   }
 
   // A running session is pinned to the exact market/timeframe/account the user
@@ -182,10 +190,12 @@ export const TradeBotPanel: React.FC<Props> = ({
   // silently onto a new market.
   useEffect(() => {
     if (!running || !runningScopeKeyRef.current || runningScopeKeyRef.current === traceScopeKey) return
+    runSessionRef.current += 1
     runningScopeKeyRef.current = null
     setRunning(false)
-    setExecutionPending(false)
-    setCycleMessage('Bot stopped because the selected market, timeframe or account changed. Press Start demo bot to start a new session.')
+    setCycleMessage(executionInFlightRef.current
+      ? 'Bot stopped because the selected market, timeframe or account changed. Cancelling the previous preflight before any order submission.'
+      : 'Bot stopped because the selected market, timeframe or account changed. Press Start demo bot to start a new session.')
   }, [running, traceScopeKey])
 
   const executionSource = useMemo<TradeBotMarketSource | null>(() => marketSource ? ({
@@ -212,8 +222,9 @@ export const TradeBotPanel: React.FC<Props> = ({
       return
     }
     if (market.status === 'unavailable' || market.status === 'error' || !market.updatedAt) {
-      setCycleMessage('Cycle ' + market.cycleNumber + ': no valid market update. ' +
-        (market.error || 'Waiting for cTrader practice history. No order was sent.'))
+      const issue = market.error || 'Waiting for cTrader practice history. No order was sent.'
+      setLastBotIssue(issue)
+      setCycleMessage('Cycle ' + market.cycleNumber + ': no valid market update. ' + issue)
       return
     }
     if (market.updatedAt < runStartedAtRef.current) {
@@ -232,12 +243,18 @@ export const TradeBotPanel: React.FC<Props> = ({
       return
     }
     if (diagnostics.summary !== 'READY_FOR_REVIEW') {
-      setCycleMessage('Cycle ' + market.cycleNumber + ': a setup candidate exists, but one or more source, freshness or risk gates are not clear. No order was sent.')
+      const heldGates = diagnostics.gates.filter((gate) => !gate.passed)
+      const details = heldGates.map((gate) => gate.label + ': ' + gate.detail).join(' | ')
+      const reason = details || 'Decision diagnostics did not reach READY_FOR_REVIEW.'
+      setLastBotIssue(reason)
+      setCycleMessage('Cycle ' + market.cycleNumber + ': setup candidate found but held by checks. ' + reason + ' No order was sent.')
       return
     }
     const lastCandle = market.frames[timeframe]?.[market.frames[timeframe]!.length - 1]
     if (!lastCandle || !Number.isFinite(lastCandle.time) || lastCandle.time <= 0) {
-      setCycleMessage('Cycle ' + market.cycleNumber + ': signal candle timestamp is missing. No order was sent.')
+      const issue = 'Signal candle timestamp is missing; no order was sent.'
+      setLastBotIssue(issue)
+      setCycleMessage('Cycle ' + market.cycleNumber + ': ' + issue)
       return
     }
     const signalKey = [
@@ -253,6 +270,7 @@ export const TradeBotPanel: React.FC<Props> = ({
 
     executionInFlightRef.current = true
     setExecutionPending(true)
+    const runSession = runSessionRef.current
     const preflightMessage = 'Cycle ' + market.cycleNumber + ': setup qualified. Checking a fresh broker quote, risk sizing, current exposure and free margin before submitting one cTrader DEMO order.'
     attemptedSignalRef.current = { key: signalKey, message: preflightMessage }
     setCycleMessage(preflightMessage)
@@ -267,7 +285,7 @@ export const TradeBotPanel: React.FC<Props> = ({
       accountFreeMargin,
       accountCurrency,
       symbolSpec,
-      shouldContinue: () => runningScopeKeyRef.current === traceScopeKey,
+      shouldContinue: () => runSessionRef.current === runSession && runningScopeKeyRef.current === traceScopeKey,
     }).then((result) => {
       onTradeOpened({ ...result.trade, chartTimeframe: timeframe })
       const message = result.protectionConfirmed
@@ -277,6 +295,7 @@ export const TradeBotPanel: React.FC<Props> = ({
           '. cTrader confirmed the broker-side stop loss and take profit.'
         : 'DEMO ORDER FILLED, BUT BROKER PROTECTION IS NOT CONFIRMED. The bot has stopped. Check this position in cTrader now.'
       attemptedSignalRef.current = { key: signalKey, message }
+      setLastBotIssue(result.protectionConfirmed ? null : 'Broker-side stop loss/take profit confirmation failed; verify the position directly in cTrader.')
       setCycleMessage(message)
       if (!result.protectionConfirmed) {
         runningScopeKeyRef.current = null
@@ -284,8 +303,10 @@ export const TradeBotPanel: React.FC<Props> = ({
       }
     }).catch((error: unknown) => {
       const reason = error instanceof Error ? error.message : 'Unknown cTrader demo order error.'
+      if (runSessionRef.current !== runSession) return
       const message = 'Cycle ' + market.cycleNumber + ': no demo order sent — ' + reason
       attemptedSignalRef.current = { key: signalKey, message }
+      setLastBotIssue(reason)
       setCycleMessage(message)
     }).finally(() => {
       executionInFlightRef.current = false
@@ -392,12 +413,19 @@ export const TradeBotPanel: React.FC<Props> = ({
           </div>
         )}
       </section>
+      {lastBotIssue && (
+        <div role="alert" className="rounded-lg border border-shafx-danger/30 bg-shafx-danger/[0.06] px-3 py-2 text-[9px] leading-4 text-shafx-text">
+          <div className="font-semibold text-shafx-danger">Last bot issue / held check</div>
+          <p className="mt-1 break-words">{lastBotIssue}</p>
+          <p className="mt-1 text-shafx-textMuted">This message stays visible until the next time you start a new run or a successful protected fill clears it.</p>
+        </div>
+      )}
 
       <details className="rounded-xl border border-shafx-border bg-shafx-bg/70 p-3">
         <summary className="cursor-pointer list-none flex items-center justify-between gap-2 text-[9px] font-semibold uppercase tracking-[0.13em]">
           <span>Decision diagnostics</span>
           <span className={'font-mono ' + diagnosticsTone}>
-            {diagnostics.summary === 'READY_FOR_REVIEW' && running ? 'SETUP READY · CHECKING BROKER' : diagnostics.summary.replace(/_/g, ' ')}
+            {diagnostics.summary === 'READY_FOR_REVIEW' && running ? 'SETUP QUALIFIED · PREFLIGHT' : diagnostics.summary.replace(/_/g, ' ')}
           </span>
         </summary>
         <div className="mt-3 space-y-3 text-[9px]">
@@ -514,7 +542,7 @@ export const TradeBotPanel: React.FC<Props> = ({
               </div>
             )}
           </div>
-          <p className="leading-4 text-shafx-textMuted">Diagnostics are for analysis and manual review only. They do not authorize or submit an order.</p>
+          <p className="leading-4 text-shafx-textMuted">When Start demo bot is active on a cTrader practice account, a qualified setup enters broker preflight. The Bot activity message above reports every hold or rejected order; a setup score alone never means an order was filled.</p>
         </div>
       </details>
 
@@ -530,7 +558,7 @@ export const TradeBotPanel: React.FC<Props> = ({
 
       <div className="flex flex-wrap gap-2">
         {!running ? (
-          <button type="button" onClick={start} disabled={!canStart} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-shafx-accent px-3 text-[9px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">
+          <button type="button" onClick={start} disabled={!canStart || executionPending} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-shafx-accent px-3 text-[9px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">
             <Play className="h-3.5 w-3.5" /> Start demo bot
           </button>
         ) : (
