@@ -56,7 +56,7 @@ export interface TradeBotHistoricalReplayResult {
   notes: string[]
 }
 
-const performanceForRecords = (
+export const calculateTradeBotReplayPerformance = (
   records: readonly TradeBotShadowRecord[],
   costRById: ReadonlyMap<string, number>,
 ): TradeBotReplayPerformance => {
@@ -210,7 +210,7 @@ export const runTradeBotHistoricalReplay = (input: {
   const ambiguous = records.filter((record) => record.status === 'AMBIGUOUS').length
   const pending = records.filter((record) => record.status === 'PENDING').length
   const resolvedSampleCount = target + stop
-  const performance = performanceForRecords(records, costRById)
+  const performance = calculateTradeBotReplayPerformance(records, costRById)
   // Use a chronological final 30% as a holdout reporting slice. Earlier bars
   // may inform a decision, but holdout signals are never evaluated on later data
   // until their outcomes resolve through subsequent candles.
@@ -221,7 +221,7 @@ export const runTradeBotHistoricalReplay = (input: {
   const outOfSampleRecords = outOfSampleStartTime === null
     ? []
     : records.filter((record) => record.signalCandleTime >= outOfSampleStartTime)
-  const outOfSample = performanceForRecords(outOfSampleRecords, costRById)
+  const outOfSample = calculateTradeBotReplayPerformance(outOfSampleRecords, costRById)
 
   return {
     timeframe,
