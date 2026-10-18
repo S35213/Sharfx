@@ -311,6 +311,20 @@ jobs:
                   interactionReport.tradeBotRunTimeframeError = String(error).slice(0, 500);
                 }
 
+                const chartBodyBeforeBots = await page.locator('body').innerText().catch(() => '');
+                interactionReport.marketSession = {
+                  timezone: 'America/New_York',
+                  weekday: newYorkParts.weekday,
+                  time: (newYorkParts.hour || '00') + ':' + (newYorkParts.minute || '00'),
+                  expectedFxWeekendClosed,
+                  closedLabelVisible: /FX MARKET CLOSED · WEEKEND/i.test(chartBodyBeforeBots),
+                  closeCountdownVisible: /\bCLOSE\s+\d{1,2}:\d{2}\b/i.test(chartBodyBeforeBots),
+                };
+                if (expectedFxWeekendClosed &&
+                    (!interactionReport.marketSession.closedLabelVisible || interactionReport.marketSession.closeCountdownVisible)) {
+                  hasFatalIssue = true;
+                }
+
                 // Open Bots after explicitly selecting M5 for the Trade Bot run check.
                 // Open the actual Bot workspace using the real navigation controls:
                 // desktop's workspace rail and mobile's fixed bottom navigation both label it "Bots".
