@@ -1391,7 +1391,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
 
   const weekendMarket = getWeekendMarketStatus(
     symbol ?? '',
-    countdownNowSeconds > 0 ? countdownNowSeconds * 1000 : Date.now(),
+    countdownNowSeconds * 1000,
   )
   const countdown = !weekendMarket.isClosed && timeframe && countdownNowSeconds > 0
     ? getCandleCloseCountdown(countdownNowSeconds, timeframe)
