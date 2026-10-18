@@ -10,6 +10,7 @@ import { advanceTradeBotShadowRecords, appendTradeBotShadowRecord, createTradeBo
 import { runTradeBotHistoricalReplay, type TradeBotHistoricalReplayResult } from '../../engine/bot/tradeBotHistoricalReplay'
 import { executeTradeBotDemoOrder } from '../../engine/bot/tradeBotExecution'
 import { formatCurrency, formatPrice } from '../../lib/format'
+import { getWeekendMarketStatus } from '../../lib/marketHours'
 
 interface Props {
   symbol: string
@@ -29,6 +30,8 @@ export const TradeBotPanel: React.FC<Props> = ({
   accountFreeMargin, onTradeOpened, onReviewSetup,
 }) => {
   const [running, setRunning] = useState(false)
+  const [sessionClockMs, setSessionClockMs] = useState(0)
+  const weekendMarket = getWeekendMarketStatus(symbol, sessionClockMs)
   const [executionPending, setExecutionPending] = useState(false)
   const [cycleMessage, setCycleMessage] = useState('Stopped. Press Start demo bot to begin monitoring the selected cTrader practice account.')
   const [lastBotIssue, setLastBotIssue] = useState<string | null>(null)
@@ -41,6 +44,14 @@ export const TradeBotPanel: React.FC<Props> = ({
   const [shadowRecords, setShadowRecords] = useState<TradeBotShadowRecord[]>([])
   const [historicalReplay, setHistoricalReplay] = useState<TradeBotHistoricalReplayResult | null>(null)
   const market = useTradeBotMarketData(symbol, marketSource, running)
+  useEffect(() => {
+    // Refresh market-session status only; this timer does not start scan cycles.
+    const update = (): void => setSessionClockMs(Date.now())
+    update()
+    const timer = window.setInterval(update, 30_000)
+    return () => window.clearInterval(timer)
+  }, [])
+
   const decision = useMemo(() => evaluateTradeBotDecision({
     frames: market.frames,
     symbol,
@@ -136,33 +147,40 @@ export const TradeBotPanel: React.FC<Props> = ({
       : !marketSource.connectionId || !marketSource.accountId
         ? 'Connect to cTrader and select a specific account.'
         : marketSource.environment !== 'demo'
-          ? 'Trade Bot analysis is restricted to cTrader practice/demo accounts. Live accounts remain blocked.'
-          : !Number.isFinite(accountBalance) || accountBalance <= 0
-            ? 'A positive balance from the selected cTrader practice account is required.'
-            : !symbolSpec
-              ? (symbolSpecError
-                ? 'cTrader instrument lookup failed: ' + symbolSpecError
-                : 'Waiting for matching cTrader instrument rules. The bot will stay blocked until the broker supplies valid contract, pip and lot constraints.')
-              : null
+          ? 'Trade Bot is restricted to cTrader practice/demo accounts. Live accounts remain blocked.'
+          : sessionClockMs > 0 && weekendMarket.isClosed
+            ? (weekendMarket.reason ?? 'The market is closed for the weekend.') + ' ' + weekendMarket.scheduleNote + ' Wait for the standard session to reopen; new entries are paused.'
+            : !Number.isFinite(accountBalance) || accountBalance <= 0
+              ? 'A positive balance from the selected cTrader practice account is required.'
+              : !symbolSpec
+                ? (symbolSpecError
+                  ? 'cTrader instrument lookup failed: ' + symbolSpecError
+                  : 'Waiting for matching cTrader instrument rules. The bot will stay blocked until the broker supplies valid contract, pip and lot constraints.')
+                : null
+  const marketClosed = sessionClockMs > 0 && weekendMarket.isClosed
   const canStart = startBlockReason === null && market.status !== 'unavailable'
-  const statusLabel = !running
-    ? (startBlockReason ? 'BLOCKED' : 'STOPPED')
-    : !symbolSpec
-      ? 'BROKER SPECS NEEDED'
-      : market.status === 'ready'
-        ? 'MONITORING'
-        : market.status === 'partial'
-          ? 'PARTIAL DATA'
-          : market.status === 'loading'
-            ? 'LOADING'
-            : market.status === 'unavailable'
-              ? 'BLOCKED'
-              : 'DATA ERROR'
-  const statusTone = decision.status === 'READY' && running
-    ? 'border-shafx-success/30 bg-shafx-success/10 text-shafx-success'
-    : decision.status === 'BLOCKED' || startBlockReason
-      ? 'border-shafx-danger/30 bg-shafx-danger/10 text-shafx-danger'
-      : 'border-shafx-border bg-shafx-bg text-shafx-textMuted'
+  const statusLabel = marketClosed
+    ? 'MARKET CLOSED'
+    : !running
+      ? (startBlockReason ? 'BLOCKED' : 'STOPPED')
+      : !symbolSpec
+        ? 'BROKER SPECS NEEDED'
+        : market.status === 'ready'
+          ? 'MONITORING'
+          : market.status === 'partial'
+            ? 'PARTIAL DATA'
+            : market.status === 'loading'
+              ? 'LOADING'
+              : market.status === 'unavailable'
+                ? 'BLOCKED'
+                : 'DATA ERROR'
+  const statusTone = marketClosed
+    ? 'border-shafx-warning/30 bg-shafx-warning/10 text-shafx-warning'
+    : decision.status === 'READY' && running
+      ? 'border-shafx-success/30 bg-shafx-success/10 text-shafx-success'
+      : decision.status === 'BLOCKED' || startBlockReason
+        ? 'border-shafx-danger/30 bg-shafx-danger/10 text-shafx-danger'
+        : 'border-shafx-border bg-shafx-bg text-shafx-textMuted'
   const updatedAt = market.updatedAt ? new Date(market.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'
 
   const start = (): void => {
@@ -184,6 +202,21 @@ export const TradeBotPanel: React.FC<Props> = ({
       ? 'Stop requested. The current preflight is being cancelled before order submission; wait for it to settle before restarting.'
       : 'Stopped by you. No further demo entries will be attempted.')
   }
+
+  // A closed weekend session is a hard entry gate. Stop a session that
+  // crosses the close, invalidate any preflight, and preserve an explanation.
+  useEffect(() => {
+    if (!marketClosed) return
+    const message = (weekendMarket.reason ?? 'The market is closed for the weekend.') + ' ' +
+      weekendMarket.scheduleNote + ' Bot decisions use historical candles and new entries are paused until the session reopens.'
+    setLastBotIssue(message)
+    if (running) {
+      runSessionRef.current += 1
+      runningScopeKeyRef.current = null
+      setRunning(false)
+    }
+    setCycleMessage(message)
+  }, [marketClosed, weekendMarket.reason, weekendMarket.scheduleNote, running])
 
   // A running session is pinned to the exact market/timeframe/account the user
   // started. Changing any of these stops it rather than moving an active bot
@@ -367,6 +400,14 @@ export const TradeBotPanel: React.FC<Props> = ({
 
       {market.error && <div role="status" className="rounded-lg border border-shafx-warning/25 bg-shafx-warning/[0.06] px-3 py-2 text-[9px] leading-4 text-shafx-textMuted">{market.error}</div>}
 
+      {sessionClockMs > 0 && weekendMarket.isClosed && (
+        <div role="status" className="rounded-xl border border-shafx-warning/35 bg-shafx-warning/[0.06] px-3 py-3">
+          <div className="text-xs font-bold uppercase tracking-[0.12em] text-shafx-warning">MARKET CLOSED · WEEKEND</div>
+          <p className="mt-1 text-sm leading-5 text-shafx-text">{weekendMarket.reason} The displayed history is not a live trading opportunity. Trade Bot Run is blocked until the standard session reopens.</p>
+          <p className="mt-1 text-xs leading-5 text-shafx-textMuted">{weekendMarket.scheduleNote}</p>
+        </div>
+      )}
+
       <div className="rounded-xl border border-shafx-border bg-shafx-bg/70 p-3">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 text-[9px] font-semibold uppercase tracking-[0.13em] text-shafx-textMuted"><ShieldCheck className="h-3.5 w-3.5" /> Independent decision</div>
@@ -374,11 +415,15 @@ export const TradeBotPanel: React.FC<Props> = ({
         </div>
         <div className="mt-3 rounded-lg border border-shafx-border bg-shafx-bg p-3">
           <div className="flex items-center justify-between gap-2">
-            <span className="font-mono text-[9px] font-bold">{decision.status}</span>
-            <span className="font-mono text-[8px] text-shafx-textMuted">HTF {decision.higherTimeframeBias}</span>
+            <span className="font-mono text-[9px] font-bold">{marketClosed ? 'MARKET CLOSED' : decision.status}</span>
+            <span className="font-mono text-[8px] text-shafx-textMuted">HTF {marketClosed ? 'PAUSED' : decision.higherTimeframeBias}</span>
           </div>
-          <p className="mt-2 text-[9px] leading-4 text-shafx-textMuted">{decision.reason}</p>
-          {decision.setup && (
+          <p className="mt-2 text-[9px] leading-4 text-shafx-textMuted">
+            {marketClosed
+              ? (weekendMarket.reason ?? 'The market is closed for the weekend.') + ' Latest candles are historical, not live. Trade Bot decisions and entries are paused.'
+              : decision.reason}
+          </p>
+          {decision.setup && !marketClosed && (
             <div className="mt-3 grid grid-cols-2 gap-2 text-[9px]">
               <div><span className="block text-shafx-textMuted">Direction</span><b className={decision.setup.direction === 'BUY' ? 'text-shafx-success' : 'text-shafx-danger'}>{decision.setup.direction}</b></div>
               <div><span className="block text-shafx-textMuted">Setup score</span><b>{decision.setup.confidence} / 100</b></div>
@@ -393,14 +438,14 @@ export const TradeBotPanel: React.FC<Props> = ({
 
       <section className="rounded-xl border border-shafx-border bg-shafx-bg p-3" aria-live="polite" role="status">
         <div className="flex items-center justify-between gap-2">
-          <div className="text-[9px] font-semibold uppercase tracking-[0.13em] text-shafx-textMuted">Bot activity</div>
-          <span className="font-mono text-[8px] text-shafx-textMuted">{running ? 'CYCLE ' + String(market.cycleNumber) : 'IDLE'}</span>
+          <div className="text-xs font-semibold uppercase tracking-[0.13em] text-shafx-textMuted">Bot activity</div>
+          <span className="font-mono text-xs text-shafx-textMuted">{running ? 'CYCLE ' + String(market.cycleNumber) : marketClosed ? 'MARKET CLOSED' : 'IDLE'}</span>
         </div>
         <div className="mt-2 flex items-center gap-2">
           {running && (market.status === 'loading' || executionPending)
             ? <Activity className="h-3.5 w-3.5 shrink-0 animate-pulse text-shafx-accent" />
             : <span className={'h-2 w-2 shrink-0 rounded-full ' + (running ? decision.status === 'READY' ? 'bg-shafx-success' : 'bg-shafx-accent' : 'bg-shafx-border')} />}
-          <p className="text-[9px] leading-4 text-shafx-text">{cycleMessage}</p>
+          <p className="text-sm leading-5 text-shafx-text">{cycleMessage}</p>
         </div>
         {running && market.cycleNumber > 0 && (
           <div className="mt-2 text-[8px] leading-4 text-shafx-textMuted">
