@@ -459,8 +459,23 @@ jobs:
                     const botBody = await page.locator('body').innerText().catch(() => '');
                     interactionReport.tradeBotRun.completedCycleObserved = /Cycle \d+:/.test(botBody);
                     interactionReport.tradeBotRun.activityText = botBody.split('\n').filter((line) =>
-                      /SHAFX Trade Bot|MONITORING|LOADING|PARTIAL DATA|BLOCKED|Cycle \d+:|Fetching a fresh cTrader|DEMO ORDER FILLED|no demo order sent|SETUP READY/i.test(line),
+                      /SHAFX Trade Bot|MONITORING|LOADING|PARTIAL DATA|BLOCKED|WAITING FOR QUOTE|Cycle \d+:|Fetching a fresh cTrader|DEMO ORDER FILLED|no demo order sent|SETUP READY/i.test(line),
                     ).slice(-32);
+                    // At the Sunday FX close, a successful history poll must not
+                    // masquerade as a fresh broker quote. The cycle should explain
+                    // the stale/missing quote and confirm that no order was sent.
+                    const quoteHeldMessageVisible = /market quote is stale or unavailable|No fresh cTrader quote is available|No cTrader broker quote timestamp is available|broker quote timestamp is \d+ seconds old or invalid|Repeated history polling does not make a stale quote live/i.test(botBody);
+                    interactionReport.tradeBotRun.brokerQuoteFreshness = {
+                      statusWaitingForQuote: /WAITING FOR QUOTE/i.test(botBody),
+                      quoteHeldMessageVisible,
+                      historyAndQuoteTimesSeparated: /History request|history check/i.test(botBody),
+                      noOrderSentMessageVisible: /No order was sent\./i.test(botBody),
+                      expectedWeekendStaleQuoteHold: expectedFxWeekendClosed,
+                    };
+                    if (expectedFxWeekendClosed && interactionReport.tradeBotRun.clickedStart &&
+                        interactionReport.tradeBotRun.completedCycleObserved && !quoteHeldMessageVisible) {
+                      hasFatalIssue = true;
+                    }
                     interactionReport.tradeBotRun.interceptedOrderCount = blockedDemoOrderRequests.length;
                     interactionReport.tradeBotRun.interceptedOrders = blockedDemoOrderRequests;
                     const stopButton = page.getByRole('button', { name: /Stop bot/i }).first();
