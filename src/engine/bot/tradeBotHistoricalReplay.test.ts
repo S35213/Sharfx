@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { OHLCV, SymbolSpec } from '../../types'
-import { runTradeBotHistoricalReplay } from './tradeBotHistoricalReplay'
+import { calculateTradeBotReplayPerformance, runTradeBotHistoricalReplay } from './tradeBotHistoricalReplay'
+import type { TradeBotShadowRecord } from './tradeBotShadowEvaluation'
 
 const spec: SymbolSpec = {
   symbol: 'EUR/USD', baseCurrency: 'EUR', quoteCurrency: 'USD',
@@ -45,5 +46,65 @@ describe('Trade Bot historical replay', () => {
     expect(result.blockedDecisions).toBeGreaterThan(0)
     expect(result.readyCandidates).toBe(0)
     expect(result.records).toHaveLength(0)
+  })
+  it('reports cost-adjusted R metrics without hiding stops or ambiguous outcomes', () => {
+    const record = (id: string, status: TradeBotShadowRecord['status'], time: number): TradeBotShadowRecord => ({
+      id,
+      scopeKey: 'scope',
+      symbol: 'EUR/USD',
+      timeframe: 'M5',
+      direction: 'BUY',
+      signalCandleTime: time,
+      entryPrice: 1.1,
+      stopLoss: 1.099,
+      takeProfit: 1.102,
+      riskBudget: 5,
+      estimatedLoss: 1,
+      estimatedReward: 2,
+      status,
+      resolvedAt: time + 300,
+      resolutionNote: 'test fixture',
+    })
+    const metrics = calculateTradeBotReplayPerformance([
+      record('target', 'TARGET', 100),
+      record('stop', 'STOP', 200),
+      record('ambiguous', 'AMBIGUOUS', 300),
+      record('pending', 'PENDING', 400),
+    ], new Map([['target', 0.2], ['stop', 0.2]]))
+
+    expect(metrics.candidateCount).toBe(4)
+    expect(metrics.target).toBe(1)
+    expect(metrics.stop).toBe(1)
+    expect(metrics.ambiguous).toBe(1)
+    expect(metrics.pending).toBe(1)
+    expect(metrics.resolvedSampleCount).toBe(2)
+    expect(metrics.targetHitRatePercent).toBe(50)
+    expect(metrics.netWinRatePercent).toBe(50)
+    expect(metrics.netTotalR).toBe(0.6)
+    expect(metrics.netExpectancyR).toBe(0.3)
+    expect(metrics.netProfitFactor).toBe(1.5)
+    expect(metrics.maxDrawdownR).toBe(1.2)
+  })
+
+  it('splits a sufficiently long history into a separate chronological holdout', () => {
+    const frame = bars(40)
+    const result = runTradeBotHistoricalReplay({
+      scopeKey: 'scope', symbol: 'EUR/USD', timeframe: 'M5', frames: { M5: frame },
+      accountBalance: 1000, accountCurrency: 'USD', symbolSpec: spec,
+      estimatedRoundTripCostPips: 1.5,
+    })
+    expect(result.assumedRoundTripCostPips).toBe(1.5)
+    expect(result.outOfSampleStartTime).toBe(frame[28].time)
+    expect(result.outOfSample.candidateCount).toBeLessThanOrEqual(result.readyCandidates)
+    expect(result.notes.join(' ')).toContain('historical spread or commission')
+  })
+
+  it('does not pretend a short history has a separate out-of-sample sample', () => {
+    const result = runTradeBotHistoricalReplay({
+      scopeKey: 'scope', symbol: 'EUR/USD', timeframe: 'M5', frames: { M5: bars(12) },
+      accountBalance: 1000, accountCurrency: 'USD', symbolSpec: spec,
+    })
+    expect(result.outOfSampleStartTime).toBeNull()
+    expect(result.outOfSample.resolvedSampleCount).toBe(0)
   })
 })
