@@ -7,6 +7,7 @@ import { buildOpenTradeEntryMarkers, buildTradeChartMarkers, type TradeChartMark
 import { isPriceLevelOccludedByQuote } from './priceLineVisibility'
 import { resolvePriceLabelY } from './priceLineLabelLayout'
 import { getCandleCloseCountdown } from './candleCountdown'
+import { getWeekendMarketStatus } from '../../lib/marketHours'
 import { getQuoteTickColor, getQuoteTickDirection, type QuoteTickDirection } from '../order/quoteTickDirection'
 
 export interface ChartAnnotation { id: string; price: number; label: string; color: string; labelColor?: string; lineWidth?: 1 | 2 | 3 | 4; priceTagOnly?: boolean }
@@ -1367,16 +1368,32 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const quotePrecision = pricePrecision
   const [countdownNowSeconds, setCountdownNowSeconds] = useState(0)
 
-  // Candle boundaries follow UTC market time. Drive the display from a local
-  // one-second clock so a quiet or delayed provider feed cannot freeze it.
+  // Candle countdown is a clock display only while the instrument's standard
+  // market session is open. During the FX weekend, pause the second-by-second
+  // clock and show a closed-market notice rather than pretending candles are forming.
   useEffect(() => {
-    const updateClock = (): void => setCountdownNowSeconds(Math.floor(Date.now() / 1000))
+    let stopped = false
+    let timer: number | null = null
+    const updateClock = (): void => {
+      if (stopped) return
+      const nowMs = Date.now()
+      const nowSeconds = Math.floor(nowMs / 1000)
+      setCountdownNowSeconds(nowSeconds)
+      const weekendClosed = getWeekendMarketStatus(symbol, nowMs).isClosed
+      timer = window.setTimeout(updateClock, weekendClosed ? 60_000 : 1000)
+    }
     updateClock()
-    const timer = window.setInterval(updateClock, 1000)
-    return () => window.clearInterval(timer)
-  }, [])
+    return () => {
+      stopped = true
+      if (timer !== null) window.clearTimeout(timer)
+    }
+  }, [symbol])
 
-  const countdown = timeframe && countdownNowSeconds > 0
+  const weekendMarket = getWeekendMarketStatus(
+    symbol,
+    countdownNowSeconds > 0 ? countdownNowSeconds * 1000 : Date.now(),
+  )
+  const countdown = !weekendMarket.isClosed && timeframe && countdownNowSeconds > 0
     ? getCandleCloseCountdown(countdownNowSeconds, timeframe)
     : null
 
@@ -1498,7 +1515,16 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
       })}
     </div>
     <div className="pointer-events-none absolute left-3 top-3 z-30 flex items-center gap-2 rounded-xl border border-shafx-border/70 bg-shafx-surface/88 px-2.5 py-1.5 shadow-md backdrop-blur">
-      {!replayMode && countdown !== null && <span className="font-mono text-[8px] font-semibold tabular text-shafx-accent">CLOSE {formatCountdown(countdown)}</span>}
+      {!replayMode && weekendMarket.isClosed && (
+        <span
+          className="font-mono text-[8px] font-bold tabular text-shafx-warning"
+          title={weekendMarket.scheduleNote}
+          aria-label={weekendMarket.reason ?? 'Market closed for the weekend'}
+        >
+          {weekendMarket.kind === 'metal' ? 'METALS MARKET CLOSED · WEEKEND' : 'FX MARKET CLOSED · WEEKEND'}
+        </span>
+      )}
+      {!replayMode && !weekendMarket.isClosed && countdown !== null && <span className="font-mono text-[8px] font-semibold tabular text-shafx-accent">CLOSE {formatCountdown(countdown)}</span>}
       {replayMode && <span className="font-mono text-[8px] font-semibold tabular text-shafx-accent">HISTORICAL</span>}
     </div>
     {hoverCandle && (
