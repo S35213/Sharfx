@@ -40,6 +40,7 @@ export const TradeBotPanel: React.FC<Props> = ({
   const [decisionTrace, setDecisionTrace] = useState<TradeBotDecisionTraceEntry[]>([])
   const [shadowRecords, setShadowRecords] = useState<TradeBotShadowRecord[]>([])
   const [historicalReplay, setHistoricalReplay] = useState<TradeBotHistoricalReplayResult | null>(null)
+  const [replayCostPips, setReplayCostPips] = useState(1.5)
   const market = useTradeBotMarketData(symbol, marketSource, running)
   const decision = useMemo(() => evaluateTradeBotDecision({
     frames: market.frames,
@@ -57,6 +58,8 @@ export const TradeBotPanel: React.FC<Props> = ({
     frames: market.frames,
     marketStatus: market.status,
     marketUpdatedAt: market.updatedAt,
+    marketQuoteTimestamp: market.quoteTimestamp,
+    marketQuoteError: market.quoteError,
     accountBalance,
     accountCurrency,
     symbolSpec,
@@ -71,6 +74,8 @@ export const TradeBotPanel: React.FC<Props> = ({
     market.frames,
     market.status,
     market.updatedAt,
+    market.quoteTimestamp,
+    market.quoteError,
     accountBalance,
     accountCurrency,
     symbolSpec,
@@ -235,6 +240,15 @@ export const TradeBotPanel: React.FC<Props> = ({
       setCycleMessage('Cycle ' + market.cycleNumber + ': market history is not ready. No order was sent.')
       return
     }
+    // Fresh history HTTP responses are not evidence of a live market. Gate on
+    // the timestamp attached to cTrader's actual quote before interpreting setup.
+    if (!diagnostics.marketFresh) {
+      const freshnessDetail = diagnostics.gates.find((gate) => gate.id === 'freshness')?.detail
+        || 'No fresh cTrader quote is available.'
+      setLastBotIssue(freshnessDetail)
+      setCycleMessage('Cycle ' + market.cycleNumber + ': market quote is stale or unavailable. ' + freshnessDetail + ' No order was sent.')
+      return
+    }
     if (decision.status !== 'READY' || !decision.setup) {
       setCycleMessage(
         'Cycle ' + market.cycleNumber + ': monitoring ' + timeframe + '; no entry qualified. ' +
@@ -315,7 +329,7 @@ export const TradeBotPanel: React.FC<Props> = ({
   }, [
     running, traceScopeKey, market.status, market.updatedAt, market.cycleNumber,
     market.error, market.lastDataChanged, market.frames, timeframe, decision,
-    diagnostics.summary, executionSource, symbol, accountBalance, accountFreeMargin,
+    diagnostics.summary, diagnostics.marketFresh, diagnostics.gates, executionSource, symbol, accountBalance, accountFreeMargin,
     accountCurrency, symbolSpec, onTradeOpened,
   ])
   const runHistoricalReplay = (): void => {
@@ -328,6 +342,7 @@ export const TradeBotPanel: React.FC<Props> = ({
       accountBalance,
       accountCurrency,
       symbolSpec,
+      estimatedRoundTripCostPips: replayCostPips,
     })
     setHistoricalReplay(result)
   }
@@ -434,7 +449,8 @@ export const TradeBotPanel: React.FC<Props> = ({
             <div className="mt-1 break-words font-mono">{diagnostics.sourceLabel}</div>
             <div className="mt-2 grid grid-cols-2 gap-2">
               <div><span className="block text-shafx-textMuted">Candle history</span><b>{diagnostics.candleCount} / 8 bars ({timeframe})</b></div>
-              <div><span className="block text-shafx-textMuted">Market refresh</span><b>{diagnostics.marketAgeSeconds === null ? 'never' : diagnostics.marketAgeSeconds + 's ago'} · {diagnostics.marketFresh ? 'fresh' : 'stale'}</b></div>
+              <div><span className="block text-shafx-textMuted">Broker quote</span><b>{diagnostics.marketAgeSeconds === null ? 'never' : diagnostics.marketAgeSeconds + 's old'} · {diagnostics.marketFresh ? 'fresh' : 'stale'}</b></div>
+              <div><span className="block text-shafx-textMuted">History request</span><b>{diagnostics.marketRefreshAgeSeconds === null ? 'never' : diagnostics.marketRefreshAgeSeconds + 's ago'}</b></div>
               <div><span className="block text-shafx-textMuted">Last candle time</span><b className="font-mono">{diagnostics.lastCandleAt ? new Date(diagnostics.lastCandleAt).toLocaleString() : '—'}</b></div>
               <div><span className="block text-shafx-textMuted">Last candle close</span><b className="font-mono">{diagnostics.lastCandleClose === null ? '—' : formatPrice(diagnostics.lastCandleClose, symbolSpec?.pricePrecision ?? 5)}</b></div>
             </div>
@@ -510,10 +526,30 @@ export const TradeBotPanel: React.FC<Props> = ({
                 <div><span className="block text-shafx-textMuted">Target / stop</span><b>{historicalReplay.target} / {historicalReplay.stop}</b></div>
                 <div><span className="block text-shafx-textMuted">Ambiguous</span><b>{historicalReplay.ambiguous}</b></div>
                 <div><span className="block text-shafx-textMuted">Unresolved</span><b>{historicalReplay.pending}</b></div>
+                <div><span className="block text-shafx-textMuted">Net total</span><b>{historicalReplay.netTotalR === null ? '—' : historicalReplay.netTotalR.toFixed(2) + 'R'}</b></div>
+                <div><span className="block text-shafx-textMuted">Profit factor</span><b>{historicalReplay.netProfitFactor === null ? '—' : historicalReplay.netProfitFactor.toFixed(2)}</b></div>
+                <div><span className="block text-shafx-textMuted">Expectancy</span><b>{historicalReplay.netExpectancyR === null ? '—' : historicalReplay.netExpectancyR.toFixed(2) + 'R/trade'}</b></div>
+                <div><span className="block text-shafx-textMuted">Max drawdown</span><b>{historicalReplay.maxDrawdownR === null ? '—' : historicalReplay.maxDrawdownR.toFixed(2) + 'R'}</b></div>
               </div>
               <div className="mt-2 text-[8px] leading-4 text-shafx-textMuted">
-                Target rate among resolved non-ambiguous samples: {historicalReplay.conservativeTargetRatePercent === null ? 'not available' : historicalReplay.conservativeTargetRatePercent + '%'}.
-                This is a historical candle replay, not broker execution or proof of profitability.
+                Target hit rate among resolved non-ambiguous samples: {historicalReplay.conservativeTargetRatePercent === null ? 'not available' : historicalReplay.conservativeTargetRatePercent + '%'}.
+                Net metrics subtract an assumed {historicalReplay.assumedRoundTripCostPips.toFixed(1)} pip-equivalent round-trip cost. This is not recorded broker spread/commission or proof of profitability.
+              </div>
+              <div className="mt-3 rounded-lg border border-shafx-border p-3">
+                <div className="text-[8px] font-semibold uppercase tracking-[0.12em] text-shafx-accent">Chronological holdout · final 30%</div>
+                <div className="mt-1 text-[8px] text-shafx-textMuted">
+                  {historicalReplay.outOfSampleStartTime === null ? 'Not enough candles to create a separate holdout segment.' : 'Signals at or after ' + new Date(historicalReplay.outOfSampleStartTime * 1000).toLocaleString() + ' are measured separately.'}
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <div><span className="block text-shafx-textMuted">Candidates</span><b>{historicalReplay.outOfSample.candidateCount}</b></div>
+                  <div><span className="block text-shafx-textMuted">Resolved / ambiguous</span><b>{historicalReplay.outOfSample.resolvedSampleCount} / {historicalReplay.outOfSample.ambiguous}</b></div>
+                  <div><span className="block text-shafx-textMuted">Net win rate</span><b>{historicalReplay.outOfSample.netWinRatePercent === null ? '—' : historicalReplay.outOfSample.netWinRatePercent + '%'}</b></div>
+                  <div><span className="block text-shafx-textMuted">Net expectancy</span><b>{historicalReplay.outOfSample.netExpectancyR === null ? '—' : historicalReplay.outOfSample.netExpectancyR.toFixed(2) + 'R'}</b></div>
+                  <div><span className="block text-shafx-textMuted">Profit factor</span><b>{historicalReplay.outOfSample.netProfitFactor === null ? '—' : historicalReplay.outOfSample.netProfitFactor.toFixed(2)}</b></div>
+                  <div><span className="block text-shafx-textMuted">Net total</span><b>{historicalReplay.outOfSample.netTotalR === null ? '—' : historicalReplay.outOfSample.netTotalR.toFixed(2) + 'R'}</b></div>
+                  <div><span className="block text-shafx-textMuted">Max drawdown</span><b>{historicalReplay.outOfSample.maxDrawdownR === null ? '—' : historicalReplay.outOfSample.maxDrawdownR.toFixed(2) + 'R'}</b></div>
+                  <div><span className="block text-shafx-textMuted">Pending</span><b>{historicalReplay.outOfSample.pending}</b></div>
+                </div>
               </div>
               <ul className="mt-2 list-disc space-y-1 pl-4 text-[8px] leading-4 text-shafx-textMuted">
                 {historicalReplay.notes.slice(1).map((note) => <li key={note}>{note}</li>)}
@@ -556,6 +592,19 @@ export const TradeBotPanel: React.FC<Props> = ({
         </div>
       )}
 
+      <label className="block text-[8px] leading-4 text-shafx-textMuted">
+        Assumed round-trip execution cost (pip-equivalent; tune per instrument)
+        <input
+          type="number"
+          min="0"
+          max="100"
+          step="0.1"
+          value={replayCostPips}
+          onChange={(event) => setReplayCostPips(event.currentTarget.value === '' ? 0 : Math.min(100, Math.max(0, Number(event.currentTarget.value) || 0)))}
+          className="mt-1 block min-h-9 w-full rounded-lg border border-shafx-border bg-shafx-bg px-3 font-mono text-xs text-shafx-text"
+          aria-label="Assumed round-trip execution cost in pip-equivalent units"
+        />
+      </label>
       <div className="flex flex-wrap gap-2">
         {!running ? (
           <button type="button" onClick={start} disabled={!canStart || executionPending} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-shafx-accent px-3 text-[9px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">
