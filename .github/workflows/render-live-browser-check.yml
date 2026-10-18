@@ -338,6 +338,14 @@ jobs:
                   botsOpened = true;
                 }
                 const botWorkspaceText = await page.locator('body').innerText().catch(() => '');
+                interactionReport.signalWeekendStatus = {
+                  expectedFxWeekendClosed,
+                  closureBannerVisible: /FX MARKET CLOSED · WEEKEND/i.test(botWorkspaceText),
+                  historicalDataWarningVisible: /historical—not live-price signals/i.test(botWorkspaceText),
+                };
+                if (expectedFxWeekendClosed &&
+                    (!interactionReport.signalWeekendStatus.closureBannerVisible ||
+                     !interactionReport.signalWeekendStatus.historicalDataWarningVisible)) hasFatalIssue = true;
 
                 // Wait for the Signal Bot scan control to become actionable, click it,
                 // and inspect the transient scanning state as well as the returned state.
