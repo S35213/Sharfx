@@ -59,6 +59,25 @@ const POLL_INTERVAL_MS = 150
 const streamKey = ({ connectionId, accountId, environment, symbol }: SubscribeArgs): string =>
   [connectionId, accountId, environment, symbol.toUpperCase()].join(':')
 
+const MAX_FRESH_QUOTE_AGE_MS = 60_000
+
+/** True only when cTrader's own quote timestamp is recent, not merely re-polled. */
+export const isCTraderQuoteTimestampFresh = (
+  timestamp: string | number | null | undefined,
+  nowMs = Date.now(),
+  maxAgeMs = MAX_FRESH_QUOTE_AGE_MS,
+): boolean => {
+  if (timestamp == null || !Number.isFinite(nowMs) || nowMs <= 0 ||
+      !Number.isFinite(maxAgeMs) || maxAgeMs < 0) return false
+  const numericTimestamp = typeof timestamp === 'number' ? timestamp : Number.NaN
+  const quoteAt = typeof timestamp === 'number'
+    ? (numericTimestamp > 100_000_000_000 ? numericTimestamp : numericTimestamp * 1000)
+    : Date.parse(timestamp)
+  if (!Number.isFinite(quoteAt) || quoteAt <= 0) return false
+  const ageMs = nowMs - quoteAt
+  return ageMs >= -5_000 && ageMs <= maxAgeMs
+}
+
 const requestQuote = async (args: SubscribeArgs): Promise<{ quote: CTraderLiveQuote; instrument: CTraderLiveInstrument }> => {
   const response = await fetch('/api/providers/ctrader', {
     method: 'POST',
@@ -180,6 +199,11 @@ const poll = async (key: string, args: SubscribeArgs, state: StreamState): Promi
     try {
       const result = await requestQuote(args)
       if (state.stopped) return
+      const observedAt = Date.now()
+      // The server may keep returning a cached spot value on a 150ms poll. Do not
+      // treat that repeat delivery as a new live tick when cTrader's own timestamp
+      // is stale; otherwise the UI heartbeat keeps the chart labelled LIVE all weekend.
+      if (!isCTraderQuoteTimestampFresh(result.quote.timestamp, observedAt)) return
       const bid = Number(result.quote.bid)
       const ask = Number(result.quote.ask)
       const quoteTimestampMs = Date.parse(result.quote.timestamp)
@@ -202,7 +226,7 @@ const poll = async (key: string, args: SubscribeArgs, state: StreamState): Promi
       const resumed = state.resumeRefreshPending
       state.resumeRefreshPending = false
       const update: CTraderQuoteUpdateMeta = { pricesChanged, quoteClockAdvanced, resumed }
-      const notifiedAt = Date.now()
+      const notifiedAt = observedAt
       if (!shouldNotifyCTraderQuoteListener(update, state.lastNotifiedAt, notifiedAt)) return
       state.lastNotifiedAt = notifiedAt
       for (const listener of state.listeners) listener(result.quote, result.instrument, update)
