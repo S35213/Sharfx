@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { TIMEFRAMES, type OHLCV, type Timeframe } from '../../types'
 import { fetchCTraderHistoricalCandles, fetchCTraderQuote, getCTraderQuoteTimestampMs, isCTraderQuoteTimestampFresh } from '../../data/ctrader/CTraderLiveQuote'
 
@@ -171,13 +171,15 @@ export const useTradeBotMarketData = (
     : null
   const sourceKey = tradeBotMarketSourceKey(symbol, selectedSource)
   const [state, setState] = useState<TradeBotMarketState>(() => emptyState(sourceKey, 'stopped'))
+  // Preserve the most recently observed candle signature across Stop/Start sessions.
+  // Otherwise the first poll after restarting would be mistaken for a new candle.
+  const previousSnapshotRef = useRef<{ sourceKey: string; signature: string } | null>(null)
 
   useEffect(() => {
     let stopped = false
     let timer: number | null = null
     let inFlight = false
     let cycleNumber = 0
-    let previousSignature: string | null = null
     if (!enabled) return () => { stopped = true }
 
     const effectSource: TradeBotMarketSource | null = providerId
@@ -207,8 +209,11 @@ export const useTradeBotMarketData = (
         const usable = TIMEFRAMES.filter((timeframe) => (result.frames[timeframe]?.length ?? 0) >= 8).length
         const status: TradeBotMarketStatus = usable === TIMEFRAMES.length ? 'ready' : usable > 0 ? 'partial' : 'error'
         const nextSignature = tradeBotFramesSignature(result.frames)
-        const lastDataChanged = previousSignature === null ? null : previousSignature !== nextSignature
-        previousSignature = nextSignature
+        const previousSnapshot = previousSnapshotRef.current
+        const lastDataChanged = previousSnapshot?.sourceKey === sourceKey
+          ? previousSnapshot.signature !== nextSignature
+          : null
+        previousSnapshotRef.current = { sourceKey, signature: nextSignature }
         cycleNumber += 1
         const checkedAt = Date.now()
         setState((previous) => ({
