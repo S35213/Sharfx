@@ -7,6 +7,7 @@ import { buildOpenTradeEntryMarkers, buildTradeChartMarkers, type TradeChartMark
 import { isPriceLevelOccludedByQuote } from './priceLineVisibility'
 import { resolvePriceLabelY } from './priceLineLabelLayout'
 import { getCandleCloseCountdown, isMarketTimestampFresh } from './candleCountdown'
+import { getWeekendMarketStatus } from '../../lib/marketHours'
 import { getQuoteTickColor, getQuoteTickDirection, type QuoteTickDirection } from '../order/quoteTickDirection'
 
 export interface ChartAnnotation { id: string; price: number; label: string; color: string; labelColor?: string; lineWidth?: 1 | 2 | 3 | 4; priceTagOnly?: boolean }
@@ -1367,24 +1368,41 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
   const quotePrecision = pricePrecision
   const [countdownNowSeconds, setCountdownNowSeconds] = useState(0)
 
-  // The clock may tick continuously, but the candle countdown is shown only
-  // while the selected market has delivered a fresh quote. Historical candles
-  // do not prove a new candle is forming during a weekend, holiday or feed outage.
+  // The wall clock is only a timer for the countdown; it must not imply that
+  // a new candle is forming while a recognised FX/metal market is closed.
+  // The source quote's own timestamp independently gates live countdowns on weekdays.
   useEffect(() => {
-    const updateClock = (): void => setCountdownNowSeconds(Math.floor(Date.now() / 1000))
+    let stopped = false
+    let timer: number | null = null
+    const updateClock = (): void => {
+      if (stopped) return
+      const nowMs = Date.now()
+      const nowSeconds = Math.floor(nowMs / 1000)
+      setCountdownNowSeconds(nowSeconds)
+      timer = window.setTimeout(
+        updateClock,
+        getWeekendMarketStatus(symbol ?? '', nowMs).isClosed ? 60_000 : 1000,
+      )
+    }
     updateClock()
-    const timer = window.setInterval(updateClock, 1000)
-    return () => window.clearInterval(timer)
-  }, [])
+    return () => {
+      stopped = true
+      if (timer !== null) window.clearTimeout(timer)
+    }
+  }, [symbol])
 
+  const weekendMarket = getWeekendMarketStatus(symbol ?? '', countdownNowSeconds * 1000)
   const marketQuoteFresh = isMarketTimestampFresh(marketTimestamp, countdownNowSeconds)
   const countdown = timeframe && countdownNowSeconds > 0
     ? getCandleCloseCountdown(countdownNowSeconds, timeframe)
     : null
-  const showLiveCountdown = !replayMode && quoteReady && marketQuoteFresh && countdown !== null
-  const countdownStatusLabel = marketTimestamp && !marketQuoteFresh
-    ? 'MARKET PAUSED · NO FRESH QUOTE'
-    : 'WAITING FOR LIVE QUOTE'
+  const showLiveCountdown = !replayMode && !weekendMarket.isClosed &&
+    quoteReady && marketQuoteFresh && countdown !== null
+  const countdownStatusLabel = weekendMarket.isClosed
+    ? (weekendMarket.kind === 'metal' ? 'METALS MARKET CLOSED · WEEKEND' : 'FX MARKET CLOSED · WEEKEND')
+    : marketTimestamp && !marketQuoteFresh
+      ? 'MARKET PAUSED · NO FRESH QUOTE'
+      : 'WAITING FOR LIVE QUOTE'
 
   useEffect(() => {
     const bid = Number(bidPrice)
