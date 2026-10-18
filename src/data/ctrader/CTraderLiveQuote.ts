@@ -68,7 +68,7 @@ export const getCTraderQuoteTimestampMs = (
   if (timestamp == null) return null
   const numeric = typeof timestamp === 'number'
     ? timestamp
-    : /^\\d+(?:\\.\\d+)?$/.test(timestamp.trim()) ? Number(timestamp) : Number.NaN
+    : /^\d+(?:\.\d+)?$/.test(timestamp.trim()) ? Number(timestamp) : Number.NaN
   const quoteAt = Number.isFinite(numeric)
     ? (numeric > 100_000_000_000 ? numeric : numeric * 1000)
     : typeof timestamp === 'string' ? Date.parse(timestamp) : Number.NaN
@@ -236,7 +236,7 @@ const poll = async (key: string, args: SubscribeArgs, state: StreamState): Promi
       const bid = Number(result.quote.bid)
       const ask = Number(result.quote.ask)
       const quoteTimestampMs = getCTraderQuoteTimestampMs(result.quote.timestamp)
-      const quoteMinuteBucket = Number.isFinite(quoteTimestampMs) ? Math.floor(quoteTimestampMs / 60_000) : null
+      const quoteMinuteBucket = quoteTimestampMs !== null ? Math.floor(quoteTimestampMs / 60_000) : null
       const pricesChanged = state.lastBid !== bid || state.lastAsk !== ask
       const quoteClockAdvanced = quoteMinuteBucket !== null &&
         state.lastMinuteBucket !== null &&
