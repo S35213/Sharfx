@@ -405,17 +405,17 @@ export const TradeBotPanel: React.FC<Props> = ({
 
       <section className="rounded-xl border border-shafx-border bg-shafx-bg p-3" aria-live="polite" role="status">
         <div className="flex items-center justify-between gap-2">
-          <div className="text-[9px] font-semibold uppercase tracking-[0.13em] text-shafx-textMuted">Bot activity</div>
-          <span className="font-mono text-[8px] text-shafx-textMuted">{running ? 'CYCLE ' + String(market.cycleNumber) : 'IDLE'}</span>
+          <div className="text-xs font-semibold uppercase tracking-[0.13em] text-shafx-textMuted">Bot activity</div>
+          <span className="font-mono text-xs text-shafx-textMuted">{running ? 'CYCLE ' + String(market.cycleNumber) : weekendMarket.isClosed ? 'MARKET CLOSED' : 'IDLE'}</span>
         </div>
         <div className="mt-2 flex items-center gap-2">
           {running && (market.status === 'loading' || executionPending)
             ? <Activity className="h-3.5 w-3.5 shrink-0 animate-pulse text-shafx-accent" />
             : <span className={'h-2 w-2 shrink-0 rounded-full ' + (running ? decision.status === 'READY' ? 'bg-shafx-success' : 'bg-shafx-accent' : 'bg-shafx-border')} />}
-          <p className="text-[9px] leading-4 text-shafx-text">{cycleMessage}</p>
+          <p className="text-sm leading-5 text-shafx-text">{cycleMessage}</p>
         </div>
         {running && market.cycleNumber > 0 && (
-          <div className="mt-2 text-[8px] leading-4 text-shafx-textMuted">
+          <div className="mt-2 text-xs leading-5 text-shafx-textMuted">
             {market.lastDataChanged === true
               ? 'New candle snapshot received on the latest cycle.'
               : market.lastDataChanged === false
@@ -556,7 +556,7 @@ export const TradeBotPanel: React.FC<Props> = ({
       </div>
 
       {!running && startBlockReason && (
-        <div role="status" className="rounded-lg border border-shafx-danger/25 bg-shafx-danger/[0.05] px-3 py-2 text-[9px] leading-4 text-shafx-textMuted">
+        <div role="status" className="rounded-lg border border-shafx-danger/25 bg-shafx-danger/[0.05] px-3 py-2 text-xs leading-5 text-shafx-textMuted">
           <span className="font-semibold text-shafx-danger">Start blocked: </span>{startBlockReason}
         </div>
       )}
