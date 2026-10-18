@@ -1,8 +1,9 @@
-import React, { useMemo } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { Activity, BrainCircuit, RefreshCw, ShieldCheck, Sparkles } from 'lucide-react'
 import type { Timeframe } from '../../types'
 import { useSignalBotMarketData, type SignalBotMarketSource } from '../../engine/bot/useSignalBotMarketData'
 import { buildSignalRadar } from '../../engine/bot/signalRadar'
+import { isForexMarketWeekendClosed } from '../../lib/marketSession'
 
 interface Props {
   symbol: string
@@ -21,6 +22,12 @@ const sourceLabel = (source: SignalBotMarketSource | null): string => {
 
 export const SignalDeskPanel: React.FC<Props> = ({ symbol, timeframe, marketSource, onReviewSetup }) => {
   const marketData = useSignalBotMarketData(symbol, marketSource)
+  const [marketClockMs, setMarketClockMs] = useState(() => Date.now())
+  useEffect(() => {
+    const timer = window.setInterval(() => setMarketClockMs(Date.now()), 30_000)
+    return () => window.clearInterval(timer)
+  }, [])
+  const fxWeekendClosed = isForexMarketWeekendClosed(symbol, marketClockMs)
   const radarFrames = marketData.frames
   const scannerPrice = radarFrames[timeframe]?.[radarFrames[timeframe]!.length - 1]?.close
     ?? radarFrames.M1?.[radarFrames.M1.length - 1]?.close
@@ -29,22 +36,26 @@ export const SignalDeskPanel: React.FC<Props> = ({ symbol, timeframe, marketSour
   const lastUpdated = marketData.updatedAt === null
     ? '—'
     : new Date(marketData.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-  const statusLabel = marketData.status === 'idle'
-    ? 'READY TO SCAN'
+  const statusLabel = fxWeekendClosed
+    ? 'MARKET CLOSED'
+    : marketData.status === 'idle'
+      ? 'READY TO SCAN'
+      : marketData.status === 'ready'
+        ? 'DATA READY'
+        : marketData.status === 'partial'
+          ? 'PARTIAL DATA'
+          : marketData.status === 'loading'
+            ? 'SCANNING'
+            : marketData.status === 'unavailable'
+              ? 'UNAVAILABLE'
+              : 'DATA ERROR'
+  const statusTone = fxWeekendClosed
+    ? 'border-shafx-warning/30 bg-shafx-warning/10 text-shafx-warning'
     : marketData.status === 'ready'
-      ? 'DATA READY'
-    : marketData.status === 'partial'
-      ? 'PARTIAL DATA'
-      : marketData.status === 'loading'
-        ? 'SCANNING'
-        : marketData.status === 'unavailable'
-          ? 'UNAVAILABLE'
-          : 'DATA ERROR'
-  const statusTone = marketData.status === 'ready'
-    ? 'border-shafx-success/25 bg-shafx-success/10 text-shafx-success'
-    : marketData.status === 'partial'
-      ? 'border-shafx-warning/25 bg-shafx-warning/10 text-shafx-warning'
-      : 'border-shafx-border bg-shafx-bg text-shafx-textMuted'
+      ? 'border-shafx-success/25 bg-shafx-success/10 text-shafx-success'
+      : marketData.status === 'partial'
+        ? 'border-shafx-warning/25 bg-shafx-warning/10 text-shafx-warning'
+        : 'border-shafx-border bg-shafx-bg text-shafx-textMuted'
 
   return (
     <section className="space-y-4 rounded-2xl border border-shafx-border bg-shafx-surface p-4 shadow-[0_14px_36px_rgba(0,0,0,.16)]">
@@ -59,6 +70,19 @@ export const SignalDeskPanel: React.FC<Props> = ({ symbol, timeframe, marketSour
         </div>
         <span className={'rounded-full border px-2 py-1 font-mono text-[8px] font-bold ' + statusTone}>{statusLabel}</span>
       </div>
+
+      {fxWeekendClosed && (
+        <div
+          role="status"
+          data-shafx-fx-weekend-closed="true"
+          className="rounded-xl border border-shafx-warning/30 bg-shafx-warning/[0.07] p-3"
+        >
+          <div className="font-mono text-[9px] font-bold uppercase tracking-[0.12em] text-shafx-warning">FX MARKET CLOSED · WEEKEND</div>
+          <p className="mt-1 text-[8px] leading-4 text-shafx-textMuted">
+            Historical—not live-price signals. The last completed candles are kept for analysis, but these levels are not live-price entries. Wait for a fresh broker quote and the market to reopen before acting on a setup.
+          </p>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-2">
         <div className="rounded-xl border border-shafx-border bg-shafx-bg p-3">

@@ -7,6 +7,7 @@ import { buildOpenTradeEntryMarkers, buildTradeChartMarkers, type TradeChartMark
 import { isPriceLevelOccludedByQuote } from './priceLineVisibility'
 import { resolvePriceLabelY } from './priceLineLabelLayout'
 import { getCandleCloseCountdown, isMarketTimestampFresh } from './candleCountdown'
+import { isForexMarketWeekendClosed } from '../../lib/marketSession'
 import { getQuoteTickColor, getQuoteTickDirection, type QuoteTickDirection } from '../order/quoteTickDirection'
 
 export interface ChartAnnotation { id: string; price: number; label: string; color: string; labelColor?: string; lineWidth?: 1 | 2 | 3 | 4; priceTagOnly?: boolean }
@@ -1382,9 +1383,12 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ data, height
     ? getCandleCloseCountdown(countdownNowSeconds, timeframe)
     : null
   const showLiveCountdown = !replayMode && quoteReady && marketQuoteFresh && countdown !== null
-  const countdownStatusLabel = marketTimestamp && !marketQuoteFresh
-    ? 'MARKET PAUSED · NO FRESH QUOTE'
-    : 'WAITING FOR LIVE QUOTE'
+  const fxWeekendClosed = isForexMarketWeekendClosed(symbol ?? '', countdownNowSeconds * 1000)
+  const countdownStatusLabel = fxWeekendClosed
+    ? 'FX MARKET CLOSED · WEEKEND'
+    : marketTimestamp && !marketQuoteFresh
+      ? 'MARKET PAUSED · NO FRESH QUOTE'
+      : 'WAITING FOR LIVE QUOTE'
 
   useEffect(() => {
     const bid = Number(bidPrice)
