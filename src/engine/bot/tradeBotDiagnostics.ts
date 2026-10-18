@@ -19,7 +19,11 @@ export interface TradeBotDiagnosticInput {
   timeframe: Timeframe
   frames: Partial<Record<Timeframe, OHLCV[]>>
   marketStatus: TradeBotMarketStatus
+  /** Local completion time of the last candle-history request. */
   marketUpdatedAt: number | null
+  /** Provider timestamp attached to the actual cTrader quote, not the poll time. */
+  marketQuoteTimestamp: number | null
+  marketQuoteError?: string | null
   accountBalance: number
   accountCurrency: string
   symbolSpec: SymbolSpec | null
@@ -37,7 +41,10 @@ export interface TradeBotDiagnosticSnapshot {
   lastCandleClose: number | null
   loadedTimeframes: string[]
   marketStatus: TradeBotMarketStatus
+  /** Age of cTrader's own quote timestamp. */
   marketAgeSeconds: number | null
+  /** Age of the last successful history-request cycle, shown separately from quote age. */
+  marketRefreshAgeSeconds: number | null
   marketFresh: boolean
   brokerSpec: {
     available: boolean
@@ -86,14 +93,15 @@ export const buildTradeBotDiagnosticSnapshot = (
 ): TradeBotDiagnosticSnapshot => {
   const {
     source, symbol, timeframe, frames, marketStatus, marketUpdatedAt,
-    accountBalance, accountCurrency, symbolSpec, decision, nowMs = Date.now(),
+    marketQuoteTimestamp, marketQuoteError, accountBalance, accountCurrency, symbolSpec, decision, nowMs = Date.now(),
   } = input
   const candles = frames[timeframe] ?? []
   const lastCandle = candles[candles.length - 1]
   const candleCount = candles.length
   const enoughCandles = candleCount >= MINIMUM_CANDLES
-  const ageMs = marketUpdatedAt == null ? null : nowMs - marketUpdatedAt
-  const marketFresh = ageMs !== null && ageMs >= -5_000 && ageMs <= STALE_AFTER_MS
+  const refreshAgeMs = marketUpdatedAt == null ? null : nowMs - marketUpdatedAt
+  const quoteAgeMs = marketQuoteTimestamp == null ? null : nowMs - marketQuoteTimestamp
+  const marketFresh = quoteAgeMs !== null && quoteAgeMs >= -5_000 && quoteAgeMs <= STALE_AFTER_MS
   const sourceAllowed = source?.providerId === 'ctrader' &&
     source.environment === 'demo' &&
     Boolean(source.connectionId?.trim() && source.accountId?.trim())
@@ -141,11 +149,11 @@ export const buildTradeBotDiagnosticSnapshot = (
       id: 'freshness',
       label: 'Market refresh',
       passed: marketFresh,
-      detail: ageMs === null
-        ? 'No successful market refresh timestamp is available.'
+      detail: marketQuoteTimestamp == null
+        ? (marketQuoteError || 'No cTrader broker quote timestamp is available. A successful candle-history request is not proof of a live market.')
         : marketFresh
-          ? 'Last refresh was ' + String(Math.max(0, Math.round(ageMs / 1000))) + ' seconds ago.'
-          : 'Last refresh is ' + String(Math.round(ageMs / 1000)) + ' seconds old or its timestamp is invalid.',
+          ? 'cTrader broker quote timestamp is ' + String(Math.max(0, Math.round(Number(quoteAgeMs) / 1000))) + ' seconds old.'
+          : 'cTrader broker quote timestamp is ' + String(Math.round(Number(quoteAgeMs) / 1000)) + ' seconds old or invalid. Repeated history polling does not make a stale quote live.',
     },
     {
       id: 'instrument',
@@ -202,7 +210,8 @@ export const buildTradeBotDiagnosticSnapshot = (
     lastCandleClose: isPositive(lastCandle?.close) ? lastCandle.close : null,
     loadedTimeframes,
     marketStatus,
-    marketAgeSeconds: ageMs === null ? null : Math.round(ageMs / 1000),
+    marketAgeSeconds: quoteAgeMs === null ? null : Math.round(quoteAgeMs / 1000),
+    marketRefreshAgeSeconds: refreshAgeMs === null ? null : Math.round(refreshAgeMs / 1000),
     marketFresh,
     brokerSpec: {
       available: Boolean(symbolSpec),
