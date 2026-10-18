@@ -446,12 +446,12 @@ No broker-side protection has been changed, and no trade has been opened or clos
 ## Bot activation + scanner scan controls — 2026-10-15
 
 - [x] Signal Bot’s ready-state badge is no longer mislabeled SCANNING; the UI distinguishes AUTO-SCAN / SCANNING and clearly identifies latest candle close.
-- [x] Signal Bot has an explicit Scan now / Retry scan control that requests a fresh, selected-provider-only scan; automatic 15-second refresh remains.
+- [x] Signal Bot has an explicit Scan now / Retry scan control; each click performs one fresh, selected-provider-only scan. Mount-time/background 15-second auto-scanning was removed and live desktop/mobile QA confirms no automatic rescan.
 - [x] Trade Bot’s stopped/blocked state now surfaces the exact prerequisite instead of presenting only a greyed-out start button.
 - [x] cTrader broker instrument metadata is fetched independently of quote streaming via the authenticated instruments endpoint; strict symbol validation and risk-spec validation still apply.
 - [x] cTrader instrument fetch tests cover matching symbol, mismatch rejection, provider errors and malformed responses.
 - [x] CI run 38762737065 (run #1988) passed build, Render static-server smoke, lint, tests and production dependency audit. Render deployment dep-db8f8t49v7es73buiha0 for commit f4c5ea8fe51a0b910b9b25918dbb4eb9e908e5d5 reports live; authenticated Bot-tab QA remains outstanding.
-- [x] No auto-start or automatic orders introduced. No broker positions changed. main and Cloudflare production remain untouched.
+- [x] No auto-start was introduced. PR #66 added guarded, opt-in cTrader PRACTICE order submission while the user explicitly runs Trade Bot; live-account submission remains blocked. QA intercepted order POSTs in-browser, so no broker positions were changed. `main` and Cloudflare production remain untouched.
 
 - [x] Added the experimental branch to SHAFX CI push triggers so subsequent feature commits receive the full test suite without requiring a pull request.
 
@@ -473,4 +473,15 @@ No broker-side protection has been changed, and no trade has been opened or clos
 - [ ] Authenticated in-session test that cTrader returns usable EUR/USD instrument contract metadata for the user's selected account. Static CI cannot prove the provider session/account itself.
 - [ ] Authenticated desktop/mobile QA of the Trade Bot tab and observed scan interaction in the user's own session.
 - [ ] Longer demo forward observation versus historical replay; no profitability claim until adequate samples are reviewed.
-- [x] No automatic execution was introduced; no broker order/position was submitted, modified or closed. The Trade Bot remains opt-in and demo-only, with validated instrument and risk guards unchanged. `main`, Cloudflare production and sibling Render services remain untouched.
+- [x] The Trade Bot has guarded, opt-in cTrader PRACTICE order submission after fresh-quote, contract, exposure, stop/target, risk and margin checks; live-account submission remains blocked. Browser QA intercepted any placeOrder request before it reached the broker. `main`, Cloudflare production and sibling Render services remain untouched.
+
+
+## Weekend market status and bot feedback — 2026-10-18
+
+- [x] Added shared `src/lib/marketHours.ts` standard weekend classification for recognized FX pairs and spot gold/silver, using New York local time so daylight-saving shifts are handled. Broker schedules can differ; weekday holidays and instrument-specific breaks are not inferred.
+- [x] `CandlestickChart` suppresses the candle-close timer for a recognized closed FX/metal weekend and displays a visible `MARKET CLOSED · WEEKEND` state. The clock refresh slows to once a minute while closed and resumes second-by-second after reopening.
+- [x] Signal Bot remains manual-only and shows a readable weekend warning that a click evaluates last-available historical candles, not a live quote.
+- [x] Trade Bot shows a visible `MARKET CLOSED` status, explains that the latest candles are historical, disables Start, and stops an already-running session if the standard weekend close is reached.
+- [x] Added unit tests for Friday close, Saturday, Sunday open, metal open, suffix symbols, unknown symbols and invalid clock input.
+- [x] CI for code commit `8bb921f44fa56fae6327f9f07defebb4423688bc` passed build, static-server smoke test, lint, full unit suite and production dependency audit.
+- [~] This weekend patch is prepared and verified in `fix/weekend-market-close-bot-feedback-20261018`; the actual Render deployment and post-deploy browser check are still pending. Only merge to `test/rebuild-deriv-native-manual-20260930` after the current PR review/CI passes.
