@@ -1,8 +1,9 @@
-import React, { useMemo } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { Activity, BrainCircuit, RefreshCw, ShieldCheck, Sparkles } from 'lucide-react'
 import type { Timeframe } from '../../types'
 import { useSignalBotMarketData, type SignalBotMarketSource } from '../../engine/bot/useSignalBotMarketData'
 import { buildSignalRadar } from '../../engine/bot/signalRadar'
+import { getWeekendMarketStatus } from '../../lib/marketHours'
 
 interface Props {
   symbol: string
@@ -21,6 +22,15 @@ const sourceLabel = (source: SignalBotMarketSource | null): string => {
 
 export const SignalDeskPanel: React.FC<Props> = ({ symbol, timeframe, marketSource, onReviewSetup }) => {
   const marketData = useSignalBotMarketData(symbol, marketSource)
+  const [sessionClockMs, setSessionClockMs] = useState(0)
+  useEffect(() => {
+    // Session status refresh only; this clock never loads data or triggers a scan.
+    const update = (): void => setSessionClockMs(Date.now())
+    update()
+    const timer = window.setInterval(update, 30_000)
+    return () => window.clearInterval(timer)
+  }, [])
+  const weekendMarket = getWeekendMarketStatus(symbol, sessionClockMs)
   const radarFrames = marketData.frames
   const scannerPrice = radarFrames[timeframe]?.[radarFrames[timeframe]!.length - 1]?.close
     ?? radarFrames.M1?.[radarFrames.M1.length - 1]?.close
@@ -59,6 +69,17 @@ export const SignalDeskPanel: React.FC<Props> = ({ symbol, timeframe, marketSour
         </div>
         <span className={'rounded-full border px-2 py-1 font-mono text-[8px] font-bold ' + statusTone}>{statusLabel}</span>
       </div>
+
+      {sessionClockMs > 0 && weekendMarket.isClosed && (
+        <div role="status" className="rounded-xl border border-shafx-warning/35 bg-shafx-warning/[0.06] px-3 py-2">
+          <div className="text-xs font-bold uppercase tracking-[0.12em] text-shafx-warning">
+            {weekendMarket.kind === 'metal' ? 'METALS MARKET CLOSED · WEEKEND' : 'FX MARKET CLOSED · WEEKEND'}
+          </div>
+          <p className="mt-1 text-xs leading-5 text-shafx-textMuted">
+            {weekendMarket.reason} A manual scan can still examine the last available candles, but those candles are historical—not live-price signals. {weekendMarket.scheduleNote}
+          </p>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-2">
         <div className="rounded-xl border border-shafx-border bg-shafx-bg p-3">
