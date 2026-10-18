@@ -9,6 +9,7 @@ import {
   shouldNotifyCTraderQuoteListener,
   shouldRepairCTraderHistoryForGap,
   getRecentCTraderCandleGapSignature,
+  isCTraderQuoteTimestampFresh,
 } from './CTraderLiveQuote'
 
 const candle = (time: number, open = 1.1, high = 1.12, low = 1.09, close = 1.11) => ({
@@ -268,5 +269,30 @@ describe('cTrader quote feed heartbeat', () => {
   it('forces a fresh quote notification when a backgrounded tab resumes', () => {
     const resumed = { pricesChanged: false, quoteClockAdvanced: false, resumed: true }
     expect(shouldNotifyCTraderQuoteListener(resumed, 10_000, 10_010)).toBe(true)
+  })
+})
+
+
+describe('cTrader broker quote freshness', () => {
+  const sunday = Date.parse('2026-10-18T11:57:00.000Z')
+
+  it('rejects an old Friday quote even when the same response is repeatedly polled', () => {
+    const fridayQuote = '2026-10-16T10:00:00.000Z'
+    expect(isCTraderQuoteTimestampFresh(fridayQuote, sunday)).toBe(false)
+  })
+
+  it('accepts an actual current broker quote', () => {
+    expect(isCTraderQuoteTimestampFresh('2026-10-18T11:56:40.000Z', sunday)).toBe(true)
+  })
+
+  it('normalizes numeric seconds and milliseconds timestamps', () => {
+    expect(isCTraderQuoteTimestampFresh(sunday / 1000 - 10, sunday)).toBe(true)
+    expect(isCTraderQuoteTimestampFresh(sunday - 10_000, sunday)).toBe(true)
+  })
+
+  it('rejects missing, invalid and implausibly future timestamps', () => {
+    expect(isCTraderQuoteTimestampFresh(null, sunday)).toBe(false)
+    expect(isCTraderQuoteTimestampFresh('not-a-time', sunday)).toBe(false)
+    expect(isCTraderQuoteTimestampFresh('2026-10-18T12:20:00.000Z', sunday)).toBe(false)
   })
 })
