@@ -154,7 +154,9 @@ export const TradeBotPanel: React.FC<Props> = ({
     ? (startBlockReason ? 'BLOCKED' : 'STOPPED')
     : !symbolSpec
       ? 'BROKER SPECS NEEDED'
-      : market.status === 'ready'
+      : !diagnostics.marketFresh
+        ? 'WAITING FOR QUOTE'
+        : market.status === 'ready'
         ? 'MONITORING'
         : market.status === 'partial'
           ? 'PARTIAL DATA'
@@ -163,9 +165,9 @@ export const TradeBotPanel: React.FC<Props> = ({
             : market.status === 'unavailable'
               ? 'BLOCKED'
               : 'DATA ERROR'
-  const statusTone = decision.status === 'READY' && running
+  const statusTone = decision.status === 'READY' && diagnostics.marketFresh && running
     ? 'border-shafx-success/30 bg-shafx-success/10 text-shafx-success'
-    : decision.status === 'BLOCKED' || startBlockReason
+    : decision.status === 'BLOCKED' || startBlockReason || (running && !diagnostics.marketFresh)
       ? 'border-shafx-danger/30 bg-shafx-danger/10 text-shafx-danger'
       : 'border-shafx-border bg-shafx-bg text-shafx-textMuted'
   const updatedAt = market.updatedAt ? new Date(market.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'
@@ -228,9 +230,14 @@ export const TradeBotPanel: React.FC<Props> = ({
       return
     }
     if (market.status === 'unavailable' || market.status === 'error' || !market.updatedAt) {
-      const issue = market.error || 'Waiting for cTrader practice history. No order was sent.'
+      const quoteGate = !diagnostics.marketFresh
+        ? diagnostics.gates.find((gate) => gate.id === 'freshness')?.detail
+        : null
+      const issue = [market.error || 'Waiting for cTrader practice history.', quoteGate]
+        .filter((part, index, parts): part is string => Boolean(part) && parts.indexOf(part) === index)
+        .join(' ')
       setLastBotIssue(issue)
-      setCycleMessage('Cycle ' + market.cycleNumber + ': no valid market update. ' + issue)
+      setCycleMessage('Cycle ' + market.cycleNumber + ': no valid market update. ' + issue + ' No order was sent.')
       return
     }
     if (market.updatedAt < runStartedAtRef.current) {
@@ -415,7 +422,7 @@ export const TradeBotPanel: React.FC<Props> = ({
         <div className="mt-2 flex items-center gap-2">
           {running && (market.status === 'loading' || executionPending)
             ? <Activity className="h-3.5 w-3.5 shrink-0 animate-pulse text-shafx-accent" />
-            : <span className={'h-2 w-2 shrink-0 rounded-full ' + (running ? decision.status === 'READY' ? 'bg-shafx-success' : 'bg-shafx-accent' : 'bg-shafx-border')} />}
+            : <span className={'h-2 w-2 shrink-0 rounded-full ' + (running ? decision.status === 'READY' && diagnostics.marketFresh ? 'bg-shafx-success' : diagnostics.marketFresh ? 'bg-shafx-accent' : 'bg-shafx-danger' : 'bg-shafx-border')} />}
           <p className="text-[9px] leading-4 text-shafx-text">{cycleMessage}</p>
         </div>
         {running && market.cycleNumber > 0 && (
