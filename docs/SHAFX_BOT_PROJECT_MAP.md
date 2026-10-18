@@ -10,7 +10,7 @@
 - Current isolated implementation branch: `fix/bot-market-freshness-replay-metrics-map-20261018`.
 - Active Render service: **Shafek Derive Render** — https://sharfx-deriv-render.onrender.com — service ID `srv-dav8hrt9fdbs73d690s0`.
 - Do **not** use Render services `Shafek Derive Test 2`, `Shafek Derive Test`, `Shafex Deriv Test 2`, or any similarly named sibling service.
-- Do not merge into `main), deploy to Cloudflare production, or place real/demo broker orders while performing QA unless the user separately authorizes that specific action.
+- Do not merge into `main`, deploy to Cloudflare production, or place real/demo broker orders while performing QA unless the user separately authorizes that specific action.
 - Do not say a problem is fixed solely because a commit exists or a build passed. Report code checks, live browser checks and broker execution evidence separately.
 - Never copy OANDA execution code from FXBot into the cTrader execution path.
 
