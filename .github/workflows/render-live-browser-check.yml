@@ -318,7 +318,7 @@ jobs:
                   time: (newYorkParts.hour || '00') + ':' + (newYorkParts.minute || '00'),
                   expectedFxWeekendClosed,
                   closedLabelVisible: /FX MARKET CLOSED · WEEKEND/i.test(chartBodyBeforeBots),
-                  closeCountdownVisible: /\bCLOSE\s+\d{1,2}:\d{2}\b/i.test(chartBodyBeforeBots),
+                  closeCountdownVisible: /\bCLOSE\s+\d/i.test(chartBodyBeforeBots),
                 };
                 if (expectedFxWeekendClosed &&
                     (!interactionReport.marketSession.closedLabelVisible || interactionReport.marketSession.closeCountdownVisible)) {
