@@ -147,7 +147,7 @@ export const buildTradeBotDiagnosticSnapshot = (
     },
     {
       id: 'freshness',
-      label: 'Market refresh',
+      label: 'Broker quote freshness',
       passed: marketFresh,
       detail: marketQuoteTimestamp == null
         ? (marketQuoteError || 'No cTrader broker quote timestamp is available. A successful candle-history request is not proof of a live market.')
