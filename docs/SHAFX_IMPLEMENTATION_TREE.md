@@ -446,12 +446,12 @@ No broker-side protection has been changed, and no trade has been opened or clos
 ## Bot activation + scanner scan controls — 2026-10-15
 
 - [x] Signal Bot’s ready-state badge is no longer mislabeled SCANNING; the UI distinguishes AUTO-SCAN / SCANNING and clearly identifies latest candle close.
-- [x] Signal Bot has an explicit Scan now / Retry scan control that requests a fresh, selected-provider-only scan; automatic 15-second refresh remains.
+- [x] Signal Bot has an explicit Scan now / Retry scan control; each click performs one fresh, selected-provider-only scan. Mount-time/background 15-second auto-scanning was removed; live desktop/mobile QA on the previous deployment confirmed no automatic rescan.
 - [x] Trade Bot’s stopped/blocked state now surfaces the exact prerequisite instead of presenting only a greyed-out start button.
 - [x] cTrader broker instrument metadata is fetched independently of quote streaming via the authenticated instruments endpoint; strict symbol validation and risk-spec validation still apply.
 - [x] cTrader instrument fetch tests cover matching symbol, mismatch rejection, provider errors and malformed responses.
 - [x] CI run 38762737065 (run #1988) passed build, Render static-server smoke, lint, tests and production dependency audit. Render deployment dep-db8f8t49v7es73buiha0 for commit f4c5ea8fe51a0b910b9b25918dbb4eb9e908e5d5 reports live; authenticated Bot-tab QA remains outstanding.
-- [x] No auto-start or automatic orders introduced. No broker positions changed. main and Cloudflare production remain untouched.
+- [x] No auto-start was introduced. PR #66 added guarded, opt-in cTrader PRACTICE entries while the user explicitly runs Trade Bot; live-account order submission remains blocked. Live QA intercepts order POSTs before broker network submission, so no broker position is changed. `main` and Cloudflare production remain untouched.
 
 - [x] Added the experimental branch to SHAFX CI push triggers so subsequent feature commits receive the full test suite without requiring a pull request.
 
@@ -473,4 +473,15 @@ No broker-side protection has been changed, and no trade has been opened or clos
 - [ ] Authenticated in-session test that cTrader returns usable EUR/USD instrument contract metadata for the user's selected account. Static CI cannot prove the provider session/account itself.
 - [ ] Authenticated desktop/mobile QA of the Trade Bot tab and observed scan interaction in the user's own session.
 - [ ] Longer demo forward observation versus historical replay; no profitability claim until adequate samples are reviewed.
-- [x] No automatic execution was introduced; no broker order/position was submitted, modified or closed. The Trade Bot remains opt-in and demo-only, with validated instrument and risk guards unchanged. `main`, Cloudflare production and sibling Render services remain untouched.
+- [x] Trade Bot has guarded, opt-in cTrader PRACTICE order submission after fresh quote, verified contract, exposure, stop/target, risk and margin checks; live-account order submission remains blocked. Browser QA intercepts any placeOrder request before it reaches the broker. `main`, Cloudflare production and sibling Render services remain untouched.
+
+
+## Weekend quote freshness / bot status — 2026-10-18 (follow-up)
+
+- [x] Added `src/lib/marketHours.ts` and deterministic tests for standard weekend hours of recognised FX pairs and spot gold/silver. Checks use `America/New_York` and account for daylight-saving changes. Broker-specific hours and weekday public holidays are not guessed.
+- [x] Chart countdown now requires a fresh broker source timestamp and an open standard weekend session. Closed FX/metal markets display a MARKET CLOSED message; stale source timestamps display MARKET PAUSED rather than a wall-clock countdown. Chart session clock slows to one minute while closed.
+- [x] Signal Bot stays manual-only and warns that manual weekend scans examine historical candles, not live-price signals. Its session-status clock is presentation only; it never triggers scans.
+- [x] Trade Bot shows MARKET CLOSED, disables Start while the weekend session is closed, persists the closure reason in Last bot issue, and invalidates/stops an active run before any new entry request.
+- [x] cTrader spot events with no valid source timestamp are no longer assigned local receipt time. A missing timestamp is a feed error; an old Friday timestamp remains old for freshness checks.
+- [x] The Trade Bot execution preflight checks weekend status before quote requests and again immediately before order submit; unit tests cover weekend blocking and the weekend close arriving during preflight.
+- [~] Code is on isolated branch `fix/weekend-market-session-gating-20261018`; full CI and post-deploy browser verification must pass before promotion to the test branch. Do not touch `main`, Cloudflare production or sibling Render services.
