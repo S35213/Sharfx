@@ -8,7 +8,7 @@ const timeframe: Timeframe = 'M5'
 const symbolSpec = getSymbolSpec(symbol)
 
 const momentumBars = (count = 90): OHLCV[] => {
-  const changes = [0.00010, -0.00009, 0.00009, -0.00007, 0.00008, 0.00012]
+  const changes = [0.00010, -0.00009, 0.00006, -0.00009, 0.00006, 0.00010]
   const candles: OHLCV[] = []
   let close = 1.1000
   for (let index = 0; index < count; index += 1) {
@@ -105,7 +105,7 @@ describe('Trade Bot explainable strategy', () => {
     const result = evaluateTradeBotStrategy({
       symbol,
       timeframe,
-      candles: momentumBars(20),
+      candles: flatBars(20),
       symbolSpec,
       higherTimeframeBias: null,
       higherTimeframeDirectionalCount: 0,
