@@ -160,7 +160,7 @@ const createMomentumSetup = (input: {
       emaText + ' with the fast EMA slope pointing the same way.',
       momentumText + '.',
       triggerText,
-      'Stop distance adapts to ATR and recent range; target is planned at 1.8R.',
+      symbol + ' ' + timeframe + ' momentum continuation signal; stop distance adapts to ATR and recent range, with target at 1.8R.',
     ],
     invalidation: buy
       ? 'Momentum setup invalidated if price moves through its protective stop.'
