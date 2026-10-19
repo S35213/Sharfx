@@ -110,7 +110,6 @@ const createMomentumSetup = (input: {
   fastEma: number
   slowEma: number
   fastEmaPrevious: number
-  timeframe: Timeframe
   rsi: number
   atr: number
   score: number
@@ -435,7 +434,6 @@ export const evaluateTradeBotStrategy = (input: {
     rsi,
     atr,
     score: chosenScore,
-    timeframe,
     breakout: direction === 'BUY' ? bullishBreakout : bearishBreakout,
   })
   if (!setup) {
