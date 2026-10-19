@@ -1,10 +1,10 @@
 import { providerSymbolsMatch } from '../../lib/normalizeProviderSymbol'
+import { CTRADER_QUOTE_MAX_AGE_MS } from '../../data/ctrader/CTraderLiveQuote'
 import { TIMEFRAMES, type OHLCV, type SymbolSpec, type Timeframe } from '../../types'
 import type { TradeBotDecision } from './tradeBotDecision'
 import type { TradeBotMarketSource, TradeBotMarketStatus } from './useTradeBotMarketData'
 
 const MINIMUM_CANDLES = 8
-const STALE_AFTER_MS = 45_000
 
 export interface TradeBotDiagnosticGate {
   id: string
@@ -101,7 +101,7 @@ export const buildTradeBotDiagnosticSnapshot = (
   const enoughCandles = candleCount >= MINIMUM_CANDLES
   const refreshAgeMs = marketUpdatedAt == null ? null : nowMs - marketUpdatedAt
   const quoteAgeMs = marketQuoteTimestamp == null ? null : nowMs - marketQuoteTimestamp
-  const marketFresh = quoteAgeMs !== null && quoteAgeMs >= -5_000 && quoteAgeMs <= STALE_AFTER_MS
+  const marketFresh = quoteAgeMs !== null && quoteAgeMs >= -5_000 && quoteAgeMs <= CTRADER_QUOTE_MAX_AGE_MS
   const sourceAllowed = source?.providerId === 'ctrader' &&
     source.environment === 'demo' &&
     Boolean(source.connectionId?.trim() && source.accountId?.trim())
