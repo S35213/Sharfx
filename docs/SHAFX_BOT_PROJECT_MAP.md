@@ -1,13 +1,13 @@
 # SHAFX Bot Project Map
 
-**Last updated:** 2026-10-18  
+**Last updated:** 2026-10-19  
 **Purpose:** durable handoff notes for a new ChatGPT conversation. Update this file whenever bot work changes.
 
 ## Guardrails — do not skip
 
 - Repository: [S35213/Sharfx](https://github.com/S35213/Sharfx).
 - Experimental application branch: `test/rebuild-deriv-native-manual-20260930`.
-- Current isolated implementation branch: `fix/bot-market-freshness-replay-metrics-map-20261018`.
+- Current isolated implementation branch: `fix/tradebot-balance-aware-lot-sizing-20261019` (in progress, based on the experimental branch; not deployed until merged back).
 - Active Render service: **Shafek Derive Render** — https://sharfx-deriv-render.onrender.com — service ID `srv-dav8hrt9fdbs73d690s0`.
 - Do **not** use Render services `Shafek Derive Test 2`, `Shafek Derive Test`, `Shafex Deriv Test 2`, or any similarly named sibling service.
 - Do not merge into `main`, deploy to Cloudflare production, or place real/demo broker orders while performing QA unless the user separately authorizes that specific action.
@@ -88,3 +88,18 @@ For every follow-up, record:
 - **Next safe action**
 
 If a new conversation starts, read this file first, then inspect the live branch/deployment state before editing.
+## 2026-10-19 — Trade Bot balance-aware lot sizing (in progress)
+
+- Confirmed Render workspace: **Shari's workspace** (`tea-dav85cugekts73fv54i0`).
+- Confirmed target service: **sharfx-deriv-render** / **Shafek Derive Render**, service ID `srv-dav8hrt9fdbs73d690s0`, URL https://sharfx-deriv-render.onrender.com.
+- Render follows `test/rebuild-deriv-native-manual-20260930`; last observed live deployment is `dep-dbadps1srm7s73abbrkg`, commit `831868a1904e0f929f6c0bae22db013a3aaec527` (deployed 2026-10-18 14:52 UTC). Runtime logs show the server started normally again on 2026-10-19 02:46 UTC; this does not prove the authenticated bot UI works.
+- Verified code limitation: Trade Bot sizes initial lots from current broker balance and a stop-risk cap (lower of 0.5% of balance or 10 account-currency units), then previously rejected a setup when estimated broker margin exceeded free margin. It did not calculate a smaller affordable volume.
+- Isolated change under development on `fix/tradebot-balance-aware-lot-sizing-20261019`: calculate broker-step-aligned affordable lots from live account free margin; retain a 10% free-margin reserve; query cTrader again for each reduced lot; re-check risk/reward; submit only after broker margin is verified. Order quantity remains explicitly `lots`, not a cash trade amount.
+- Added unit tests for proportional lot reduction, stepped rounding, minimum-lot rejection and no order when the account cannot support minimum margin. Added a visible planned-lot estimate and a note if margin checking reduces the final size.
+- [ ] SHAFX CI/build/lint/all tests pass for the exact change commit.
+- [ ] Render deploy points at the resulting change commit after merge into the experimental branch.
+- [ ] Authenticated browser acceptance confirms Signal Bot manual scan progress/results and the Trade Bot's visible blocker/freshness state.
+- [x] Source inspection and Render deployment/log identity checked; no broker order was submitted, modified or closed.
+- [ ] Do not call the bot fixed until exact-commit CI, deployed-commit verification and authenticated browser QA succeed.
+- Browser automation was not started on 2026-10-19 because the connected TinyFish wallet returned an insufficient-credit error. No authenticated UI test occurred during this inspection.
+- Safe next action: review the sizing patch and unit tests, run CI on the feature branch, then merge only into `test/rebuild-deriv-native-manual-20260930` if green. Let that specific Render service auto-deploy and verify the exact commit. Keep `main`, Cloudflare production and sibling Render services untouched.
