@@ -7,7 +7,7 @@
 
 - Repository: [S35213/Sharfx](https://github.com/S35213/Sharfx).
 - Experimental application branch: `test/rebuild-deriv-native-manual-20260930`.
-- Latest focused fixes: PR #74 (balance-aware lot sizing) and PR #75 (cTrader quote timestamp normalization), both merged into `test/rebuild-deriv-native-manual-20260930`. Current live code commit: `1bb00b121c05ce76641f4e2226cb922dfef93103`.
+- Latest focused fixes: PR #74 (margin-aware lot sizing), PR #75 (cTrader quote timestamp normalization), and PR #76 (editable lot input and simplified Run feedback), all merged into `test/rebuild-deriv-native-manual-20260930`. Current live code commit: `2a867c41d394c76525404bcbc8bbc031fb038979`.
 - Active Render service: **Shafek Derive Render** — https://sharfx-deriv-render.onrender.com — service ID `srv-dav8hrt9fdbs73d690s0`.
 - Do **not** use Render services `Shafek Derive Test 2`, `Shafek Derive Test`, `Shafex Deriv Test 2`, or any similarly named sibling service.
 - Do not merge into `main`, deploy to Cloudflare production, or place real/demo broker orders while performing QA unless the user separately authorizes that specific action.
@@ -56,16 +56,21 @@ Do not transplant the FXBot's Python/OANDA-specific classes. SHAFX is React/Type
 ## Evidence / status tracking — last verified 2026-10-19
 
 - [x] Build and TypeScript checks pass on lot-sizing commit `2a9efb80f772e2ed5f14d7c8a4a8089623706157` — [SHAFX CI run 39234633194](https://github.com/S35213/Sharfx/actions/runs/39234633194).
+- [x] Trade Bot lot-input UI and requested-lot sizing pass build, static-server, lint, all tests, and production dependency audit before merge — [feature CI run 39245515890](https://github.com/S35213/Sharfx/actions/runs/39245515890).
+- [x] Post-merge CI passes on live code commit `2a867c41d394c76525404bcbc8bbc031fb038979` — [SHAFX CI run 39245701769](https://github.com/S35213/Sharfx/actions/runs/39245701769).
 - [x] Quote timestamp fix commit `1bb00b121c05ce76641f4e2226cb922dfef93103` passes build, static-server smoke, lint, unit tests and production dependency audit — [SHAFX CI run 39238439339](https://github.com/S35213/Sharfx/actions/runs/39238439339).
 - [x] ESLint passes on the same code revision.
 - [x] Vitest suite passes on the same code revision.
 - [x] Node static-server smoke and production-only dependency audit pass (same CI run).
 - [x] Manual CFD verification passes for lot sizing — [workflow 39234633020](https://github.com/S35213/Sharfx/actions/runs/39234633020).
 - [x] Manual CFD verification passes after quote timestamp fix — [workflow 39238439337](https://github.com/S35213/Sharfx/actions/runs/39238439337).
+- [x] Post-merge manual CFD verification passes on lot-input UI commit — [workflow 39245701778](https://github.com/S35213/Sharfx/actions/runs/39245701778).
 - [x] Live Render smoke passes for lot-sizing deploy — [workflow 39234634357](https://github.com/S35213/Sharfx/actions/runs/39234634357). The workflow checked the HTML, bundled assets, health endpoint, expected unauthenticated auth response, public Deriv feed and responsive desktop/mobile UI.
 - [x] Live Render smoke also passes after quote timestamp fix — [workflow 39238439335](https://github.com/S35213/Sharfx/actions/runs/39238439335).
 - [x] Visual-preview workflow passed, including desktop and mobile preview capture — [workflow 39234633310](https://github.com/S35213/Sharfx/actions/runs/39234633310).
-- [x] Render service identity, experimental branch, live commit and start logs verified; latest code deploy is `dep-dbav4f942hec73e1pt10` at commit `1bb00b121c05ce76641f4e2226cb922dfef93103` (LIVE at 2026-10-19 10:35:42 UTC).
+- [x] Post-merge desktop/mobile preview passes after Trade Bot lot-input redesign — [workflow 39245701765](https://github.com/S35213/Sharfx/actions/runs/39245701765).
+- [x] Render service identity, experimental branch, live commit and start logs verified; latest code deploy is `dep-dbb00rqvcj2c73amgo90` at commit `2a867c41d394c76525404bcbc8bbc031fb038979` (LIVE at 2026-10-19 11:36:21 UTC).
+- [x] Live Render smoke passes after Trade Bot lot-input redesign — [workflow 39245701779](https://github.com/S35213/Sharfx/actions/runs/39245701779).
 - [x] No broker order was submitted, modified or closed during this verification.
 - [ ] Authenticated browser check still needed for the signed-in user's Signal Bot scan interaction and Trade Bot cycle/blocker state.
 - [ ] Observe a cTrader practice-account monitoring cycle and verify the margin-resized bot behavior in-session; automated execution tests use mocked broker responses.
@@ -92,6 +97,21 @@ For every follow-up, record:
 - **Next safe action**
 
 If a new conversation starts, read this file first, then inspect the live branch/deployment state before editing.
+## 2026-10-19 — Trade Bot lot-input redesign (deployed; authenticated workflow pending)
+
+- **User pain confirmed:** the main Trade Bot UI showed `$10` as a risk ceiling, a read-only `Planned lot size`, a `Margin safeguard 90% maximum` card, a large strategy card, and a sticky `Last bot issue / held check` message. User asked for a proper editable lot size field and fewer technical details on the main screen.
+- **UI change deployed:** replace risk ceiling/planned-lot/margin cards with a prominent editable **Lot size** numeric input next to the selected market. Main action is **Run bot**; the panel shows `CHECKING MARKET` in accent colors while the request is loading. Strategy diagnostics, cycle traces, shadow outcomes and replay controls are behind `Advanced diagnostics (optional)`.
+- **Lot algorithm:** the user's lot input is the requested maximum, not a cash stake. It is passed into both the strategy decision and final cTrader practice execution. Resolver `src/engine/bot/tradeBotLotSizing.ts` rounds down to broker increments only, caps at broker max and account stop-risk allowance, and refuses the entry if even the broker minimum exceeds that allowance. The broker's fresh margin check can reduce it further while reserving 10% of free margin; it rechecks cTrader margin after a reduction. It never increases the user's lot and never bypasses quote/exposure/risk/reward/protection checks.
+- **Run/issue feedback:** the running state now prioritizes `CHECKING MARKET` while history is loading rather than prematurely showing `WAITING FOR QUOTE`; a successful fresh quote/history cycle clears an old blocker. A current failed gate can still show a concise `Needs attention` message, without the old message claiming it stays until a future fill.
+- **Code files changed in PR #76:** `src/components/ai/TradeBotPanel.tsx`, `src/engine/bot/tradeBotDecision.ts`, `src/engine/bot/tradeBotExecution.ts`, new `src/engine/bot/tradeBotLotSizing.ts`, new `src/engine/bot/tradeBotLotSizing.test.ts`, and `src/engine/bot/tradeBotExecution.test.ts`.
+- **PR:** [#76 — Simplify Trade Bot controls and use the requested lot size](https://github.com/S35213/Sharfx/pull/76), merged only into `test/rebuild-deriv-native-manual-20260930`.
+- **Current deployed code commit:** `2a867c41d394c76525404bcbc8bbc031fb038979`; Render deployment `dep-dbb00rqvcj2c73amgo90` is LIVE at 2026-10-19 11:36:21 UTC.
+- **Checks passed:** [feature-branch CI](https://github.com/S35213/Sharfx/actions/runs/39245515890), [post-merge CI](https://github.com/S35213/Sharfx/actions/runs/39245701769), [post-merge manual CFD verification](https://github.com/S35213/Sharfx/actions/runs/39245701778), [post-merge Render smoke](https://github.com/S35213/Sharfx/actions/runs/39245701779), and [desktop/mobile visual preview](https://github.com/S35213/Sharfx/actions/runs/39245701765) passed.
+- **Not proven yet:** authenticated in-session cTrader quote/market cycles and visible bot behavior have not been captured by assistant browser automation, which was unavailable. CI and public smoke prove build/server behavior, not a successful order in the user's session.
+- **No broker order:** no live or practice broker orders were submitted or modified during implementation and checks.
+- **Next user-facing verification:** refresh https://sharfx-deriv-render.onrender.com, open Bots → Trade Bot, confirm the new `Lot size` field appears where the old risk/planned-lot/margin cards were, enter a target such as `0.01` (respect the on-screen cTrader minimum/step), and press `Run bot`. It should show a current quote/history check and then explain whether an entry qualified. Do not expect every Run to place a trade: it must find a qualifying setup and fresh cTrader price. If it still blocks, capture the current `Needs attention` text or open `Advanced diagnostics (optional)` and screenshot the `Broker quote` gate.
+- **Guardrails:** cTrader practice/demo only; never loosen quote freshness or stop/risk/margin/protection gates to force trades. Keep `main`, Cloudflare production, and sibling Render services untouched.
+
 ## 2026-10-19 — cTrader quote timestamp fix (deployed; authenticated UI pending)
 
 - **Screenshot symptom:** Trade Bot displayed `WAITING FOR QUOTE`, planned lot `—`, and a blocked/held-check panel. This prevents the bot from advancing to a validated setup and preflight.
