@@ -62,7 +62,7 @@ export const calculateMarginConstrainedLots = (input: MarginConstrainedLotsInput
     ? Math.min(0.9, Math.max(0, requestedUtilization))
     : 0.9
   if (![requestedLots, availableFreeMargin, marginRequired, minimumLots, maximumLots, lotStep]
-    .every(isPositive) || maximumLots < minimumLots || utilization <= 0) return 0
+    .every((value) => Number.isFinite(value) && value > 0) || maximumLots < minimumLots || utilization <= 0) return 0
 
   const marginBudget = availableFreeMargin * utilization
   const affordableLots = marginRequired <= marginBudget
