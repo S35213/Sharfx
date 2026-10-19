@@ -4,6 +4,7 @@ import { calculateCfdRiskPlan, type CfdRiskPlan } from '../../lib/cfdRiskEngine'
 import { providerSymbolsMatch } from '../../lib/normalizeProviderSymbol'
 import type { CTraderLiveInstrument, CTraderLiveQuote } from '../../data/ctrader/CTraderLiveQuote'
 import { tradeBotRiskBudget } from './tradeBotDecision'
+import { resolveTradeBotLotSize } from './tradeBotLotSizing'
 import type { TradeBotMarketSource } from './useTradeBotMarketData'
 
 export type CTraderApiPost = (body: Record<string, unknown>) => Promise<Record<string, unknown>>
@@ -18,6 +19,8 @@ export interface TradeBotDemoExecutionInput {
   accountFreeMargin: number
   accountCurrency: string
   symbolSpec: SymbolSpec | null
+  /** User's requested maximum lot; it may be reduced by risk and live broker margin. */
+  requestedLots?: number
   nowMs?: number
   post?: CTraderApiPost
   /** Allows Stop/source changes to cancel preflight before any market order is submitted. */
@@ -32,6 +35,9 @@ export interface TradeBotDemoExecutionResult {
   signalKey: string
   /** Risk-sized lot before the final live-broker margin cap. */
   riskSizedLotSize: number
+  requestedLotSize: number
+  lotSizeReducedForRisk: boolean
+  lotAdjustmentReason: string | null
   /** True when the current cTrader free-margin snapshot required a smaller lot. */
   lotSizeReducedForMargin: boolean
 }
@@ -253,7 +259,7 @@ export const executeTradeBotDemoOrder = async (
   const stopLoss = roundToTick(stopPriceRaw, priceTick, setup.direction === 'BUY' ? 'down' : 'up')
   const takeProfit = roundToTick(targetPriceRaw, priceTick, setup.direction === 'BUY' ? 'up' : 'down')
 
-  let riskPlan = calculateCfdRiskPlan({
+  const riskLimitPlan = calculateCfdRiskPlan({
     accountBalance: currentBalance,
     accountCurrency: currentCurrency,
     symbol: symbolSpec,
@@ -263,21 +269,49 @@ export const executeTradeBotDemoOrder = async (
     takeProfitPrice: takeProfit,
     riskAmount: riskBudget,
   })
-  if (!riskPlan.valid) throw new Error(riskPlan.error || 'Fresh-quote risk sizing failed; no order was sent.')
-  if (riskPlan.estimatedLossAtStop > riskBudget + 0.01) {
+  if (!riskLimitPlan.valid) throw new Error(riskLimitPlan.error || 'Fresh-quote risk sizing failed; no order was sent.')
+  if (riskLimitPlan.estimatedLossAtStop > riskBudget + 0.01) {
     throw new Error(
-      'Broker minimum volume would exceed the risk ceiling (' +
-      riskPlan.estimatedLossAtStop.toFixed(2) + ' > ' + riskBudget.toFixed(2) +
+      'Broker minimum volume would exceed the account stop-risk limit (' +
+      riskLimitPlan.estimatedLossAtStop.toFixed(2) + ' > ' + riskBudget.toFixed(2) +
       ' ' + currentCurrency + '); no order was sent.',
     )
+  }
+
+  const minimumLots = Math.max(symbolSpec.minLotSize, instrument.quantityMin)
+  const maximumLots = Math.min(symbolSpec.maxLotSize, instrument.quantityMax)
+  const lotStep = Math.max(symbolSpec.lotStep, instrument.quantityStep)
+  const requestedLotSize = input.requestedLots ?? riskLimitPlan.lotSize
+  const lotChoice = resolveTradeBotLotSize({
+    requestedLots: requestedLotSize,
+    riskAllowedLots: riskLimitPlan.lotSize,
+    minimumLots,
+    maximumLots,
+    lotStep,
+  })
+  if (lotChoice.error || lotChoice.lotSize === null) {
+    throw new Error((lotChoice.error || 'No broker-valid lot fits the current account risk limit.') + ' No order was sent.')
+  }
+
+  let riskPlan = calculateCfdRiskPlan({
+    accountBalance: currentBalance,
+    accountCurrency: currentCurrency,
+    symbol: symbolSpec,
+    side: setup.direction,
+    entryPrice,
+    stopLossPrice: stopLoss,
+    takeProfitPrice: takeProfit,
+    riskAmount: riskBudget,
+    lots: lotChoice.lotSize,
+  })
+  if (!riskPlan.valid) throw new Error(riskPlan.error || 'Selected lot failed fresh-quote risk validation; no order was sent.')
+  if (riskPlan.estimatedLossAtStop > riskBudget + 0.01) {
+    throw new Error('Selected lot would exceed the account stop-risk limit; no order was sent.')
   }
   if (riskPlan.riskRewardRatio < 1.5) {
     throw new Error('The fresh-quote risk/reward is below 1.5:1 after broker-distance checks; no order was sent.')
   }
-  if (riskPlan.lotSize < instrument.quantityMin - 1e-8 ||
-      riskPlan.lotSize > instrument.quantityMax + 1e-8) {
-    throw new Error('The calculated volume is outside current cTrader lot limits; no order was sent.')
-  }
+  const lotAdjustmentReason = lotChoice.adjustmentReason
 
   // Keep the balance-derived stop-risk sizing as the starting point, then cap
   // volume to the current broker free-margin snapshot. Never trust one scaled
@@ -451,6 +485,9 @@ export const executeTradeBotDemoOrder = async (
     protectionConfirmed,
     signalKey: sourceKey,
     riskSizedLotSize,
+    requestedLotSize,
+    lotSizeReducedForRisk: riskPlan.lotSize < requestedLotSize - 1e-8,
+    lotAdjustmentReason,
     lotSizeReducedForMargin: riskPlan.lotSize < riskSizedLotSize - 1e-8,
   }
 }
