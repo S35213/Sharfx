@@ -8,7 +8,7 @@ const limits = {
 }
 
 describe('Trade Bot requested lot sizing', () => {
-  it('respects the user's lot when risk and broker rules allow it', () => {
+  it("respects the user-entered lot when risk and broker rules allow it", () => {
     expect(resolveTradeBotLotSize({
       ...limits,
       requestedLots: 0.03,
