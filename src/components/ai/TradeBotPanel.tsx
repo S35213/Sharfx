@@ -184,11 +184,13 @@ export const TradeBotPanel: React.FC<Props> = ({
               : market.status === 'unavailable'
                 ? 'BLOCKED'
                 : 'DATA ERROR'
-  const statusTone = decision.status === 'READY' && diagnostics.marketFresh && running
-    ? 'border-shafx-success/30 bg-shafx-success/10 text-shafx-success'
-    : decision.status === 'BLOCKED' || startBlockReason || (running && !diagnostics.marketFresh)
-      ? 'border-shafx-danger/30 bg-shafx-danger/10 text-shafx-danger'
-      : 'border-shafx-border bg-shafx-bg text-shafx-textMuted'
+  const statusTone = running && market.status === 'loading'
+    ? 'border-shafx-accent/30 bg-shafx-accent/10 text-shafx-accent'
+    : decision.status === 'READY' && diagnostics.marketFresh && running
+      ? 'border-shafx-success/30 bg-shafx-success/10 text-shafx-success'
+      : decision.status === 'BLOCKED' || startBlockReason || (running && !diagnostics.marketFresh)
+        ? 'border-shafx-danger/30 bg-shafx-danger/10 text-shafx-danger'
+        : 'border-shafx-border bg-shafx-bg text-shafx-textMuted'
 
   const start = (): void => {
     const currentScope = traceScopeKey
