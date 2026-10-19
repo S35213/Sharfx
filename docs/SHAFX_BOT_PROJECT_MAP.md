@@ -7,7 +7,7 @@
 
 - Repository: [S35213/Sharfx](https://github.com/S35213/Sharfx).
 - Experimental application branch: `test/rebuild-deriv-native-manual-20260930`.
-- Latest focused fixes: PR #74 (margin-aware lot sizing), PR #75 (cTrader quote timestamp normalization), and PR #76 (editable lot input and simplified Run feedback), all merged into `test/rebuild-deriv-native-manual-20260930`. Current live code commit: `2a867c41d394c76525404bcbc8bbc031fb038979`.
+- Latest focused fixes: PR #74 (margin-aware lot sizing), PR #75 (cTrader quote timestamp normalization), PR #76 (editable lot input and simplified Run feedback), and PR #77 (strategy fallback + visible signal pipeline), all merged into `test/rebuild-deriv-native-manual-20260930`. Current live code commit: `ddabec62952cae01c0019f6fed94df67984ef240`.
 - Active Render service: **Shafek Derive Render** — https://sharfx-deriv-render.onrender.com — service ID `srv-dav8hrt9fdbs73d690s0`.
 - Do **not** use Render services `Shafek Derive Test 2`, `Shafek Derive Test`, `Shafex Deriv Test 2`, or any similarly named sibling service.
 - Do not merge into `main`, deploy to Cloudflare production, or place real/demo broker orders while performing QA unless the user separately authorizes that specific action.
@@ -57,7 +57,8 @@ Do not transplant the FXBot's Python/OANDA-specific classes. SHAFX is React/Type
 
 - [x] Build and TypeScript checks pass on lot-sizing commit `2a9efb80f772e2ed5f14d7c8a4a8089623706157` — [SHAFX CI run 39234633194](https://github.com/S35213/Sharfx/actions/runs/39234633194).
 - [x] Trade Bot lot-input UI and requested-lot sizing pass build, static-server, lint, all tests, and production dependency audit before merge — [feature CI run 39245515890](https://github.com/S35213/Sharfx/actions/runs/39245515890).
-- [x] Post-merge CI passes on live code commit `2a867c41d394c76525404bcbc8bbc031fb038979` — [SHAFX CI run 39245701769](https://github.com/S35213/Sharfx/actions/runs/39245701769).
+- [x] Post-merge CI passes on lot-input commit `2a867c41d394c76525404bcbc8bbc031fb038979` — [SHAFX CI run 39245701769](https://github.com/S35213/Sharfx/actions/runs/39245701769).
+- [x] Strategy fallback + signal pipeline commit `ddabec62952cae01c0019f6fed94df67984ef240` passes build, static-server, lint, all tests and production dependency audit — [SHAFX CI run 39248665020](https://github.com/S35213/Sharfx/actions/runs/39248665020).
 - [x] Quote timestamp fix commit `1bb00b121c05ce76641f4e2226cb922dfef93103` passes build, static-server smoke, lint, unit tests and production dependency audit — [SHAFX CI run 39238439339](https://github.com/S35213/Sharfx/actions/runs/39238439339).
 - [x] ESLint passes on the same code revision.
 - [x] Vitest suite passes on the same code revision.
@@ -65,12 +66,15 @@ Do not transplant the FXBot's Python/OANDA-specific classes. SHAFX is React/Type
 - [x] Manual CFD verification passes for lot sizing — [workflow 39234633020](https://github.com/S35213/Sharfx/actions/runs/39234633020).
 - [x] Manual CFD verification passes after quote timestamp fix — [workflow 39238439337](https://github.com/S35213/Sharfx/actions/runs/39238439337).
 - [x] Post-merge manual CFD verification passes on lot-input UI commit — [workflow 39245701778](https://github.com/S35213/Sharfx/actions/runs/39245701778).
+- [x] Manual CFD verification passes on the strategy fallback + signal pipeline commit — [workflow 39248665135](https://github.com/S35213/Sharfx/actions/runs/39248665135).
 - [x] Live Render smoke passes for lot-sizing deploy — [workflow 39234634357](https://github.com/S35213/Sharfx/actions/runs/39234634357). The workflow checked the HTML, bundled assets, health endpoint, expected unauthenticated auth response, public Deriv feed and responsive desktop/mobile UI.
 - [x] Live Render smoke also passes after quote timestamp fix — [workflow 39238439335](https://github.com/S35213/Sharfx/actions/runs/39238439335).
 - [x] Visual-preview workflow passed, including desktop and mobile preview capture — [workflow 39234633310](https://github.com/S35213/Sharfx/actions/runs/39234633310).
 - [x] Post-merge desktop/mobile preview passes after Trade Bot lot-input redesign — [workflow 39245701765](https://github.com/S35213/Sharfx/actions/runs/39245701765).
-- [x] Render service identity, experimental branch, live commit and start logs verified; latest code deploy is `dep-dbb00rqvcj2c73amgo90` at commit `2a867c41d394c76525404bcbc8bbc031fb038979` (LIVE at 2026-10-19 11:36:21 UTC).
+- [x] Strategy fallback + signal pipeline desktop/mobile preview passes — [workflow 39248665106](https://github.com/S35213/Sharfx/actions/runs/39248665106).
+- [x] Render service identity, experimental branch, live commit and start logs verified; latest code deploy is `dep-dbb0cenlk1mc73dbcl70` at commit `ddabec62952cae01c0019f6fed94df67984ef240` (LIVE at 2026-10-19 12:00:56 UTC).
 - [x] Live Render smoke passes after Trade Bot lot-input redesign — [workflow 39245701779](https://github.com/S35213/Sharfx/actions/runs/39245701779).
+- [x] Live Render smoke passes after strategy fallback + signal pipeline — [workflow 39248665141](https://github.com/S35213/Sharfx/actions/runs/39248665141).
 - [x] No broker order was submitted, modified or closed during this verification.
 - [ ] Authenticated browser check still needed for the signed-in user's Signal Bot scan interaction and Trade Bot cycle/blocker state.
 - [ ] Observe a cTrader practice-account monitoring cycle and verify the margin-resized bot behavior in-session; automated execution tests use mocked broker responses.
@@ -97,6 +101,22 @@ For every follow-up, record:
 - **Next safe action**
 
 If a new conversation starts, read this file first, then inspect the live branch/deployment state before editing.
+## 2026-10-19 — Trade Bot strategy fallback + visible signal pipeline (deployed; authenticated demo run pending)
+
+- **User symptom:** Trade Bot kept cycling on EUR/USD M5 with the generic "no setup passed the structure and liquidity rules" message, without useful visible scan/pass/blocked stages or outcome feedback.
+- **Root causes confirmed in source:** (1) `src/engine/bot/tradeBotDecision.ts` used only the strict structure + support/resistance + unswept-liquidity candidate, with no fallback. (2) missing/unclear higher-timeframe bias was mapped to `Unclear` and then treated as a hard veto. (3) the main view surfaced only one text result; strategy checks and hypothetical results were hidden. The generic message meant the strategy rejected the current candidate, not that cTrader cannot trade EUR/USD.
+- **Strategy change:** retain structure/liquidity setup when valid; otherwise evaluate closed-candle EMA(9/21) + RSI(14) + ATR(14) momentum continuation, with scored trend/slope/price/RSI/price-action checks. The fallback derives the protective stop from ATR/recent range and targets 1.8R. A score is a confluence score, **not a win probability or profitability promise**.
+- **Higher timeframe:** unclear/mixed bias is informational rather than a veto. A candidate that opposes a directional higher-timeframe bias is held when at least two directional higher-timeframe frames support that bias and confidence is at least 65%. Fresh quote, instrument validity, balance, lot sizing, stop-risk, minimum R:R, margin, exposure and broker protection checks remain.
+- **Closed-candle timing:** the last potentially-forming bar is excluded from signal detection. The selected closed-candle timestamp is passed through execution deduplication and hypothetical outcome evaluation.
+- **UI:** added `Signal pipeline` (Market → Strategy → Risk → Broker), scan/pass/watch/block states, individual strategy checks, EMA/RSI values, score, and an explanation for holds. Added `Strategy outcomes` counts for WIN/LOSS/AMBIGUOUS/PENDING. These are explicitly **hypothetical signals, not broker trade results**; only later closed candles touching stop/target resolve them. If one candle touches both, it is ambiguous.
+- **Files changed in PR #77:** `src/engine/bot/tradeBotStrategy.ts`, `src/engine/bot/tradeBotStrategy.test.ts`, `src/engine/bot/tradeBotDecision.ts`, `src/engine/bot/tradeBotDecision.test.ts`, and `src/components/ai/TradeBotPanel.tsx`.
+- **PR:** [#77 — Make Trade Bot find explainable setups and show a live signal pipeline](https://github.com/S35213/Sharfx/pull/77), merged only into `test/rebuild-deriv-native-manual-20260930`.
+- **Live code/deploy:** commit `ddabec62952cae01c0019f6fed94df67984ef240`, Render deployment `dep-dbb0cenlk1mc73dbcl70`, LIVE at 2026-10-19 12:00:56 UTC on **Shafek Derive Render**.
+- **Checks passed:** [pre-merge CI](https://github.com/S35213/Sharfx/actions/runs/39248448381), [post-merge CI](https://github.com/S35213/Sharfx/actions/runs/39248665020), [manual CFD verification](https://github.com/S35213/Sharfx/actions/runs/39248665135), [live Render smoke](https://github.com/S35213/Sharfx/actions/runs/39248665141), and [desktop/mobile preview](https://github.com/S35213/Sharfx/actions/runs/39248665106).
+- **Still unverified:** no authenticated cTrader practice order was placed during implementation; no profitability claim is made. Automated checks don't prove the signed-in account's actual quote is fresh or that the fallback will be profitable.
+- **Next step for user:** refresh https://sharfx-deriv-render.onrender.com, open Bots → Trade Bot, select EUR/USD and M5, set the intended lot, press Run bot, and inspect the new pipeline. If it waits, the Strategy card shows the exact waiting checks; if Broker is WAIT/HELD, inspect Advanced diagnostics for quote age/instrument gate and share a screenshot.
+- **Guardrails:** validate on cTrader DEMO only; do not bypass stale quote or risk/protection gates; keep `main`, Cloudflare production and sibling Render services untouched.
+
 ## 2026-10-19 — Trade Bot lot-input redesign (deployed; authenticated workflow pending)
 
 - **User pain confirmed:** the main Trade Bot UI showed `$10` as a risk ceiling, a read-only `Planned lot size`, a `Margin safeguard 90% maximum` card, a large strategy card, and a sticky `Last bot issue / held check` message. User asked for a proper editable lot size field and fewer technical details on the main screen.
