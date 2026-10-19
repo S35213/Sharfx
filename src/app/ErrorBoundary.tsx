@@ -1,14 +1,18 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 
 interface Props { children: ReactNode }
-interface State { hasError: boolean; error: Error | null }
+interface State { hasError: boolean; error: Error | null; componentStack: string }
 
 export class ErrorBoundary extends Component<Props, State> {
-  public state: State = { hasError: false, error: null }
-  public static getDerivedStateFromError(error: Error): State { return { hasError: true, error } }
-  public componentDidCatch(error: Error, info: ErrorInfo): void { console.error('SHAFX ErrorBoundary caught:', error, info) }
+  public state: State = { hasError: false, error: null, componentStack: '' }
+  public static getDerivedStateFromError(error: Error): Partial<State> { return { hasError: true, error } }
+  public componentDidCatch(error: Error, info: ErrorInfo): void {
+    console.error('SHAFX ErrorBoundary caught:', error, info)
+    this.setState({ componentStack: info.componentStack || '' })
+  }
   public render(): ReactNode {
     if (!this.state.hasError) return this.props.children
-    return <div className="flex min-h-screen flex-col items-center justify-center bg-shafx-bg p-4 text-shafx-text"><h2 className="mb-2 text-xl font-bold text-shafx-danger">Something went wrong.</h2><p className="mb-4 text-shafx-textMuted">The application encountered a critical error.</p><pre className="max-w-full overflow-auto rounded border border-shafx-border bg-shafx-surface p-4 text-xs">{this.state.error?.message ?? 'Unknown error'}</pre><a href="/" className="mt-4 rounded bg-shafx-primary px-4 py-2 text-white hover:bg-shafx-primaryHover">Reload Application</a></div>
+    const errorDetails = [this.state.error?.stack, this.state.componentStack].filter(Boolean).join('\n\nReact component stack:\n')
+    return <div className="flex min-h-screen flex-col items-center justify-center bg-shafx-bg p-4 text-shafx-text"><h2 className="mb-2 text-xl font-bold text-shafx-danger">Something went wrong.</h2><p className="mb-4 text-shafx-textMuted">The application encountered a critical error.</p><pre className="max-w-full overflow-auto rounded border border-shafx-border bg-shafx-surface p-4 text-xs">{this.state.error?.message ?? 'Unknown error'}</pre><details className="mt-3 w-full max-w-2xl"><summary className="cursor-pointer text-xs text-shafx-textMuted">Technical details (diagnostic)</summary><pre data-shafx-error-stack="true" className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded border border-shafx-border bg-shafx-surface p-3 text-[10px]">{errorDetails || 'No JavaScript/component stack was captured.'}</pre></details><a href="/" className="mt-4 rounded bg-shafx-primary px-4 py-2 text-white hover:bg-shafx-primaryHover">Reload Application</a></div>
   }
 }

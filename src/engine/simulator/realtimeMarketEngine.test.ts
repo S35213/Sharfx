@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { SimulatorRealtimeMarketEngine } from './realtimeMarketEngine'
 import type { OHLCV, SymbolSpec } from '../../types'
 
@@ -22,18 +22,25 @@ const seed: OHLCV[] = Array.from({ length: 1200 }, (_, index) => {
 
 describe('SimulatorRealtimeMarketEngine', () => {
   it('updates the currently forming M1 candle on every tick', () => {
-    const engine = new SimulatorRealtimeMarketEngine(spec, 'M1', seed)
-    const before = engine.snapshot()
-    const first = engine.tickOnce(1)
-    const second = engine.tickOnce(1)
-    const current = first.candles[first.candles.length - 1]
-    const current2 = second.candles[second.candles.length - 1]
+    // Keep the wall-clock rebase deterministic and away from a minute boundary.
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-10-02T12:34:30Z'))
+    try {
+      const engine = new SimulatorRealtimeMarketEngine(spec, 'M1', seed)
+      const before = engine.snapshot()
+      const first = engine.tickOnce(1)
+      const second = engine.tickOnce(1)
+      const current = first.candles[first.candles.length - 1]
+      const current2 = second.candles[second.candles.length - 1]
 
-    expect(current.time).toBe(before.candles[before.candles.length - 1].time)
-    expect(current2.time).toBe(current.time)
-    expect(current2.close).toBe(second.bid)
-    expect(current2.high).toBeGreaterThanOrEqual(Math.max(current2.open, current2.close))
-    expect(current2.low).toBeLessThanOrEqual(Math.min(current2.open, current2.close))
+      expect(current.time).toBe(before.candles[before.candles.length - 1].time)
+      expect(current2.time).toBe(current.time)
+      expect(current2.close).toBe(second.bid)
+      expect(current2.high).toBeGreaterThanOrEqual(Math.max(current2.open, current2.close))
+      expect(current2.low).toBeLessThanOrEqual(Math.min(current2.open, current2.close))
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('rolls a 5-minute candle from the underlying M1 ticks', () => {

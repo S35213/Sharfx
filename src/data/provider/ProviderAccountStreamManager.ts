@@ -2,6 +2,7 @@ import type { ProviderAccountSnapshot } from '../../integrations/core/types'
 import { ProviderAccountStream } from './ProviderAccountStream'
 import { ProviderAccountCache } from './ProviderAccountCache'
 import { providerTelemetry } from '../../integrations/core/providerTelemetry'
+import type { ProviderStreamEvent } from '../../integrations/core/types'
 
 export interface ProviderAccountStreamSpec {
   providerId: string
@@ -16,6 +17,7 @@ export interface ManagedStreamSession {
   spec: ProviderAccountStreamSpec
   onSnapshot?: (snapshot: ProviderAccountSnapshot) => void
   onStatus?: (status: ManagedProviderStreamStatus) => void
+  onEvent?: (event: ProviderStreamEvent) => void
   retryAttempt: number
   retryTimer?: ReturnType<typeof setTimeout>
   stopped: boolean
@@ -43,11 +45,12 @@ export class ProviderAccountStreamManager {
     spec: ProviderAccountStreamSpec,
     onSnapshot?: (snapshot: ProviderAccountSnapshot) => void,
     onStatus?: (status: ManagedProviderStreamStatus) => void,
+    onEvent?: (event: ProviderStreamEvent) => void,
   ): Promise<string> {
     const key = providerAccountStreamKey(spec)
     await this.stop(key)
     this.records.set(key, { key, spec, snapshot: null, status: 'connecting' })
-    this.sessions.set(key, { spec, onSnapshot, onStatus, retryAttempt: 0, stopped: false })
+    this.sessions.set(key, { spec, onSnapshot, onStatus, onEvent, retryAttempt: 0, stopped: false })
     await this.launch(key)
     return key
   }
@@ -79,6 +82,7 @@ export class ProviderAccountStreamManager {
       accountId: session.spec.accountId,
       accountType: session.spec.accountType,
       onEvent: (event) => {
+        session.onEvent?.(event)
         const cached = this.cache.get(key)
         if (event.type === 'position') {
           const positions = [...(cached?.positions || [])]

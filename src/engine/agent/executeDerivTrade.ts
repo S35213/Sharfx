@@ -1,16 +1,7 @@
 import { decideAgentAction } from './decideAgentAction'
 import { prepareTradePlan } from './prepareTradePlan'
-import { placeDerivContract } from '../../data/deriv/derivTrading'
 import type { AgentContext } from './types'
 import type { SymbolSpec, TradeOrder } from '../../types'
-
-
-const accountAffordableLotCeiling = (accountBalance: number, plan: ReturnType<typeof prepareTradePlan>): number => {
-  if (!Number.isFinite(accountBalance) || accountBalance <= 0 || !Number.isFinite(plan.estimatedLoss) || plan.estimatedLoss <= 0 || !Number.isFinite(plan.lotSize) || plan.lotSize <= 0) return 0
-  const lossPerLot = plan.estimatedLoss / plan.lotSize
-  if (!Number.isFinite(lossPerLot) || lossPerLot <= 0) return 0
-  return accountBalance / lossPerLot
-}
 
 export interface ExecuteDerivTradeInput {
   context: AgentContext
@@ -31,6 +22,9 @@ export interface ExecuteDerivTradeResult {
   order: TradeOrder | null
 }
 
+// Broker execution is deliberately disabled while the SHAFX test project
+// rebuilds its Deriv-native bridge. The analysis/planning layer remains useful,
+// but it cannot turn a signal into a broker order by itself.
 export const executeDerivTrade = async (input: ExecuteDerivTradeInput): Promise<ExecuteDerivTradeResult> => {
   const decision = decideAgentAction(input.context)
   const setup = decision.setup
@@ -44,62 +38,14 @@ export const executeDerivTrade = async (input: ExecuteDerivTradeInput): Promise<
     symbolSpec: input.symbolSpec,
     conversionRate: input.conversionRate,
   })
-  if (!plan.isValid) return { decision, plan, order: null }
 
-  const lotSize = input.lotSize ?? plan.lotSize
-  const lotStepValid = Math.abs((lotSize / input.symbolSpec.lotStep) - Math.round(lotSize / input.symbolSpec.lotStep)) < 1e-8
-  if (!Number.isFinite(lotSize) || lotSize < input.symbolSpec.minLotSize || lotSize > input.symbolSpec.maxLotSize || !lotStepValid) {
-    return { decision, plan: { ...plan, isValid: false, summary: 'Trade size is outside the selected symbol rules.' }, order: null }
-  }
-
-  const accountLotCeiling = accountAffordableLotCeiling(input.accountBalance, plan)
-  if (!Number.isFinite(accountLotCeiling) || accountLotCeiling <= 0 || lotSize > accountLotCeiling + 1e-8) {
-    return { decision, plan: { ...plan, isValid: false, summary: 'Trade size exceeds the Deriv account balance when converted to the bot stake.' }, order: null }
-  }
-
-  const multiplier = 100
-  const lotMultiplier = plan.lotSize > 0 ? lotSize / plan.lotSize : 1
-  const estimatedLoss = Number((plan.estimatedLoss * lotMultiplier).toFixed(2))
-  const brokerMinimumStake = 1
-  const stake = Math.max(brokerMinimumStake, estimatedLoss)
-  const estimatedReward = Number((plan.estimatedReward * lotMultiplier).toFixed(2))
-  if (!Number.isFinite(stake) || !Number.isFinite(estimatedLoss) || estimatedLoss <= 0) {
-    return {
-      decision,
-      plan: { ...plan, isValid: false, summary: 'The bot calculated an invalid monetary risk amount.' },
-      order: null,
-    }
-  }
-  if (!Number.isFinite(input.accountBalance) || input.accountBalance < brokerMinimumStake) {
-    return {
-      decision,
-      plan: { ...plan, isValid: false, summary: 'Deriv requires at least 1 ' + input.accountCurrency + ' to open this trade. Current account balance is below the broker minimum.' },
-      order: null,
-    }
-  }
-
-  const order = await placeDerivContract({
-    connection: {
-      connectionId: input.connectionId,
-      accountId: input.accountId,
-      environment: input.environment,
+  return {
+    decision: {
+      ...decision,
+      action: 'WAIT',
+      rationale: 'SHAFX broker execution is paused while the Deriv-native manual bridge is being rebuilt.',
     },
-    symbol: input.symbolSpec.symbol,
-    side: setup.direction,
-    stake,
-    currency: input.accountCurrency,
-    multiplier,
-    durationSeconds: 30,
-    takeProfitAmount: estimatedReward,
-    stopLossAmount: estimatedLoss,
-    entryPrice: setup.entryPrice,
-    stopLoss: setup.stopLoss,
-    takeProfit: setup.takeProfit,
-    riskPercent: plan.riskPercent,
-    riskAmount: estimatedLoss,
-    rewardAmount: estimatedReward,
-    riskRewardRatio: plan.risk.riskRewardRatio,
-  })
-
-  return { decision, plan, order }
+    plan,
+    order: null,
+  }
 }

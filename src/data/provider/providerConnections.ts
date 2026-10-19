@@ -122,7 +122,9 @@ export function chooseDefaultProviderSelection(connections: ProviderConnectionRe
 
   for (const connection of connections) {
     if (connection.state !== 'connected') continue
-    const account = connection.accounts.find((item) => item.active)
+    const account = connection.providerId === 'deriv'
+      ? connection.accounts.find((item) => item.active && item.environment === 'demo') ?? connection.accounts.find((item) => item.active)
+      : connection.accounts.find((item) => item.active)
     if (!account) continue
     return {
       providerId: connection.providerId,

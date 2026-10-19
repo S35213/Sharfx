@@ -2,6 +2,10 @@
 
 SHAFX is an original Forex analysis terminal prototype with a **simulator-first safety boundary**.
 
+## Experimental manual-CFD rebuild
+
+This branch is the isolated manual-trading experiment. Read [`docs/SHAFX_BRANCH_HANDOFF.md`](docs/SHAFX_BRANCH_HANDOFF.md) before changing it. The destination is now **SHAFX Manual CFD via Deriv cTrader**; Deriv Multiplier is retained as a legacy compatibility mode, and bot work is paused until the manual CFD path passes its gates. **Do not merge this branch into `main` until all mandatory gates pass and the user explicitly approves promotion.**
+
 ## Persistent implementation tree
 
 The project maintains a checked handoff tree at [`docs/SHAFX_IMPLEMENTATION_TREE.md`](docs/SHAFX_IMPLEMENTATION_TREE.md). It is the source of truth for implementation progress. Future agents must continue from the first unchecked/failed gate and must not restart the audit from zero.

@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, Command, MoreVertical, Search, Settings2, ShieldCheck, Wifi } from 'lucide-react'
-import type { MarketPair, Timeframe } from '../../types'
-import { TIMEFRAMES } from '../../types'
+import type { MarketPair } from '../../types'
 import { formatPrice } from '../../lib/format'
 import { ProviderConnectionControl } from '../market/ProviderConnectionControl'
 import { ChartSettingsSheet } from './ChartSettingsSheet'
@@ -12,14 +11,12 @@ interface TopNavProps {
   symbol: string
   price: number
   pricePrecision: number
-  timeframe: Timeframe
-  onTimeframeChange: (tf: Timeframe) => void
   pairs: MarketPair[]
   onSelectPair: (symbol: string) => void
   view?: TerminalView
 }
 
-export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, timeframe, onTimeframeChange, pairs, onSelectPair, view = 'market' }) => {
+export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, pairs, onSelectPair, view = 'market' }) => {
   const [marketOpen, setMarketOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
@@ -45,7 +42,7 @@ export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, t
   const choose = (item: string) => { onSelectPair(item); setMarketOpen(false); setQuery('') }
 
   return <header ref={navRef} className="shafx-top-nav sticky top-0 z-50 border-b border-shafx-border bg-[#080C12]/95 shadow-[0_8px_30px_rgba(0,0,0,.24)] backdrop-blur-xl">
-    <div className="flex min-h-[68px] items-center gap-2 px-3 sm:gap-3 sm:px-4 lg:px-5">
+    <div className="flex min-h-[68px] items-center gap-2 px-3 sm:gap-3 sm:px-4 lg:min-h-[58px] lg:gap-2.5 lg:px-4">
       <div className="flex flex-shrink-0 items-center gap-2.5">
         <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-shafx-accent/30 bg-shafx-accent/[0.08]"><ShafxBrandMark size={30} /></div>
         <div className="hidden lg:block"><ShafxWordmark compact /><div className="text-[8px] uppercase tracking-[0.26em] text-shafx-textMuted">Deriv workspace</div></div>
@@ -88,14 +85,12 @@ export const TopNav: React.FC<TopNavProps> = ({ symbol, price, pricePrecision, t
           <button type="button" onClick={() => setAccountOpen((v) => !v)} className="flex min-h-12 items-center gap-2 rounded-xl border border-shafx-border bg-shafx-surface px-3 text-left" aria-expanded={accountOpen}><span className="h-2 w-2 rounded-full bg-shafx-accent" /><span className="hidden text-[10px] font-semibold sm:block">Deriv</span><ChevronDown className="h-3.5 w-3.5 text-shafx-textMuted" /></button>
           {accountOpen && <div className="absolute right-0 top-[calc(100%+8px)] z-[90] w-72 rounded-2xl border border-shafx-border bg-shafx-surface p-2 shadow-2xl"><div className="px-2 py-2 text-[9px] font-semibold uppercase tracking-[0.16em] text-shafx-textMuted">Connected broker</div><div className="flex min-h-11 items-center justify-between rounded-xl bg-shafx-accent/10 px-3 text-xs text-shafx-accent"><span>Deriv</span><span className="text-[9px]">CONNECTED</span></div><div className="mt-2 flex items-start gap-2 rounded-xl border border-shafx-border bg-shafx-bg p-2.5 text-[9px] leading-4 text-shafx-textMuted"><ShieldCheck className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-shafx-success" />Demo or real account selection is handled before the terminal opens.</div></div>}
         </div>
-        <div className="hidden md:block"><span className="rounded-xl border border-shafx-border bg-shafx-surface px-3 py-2 text-[9px] font-semibold text-shafx-textMuted">{TIMEFRAMES.includes(timeframe) ? timeframe : '—'}</span></div>
         <div className="relative">
           <button type="button" onClick={() => setMoreOpen((v) => !v)} className="flex h-12 w-12 items-center justify-center rounded-xl border border-shafx-border bg-shafx-surface text-shafx-textMuted" aria-expanded={moreOpen}><MoreVertical className="h-5 w-5" /></button>
           {moreOpen && <div className="absolute right-0 top-[calc(100%+8px)] z-[100] w-72 rounded-2xl border border-shafx-border bg-shafx-surface p-2 shadow-2xl"><button type="button" onClick={() => { setMoreOpen(false); setSettingsOpen(true) }} className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left hover:bg-shafx-surfaceHover"><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-shafx-accent/10 text-shafx-accent"><Settings2 className="h-4 w-4" /></span><span><span className="block text-xs font-semibold">Settings</span><span className="mt-0.5 block text-[9px] text-shafx-textMuted">Chart, navigation and display</span></span></button><div className="my-1 border-t border-shafx-border" /><div className="px-3 py-2 text-[9px] leading-4 text-shafx-textMuted">SHAFX is connected to Deriv. Deposit and withdrawal stay on Deriv.</div></div>}
         </div>
       </div>
     </div>
-    {view === 'market' && <div className="flex gap-1 overflow-x-auto border-t border-shafx-border/70 px-3 py-1.5 sm:px-4 lg:px-5">{TIMEFRAMES.map((tf) => <button key={tf} type="button" onClick={() => onTimeframeChange(tf)} aria-pressed={timeframe === tf} className={'min-h-10 flex-shrink-0 rounded-lg px-3 text-[9px] font-semibold transition ' + (timeframe === tf ? 'bg-shafx-accent text-white' : 'text-shafx-textMuted hover:bg-shafx-surfaceHover hover:text-shafx-text')}>{tf}</button>)}</div>}
     <ChartSettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} />
   </header>
 }
