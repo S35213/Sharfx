@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Activity, CircleStop, Play, ShieldCheck } from 'lucide-react'
+import { Activity, CircleStop, Play } from 'lucide-react'
 import type { SymbolSpec, Timeframe, TradeOrder } from '../../types'
 import type { SetupCandidate } from '../../engine/setup/types'
 import { evaluateTradeBotDecision } from '../../engine/bot/tradeBotDecision'
@@ -30,7 +30,14 @@ export const TradeBotPanel: React.FC<Props> = ({
 }) => {
   const [running, setRunning] = useState(false)
   const [executionPending, setExecutionPending] = useState(false)
-  const [cycleMessage, setCycleMessage] = useState('Stopped. Press Start demo bot to begin monitoring the selected cTrader practice account.')
+  const [lotSizeInput, setLotSizeInput] = useState(() => String(symbolSpec?.minLotSize ?? 0.01))
+  const requestedLotSize = lotSizeInput.trim() === '' ? Number.NaN : Number(lotSizeInput)
+  const lotSizeInputError = !Number.isFinite(requestedLotSize) || requestedLotSize <= 0
+    ? 'Enter a lot size greater than zero.'
+    : symbolSpec && requestedLotSize < symbolSpec.minLotSize - 1e-8
+      ? 'The minimum for ' + symbol + ' is ' + symbolSpec.minLotSize + ' lots.'
+      : null
+  const [cycleMessage, setCycleMessage] = useState('Stopped. Set your lot size, then press Run bot to check the selected cTrader practice account.')
   const [lastBotIssue, setLastBotIssue] = useState<string | null>(null)
   const runSessionRef = useRef(0)
   const runStartedAtRef = useRef(0)
@@ -41,6 +48,15 @@ export const TradeBotPanel: React.FC<Props> = ({
   const [shadowRecords, setShadowRecords] = useState<TradeBotShadowRecord[]>([])
   const [historicalReplay, setHistoricalReplay] = useState<TradeBotHistoricalReplayResult | null>(null)
   const [replayCostPips, setReplayCostPips] = useState(1.5)
+  useEffect(() => {
+    if (!symbolSpec) return
+    setLotSizeInput((current) => {
+      const parsed = Number(current)
+      return current.trim() && Number.isFinite(parsed) && parsed >= symbolSpec.minLotSize
+        ? current
+        : String(symbolSpec.minLotSize)
+    })
+  }, [symbolSpec?.symbol, symbolSpec?.minLotSize])
   const market = useTradeBotMarketData(symbol, marketSource, running)
   const decision = useMemo(() => evaluateTradeBotDecision({
     frames: market.frames,
@@ -49,7 +65,8 @@ export const TradeBotPanel: React.FC<Props> = ({
     accountBalance,
     accountCurrency,
     symbolSpec,
-  }), [market.frames, symbol, timeframe, accountBalance, accountCurrency, symbolSpec])
+    requestedLots: requestedLotSize,
+  }), [market.frames, symbol, timeframe, accountBalance, accountCurrency, symbolSpec, requestedLotSize])
 
   const diagnostics = useMemo(() => buildTradeBotDiagnosticSnapshot({
     source: marketSource,
@@ -148,30 +165,32 @@ export const TradeBotPanel: React.FC<Props> = ({
               ? (symbolSpecError
                 ? 'cTrader instrument lookup failed: ' + symbolSpecError
                 : 'Waiting for matching cTrader instrument rules. The bot will stay blocked until the broker supplies valid contract, pip and lot constraints.')
-              : null
-  const canStart = startBlockReason === null && market.status !== 'unavailable'
+              : lotSizeInputError
+                ? lotSizeInputError
+                : null
+  const canStart = startBlockReason === null && market.status !== 'unavailable' && !lotSizeInputError
   const statusLabel = !running
     ? (startBlockReason ? 'BLOCKED' : 'STOPPED')
     : !symbolSpec
       ? 'BROKER SPECS NEEDED'
-      : !diagnostics.marketFresh
-        ? 'WAITING FOR QUOTE'
-        : market.status === 'ready'
-        ? 'MONITORING'
-        : market.status === 'partial'
-          ? 'PARTIAL DATA'
-          : market.status === 'loading'
-            ? 'LOADING'
-            : market.status === 'unavailable'
-              ? 'BLOCKED'
-              : 'DATA ERROR'
-  const statusTone = decision.status === 'READY' && diagnostics.marketFresh && running
-    ? 'border-shafx-success/30 bg-shafx-success/10 text-shafx-success'
-    : decision.status === 'BLOCKED' || startBlockReason || (running && !diagnostics.marketFresh)
-      ? 'border-shafx-danger/30 bg-shafx-danger/10 text-shafx-danger'
-      : 'border-shafx-border bg-shafx-bg text-shafx-textMuted'
-  const updatedAt = market.updatedAt ? new Date(market.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'
-  const lastDataChangedAt = market.lastDataChangedAt ? new Date(market.lastDataChangedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'
+      : market.status === 'loading'
+        ? 'CHECKING MARKET'
+        : !diagnostics.marketFresh
+          ? 'WAITING FOR QUOTE'
+          : market.status === 'ready'
+            ? 'MONITORING'
+            : market.status === 'partial'
+              ? 'PARTIAL DATA'
+              : market.status === 'unavailable'
+                ? 'BLOCKED'
+                : 'DATA ERROR'
+  const statusTone = running && market.status === 'loading'
+    ? 'border-shafx-accent/30 bg-shafx-accent/10 text-shafx-accent'
+    : decision.status === 'READY' && diagnostics.marketFresh && running
+      ? 'border-shafx-success/30 bg-shafx-success/10 text-shafx-success'
+      : decision.status === 'BLOCKED' || startBlockReason || (running && !diagnostics.marketFresh)
+        ? 'border-shafx-danger/30 bg-shafx-danger/10 text-shafx-danger'
+        : 'border-shafx-border bg-shafx-bg text-shafx-textMuted'
 
   const start = (): void => {
     const currentScope = traceScopeKey
@@ -179,7 +198,7 @@ export const TradeBotPanel: React.FC<Props> = ({
     runningScopeKeyRef.current = currentScope
     runStartedAtRef.current = Date.now()
     setLastBotIssue(null)
-    setCycleMessage('Started. Waiting for a fresh completed market-history cycle before making any decision.')
+    setCycleMessage('Run started. Checking ' + symbol + ' prices and candle history…')
     setRunning(true)
   }
   const stop = (): void => {
@@ -226,7 +245,7 @@ export const TradeBotPanel: React.FC<Props> = ({
     if (!running) return
     if (runningScopeKeyRef.current !== traceScopeKey) return
     if (market.status === 'loading') {
-      setCycleMessage('Fetching a fresh cTrader history snapshot for this monitoring cycle…')
+      setCycleMessage('Checking ' + symbol + ' quote and candle history for cycle ' + Math.max(1, market.cycleNumber + 1) + '…')
       return
     }
     if (market.status === 'unavailable' || market.status === 'error' || !market.updatedAt) {
@@ -257,10 +276,13 @@ export const TradeBotPanel: React.FC<Props> = ({
       setCycleMessage('Cycle ' + market.cycleNumber + ': market quote is stale or unavailable. ' + freshnessDetail + ' No order was sent.')
       return
     }
+    // A successful fresh market cycle clears any old blocker. Errors must describe
+    // the current cycle, not stay on screen after the cause has disappeared.
+    setLastBotIssue(null)
     if (decision.status !== 'READY' || !decision.setup) {
       setCycleMessage(
-        'Cycle ' + market.cycleNumber + ': monitoring ' + timeframe + '; no entry qualified. ' +
-        decision.reason + (market.lastDataChanged === false ? ' Candle history was unchanged this cycle.' : ''),
+        'Cycle ' + market.cycleNumber + ' checked ' + symbol + ' ' + timeframe + ': no entry matched the strategy. ' +
+        decision.reason,
       )
       return
     }
@@ -293,7 +315,7 @@ export const TradeBotPanel: React.FC<Props> = ({
     executionInFlightRef.current = true
     setExecutionPending(true)
     const runSession = runSessionRef.current
-    const preflightMessage = 'Cycle ' + market.cycleNumber + ': setup qualified. Checking a fresh broker quote, risk sizing, current exposure and free margin before submitting one cTrader DEMO order.'
+    const preflightMessage = 'Cycle ' + market.cycleNumber + ': setup found. Checking whether ' + requestedLotSize + ' lots fit the account and broker limits before any demo entry.'
     attemptedSignalRef.current = { key: signalKey, message: preflightMessage }
     setCycleMessage(preflightMessage)
 
@@ -307,18 +329,18 @@ export const TradeBotPanel: React.FC<Props> = ({
       accountFreeMargin,
       accountCurrency,
       symbolSpec,
+      requestedLots: requestedLotSize,
       shouldContinue: () => runSessionRef.current === runSession && runningScopeKeyRef.current === traceScopeKey,
     }).then((result) => {
       onTradeOpened({ ...result.trade, chartTimeframe: timeframe })
-      const marginSizingNote = result.lotSizeReducedForMargin
-        ? ' Lot size reduced from ' + result.riskSizedLotSize + ' to ' + result.trade.lotSize + ' to fit current broker free margin.'
-        : ''
+      const sizingNotes: string[] = []
+      if (result.lotSizeReducedForRisk) sizingNotes.push('Lot adjusted from ' + result.requestedLotSize + ' to ' + result.riskSizedLotSize + ' for account/broker limits.')
+      if (result.lotSizeReducedForMargin) sizingNotes.push('Further reduced to ' + result.trade.lotSize + ' lots for available margin.')
+      const sizingNote = sizingNotes.length ? ' ' + sizingNotes.join(' ') : ''
       const message = result.protectionConfirmed
         ? 'DEMO ORDER FILLED: ' + result.trade.type + ' ' + symbol + ' · ' +
-          result.trade.lotSize + ' lots · estimated stop risk ' +
-          formatCurrency(result.trade.riskAmount ?? 0, accountCurrency) +
-          '. cTrader confirmed the broker-side stop loss and take profit.' + marginSizingNote
-        : 'DEMO ORDER FILLED, BUT BROKER PROTECTION IS NOT CONFIRMED. The bot has stopped. Check this position in cTrader now.' + marginSizingNote
+          result.trade.lotSize + ' lots. Broker stop loss and take profit confirmed.' + sizingNote
+        : 'DEMO ORDER FILLED, BUT BROKER PROTECTION IS NOT CONFIRMED. The bot has stopped. Check this position in cTrader now.' + sizingNote
       attemptedSignalRef.current = { key: signalKey, message }
       setLastBotIssue(result.protectionConfirmed ? null : 'Broker-side stop loss/take profit confirmation failed; verify the position directly in cTrader.')
       setCycleMessage(message)
@@ -376,60 +398,47 @@ export const TradeBotPanel: React.FC<Props> = ({
         <span className={'rounded-full border px-2 py-1 font-mono text-[8px] font-bold ' + statusTone}>{statusLabel}</span>
       </header>
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className="space-y-3">
         <div className="rounded-xl border border-shafx-border bg-shafx-bg p-3">
-          <span className="block text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted">Selected market</span>
-          <strong className="mt-1 block font-mono text-sm">{symbol}</strong>
-          <span className="mt-0.5 block text-[8px] text-shafx-textMuted">
-            {timeframe} • cTrader {marketSource?.environment === 'demo' ? 'practice' : marketSource?.environment === 'live' ? 'live (blocked)' : 'environment unknown'}
-          </span>
-        </div>
-        <div className="rounded-xl border border-shafx-border bg-shafx-bg p-3">
-          <span className="block text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted">Risk ceiling</span>
-          <strong className="mt-1 block font-mono text-sm">{formatCurrency(decision.riskBudget, accountCurrency)}</strong>
-          <span className="mt-0.5 block text-[8px] leading-4 text-shafx-textMuted">Lower of 0.5% of balance or 10; this is stop-loss risk, not the amount traded.</span>
-        </div>
-      </div>
-
-      {market.error && <div role="status" className="rounded-lg border border-shafx-warning/25 bg-shafx-warning/[0.06] px-3 py-2 text-[9px] leading-4 text-shafx-textMuted">{market.error}</div>}
-
-      <div className="grid grid-cols-2 gap-2">
-        <div className="rounded-xl border border-shafx-border bg-shafx-bg p-3" data-testid="tradebot-planned-lot-size">
-          <span className="block text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted">Planned lot size</span>
-          <strong className="mt-1 block font-mono text-sm">{decision.status === 'READY' && decision.riskPlan?.valid ? String(decision.riskPlan.lotSize) : '—'}</strong>
-          <span className="mt-0.5 block text-[8px] leading-4 text-shafx-textMuted">
-            {decision.status === 'READY' && decision.riskPlan?.valid
-              ? 'Estimated stop risk ' + formatCurrency(decision.riskPlan.estimatedLossAtStop, accountCurrency) + ' of ' + formatCurrency(decision.riskBudget, accountCurrency) + ' allowed.'
-              : 'Calculated from the selected account balance and stop distance after a setup qualifies.'}
-          </span>
-        </div>
-        <div className="rounded-xl border border-shafx-border bg-shafx-bg p-3">
-          <span className="block text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted">Margin safeguard</span>
-          <strong className="mt-1 block font-mono text-sm">90% maximum</strong>
-          <span className="mt-0.5 block text-[8px] leading-4 text-shafx-textMuted">The final lot can be reduced again using current broker free margin. At least 10% stays unused.</span>
-        </div>
-      </div>
-
-      <div className="rounded-xl border border-shafx-border bg-shafx-bg/70 p-3">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 text-[9px] font-semibold uppercase tracking-[0.13em] text-shafx-textMuted"><ShieldCheck className="h-3.5 w-3.5" /> Independent decision</div>
-          <span className="font-mono text-[8px] font-bold text-shafx-accent">{market.updatedAt ? 'Updated ' + updatedAt : 'No data yet'}</span>
-        </div>
-        <div className="mt-3 rounded-lg border border-shafx-border bg-shafx-bg p-3">
-          <div className="flex items-center justify-between gap-2">
-            <span className="font-mono text-[9px] font-bold">{decision.status}</span>
-            <span className="font-mono text-[8px] text-shafx-textMuted">HTF {decision.higherTimeframeBias}</span>
-          </div>
-          <p className="mt-2 text-[9px] leading-4 text-shafx-textMuted">{decision.reason}</p>
-          {decision.setup && (
-            <div className="mt-3 grid grid-cols-2 gap-2 text-[9px]">
-              <div><span className="block text-shafx-textMuted">Direction</span><b className={decision.setup.direction === 'BUY' ? 'text-shafx-success' : 'text-shafx-danger'}>{decision.setup.direction}</b></div>
-              <div><span className="block text-shafx-textMuted">Setup score</span><b>{decision.setup.confidence} / 100</b></div>
-              <div><span className="block text-shafx-textMuted">Entry reference</span><b className="font-mono">{formatPrice(decision.setup.entryPrice, (symbolSpec?.pricePrecision ?? 5))}</b></div>
-              <div><span className="block text-shafx-textMuted">Risk / reward</span><b className="font-mono">{decision.riskPlan?.riskRewardRatio.toFixed(2) ?? '—'} : 1</b></div>
-              <div><span className="block text-shafx-textMuted">Stop loss</span><b className="font-mono">{formatPrice(decision.setup.stopLoss, (symbolSpec?.pricePrecision ?? 5))}</b></div>
-              <div><span className="block text-shafx-textMuted">Take profit</span><b className="font-mono">{formatPrice(decision.setup.takeProfit, (symbolSpec?.pricePrecision ?? 5))}</b></div>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <span className="block text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted">Market</span>
+              <strong className="mt-1 block font-mono text-base">{symbol}</strong>
+              <span className="mt-0.5 block text-[8px] text-shafx-textMuted">{timeframe} · cTrader practice account</span>
             </div>
+            <span className="rounded-md border border-shafx-border px-2 py-1 font-mono text-[8px] text-shafx-textMuted">{running ? 'BOT RUNNING' : 'DEMO ONLY'}</span>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-shafx-accent/30 bg-shafx-bg p-3" data-testid="tradebot-lot-size-card">
+          <label htmlFor="tradebot-lot-size" className="block text-[9px] font-semibold uppercase tracking-[0.12em] text-shafx-textMuted">Lot size</label>
+          <div className="mt-2 flex items-center gap-3">
+            <input
+              id="tradebot-lot-size"
+              data-testid="tradebot-lot-size-input"
+              type="number"
+              inputMode="decimal"
+              min={symbolSpec?.minLotSize ?? 0.01}
+              max={symbolSpec?.maxLotSize}
+              step={symbolSpec?.lotStep ?? 0.01}
+              value={lotSizeInput}
+              onChange={(event) => setLotSizeInput(event.currentTarget.value)}
+              disabled={running || executionPending}
+              aria-invalid={Boolean(lotSizeInputError)}
+              className="min-h-12 w-full min-w-0 rounded-lg border border-shafx-border bg-shafx-surface px-3 font-mono text-lg text-shafx-text outline-none focus:border-shafx-accent disabled:opacity-60"
+            />
+            <span className="shrink-0 font-mono text-xs text-shafx-textMuted">lots</span>
+          </div>
+          <p className="mt-2 text-[8px] leading-4 text-shafx-textMuted">
+            Enter the lot you want. The bot checks stop risk, broker limits and available margin against the selected account, and only reduces the lot when needed.
+          </p>
+          {lotSizeInputError && (
+            <p role="alert" className="mt-2 text-[8px] leading-4 text-shafx-danger">{lotSizeInputError}</p>
+          )}
+          {decision.status === 'READY' && decision.lotAdjustmentReason && (
+            <p role="status" data-testid="tradebot-lot-adjustment" className="mt-2 rounded-lg border border-shafx-warning/25 bg-shafx-warning/[0.05] px-2.5 py-2 text-[8px] leading-4 text-shafx-warning">
+              {decision.lotAdjustmentReason}
+            </p>
           )}
         </div>
       </div>
@@ -445,33 +454,27 @@ export const TradeBotPanel: React.FC<Props> = ({
             : <span className={'h-2 w-2 shrink-0 rounded-full ' + (running ? decision.status === 'READY' && diagnostics.marketFresh ? 'bg-shafx-success' : diagnostics.marketFresh ? 'bg-shafx-accent' : 'bg-shafx-danger' : 'bg-shafx-border')} />}
           <p className="text-[9px] leading-4 text-shafx-text">{cycleMessage}</p>
         </div>
-        {running && market.cycleNumber > 0 && (
-          <div className="mt-2 text-[8px] leading-4 text-shafx-textMuted">
-            {market.lastDataChanged === true
-              ? 'New candle snapshot received on the latest cycle.'
-              : market.lastDataChanged === false
-                ? 'The latest response contained unchanged candle history; that does not prove the market is live.'
-                : 'Waiting for the first candle snapshot comparison.'}
-            {' Last history check ' + updatedAt + ' · last snapshot change ' + lastDataChangedAt + '.'}
-          </div>
-        )}
       </section>
       {lastBotIssue && (
         <div role="alert" className="rounded-lg border border-shafx-danger/30 bg-shafx-danger/[0.06] px-3 py-2 text-[9px] leading-4 text-shafx-text">
-          <div className="font-semibold text-shafx-danger">Last bot issue / held check</div>
+          <div className="font-semibold text-shafx-danger">Needs attention</div>
           <p className="mt-1 break-words">{lastBotIssue}</p>
-          <p className="mt-1 text-shafx-textMuted">This message stays visible until the next time you start a new run or a successful protected fill clears it.</p>
         </div>
       )}
 
       <details className="rounded-xl border border-shafx-border bg-shafx-bg/70 p-3">
         <summary className="cursor-pointer list-none flex items-center justify-between gap-2 text-[9px] font-semibold uppercase tracking-[0.13em]">
-          <span>Decision diagnostics</span>
+          <span>Advanced diagnostics (optional)</span>
           <span className={'font-mono ' + diagnosticsTone}>
             {diagnostics.summary === 'READY_FOR_REVIEW' && running ? 'SETUP QUALIFIED · PREFLIGHT' : diagnostics.summary.replace(/_/g, ' ')}
           </span>
         </summary>
         <div className="mt-3 space-y-3 text-[9px]">
+          {onReviewSetup && decision.status === 'READY' && decision.setup && (
+            <button type="button" onClick={() => onReviewSetup(decision.setup)} className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-shafx-accent/30 px-3 text-[8px] font-bold text-shafx-accent">
+              Review qualified setup in manual trade
+            </button>
+          )}
           <div className="rounded-lg border border-shafx-border bg-shafx-bg p-3">
             <div className="text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted">Data source scope</div>
             <div className="mt-1 break-words font-mono">{diagnostics.sourceLabel}</div>
@@ -606,7 +609,26 @@ export const TradeBotPanel: React.FC<Props> = ({
               </div>
             )}
           </div>
-          <p className="leading-4 text-shafx-textMuted">When Start demo bot is active on a cTrader practice account, a qualified setup enters broker preflight. The Bot activity message above reports every hold or rejected order; a setup score alone never means an order was filled.</p>
+          <div className="rounded-lg border border-shafx-border bg-shafx-bg p-3">
+            <div className="text-[8px] font-semibold uppercase tracking-[0.12em] text-shafx-accent">Historical analysis tools</div>
+            <label className="mt-2 block text-[8px] leading-4 text-shafx-textMuted">
+              Assumed round-trip cost (pip-equivalent)
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.1"
+                value={replayCostPips}
+                onChange={(event) => setReplayCostPips(event.currentTarget.value === '' ? 0 : Math.min(100, Math.max(0, Number(event.currentTarget.value) || 0)))}
+                className="mt-1 block min-h-9 w-full rounded-lg border border-shafx-border bg-shafx-surface px-3 font-mono text-xs text-shafx-text"
+                aria-label="Assumed round-trip execution cost in pip-equivalent units"
+              />
+            </label>
+            <button type="button" onClick={runHistoricalReplay} disabled={!canRunHistoricalReplay} className="mt-2 inline-flex min-h-9 items-center gap-2 rounded-lg border border-shafx-border px-3 text-[8px] font-bold text-shafx-text disabled:cursor-not-allowed disabled:opacity-40">
+              Run historical replay
+            </button>
+          </div>
+          <p className="leading-4 text-shafx-textMuted">The main Run bot control checks fresh market data and looks for a setup on the selected timeframe. If conditions are not met, the status above tells you why no demo entry was sent.</p>
         </div>
       </details>
 
@@ -620,39 +642,18 @@ export const TradeBotPanel: React.FC<Props> = ({
         </div>
       )}
 
-      <label className="block text-[8px] leading-4 text-shafx-textMuted">
-        Assumed round-trip execution cost (pip-equivalent; tune per instrument)
-        <input
-          type="number"
-          min="0"
-          max="100"
-          step="0.1"
-          value={replayCostPips}
-          onChange={(event) => setReplayCostPips(event.currentTarget.value === '' ? 0 : Math.min(100, Math.max(0, Number(event.currentTarget.value) || 0)))}
-          className="mt-1 block min-h-9 w-full rounded-lg border border-shafx-border bg-shafx-bg px-3 font-mono text-xs text-shafx-text"
-          aria-label="Assumed round-trip execution cost in pip-equivalent units"
-        />
-      </label>
-      <div className="flex flex-wrap gap-2">
+      <div className="space-y-2">
         {!running ? (
-          <button type="button" onClick={start} disabled={!canStart || executionPending} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-shafx-accent px-3 text-[9px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">
-            <Play className="h-3.5 w-3.5" /> Start demo bot
+          <button type="button" onClick={start} disabled={!canStart || executionPending} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-shafx-accent px-4 text-[10px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">
+            <Play className="h-4 w-4" /> Run bot
           </button>
         ) : (
-          <button type="button" onClick={stop} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-shafx-danger/35 bg-shafx-danger/10 px-3 text-[9px] font-bold text-shafx-danger">
-            <CircleStop className="h-3.5 w-3.5" /> Stop bot
+          <button type="button" onClick={stop} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-shafx-danger/35 bg-shafx-danger/10 px-4 text-[10px] font-bold text-shafx-danger">
+            <CircleStop className="h-4 w-4" /> Stop bot
           </button>
         )}
-        {decision.status === 'READY' && decision.setup && (
-          <button type="button" onClick={() => onReviewSetup?.(decision.setup)} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-shafx-accent/30 px-3 text-[9px] font-bold text-shafx-accent hover:bg-shafx-accent/10">
-            Review in trade ticket
-          </button>
-        )}
-        <button type="button" onClick={runHistoricalReplay} disabled={!canRunHistoricalReplay} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-shafx-border px-3 text-[9px] font-bold text-shafx-text disabled:cursor-not-allowed disabled:opacity-40">
-          Run historical replay
-        </button>
+        <p className="text-[8px] leading-4 text-shafx-textMuted">Practice account only. The bot reports why it is waiting and never skips a safety check.</p>
       </div>
-      <p className="text-[8px] leading-4 text-shafx-textMuted">Monitoring cycle every 15 seconds • last update {updatedAt} • auto-entry only while you keep this demo bot running</p>
     </section>
   )
 }
