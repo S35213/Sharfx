@@ -310,12 +310,15 @@ export const TradeBotPanel: React.FC<Props> = ({
       shouldContinue: () => runSessionRef.current === runSession && runningScopeKeyRef.current === traceScopeKey,
     }).then((result) => {
       onTradeOpened({ ...result.trade, chartTimeframe: timeframe })
+      const marginSizingNote = result.lotSizeReducedForMargin
+        ? ' Lot size reduced from ' + result.riskSizedLotSize + ' to ' + result.trade.lotSize + ' to fit current broker free margin.'
+        : ''
       const message = result.protectionConfirmed
         ? 'DEMO ORDER FILLED: ' + result.trade.type + ' ' + symbol + ' · ' +
           result.trade.lotSize + ' lots · estimated stop risk ' +
           formatCurrency(result.trade.riskAmount ?? 0, accountCurrency) +
-          '. cTrader confirmed the broker-side stop loss and take profit.'
-        : 'DEMO ORDER FILLED, BUT BROKER PROTECTION IS NOT CONFIRMED. The bot has stopped. Check this position in cTrader now.'
+          '. cTrader confirmed the broker-side stop loss and take profit.' + marginSizingNote
+        : 'DEMO ORDER FILLED, BUT BROKER PROTECTION IS NOT CONFIRMED. The bot has stopped. Check this position in cTrader now.' + marginSizingNote
       attemptedSignalRef.current = { key: signalKey, message }
       setLastBotIssue(result.protectionConfirmed ? null : 'Broker-side stop loss/take profit confirmation failed; verify the position directly in cTrader.')
       setCycleMessage(message)
@@ -384,11 +387,28 @@ export const TradeBotPanel: React.FC<Props> = ({
         <div className="rounded-xl border border-shafx-border bg-shafx-bg p-3">
           <span className="block text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted">Risk ceiling</span>
           <strong className="mt-1 block font-mono text-sm">{formatCurrency(decision.riskBudget, accountCurrency)}</strong>
-          <span className="mt-0.5 block text-[8px] text-shafx-textMuted">Lower of 0.5% balance or 10</span>
+          <span className="mt-0.5 block text-[8px] leading-4 text-shafx-textMuted">Lower of 0.5% of balance or 10; this is stop-loss risk, not the amount traded.</span>
         </div>
       </div>
 
       {market.error && <div role="status" className="rounded-lg border border-shafx-warning/25 bg-shafx-warning/[0.06] px-3 py-2 text-[9px] leading-4 text-shafx-textMuted">{market.error}</div>}
+
+      <div className="grid grid-cols-2 gap-2">
+        <div className="rounded-xl border border-shafx-border bg-shafx-bg p-3" data-testid="tradebot-planned-lot-size">
+          <span className="block text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted">Planned lot size</span>
+          <strong className="mt-1 block font-mono text-sm">{decision.status === 'READY' && decision.riskPlan?.valid ? String(decision.riskPlan.lotSize) : '—'}</strong>
+          <span className="mt-0.5 block text-[8px] leading-4 text-shafx-textMuted">
+            {decision.status === 'READY' && decision.riskPlan?.valid
+              ? 'Estimated stop risk ' + formatCurrency(decision.riskPlan.estimatedLossAtStop, accountCurrency) + ' of ' + formatCurrency(decision.riskBudget, accountCurrency) + ' allowed.'
+              : 'Calculated from the selected account balance and stop distance after a setup qualifies.'}
+          </span>
+        </div>
+        <div className="rounded-xl border border-shafx-border bg-shafx-bg p-3">
+          <span className="block text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted">Margin safeguard</span>
+          <strong className="mt-1 block font-mono text-sm">90% maximum</strong>
+          <span className="mt-0.5 block text-[8px] leading-4 text-shafx-textMuted">The final lot can be reduced again using current broker free margin. At least 10% stays unused.</span>
+        </div>
+      </div>
 
       <div className="rounded-xl border border-shafx-border bg-shafx-bg/70 p-3">
         <div className="flex items-center justify-between gap-2">

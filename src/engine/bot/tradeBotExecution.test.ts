@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { SymbolSpec } from '../../types'
 import type { SetupCandidate } from '../setup/types'
 import type { CTraderApiPost } from './tradeBotExecution'
-import { executeTradeBotDemoOrder } from './tradeBotExecution'
+import { calculateMarginConstrainedLots, executeTradeBotDemoOrder } from './tradeBotExecution'
 
 const NOW = Date.now()
 const source = {
@@ -92,6 +92,41 @@ const createPost = (overrides: Partial<Record<string, unknown>> = {}): CTraderAp
   throw new Error('Unexpected action: ' + action)
 })
 
+describe('Trade Bot balance-aware lot sizing', () => {
+  it('reduces volume to a valid lot step and reserves 10% of free margin', () => {
+    expect(calculateMarginConstrainedLots({
+      requestedLots: 0.05,
+      availableFreeMargin: 50,
+      marginRequired: 100,
+      minimumLots: 0.01,
+      maximumLots: 20,
+      lotStep: 0.01,
+    })).toBe(0.02)
+  })
+
+  it('returns zero when the account cannot support its minimum lot', () => {
+    expect(calculateMarginConstrainedLots({
+      requestedLots: 0.05,
+      availableFreeMargin: 1,
+      marginRequired: 100,
+      minimumLots: 0.01,
+      maximumLots: 20,
+      lotStep: 0.01,
+    })).toBe(0)
+  })
+
+  it('never rounds a margin-limited lot above the requested size', () => {
+    expect(calculateMarginConstrainedLots({
+      requestedLots: 0.057,
+      availableFreeMargin: 1000,
+      marginRequired: 100,
+      minimumLots: 0.01,
+      maximumLots: 20,
+      lotStep: 0.01,
+    })).toBe(0.05)
+  })
+})
+
 describe('Trade Bot cTrader demo execution', () => {
   it('places one risk-sized demo market order only after quote, exposure and margin checks', async () => {
     const post = createPost()
@@ -152,11 +187,58 @@ describe('Trade Bot cTrader demo execution', () => {
     expect(vi.mocked(post).mock.calls.map(([body]) => body.action)).toEqual(['quote', 'account'])
   })
 
-  it('blocks orders when the broker margin exceeds free margin', async () => {
+  it('refuses to place an order when the broker margin remains unaffordable after resizing', async () => {
     const post = createPost({ margin: { ok: true, margin: { buyMargin: 10_000, sellMargin: 10_000 } } })
-    await expect(executeTradeBotDemoOrder({ ...input(), post })).rejects.toThrow(/exceeds current free margin/i)
+    await expect(executeTradeBotDemoOrder({ ...input(), post })).rejects.toThrow(/cannot safely support even the broker minimum lot/i)
+    expect(vi.mocked(post).mock.calls.map(([body]) => body.action)).toEqual(['quote', 'account', 'margin', 'margin', 'margin'])
+  })
+  it('automatically reduces risk-sized lots when current free margin is tighter', async () => {
+    const post: CTraderApiPost = vi.fn(async (body) => {
+      const action = String(body.action)
+      if (action === 'quote') return validQuote
+      if (action === 'account') {
+        return { ok: true, account: { balance: 1_000, freeMargin: 50, currency: 'USD' }, positions: [], orders: [] }
+      }
+      if (action === 'margin') {
+        const required = Number(body.lots) * 2_000
+        return { ok: true, margin: { buyMargin: required, sellMargin: required } }
+      }
+      if (action === 'placeOrder') return filledOrder
+      throw new Error('Unexpected action: ' + action)
+    })
+
+    const result = await executeTradeBotDemoOrder({ ...input(), post })
+    const actions = vi.mocked(post).mock.calls.map(([body]) => body.action)
+    expect(actions).toEqual(['quote', 'account', 'margin', 'margin', 'placeOrder'])
+    expect(result.riskSizedLotSize).toBeCloseTo(0.05, 8)
+    expect(result.lotSizeReducedForMargin).toBe(true)
+    expect(result.trade.lotSize).toBeCloseTo(0.02, 8)
+    expect(result.marginRequired).toBeCloseTo(40, 8)
+    expect(result.marginRequired).toBeLessThanOrEqual(50 * 0.9)
+    expect(result.trade.riskAmount).toBeCloseTo(2, 8)
+    const calls = vi.mocked(post).mock.calls
+    expect(calls[calls.length - 1]?.[0].order).toMatchObject({ quantity: 0.02, quantityUnit: 'lots' })
+  })
+
+  it('refuses the order when even the minimum lot exceeds the account margin reserve', async () => {
+    const post: CTraderApiPost = vi.fn(async (body) => {
+      const action = String(body.action)
+      if (action === 'quote') return validQuote
+      if (action === 'account') {
+        return { ok: true, account: { balance: 1_000, freeMargin: 1, currency: 'USD' }, positions: [], orders: [] }
+      }
+      if (action === 'margin') {
+        const required = Number(body.lots) * 2_000
+        return { ok: true, margin: { buyMargin: required, sellMargin: required } }
+      }
+      if (action === 'placeOrder') return filledOrder
+      throw new Error('Unexpected action: ' + action)
+    })
+
+    await expect(executeTradeBotDemoOrder({ ...input(), post })).rejects.toThrow(/cannot safely support even the broker minimum lot/i)
     expect(vi.mocked(post).mock.calls.map(([body]) => body.action)).toEqual(['quote', 'account', 'margin'])
   })
+
   it('uses current broker balance and free margin instead of stale UI values', async () => {
     const post = createPost({
       account: { ok: true, account: { balance: 1_000, freeMargin: 5_000, currency: 'USD' }, positions: [], orders: [] },
