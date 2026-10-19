@@ -317,6 +317,7 @@ export const executeTradeBotDemoOrder = async (
   // volume to the current broker free-margin snapshot. Never trust one scaled
   // estimate: re-query cTrader for every smaller stepped volume before ordering.
   const riskSizedLotSize = riskPlan.lotSize
+  const lotSizeReducedForRisk = riskPlan.lotSize < requestedLotSize - 1e-8
   const MIN_FREE_MARGIN_RESERVE = 0.1
   const maximumMarginUse = currentFreeMargin * (1 - MIN_FREE_MARGIN_RESERVE)
   let marginRequired = 0
@@ -486,7 +487,7 @@ export const executeTradeBotDemoOrder = async (
     signalKey: sourceKey,
     riskSizedLotSize,
     requestedLotSize,
-    lotSizeReducedForRisk: riskPlan.lotSize < requestedLotSize - 1e-8,
+    lotSizeReducedForRisk,
     lotAdjustmentReason,
     lotSizeReducedForMargin: riskPlan.lotSize < riskSizedLotSize - 1e-8,
   }
