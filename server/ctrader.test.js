@@ -3,12 +3,32 @@ import {
   ctraderLotsToProtocolVolume,
   ctraderProtocolVolumeToLots,
   ctraderRelativeDistanceUnits,
+  normalizeCtraderSpotTimestamp,
   isCtraderMarketOrderTerminalEvent,
   getCtraderRequestError,
   normalizeCtraderInstrument,
   normalizeCtraderOrder,
   normalizeCtraderPosition,
 } from './ctrader.js'
+
+describe('cTrader spot timestamp normalization', () => {
+  const spotAtMs = Date.UTC(2026, 9, 19, 10, 0, 0)
+
+  it('accepts Unix seconds and milliseconds', () => {
+    expect(normalizeCtraderSpotTimestamp(spotAtMs / 1000)).toBe(new Date(spotAtMs).toISOString())
+    expect(normalizeCtraderSpotTimestamp(String(spotAtMs / 1000))).toBe(new Date(spotAtMs).toISOString())
+    expect(normalizeCtraderSpotTimestamp(spotAtMs)).toBe(new Date(spotAtMs).toISOString())
+    expect(normalizeCtraderSpotTimestamp(String(spotAtMs))).toBe(new Date(spotAtMs).toISOString())
+  })
+
+  it('does not replace missing or invalid broker timestamps with local time', () => {
+    expect(normalizeCtraderSpotTimestamp(null)).toBeNull()
+    expect(normalizeCtraderSpotTimestamp(undefined)).toBeNull()
+    expect(normalizeCtraderSpotTimestamp('')).toBeNull()
+    expect(normalizeCtraderSpotTimestamp('not-a-timestamp')).toBeNull()
+    expect(normalizeCtraderSpotTimestamp(0)).toBeNull()
+  })
+})
 
 describe('cTrader request error normalization', () => {
   it('handles order errors immediately with broker details', () => {
