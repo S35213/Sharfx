@@ -7,7 +7,7 @@
 
 - Repository: [S35213/Sharfx](https://github.com/S35213/Sharfx).
 - Experimental application branch: `test/rebuild-deriv-native-manual-20260930`.
-- Latest focused implementation branch: `fix/tradebot-balance-aware-lot-sizing-20261019` (PR #74 merged into the experimental branch; live on Render at commit `2a9efb80f772e2ed5f14d7c8a4a8089623706157`).
+- Latest focused fixes: PR #74 (balance-aware lot sizing) and PR #75 (cTrader quote timestamp normalization), both merged into `test/rebuild-deriv-native-manual-20260930`. Current live code commit: `1bb00b121c05ce76641f4e2226cb922dfef93103`.
 - Active Render service: **Shafek Derive Render** — https://sharfx-deriv-render.onrender.com — service ID `srv-dav8hrt9fdbs73d690s0`.
 - Do **not** use Render services `Shafek Derive Test 2`, `Shafek Derive Test`, `Shafex Deriv Test 2`, or any similarly named sibling service.
 - Do not merge into `main`, deploy to Cloudflare production, or place real/demo broker orders while performing QA unless the user separately authorizes that specific action.
@@ -55,14 +55,17 @@ Do not transplant the FXBot's Python/OANDA-specific classes. SHAFX is React/Type
 
 ## Evidence / status tracking — last verified 2026-10-19
 
-- [x] Build and TypeScript checks pass on deployed commit `2a9efb80f772e2ed5f14d7c8a4a8089623706157` — [SHAFX CI run 39234633194](https://github.com/S35213/Sharfx/actions/runs/39234633194).
+- [x] Build and TypeScript checks pass on lot-sizing commit `2a9efb80f772e2ed5f14d7c8a4a8089623706157` — [SHAFX CI run 39234633194](https://github.com/S35213/Sharfx/actions/runs/39234633194).
+- [x] Quote timestamp fix commit `1bb00b121c05ce76641f4e2226cb922dfef93103` passes build, static-server smoke, lint, unit tests and production dependency audit — [SHAFX CI run 39238439339](https://github.com/S35213/Sharfx/actions/runs/39238439339).
 - [x] ESLint passes on the same code revision.
 - [x] Vitest suite passes on the same code revision.
 - [x] Node static-server smoke and production-only dependency audit pass (same CI run).
-- [x] Manual CFD verification passes — [workflow 39234633020](https://github.com/S35213/Sharfx/actions/runs/39234633020).
-- [x] Live Render smoke passes — [workflow 39234634357](https://github.com/S35213/Sharfx/actions/runs/39234634357). The workflow checked the HTML, bundled assets, health endpoint, expected unauthenticated auth response, public Deriv feed and responsive desktop/mobile UI.
+- [x] Manual CFD verification passes for lot sizing — [workflow 39234633020](https://github.com/S35213/Sharfx/actions/runs/39234633020).
+- [x] Manual CFD verification passes after quote timestamp fix — [workflow 39238439337](https://github.com/S35213/Sharfx/actions/runs/39238439337).
+- [x] Live Render smoke passes for lot-sizing deploy — [workflow 39234634357](https://github.com/S35213/Sharfx/actions/runs/39234634357). The workflow checked the HTML, bundled assets, health endpoint, expected unauthenticated auth response, public Deriv feed and responsive desktop/mobile UI.
+- [x] Live Render smoke also passes after quote timestamp fix — [workflow 39238439335](https://github.com/S35213/Sharfx/actions/runs/39238439335).
 - [x] Visual-preview workflow passed, including desktop and mobile preview capture — [workflow 39234633310](https://github.com/S35213/Sharfx/actions/runs/39234633310).
-- [x] Render service identity, experimental branch, live commit and start logs verified; latest deploy is `dep-dbaulorm8hqs73bqfs90`.
+- [x] Render service identity, experimental branch, live commit and start logs verified; latest code deploy is `dep-dbav4f942hec73e1pt10` at commit `1bb00b121c05ce76641f4e2226cb922dfef93103` (LIVE at 2026-10-19 10:35:42 UTC).
 - [x] No broker order was submitted, modified or closed during this verification.
 - [ ] Authenticated browser check still needed for the signed-in user's Signal Bot scan interaction and Trade Bot cycle/blocker state.
 - [ ] Observe a cTrader practice-account monitoring cycle and verify the margin-resized bot behavior in-session; automated execution tests use mocked broker responses.
@@ -89,6 +92,20 @@ For every follow-up, record:
 - **Next safe action**
 
 If a new conversation starts, read this file first, then inspect the live branch/deployment state before editing.
+## 2026-10-19 — cTrader quote timestamp fix (deployed; authenticated UI pending)
+
+- **Screenshot symptom:** Trade Bot displayed `WAITING FOR QUOTE`, planned lot `—`, and a blocked/held-check panel. This prevents the bot from advancing to a validated setup and preflight.
+- **Source defect fixed:** `server/ctrader.js` assumed cTrader spot event timestamps were milliseconds. If serialized as Unix seconds or a numeric string, they could be interpreted as a 1970-era date. It also substituted local server time when the broker omitted a timestamp, which could falsely label an undated quote fresh. Client freshness and the Trade Bot diagnostic gate also disagreed (60s vs 45s). The signed-in account's actual timestamp payload was not captured, so these are confirmed source defects, not proof they were the only reason for the screenshot.
+- **Fix deployed in PR #75:** normalize numeric seconds/milliseconds (including numeric strings); preserve missing/invalid provider timestamps as null instead of faking freshness; make the client quote type nullable; use one 45-second freshness rule for provider validation and Trade Bot diagnostics.
+- **Regression tests:** seconds/ms numbers and strings, missing/invalid values, and the shared 45-second cutoff. The first CI found a TypeScript mismatch and an over-escaped numeric-string matcher; both were corrected before merge. The final exact-commit CI is green.
+- **Files changed for PR #75:** `server/ctrader.js`, `server/ctrader.test.js`, `src/data/ctrader/CTraderLiveQuote.ts`, `src/data/ctrader/CTraderLiveQuote.test.ts`, `src/engine/bot/tradeBotDiagnostics.ts`, and `src/components/order/CTraderManualTicket.tsx`.
+- **PR:** [#75 — Fix cTrader quote timestamps blocking the Trade Bot](https://github.com/S35213/Sharfx/pull/75), merged only into `test/rebuild-deriv-native-manual-20260930`.
+- **Code/deploy commit:** `1bb00b121c05ce76641f4e2226cb922dfef93103`; Render deployment `dep-dbav4f942hec73e1pt10` is LIVE (2026-10-19 10:35:42 UTC). Build and server startup succeeded.
+- **Checks passed:** [SHAFX CI](https://github.com/S35213/Sharfx/actions/runs/39238439339) passed build, static-server, lint, tests and production dependency audit; [manual CFD verification](https://github.com/S35213/Sharfx/actions/runs/39238439337) passed; [Render live smoke](https://github.com/S35213/Sharfx/actions/runs/39238439335) passed; [desktop/mobile visual preview](https://github.com/S35213/Sharfx/actions/runs/39238439343) passed.
+- **Still unverified:** authenticated cTrader quote freshness and Signal Bot scan results inside the signed-in account. Browser automation could not open a session because its wallet was out of credit. Public smoke does not prove the exact account quote is fresh.
+- **No broker orders:** no real or practice order was submitted, modified or closed.
+- **Next action:** refresh the app and check `Bots → Trade Bot → Decision diagnostics`, especially `Broker quote` age/status and `Last bot issue / held check`. If it remains `WAITING FOR QUOTE`, capture that exact issue text and diagnostic gates. Do not bypass freshness or trading safety checks. Keep `main`, Cloudflare production and sibling Render services untouched.
+
 ## 2026-10-19 — Trade Bot balance-aware lot sizing (deployed; authenticated UI pending)
 
 - **Root cause found in source:** Trade Bot calculated its initial lot from account balance and stop-loss risk, but rejected the setup outright whenever the initial broker-margin quote was too large for current free margin. It did not try a smaller broker-valid lot.
