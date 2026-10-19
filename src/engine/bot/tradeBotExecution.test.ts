@@ -216,7 +216,8 @@ describe('Trade Bot cTrader demo execution', () => {
     expect(result.marginRequired).toBeCloseTo(40, 8)
     expect(result.marginRequired).toBeLessThanOrEqual(50 * 0.9)
     expect(result.trade.riskAmount).toBeCloseTo(2, 8)
-    expect(vi.mocked(post).mock.calls.at(-1)?.[0].order).toMatchObject({ quantity: 0.02, quantityUnit: 'lots' })
+    const calls = vi.mocked(post).mock.calls
+    expect(calls[calls.length - 1]?.[0].order).toMatchObject({ quantity: 0.02, quantityUnit: 'lots' })
   })
 
   it('refuses the order when even the minimum lot exceeds the account margin reserve', async () => {
