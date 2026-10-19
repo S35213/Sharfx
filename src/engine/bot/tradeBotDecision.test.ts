@@ -7,6 +7,7 @@ import {
 } from './useTradeBotMarketData'
 import { tradeBotRiskBudget, evaluateTradeBotDecision } from './tradeBotDecision'
 import { getSymbolSpec } from '../../data/mock/symbols'
+import type { OHLCV } from '../../types'
 
 describe('independent Trade Bot guardrails', () => {
   it('scopes candle state by symbol, provider, account, connection and environment', () => {
