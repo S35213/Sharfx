@@ -135,7 +135,7 @@ export const evaluateTradeBotDecision = (input: {
         higherTimeframeBias,
       }
     }
-    riskAdjustmentReason = choice.adjustmentReason
+    lotAdjustmentReason = choice.adjustmentReason
     riskPlan = calculateCfdRiskPlan({
       accountBalance,
       accountCurrency,
