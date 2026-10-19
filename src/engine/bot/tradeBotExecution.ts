@@ -253,7 +253,7 @@ export const executeTradeBotDemoOrder = async (
   const stopLoss = roundToTick(stopPriceRaw, priceTick, setup.direction === 'BUY' ? 'down' : 'up')
   const takeProfit = roundToTick(targetPriceRaw, priceTick, setup.direction === 'BUY' ? 'up' : 'down')
 
-  const riskPlan = calculateCfdRiskPlan({
+  let riskPlan = calculateCfdRiskPlan({
     accountBalance: currentBalance,
     accountCurrency: currentCurrency,
     symbol: symbolSpec,
