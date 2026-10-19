@@ -50,7 +50,7 @@ export const normalizeCtraderSpotTimestamp = (value) => {
   if (value === null || value === undefined || (typeof value === 'string' && !value.trim())) return null
   const numeric = typeof value === 'number'
     ? value
-    : typeof value === 'string' && /^\\d+(?:\\.\\d+)?$/.test(value.trim())
+    : typeof value === 'string' && /^\d+(?:\.\d+)?$/.test(value.trim())
       ? Number(value.trim())
       : Number.NaN
   if (!Number.isFinite(numeric) || numeric <= 0) return null
