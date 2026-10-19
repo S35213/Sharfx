@@ -183,7 +183,7 @@ describe('Trade Bot cTrader demo execution', () => {
   it('blocks orders that would exceed the allowed cash-risk ceiling', async () => {
     const wideSetup = { ...setup, stopLoss: 1.08, takeProfit: 1.1401 }
     const post = createPost()
-    await expect(executeTradeBotDemoOrder({ ...input(), setup: wideSetup, post })).rejects.toThrow(/exceed the risk ceiling/i)
+    await expect(executeTradeBotDemoOrder({ ...input(), setup: wideSetup, post })).rejects.toThrow(/exceed the account stop-risk limit/i)
     expect(vi.mocked(post).mock.calls.map(([body]) => body.action)).toEqual(['quote', 'account'])
   })
 
