@@ -4,6 +4,7 @@ import { analyzeSetup } from '../setup'
 import { analyzeSupportResistance } from '../supportResistance'
 import { analyzeMultiTimeframeBias } from '../agent/multiTimeframe'
 import { calculateCfdRiskPlan, type CfdRiskPlan } from '../../lib/cfdRiskEngine'
+import { resolveTradeBotLotSize } from './tradeBotLotSizing'
 import type { OHLCV, SymbolSpec, Timeframe } from '../../types'
 import type { SetupCandidate } from '../setup/types'
 
@@ -16,6 +17,8 @@ export interface TradeBotDecision {
   timeframe: Timeframe
   riskBudget: number
   riskPlan: CfdRiskPlan | null
+  requestedLotSize?: number
+  lotAdjustmentReason?: string | null
   higherTimeframeBias: 'Bullish' | 'Bearish' | 'Sideways' | 'Unclear'
 }
 
@@ -41,6 +44,8 @@ export const evaluateTradeBotDecision = (input: {
   accountBalance: number
   accountCurrency: string
   symbolSpec: SymbolSpec | null
+  /** User's requested maximum lot. The broker/risk rules may reduce it, never increase it. */
+  requestedLots?: number
 }): TradeBotDecision => {
   const { frames, symbol, timeframe, accountBalance, accountCurrency, symbolSpec } = input
   const riskBudget = tradeBotRiskBudget(accountBalance)
@@ -86,7 +91,7 @@ export const evaluateTradeBotDecision = (input: {
     return wait(timeframe, 'Higher-timeframe bias does not confirm the candidate direction.', riskBudget, higherTimeframeBias)
   }
 
-  const riskPlan = calculateCfdRiskPlan({
+  const riskLimitPlan = calculateCfdRiskPlan({
     accountBalance,
     accountCurrency,
     symbol: symbolSpec,
@@ -96,25 +101,76 @@ export const evaluateTradeBotDecision = (input: {
     takeProfitPrice: setup.takeProfit,
     riskAmount: riskBudget,
   })
-  if (!riskPlan.valid) {
+  if (!riskLimitPlan.valid) {
     return {
       status: 'BLOCKED',
-      reason: riskPlan.error || 'Risk plan failed validation.',
+      reason: riskLimitPlan.error || 'Risk plan failed validation.',
       setup,
       timeframe,
       riskBudget,
-      riskPlan,
+      riskPlan: riskLimitPlan,
       higherTimeframeBias,
+    }
+  }
+
+  let riskPlan = riskLimitPlan
+  let lotAdjustmentReason: string | null = null
+  if (input.requestedLots !== undefined) {
+    const choice = resolveTradeBotLotSize({
+      requestedLots: input.requestedLots,
+      riskAllowedLots: riskLimitPlan.lotSize,
+      minimumLots: symbolSpec.minLotSize,
+      maximumLots: symbolSpec.maxLotSize,
+      lotStep: symbolSpec.lotStep,
+    })
+    if (choice.error || choice.lotSize === null) {
+      return {
+        status: 'BLOCKED',
+        reason: choice.error || 'No valid lot size fits the selected account and risk limit.',
+        setup,
+        timeframe,
+        riskBudget,
+        riskPlan: riskLimitPlan,
+        requestedLotSize: input.requestedLots,
+        higherTimeframeBias,
+      }
+    }
+    riskAdjustmentReason = choice.adjustmentReason
+    riskPlan = calculateCfdRiskPlan({
+      accountBalance,
+      accountCurrency,
+      symbol: symbolSpec,
+      side: setup.direction,
+      entryPrice: setup.entryPrice,
+      stopLossPrice: setup.stopLoss,
+      takeProfitPrice: setup.takeProfit,
+      riskAmount: riskBudget,
+      lots: choice.lotSize,
+    })
+    if (!riskPlan.valid) {
+      return {
+        status: 'BLOCKED',
+        reason: riskPlan.error || 'Selected lot failed risk validation.',
+        setup,
+        timeframe,
+        riskBudget,
+        riskPlan,
+        requestedLotSize: input.requestedLots,
+        lotAdjustmentReason,
+        higherTimeframeBias,
+      }
     }
   }
   if (riskPlan.estimatedLossAtStop > riskBudget + 0.01) {
     return {
       status: 'BLOCKED',
-      reason: 'Calculated stop-loss exposure exceeds the Trade Bot risk ceiling.',
+      reason: 'Calculated stop-loss exposure exceeds the Trade Bot risk limit.',
       setup,
       timeframe,
       riskBudget,
       riskPlan,
+      requestedLotSize: input.requestedLots,
+      lotAdjustmentReason,
       higherTimeframeBias,
     }
   }
@@ -126,6 +182,8 @@ export const evaluateTradeBotDecision = (input: {
       timeframe,
       riskBudget,
       riskPlan,
+      requestedLotSize: input.requestedLots,
+      lotAdjustmentReason,
       higherTimeframeBias,
     }
   }
@@ -137,6 +195,8 @@ export const evaluateTradeBotDecision = (input: {
     timeframe,
     riskBudget,
     riskPlan,
+    requestedLotSize: input.requestedLots,
+    lotAdjustmentReason,
     higherTimeframeBias,
   }
 }
