@@ -64,6 +64,48 @@ describe('independent Trade Bot guardrails', () => {
     expect(result.reason).toContain('Verified cTrader instrument contract data is unavailable')
   })
 
+
+  it('produces a scored fallback candidate when structure/liquidity has no executable setup', () => {
+    const changes = [0.00010, -0.00009, 0.00006, -0.00009, 0.00006, 0.00010]
+    const candles: OHLCV[] = []
+    let close = 1.1
+    for (let index = 0; index < 90; index += 1) {
+      const open = close
+      close = open + changes[index % changes.length]
+      candles.push({
+        time: (index + 1) * 300,
+        open,
+        close,
+        high: Math.max(open, close) + 0.00003,
+        low: Math.min(open, close) - 0.00003,
+      })
+    }
+    candles.push({
+      time: 91 * 300,
+      open: close,
+      close: close + 0.00001,
+      high: close + 0.00003,
+      low: close - 0.00003,
+    })
+
+    const result = evaluateTradeBotDecision({
+      frames: { M5: candles },
+      symbol: 'EUR/USD',
+      timeframe: 'M5',
+      accountBalance: 1000,
+      accountCurrency: 'USD',
+      symbolSpec: getSymbolSpec('EUR/USD'),
+      requestedLots: 0.01,
+    })
+
+    expect(result.status).toBe('READY')
+    expect(result.setup?.direction).toBe('BUY')
+    expect(result.signalAnalysis?.source).toBe('EMA_MOMENTUM')
+    expect(result.signalAnalysis?.score).toBeGreaterThanOrEqual(75)
+    expect(result.signalCandleTime).toBe(candles[candles.length - 2]?.time)
+    expect(result.riskPlan?.valid).toBe(true)
+  })
+
   it('waits instead of inventing a setup when timeframe candles are missing', () => {
     const symbolSpec = getSymbolSpec('EUR/USD')
     const result = evaluateTradeBotDecision({
