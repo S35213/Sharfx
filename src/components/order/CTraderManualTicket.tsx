@@ -37,7 +37,8 @@ interface ProviderQuote {
   bid?: number
   ask?: number
   last?: number
-  timestamp: string
+  /** Missing provider timestamps must remain missing; they are not evidence of freshness. */
+  timestamp: string | null
 }
 
 interface ProviderInstrument {

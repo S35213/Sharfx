@@ -11,6 +11,7 @@ import {
   getRecentCTraderCandleGapSignature,
   isCTraderQuoteTimestampFresh,
   getCTraderQuoteTimestampMs,
+  CTRADER_QUOTE_MAX_AGE_MS,
 } from './CTraderLiveQuote'
 
 const candle = (time: number, open = 1.1, high = 1.12, low = 1.09, close = 1.11) => ({
@@ -292,6 +293,12 @@ describe('cTrader broker quote freshness', () => {
     expect(getCTraderQuoteTimestampMs(sunday - 10_000)).toBe(sunday - 10_000)
     expect(getCTraderQuoteTimestampMs('2026-10-18T11:56:50.000Z')).toBe(sunday - 10_000)
     expect(getCTraderQuoteTimestampMs('not-a-time')).toBeNull()
+  })
+
+  it('uses the same maximum quote age as the Trade Bot diagnostic gate', () => {
+    expect(CTRADER_QUOTE_MAX_AGE_MS).toBe(45_000)
+    expect(isCTraderQuoteTimestampFresh(sunday - 45_000, sunday)).toBe(true)
+    expect(isCTraderQuoteTimestampFresh(sunday - 45_001, sunday)).toBe(false)
   })
 
   it('normalizes numeric seconds and milliseconds timestamps for freshness checks', () => {

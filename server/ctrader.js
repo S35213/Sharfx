@@ -45,6 +45,21 @@ const decodeMoney = (value, digits = 8) => asNumber(value) / (10 ** Number(digit
 const decodePrice = (value) => asNumber(value) / 100000
 const encodePrice = (value) => Math.round(asNumber(value) * 100000)
 
+/** Normalize cTrader spot timestamps to ISO-8601 without fabricating freshness. */
+export const normalizeCtraderSpotTimestamp = (value) => {
+  if (value === null || value === undefined || (typeof value === 'string' && !value.trim())) return null
+  const numeric = typeof value === 'number'
+    ? value
+    : typeof value === 'string' && /^\d+(?:\.\d+)?$/.test(value.trim())
+      ? Number(value.trim())
+      : Number.NaN
+  if (!Number.isFinite(numeric) || numeric <= 0) return null
+  // Spot messages from different adapters may serialize Unix seconds or ms.
+  const timestampMs = numeric < 100_000_000_000 ? numeric * 1000 : numeric
+  const date = new Date(timestampMs)
+  return Number.isFinite(date.getTime()) ? date.toISOString() : null
+}
+
 const normalizeSymbol = (value) => String(value || '').trim().replace(/[^A-Za-z0-9/_.-]/g, '').toUpperCase()
 const symbolAliases = (value) => {
   const normalized = normalizeSymbol(value)
@@ -518,7 +533,8 @@ const createCtraderQuoteStream = async ({ environment, account, accessToken, id,
           symbolId: Number(body.symbolId),
           bid: body.bid == null ? undefined : decodePrice(body.bid),
           ask: body.ask == null ? undefined : decodePrice(body.ask),
-          timestamp: body.timestamp ? new Date(Number(body.timestamp)).toISOString() : new Date().toISOString(),
+          // Never substitute server receipt time: it would make an undated or stale quote look live.
+          timestamp: normalizeCtraderSpotTimestamp(body.timestamp),
         }
         stream.quote = quote
         stream.lastQuoteAt = Date.now()
