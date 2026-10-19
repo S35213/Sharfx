@@ -110,6 +110,7 @@ const createMomentumSetup = (input: {
   fastEma: number
   slowEma: number
   fastEmaPrevious: number
+  timeframe: Timeframe
   rsi: number
   atr: number
   score: number
@@ -138,11 +139,12 @@ const createMomentumSetup = (input: {
   const takeProfit = rounded(entryPrice + (buy ? stopDistance * 1.8 : -stopDistance * 1.8), symbolSpec.pricePrecision)
   if (!(buy ? stopLoss < entryPrice && takeProfit > entryPrice : stopLoss > entryPrice && takeProfit < entryPrice)) return null
 
-  const emaText = 'EMA(9) ' + (buy ? 'above' : 'below') + ' EMA(21)'
+  const emaText = 'EMA(9) ' + (buy ? 'above' : 'below') + ' EMA(21); fast EMA moved from ' +
+    fastEmaPrevious.toFixed(symbolSpec.pricePrecision) + ' to ' + fastEma.toFixed(symbolSpec.pricePrecision)
   const momentumText = 'RSI(14) ' + rsi.toFixed(1) + ' supports ' + (buy ? 'bullish' : 'bearish') + ' momentum'
   const triggerText = breakout
-    ? 'The last closed candle broke the previous six-candle range.'
-    : 'The last closed candle confirms continuation in the EMA trend.'
+    ? timeframe + ' closed candle broke the previous six-candle range.'
+    : timeframe + ' closed candle confirms continuation in the EMA trend.'
   return {
     direction: buy ? 'BUY' : 'SELL',
     status: 'candidate',
@@ -195,10 +197,11 @@ export const evaluateTradeBotStrategy = (input: {
   candles: readonly OHLCV[]
   symbolSpec: SymbolSpec
   higherTimeframeBias: MarketBias | null
-  opposingHigherTimeframeConfirmed: boolean
+  higherTimeframeDirectionalCount: number
+  higherTimeframeConfidence: number
   higherTimeframeDetail: string
 }): TradeBotStrategyResult => {
-  const { symbol, timeframe, symbolSpec, higherTimeframeBias, opposingHigherTimeframeConfirmed, higherTimeframeDetail } = input
+  const { symbol, timeframe, symbolSpec, higherTimeframeBias, higherTimeframeDirectionalCount, higherTimeframeConfidence, higherTimeframeDetail } = input
   // The final cTrader candle may still be forming. Signals use closed candles only.
   const candles = input.candles.slice().filter(validCandle).sort((a, b) => a.time - b.time).slice(0, -1)
   const historyCheck: TradeBotStrategyCheck = {
@@ -217,7 +220,11 @@ export const evaluateTradeBotStrategy = (input: {
         detail: higherTimeframeDetail || 'Higher-timeframe bias will be reviewed when a directional candidate appears.',
       }
     }
-    if (opposingHigherTimeframeConfirmed) {
+    const hasStrongOpposition = Boolean(
+      higherTimeframeBias && higherTimeframeBias !== 'Sideways' && higherTimeframeBias !== directionBias &&
+      higherTimeframeDirectionalCount >= 2 && higherTimeframeConfidence >= 65,
+    )
+    if (hasStrongOpposition) {
       return {
         id: 'higher-timeframe',
         label: 'Higher timeframe',
@@ -428,6 +435,7 @@ export const evaluateTradeBotStrategy = (input: {
     rsi,
     atr,
     score: chosenScore,
+    timeframe,
     breakout: direction === 'BUY' ? bullishBreakout : bearishBreakout,
   })
   if (!setup) {
