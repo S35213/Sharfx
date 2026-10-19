@@ -30,6 +30,51 @@ export interface TradeBotDemoExecutionResult {
   marginRequired: number
   protectionConfirmed: boolean
   signalKey: string
+  /** Risk-sized lot before the final live-broker margin cap. */
+  riskSizedLotSize: number
+  /** True when the current cTrader free-margin snapshot required a smaller lot. */
+  lotSizeReducedForMargin: boolean
+}
+
+export interface MarginConstrainedLotsInput {
+  requestedLots: number
+  availableFreeMargin: number
+  marginRequired: number
+  minimumLots: number
+  maximumLots: number
+  lotStep: number
+  /** Desired maximum fraction of free margin used; the implementation caps it at 90%. */
+  marginUtilization?: number
+}
+
+/**
+ * Estimate a stepped lot size that fits the broker margin quote while reserving
+ * at least 10% of free margin. The execution path must query cTrader again for
+ * the reduced size before placing any order.
+ */
+export const calculateMarginConstrainedLots = (input: MarginConstrainedLotsInput): number => {
+  const {
+    requestedLots, availableFreeMargin, marginRequired,
+    minimumLots, maximumLots, lotStep,
+  } = input
+  const requestedUtilization = input.marginUtilization ?? 0.9
+  const utilization = Number.isFinite(requestedUtilization)
+    ? Math.min(0.9, Math.max(0, requestedUtilization))
+    : 0.9
+  if (![requestedLots, availableFreeMargin, marginRequired, minimumLots, maximumLots, lotStep]
+    .every(isPositive) || maximumLots < minimumLots || utilization <= 0) return 0
+
+  const marginBudget = availableFreeMargin * utilization
+  const affordableLots = marginRequired <= marginBudget
+    ? requestedLots
+    : requestedLots * marginBudget / marginRequired
+  if (!Number.isFinite(affordableLots) || affordableLots < minimumLots - 1e-8) return 0
+
+  const boundedLots = Math.min(requestedLots, maximumLots, affordableLots)
+  const stepCount = Math.floor((boundedLots - minimumLots + 1e-8) / lotStep)
+  if (stepCount < 0) return 0
+  const rounded = Number((minimumLots + stepCount * lotStep).toFixed(10))
+  return rounded >= minimumLots - 1e-8 ? rounded : 0
 }
 
 const isPositive = (value: unknown): value is number =>
@@ -234,19 +279,76 @@ export const executeTradeBotDemoOrder = async (
     throw new Error('The calculated volume is outside current cTrader lot limits; no order was sent.')
   }
 
-  const marginPayload = await apiRequest(post, source, 'margin', {
-    symbol,
-    symbolId: instrument.providerSymbol,
-    lots: riskPlan.lotSize,
-  })
-  const margin = asObject(marginPayload.margin)
-  const marginRequired = Number(setup.direction === 'BUY' ? margin.buyMargin : margin.sellMargin)
-  if (!isPositive(marginRequired)) {
-    throw new Error('cTrader did not return a valid broker-margin estimate; no order was sent.')
+  // Keep the balance-derived stop-risk sizing as the starting point, then cap
+  // volume to the current broker free-margin snapshot. Never trust one scaled
+  // estimate: re-query cTrader for every smaller stepped volume before ordering.
+  const riskSizedLotSize = riskPlan.lotSize
+  const MIN_FREE_MARGIN_RESERVE = 0.1
+  const maximumMarginUse = currentFreeMargin * (1 - MIN_FREE_MARGIN_RESERVE)
+  let marginRequired = 0
+  let marginFits = false
+  const MAX_MARGIN_RECHECKS = 8
+
+  for (let attempt = 0; attempt < MAX_MARGIN_RECHECKS; attempt += 1) {
+    const marginPayload = await apiRequest(post, source, 'margin', {
+      symbol,
+      symbolId: instrument.providerSymbol,
+      lots: riskPlan.lotSize,
+    })
+    const margin = asObject(marginPayload.margin)
+    marginRequired = Number(setup.direction === 'BUY' ? margin.buyMargin : margin.sellMargin)
+    if (!isPositive(marginRequired)) {
+      throw new Error('cTrader did not return a valid broker-margin estimate; no order was sent.')
+    }
+    ensureContinued()
+
+    if (marginRequired <= maximumMarginUse) {
+      marginFits = true
+      break
+    }
+
+    const reducedLots = calculateMarginConstrainedLots({
+      requestedLots: riskPlan.lotSize,
+      availableFreeMargin: currentFreeMargin,
+      marginRequired,
+      minimumLots: Math.max(symbolSpec.minLotSize, instrument.quantityMin),
+      maximumLots: Math.min(symbolSpec.maxLotSize, instrument.quantityMax),
+      lotStep: Math.max(symbolSpec.lotStep, instrument.quantityStep),
+      marginUtilization: 1 - MIN_FREE_MARGIN_RESERVE,
+    })
+    if (!isPositive(reducedLots) || reducedLots < instrument.quantityMin - 1e-8 ||
+        reducedLots >= riskPlan.lotSize - 1e-8) {
+      throw new Error(
+        'Current free margin cannot safely support even the broker minimum lot while keeping a 10% free-margin reserve; no order was sent.',
+      )
+    }
+
+    const reducedPlan = calculateCfdRiskPlan({
+      accountBalance: currentBalance,
+      accountCurrency: currentCurrency,
+      symbol: symbolSpec,
+      side: setup.direction,
+      entryPrice,
+      stopLossPrice: stopLoss,
+      takeProfitPrice: takeProfit,
+      riskAmount: riskBudget,
+      lots: reducedLots,
+    })
+    if (!reducedPlan.valid) {
+      throw new Error(reducedPlan.error || 'Margin-adjusted lot size failed risk validation; no order was sent.')
+    }
+    if (reducedPlan.lotSize > reducedLots + 1e-8 ||
+        reducedPlan.estimatedLossAtStop > riskBudget + 0.01) {
+      throw new Error('Margin-adjusted volume would exceed the account risk ceiling; no order was sent.')
+    }
+    if (reducedPlan.riskRewardRatio < 1.5) {
+      throw new Error('The margin-adjusted risk/reward is below 1.5:1; no order was sent.')
+    }
+    riskPlan = reducedPlan
   }
-  ensureContinued()
-  if (marginRequired > currentFreeMargin) {
-    throw new Error('The required broker margin exceeds current free margin; no order was sent.')
+
+  if (!marginFits || marginRequired > maximumMarginUse) {
+    throw new Error('Could not verify a lot size within 90% of current cTrader free margin; no order was sent.')
   }
 
   const clientOrderId = [
@@ -342,5 +444,13 @@ export const executeTradeBotDemoOrder = async (
       ? undefined
       : protectionError || 'cTrader did not confirm both broker-side stop loss and take profit or a usable position ID.',
   }
-  return { trade, riskPlan, marginRequired, protectionConfirmed, signalKey: sourceKey }
+  return {
+    trade,
+    riskPlan,
+    marginRequired,
+    protectionConfirmed,
+    signalKey: sourceKey,
+    riskSizedLotSize,
+    lotSizeReducedForMargin: riskPlan.lotSize < riskSizedLotSize - 1e-8,
+  }
 }
