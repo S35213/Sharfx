@@ -7,7 +7,8 @@ export interface CTraderLiveQuote {
   bid?: number
   ask?: number
   last?: number
-  timestamp: string
+  /** Null means the provider did not supply a usable timestamp; callers must hold the bot. */
+  timestamp: string | null
 }
 
 export interface CTraderLiveInstrument {
@@ -59,7 +60,7 @@ const POLL_INTERVAL_MS = 150
 const streamKey = ({ connectionId, accountId, environment, symbol }: SubscribeArgs): string =>
   [connectionId, accountId, environment, symbol.toUpperCase()].join(':')
 
-const MAX_FRESH_QUOTE_AGE_MS = 60_000
+export const CTRADER_QUOTE_MAX_AGE_MS = 45_000
 
 /** Normalize broker quote timestamps (ISO strings, Unix seconds or milliseconds) to epoch ms. */
 export const getCTraderQuoteTimestampMs = (
@@ -79,7 +80,7 @@ export const getCTraderQuoteTimestampMs = (
 export const isCTraderQuoteTimestampFresh = (
   timestamp: string | number | null | undefined,
   nowMs = Date.now(),
-  maxAgeMs = MAX_FRESH_QUOTE_AGE_MS,
+  maxAgeMs = CTRADER_QUOTE_MAX_AGE_MS,
 ): boolean => {
   if (!Number.isFinite(nowMs) || nowMs <= 0 ||
       !Number.isFinite(maxAgeMs) || maxAgeMs < 0) return false
