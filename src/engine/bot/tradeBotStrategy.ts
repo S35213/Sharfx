@@ -207,8 +207,8 @@ export const evaluateTradeBotStrategy = (input: {
   const historyCheck: TradeBotStrategyCheck = {
     id: 'history',
     label: 'Closed candles',
-    status: candles.length >= 30 ? 'PASS' : 'BLOCK',
-    detail: String(candles.length) + ' closed candles available; trend fallback needs at least 30.',
+    status: candles.length >= 30 ? 'PASS' : candles.length >= 7 ? 'WATCH' : 'BLOCK',
+    detail: String(candles.length) + ' closed candles available; trend fallback needs at least 30, while structural checks need at least 7.',
   }
   const higherCheck = (direction: 'BUY' | 'SELL' | null): TradeBotStrategyCheck => {
     const directionBias = direction === 'BUY' ? 'Bullish' : direction === 'SELL' ? 'Bearish' : null
