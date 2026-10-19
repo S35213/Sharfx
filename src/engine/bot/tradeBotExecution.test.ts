@@ -239,6 +239,30 @@ describe('Trade Bot cTrader demo execution', () => {
     expect(vi.mocked(post).mock.calls.map(([body]) => body.action)).toEqual(['quote', 'account', 'margin'])
   })
 
+  it('uses the user-entered lot when the risk and broker rules allow it', async () => {
+    const post = createPost()
+    const result = await executeTradeBotDemoOrder({ ...input(), requestedLots: 0.03, post })
+
+    expect(result.requestedLotSize).toBe(0.03)
+    expect(result.trade.lotSize).toBe(0.03)
+    expect(result.lotSizeReducedForRisk).toBe(false)
+    expect(result.riskPlan.estimatedLossAtStop).toBeLessThanOrEqual(10.01)
+    const calls = vi.mocked(post).mock.calls
+    expect(calls[calls.length - 1]?.[0].order).toMatchObject({ quantity: 0.03, quantityUnit: 'lots' })
+  })
+
+  it('reduces an oversized requested lot to the balance-based stop-risk limit', async () => {
+    const post = createPost()
+    const result = await executeTradeBotDemoOrder({ ...input(), requestedLots: 0.5, post })
+
+    expect(result.requestedLotSize).toBe(0.5)
+    expect(result.lotSizeReducedForRisk).toBe(true)
+    expect(result.riskSizedLotSize).toBeLessThan(0.5)
+    expect(result.trade.lotSize).toBeLessThanOrEqual(result.riskSizedLotSize)
+    expect(result.trade.riskAmount).toBeLessThanOrEqual(10.01)
+    expect(result.lotAdjustmentReason).toContain('account stop-risk limit')
+  })
+
   it('uses current broker balance and free margin instead of stale UI values', async () => {
     const post = createPost({
       account: { ok: true, account: { balance: 1_000, freeMargin: 5_000, currency: 'USD' }, positions: [], orders: [] },
