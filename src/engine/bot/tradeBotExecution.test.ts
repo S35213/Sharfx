@@ -187,10 +187,10 @@ describe('Trade Bot cTrader demo execution', () => {
     expect(vi.mocked(post).mock.calls.map(([body]) => body.action)).toEqual(['quote', 'account'])
   })
 
-  it('blocks orders when the broker margin exceeds free margin', async () => {
+  it('refuses to place an order when the broker margin remains unaffordable after resizing', async () => {
     const post = createPost({ margin: { ok: true, margin: { buyMargin: 10_000, sellMargin: 10_000 } } })
-    await expect(executeTradeBotDemoOrder({ ...input(), post })).rejects.toThrow(/exceeds current free margin/i)
-    expect(vi.mocked(post).mock.calls.map(([body]) => body.action)).toEqual(['quote', 'account', 'margin'])
+    await expect(executeTradeBotDemoOrder({ ...input(), post })).rejects.toThrow(/cannot safely support even the broker minimum lot/i)
+    expect(vi.mocked(post).mock.calls.map(([body]) => body.action)).toEqual(['quote', 'account', 'margin', 'margin', 'margin'])
   })
   it('automatically reduces risk-sized lots when current free margin is tighter', async () => {
     const post: CTraderApiPost = vi.fn(async (body) => {
