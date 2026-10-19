@@ -127,16 +127,15 @@ export const TradeBotPanel: React.FC<Props> = ({
 
   useEffect(() => {
     if (!running || !market.updatedAt) return
-    const candles = market.frames[timeframe] ?? []
-    const lastCandle = candles[candles.length - 1]
     setShadowRecords((current) => {
       const advanced = advanceTradeBotShadowRecords(current, market.frames)
-      if (decision.status !== 'READY' || !decision.setup || !lastCandle) return advanced
+      const signalCandleTime = decision.signalCandleTime
+      if (decision.status !== 'READY' || !decision.setup || !Number.isFinite(signalCandleTime) || Number(signalCandleTime) <= 0) return advanced
       const candidate = createTradeBotShadowRecord({
         scopeKey: traceScopeKey,
         symbol,
         timeframe,
-        signalCandleTime: lastCandle.time,
+        signalCandleTime: Number(signalCandleTime),
         setup: decision.setup,
         riskBudget: decision.riskBudget,
         estimatedLoss: decision.riskPlan?.valid ? decision.riskPlan.estimatedLossAtStop : null,
@@ -146,10 +145,18 @@ export const TradeBotPanel: React.FC<Props> = ({
     })
   }, [running, market.updatedAt, market.frames, timeframe, decision, traceScopeKey, symbol])
 
-  const visibleShadowRecords = useMemo(
-    () => shadowRecords.filter((record) => record.scopeKey === traceScopeKey).slice(0, 6),
+  const scopedShadowRecords = useMemo(
+    () => shadowRecords.filter((record) => record.scopeKey === traceScopeKey),
     [shadowRecords, traceScopeKey],
   )
+  const visibleShadowRecords = useMemo(() => scopedShadowRecords.slice(0, 6), [scopedShadowRecords])
+  const shadowOutcomeCounts = useMemo(() => ({
+    wins: scopedShadowRecords.filter((record) => record.status === 'TARGET').length,
+    losses: scopedShadowRecords.filter((record) => record.status === 'STOP').length,
+    ambiguous: scopedShadowRecords.filter((record) => record.status === 'AMBIGUOUS').length,
+    pending: scopedShadowRecords.filter((record) => record.status === 'PENDING').length,
+  }), [scopedShadowRecords])
+  const latestResolvedShadow = scopedShadowRecords.find((record) => record.status !== 'PENDING') ?? null
 
   const startBlockReason = !marketSource?.providerId
     ? 'Select a market provider and account before starting analysis.'
@@ -294,16 +301,16 @@ export const TradeBotPanel: React.FC<Props> = ({
       setCycleMessage('Cycle ' + market.cycleNumber + ': setup candidate found but held by checks. ' + reason + ' No order was sent.')
       return
     }
-    const lastCandle = market.frames[timeframe]?.[market.frames[timeframe]!.length - 1]
-    if (!lastCandle || !Number.isFinite(lastCandle.time) || lastCandle.time <= 0) {
-      const issue = 'Signal candle timestamp is missing; no order was sent.'
+    const signalCandleTime = decision.signalCandleTime
+    if (!Number.isFinite(signalCandleTime) || Number(signalCandleTime) <= 0) {
+      const issue = 'The strategy did not provide a valid closed-candle timestamp; no order was sent.'
       setLastBotIssue(issue)
       setCycleMessage('Cycle ' + market.cycleNumber + ': ' + issue)
       return
     }
     const signalKey = [
       traceScopeKey,
-      String(lastCandle.time),
+      String(signalCandleTime),
       decision.setup.direction,
     ].join('|')
     if (attemptedSignalRef.current?.key === signalKey) {
@@ -323,7 +330,7 @@ export const TradeBotPanel: React.FC<Props> = ({
       source: executionSource,
       symbol,
       timeframe,
-      signalCandleTime: Number(lastCandle.time),
+      signalCandleTime: Number(signalCandleTime),
       setup: decision.setup,
       accountBalance,
       accountFreeMargin,
@@ -406,7 +413,7 @@ export const TradeBotPanel: React.FC<Props> = ({
               <strong className="mt-1 block font-mono text-base">{symbol}</strong>
               <span className="mt-0.5 block text-[8px] text-shafx-textMuted">{timeframe} · cTrader practice account</span>
             </div>
-            <span className="rounded-md border border-shafx-border px-2 py-1 font-mono text-[8px] text-shafx-textMuted">{running ? 'BOT RUNNING' : 'DEMO ONLY'}</span>
+            <span className="rounded-md border border-shafx-border px-2 py-1 font-mono text-[8px] text-shafx-textMuted">{running ? 'MONITORING' : 'DEMO ONLY'}</span>
           </div>
         </div>
 
@@ -442,6 +449,125 @@ export const TradeBotPanel: React.FC<Props> = ({
           )}
         </div>
       </div>
+
+      <section className="rounded-xl border border-shafx-border bg-shafx-bg p-3" aria-label="Trade Bot signal pipeline">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <h4 className="text-[10px] font-semibold">Signal pipeline</h4>
+            <p className="mt-0.5 text-[8px] text-shafx-textMuted">Live checks for this market and timeframe</p>
+          </div>
+          <span className="font-mono text-[8px] text-shafx-textMuted">{running ? 'CYCLE ' + String(market.cycleNumber) : 'READY WHEN RUN'}</span>
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className={'rounded-lg border p-2 ' + (running && market.status === 'loading' ? 'animate-pulse border-shafx-accent/30 bg-shafx-accent/10' : diagnostics.marketFresh ? 'border-shafx-success/25 bg-shafx-success/[0.05]' : 'border-shafx-warning/25 bg-shafx-warning/[0.05]')}>
+            <span className="block text-[8px] uppercase tracking-[0.1em] text-shafx-textMuted">1 · Market</span>
+            <strong className={'mt-1 block text-[9px] ' + (running && market.status === 'loading' ? 'text-shafx-accent' : diagnostics.marketFresh ? 'text-shafx-success' : 'text-shafx-warning')}>
+              {market.status === 'loading' ? 'SCANNING' : diagnostics.marketFresh ? 'PASS' : 'WAIT'}
+            </strong>
+            <span className="mt-1 block text-[8px] leading-3 text-shafx-textMuted">
+              {market.status === 'loading' ? 'Requesting quote + bars' : diagnostics.marketAgeSeconds === null ? 'No broker quote yet' : 'Quote age ' + diagnostics.marketAgeSeconds + 's'}
+            </span>
+          </div>
+          <div className={'rounded-lg border p-2 ' + (decision.signalAnalysis?.setup ? 'border-shafx-success/25 bg-shafx-success/[0.05]' : decision.status === 'BLOCKED' ? 'border-shafx-danger/25 bg-shafx-danger/[0.05]' : 'border-shafx-warning/25 bg-shafx-warning/[0.05]')}>
+            <span className="block text-[8px] uppercase tracking-[0.1em] text-shafx-textMuted">2 · Strategy</span>
+            <strong className={'mt-1 block text-[9px] ' + (decision.signalAnalysis?.setup ? 'text-shafx-success' : decision.status === 'BLOCKED' ? 'text-shafx-danger' : 'text-shafx-warning')}>
+              {decision.signalAnalysis?.setup ? 'PASS' : decision.status === 'BLOCKED' ? 'BLOCK' : running ? 'SEARCHING' : 'IDLE'}
+            </strong>
+            <span className="mt-1 block text-[8px] leading-3 text-shafx-textMuted">
+              {decision.signalAnalysis?.source === 'STRUCTURE_LIQUIDITY' ? 'Structure + liquidity' : decision.signalAnalysis?.source === 'EMA_MOMENTUM' ? 'EMA + momentum fallback' : 'No qualified candidate yet'}
+            </span>
+          </div>
+          <div className={'rounded-lg border p-2 ' + (decision.riskPlan?.valid && diagnostics.riskWithinBudget ? 'border-shafx-success/25 bg-shafx-success/[0.05]' : decision.status === 'BLOCKED' && /risk|lot|margin|volume/i.test(decision.reason) ? 'border-shafx-danger/25 bg-shafx-danger/[0.05]' : 'border-shafx-border')}>
+            <span className="block text-[8px] uppercase tracking-[0.1em] text-shafx-textMuted">3 · Risk</span>
+            <strong className={'mt-1 block text-[9px] ' + (decision.riskPlan?.valid && diagnostics.riskWithinBudget ? 'text-shafx-success' : decision.status === 'BLOCKED' && /risk|lot|margin|volume/i.test(decision.reason) ? 'text-shafx-danger' : 'text-shafx-textMuted')}>
+              {decision.riskPlan?.valid && diagnostics.riskWithinBudget ? 'PASS' : decision.status === 'BLOCKED' && /risk|lot|margin|volume/i.test(decision.reason) ? 'BLOCK' : 'WAIT'}
+            </strong>
+            <span className="mt-1 block text-[8px] leading-3 text-shafx-textMuted">
+              {decision.riskPlan?.valid ? String(decision.riskPlan.lotSize) + ' lots planned' : 'Waits for a valid setup'}
+            </span>
+          </div>
+          <div className={'rounded-lg border p-2 ' + (cycleMessage.startsWith('DEMO ORDER FILLED') ? 'border-shafx-success/25 bg-shafx-success/[0.05]' : executionPending ? 'animate-pulse border-shafx-accent/30 bg-shafx-accent/10' : lastBotIssue ? 'border-shafx-danger/25 bg-shafx-danger/[0.05]' : 'border-shafx-border')}>
+            <span className="block text-[8px] uppercase tracking-[0.1em] text-shafx-textMuted">4 · Broker</span>
+            <strong className={'mt-1 block text-[9px] ' + (cycleMessage.startsWith('DEMO ORDER FILLED') ? 'text-shafx-success' : executionPending ? 'text-shafx-accent' : lastBotIssue ? 'text-shafx-danger' : 'text-shafx-textMuted')}>
+              {cycleMessage.startsWith('DEMO ORDER FILLED') ? 'FILLED' : executionPending ? 'CHECKING' : lastBotIssue ? 'HELD' : 'WAIT'}
+            </strong>
+            <span className="mt-1 block text-[8px] leading-3 text-shafx-textMuted">
+              {cycleMessage.startsWith('DEMO ORDER FILLED') ? 'Broker response received' : executionPending ? 'Validating order' : 'No order sent yet'}
+            </span>
+          </div>
+        </div>
+        {decision.signalAnalysis && (
+          <div className="mt-3 rounded-lg border border-shafx-border bg-shafx-surface p-3">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <div className="text-[9px] font-semibold">{decision.signalAnalysis.source === 'STRUCTURE_LIQUIDITY' ? 'Structure + liquidity' : decision.signalAnalysis.source === 'EMA_MOMENTUM' ? 'EMA + momentum strategy' : 'Strategy checks'}</div>
+                <p className="mt-1 text-[8px] leading-4 text-shafx-textMuted">{decision.reason}</p>
+              </div>
+              {decision.signalAnalysis.score !== null && (
+                <div className="shrink-0 rounded-lg border border-shafx-accent/25 bg-shafx-accent/[0.06] px-2 py-1 text-right">
+                  <strong className="block font-mono text-sm text-shafx-accent">{decision.signalAnalysis.score}</strong>
+                  <span className="block text-[7px] uppercase text-shafx-textMuted">score</span>
+                </div>
+              )}
+            </div>
+            {decision.signalAnalysis.metrics.emaFast !== null && decision.signalAnalysis.metrics.emaSlow !== null && (
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[8px] text-shafx-textMuted">
+                <span>EMA 9 <b className="font-mono text-shafx-text">{formatPrice(decision.signalAnalysis.metrics.emaFast, symbolSpec?.pricePrecision ?? 5)}</b></span>
+                <span>EMA 21 <b className="font-mono text-shafx-text">{formatPrice(decision.signalAnalysis.metrics.emaSlow, symbolSpec?.pricePrecision ?? 5)}</b></span>
+                {decision.signalAnalysis.metrics.rsi !== null && <span>RSI <b className="font-mono text-shafx-text">{decision.signalAnalysis.metrics.rsi.toFixed(1)}</b></span>}
+              </div>
+            )}
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {decision.signalAnalysis.checks.map((check) => (
+                <div key={check.id} className="flex items-start gap-2 rounded-md bg-shafx-bg px-2 py-2">
+                  <span className={'mt-0.5 shrink-0 rounded px-1.5 py-0.5 font-mono text-[7px] font-bold ' + (check.status === 'PASS' ? 'bg-shafx-success/10 text-shafx-success' : check.status === 'BLOCK' ? 'bg-shafx-danger/10 text-shafx-danger' : 'bg-shafx-warning/10 text-shafx-warning')}>
+                    {check.status}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="text-[8px] font-semibold">{check.label}</div>
+                    <p className="mt-0.5 break-words text-[8px] leading-3 text-shafx-textMuted">{check.detail}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-xl border border-shafx-border bg-shafx-bg p-3" aria-label="Strategy-only hypothetical outcomes">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <h4 className="text-[10px] font-semibold">Strategy outcomes</h4>
+            <p className="mt-0.5 text-[8px] text-shafx-textMuted">Hypothetical signals only · not broker trade results</p>
+          </div>
+          {latestResolvedShadow && (
+            <span className={'rounded-md px-2 py-1 font-mono text-[7px] font-bold ' + (latestResolvedShadow.status === 'TARGET' ? 'animate-pulse bg-shafx-success/10 text-shafx-success' : latestResolvedShadow.status === 'STOP' ? 'animate-pulse bg-shafx-danger/10 text-shafx-danger' : 'bg-shafx-warning/10 text-shafx-warning')}>
+              LATEST {latestResolvedShadow.status === 'TARGET' ? 'WIN' : latestResolvedShadow.status === 'STOP' ? 'LOSS' : 'AMBIGUOUS'}
+            </span>
+          )}
+        </div>
+        <div className="mt-3 grid grid-cols-4 gap-2">
+          <div className="rounded-lg border border-shafx-success/20 bg-shafx-success/[0.04] p-2">
+            <span className="block text-[7px] uppercase tracking-[0.08em] text-shafx-textMuted">Wins</span>
+            <strong className="mt-1 block font-mono text-base text-shafx-success">{shadowOutcomeCounts.wins}</strong>
+          </div>
+          <div className="rounded-lg border border-shafx-danger/20 bg-shafx-danger/[0.04] p-2">
+            <span className="block text-[7px] uppercase tracking-[0.08em] text-shafx-textMuted">Losses</span>
+            <strong className="mt-1 block font-mono text-base text-shafx-danger">{shadowOutcomeCounts.losses}</strong>
+          </div>
+          <div className="rounded-lg border border-shafx-warning/20 bg-shafx-warning/[0.04] p-2">
+            <span className="block text-[7px] uppercase tracking-[0.08em] text-shafx-textMuted">Ambiguous</span>
+            <strong className="mt-1 block font-mono text-base">{shadowOutcomeCounts.ambiguous}</strong>
+          </div>
+          <div className="rounded-lg border border-shafx-border p-2">
+            <span className="block text-[7px] uppercase tracking-[0.08em] text-shafx-textMuted">Pending</span>
+            <strong className="mt-1 block font-mono text-base">{shadowOutcomeCounts.pending}</strong>
+          </div>
+        </div>
+        <p className="mt-2 text-[8px] leading-4 text-shafx-textMuted">
+          Win/loss counts update only after a later closed candle reaches the planned target or stop. If one candle touches both, the result is marked ambiguous; the bot never invents an outcome.
+        </p>
+      </section>
 
       <section className="rounded-xl border border-shafx-border bg-shafx-bg p-3" aria-live="polite" role="status">
         <div className="flex items-center justify-between gap-2">

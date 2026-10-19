@@ -1,7 +1,4 @@
-import { analyzeLiquidity } from '../liquidity'
-import { analyzeMarketStructure, findSwingPoints } from '../marketStructure'
-import { analyzeSetup } from '../setup'
-import { analyzeSupportResistance } from '../supportResistance'
+import { evaluateTradeBotStrategy, type TradeBotStrategyResult } from './tradeBotStrategy'
 import { analyzeMultiTimeframeBias } from '../agent/multiTimeframe'
 import { calculateCfdRiskPlan, type CfdRiskPlan } from '../../lib/cfdRiskEngine'
 import { resolveTradeBotLotSize } from './tradeBotLotSizing'
@@ -19,6 +16,8 @@ export interface TradeBotDecision {
   riskPlan: CfdRiskPlan | null
   requestedLotSize?: number
   lotAdjustmentReason?: string | null
+  signalCandleTime?: number | null
+  signalAnalysis?: TradeBotStrategyResult
   higherTimeframeBias: 'Bullish' | 'Bearish' | 'Sideways' | 'Unclear'
 }
 
@@ -33,8 +32,9 @@ const wait = (
   reason: string,
   riskBudget: number,
   higherTimeframeBias: TradeBotDecision['higherTimeframeBias'] = 'Unclear',
+  signalAnalysis?: TradeBotStrategyResult,
 ): TradeBotDecision => ({
-  status: 'WAIT', reason, setup: null, timeframe, riskBudget, riskPlan: null, higherTimeframeBias,
+  status: 'WAIT', reason, setup: null, timeframe, riskBudget, riskPlan: null, higherTimeframeBias, signalAnalysis,
 })
 
 export const evaluateTradeBotDecision = (input: {
@@ -67,28 +67,31 @@ export const evaluateTradeBotDecision = (input: {
 
   const multi = analyzeMultiTimeframeBias(frames)
   const rawBias = multi.higherTimeframeBias
-  const higherTimeframeBias = rawBias === 'Bullish' || rawBias === 'Bearish' || rawBias === 'Sideways'
+  const higherTimeframeBias = rawBias === 'Bullish' || rawBias === 'Bearish'
     ? rawBias
     : 'Unclear'
-  const swings = findSwingPoints(candles, 2)
-  const structure = analyzeMarketStructure(candles, 2)
-  const tolerance = symbol.includes('JPY') ? 0.1 : symbol.includes('XAU') ? 0.01 : 0.001
-  const supportResistance = analyzeSupportResistance(candles, tolerance, swings)
-  const liquidity = analyzeLiquidity(candles, swings, tolerance)
-  const setup = analyzeSetup({
-    currentPrice: Number(candles[candles.length - 1]?.close ?? 0),
-    structure,
-    supportResistance,
-    liquidity,
-  }).preferredSetup
+  const higherTimeframeDirectionalCount = multi.biases.filter((item) =>
+    ['H1', 'H4', 'D1', 'W1'].includes(item.timeframe) &&
+    (item.bias === 'Bullish' || item.bias === 'Bearish'),
+  ).length
+  const higherTimeframeDetail = multi.summary +
+    ' Higher-timeframe directional frames: ' + higherTimeframeDirectionalCount +
+    '; dominant confidence ' + multi.higherTimeframeConfidence + '%.'
+
+  const signalAnalysis = evaluateTradeBotStrategy({
+    symbol,
+    timeframe,
+    candles,
+    symbolSpec,
+    higherTimeframeBias: rawBias,
+    higherTimeframeDirectionalCount,
+    higherTimeframeConfidence: multi.higherTimeframeConfidence,
+    higherTimeframeDetail,
+  })
+  const setup = signalAnalysis.setup
 
   if (!setup || (setup.direction !== 'BUY' && setup.direction !== 'SELL')) {
-    return wait(timeframe, 'No setup passed the Trade Bot structure and liquidity rules.', riskBudget, higherTimeframeBias)
-  }
-
-  const directionalBias = setup.direction === 'BUY' ? 'Bullish' : 'Bearish'
-  if (higherTimeframeBias !== directionalBias) {
-    return wait(timeframe, 'Higher-timeframe bias does not confirm the candidate direction.', riskBudget, higherTimeframeBias)
+    return wait(timeframe, signalAnalysis.reason, riskBudget, higherTimeframeBias, signalAnalysis)
   }
 
   const riskLimitPlan = calculateCfdRiskPlan({
@@ -110,6 +113,8 @@ export const evaluateTradeBotDecision = (input: {
       riskBudget,
       riskPlan: riskLimitPlan,
       higherTimeframeBias,
+      signalCandleTime: signalAnalysis.signalCandleTime,
+      signalAnalysis,
     }
   }
 
@@ -133,6 +138,8 @@ export const evaluateTradeBotDecision = (input: {
         riskPlan: riskLimitPlan,
         requestedLotSize: input.requestedLots,
         higherTimeframeBias,
+        signalCandleTime: signalAnalysis.signalCandleTime,
+        signalAnalysis,
       }
     }
     lotAdjustmentReason = choice.adjustmentReason
@@ -158,6 +165,8 @@ export const evaluateTradeBotDecision = (input: {
         requestedLotSize: input.requestedLots,
         lotAdjustmentReason,
         higherTimeframeBias,
+        signalCandleTime: signalAnalysis.signalCandleTime,
+        signalAnalysis,
       }
     }
   }
@@ -172,6 +181,8 @@ export const evaluateTradeBotDecision = (input: {
       requestedLotSize: input.requestedLots,
       lotAdjustmentReason,
       higherTimeframeBias,
+      signalCandleTime: signalAnalysis.signalCandleTime,
+      signalAnalysis,
     }
   }
   if (riskPlan.riskRewardRatio < 1.5) {
@@ -185,6 +196,8 @@ export const evaluateTradeBotDecision = (input: {
       requestedLotSize: input.requestedLots,
       lotAdjustmentReason,
       higherTimeframeBias,
+      signalCandleTime: signalAnalysis.signalCandleTime,
+      signalAnalysis,
     }
   }
 
@@ -197,6 +210,8 @@ export const evaluateTradeBotDecision = (input: {
     riskPlan,
     requestedLotSize: input.requestedLots,
     lotAdjustmentReason,
+    signalCandleTime: signalAnalysis.signalCandleTime,
+    signalAnalysis,
     higherTimeframeBias,
   }
 }
