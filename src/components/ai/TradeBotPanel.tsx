@@ -189,7 +189,6 @@ export const TradeBotPanel: React.FC<Props> = ({
     : decision.status === 'BLOCKED' || startBlockReason || (running && !diagnostics.marketFresh)
       ? 'border-shafx-danger/30 bg-shafx-danger/10 text-shafx-danger'
       : 'border-shafx-border bg-shafx-bg text-shafx-textMuted'
-  const updatedAt = market.updatedAt ? new Date(market.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'
 
   const start = (): void => {
     const currentScope = traceScopeKey
