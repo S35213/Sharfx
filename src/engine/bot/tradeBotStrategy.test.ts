@@ -115,6 +115,6 @@ describe('Trade Bot explainable strategy', () => {
 
     expect(result.setup).toBeNull()
     expect(result.reason).toContain('30 closed candles')
-    expect(result.checks.find((check) => check.id === 'history')?.status).toBe('BLOCK')
+    expect(result.checks.find((check) => check.id === 'history')?.status).toBe('WATCH')
   })
 })
