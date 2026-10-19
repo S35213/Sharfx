@@ -190,7 +190,6 @@ export const TradeBotPanel: React.FC<Props> = ({
       ? 'border-shafx-danger/30 bg-shafx-danger/10 text-shafx-danger'
       : 'border-shafx-border bg-shafx-bg text-shafx-textMuted'
   const updatedAt = market.updatedAt ? new Date(market.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'
-  const lastDataChangedAt = market.lastDataChangedAt ? new Date(market.lastDataChangedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'
 
   const start = (): void => {
     const currentScope = traceScopeKey
@@ -470,6 +469,11 @@ export const TradeBotPanel: React.FC<Props> = ({
           </span>
         </summary>
         <div className="mt-3 space-y-3 text-[9px]">
+          {onReviewSetup && decision.status === 'READY' && decision.setup && (
+            <button type="button" onClick={() => onReviewSetup(decision.setup)} className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-shafx-accent/30 px-3 text-[8px] font-bold text-shafx-accent">
+              Review qualified setup in manual trade
+            </button>
+          )}
           <div className="rounded-lg border border-shafx-border bg-shafx-bg p-3">
             <div className="text-[8px] uppercase tracking-[0.12em] text-shafx-textMuted">Data source scope</div>
             <div className="mt-1 break-words font-mono">{diagnostics.sourceLabel}</div>
