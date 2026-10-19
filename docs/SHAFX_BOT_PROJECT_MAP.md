@@ -3,6 +3,19 @@
 **Last updated:** 2026-10-19  
 **Purpose:** durable handoff notes for a new ChatGPT conversation. Update this file whenever bot work changes.
 
+## Mandatory release gate — for every change, on every platform
+
+**This is a required workflow, not an optional checklist.** A coding agent must remain on the task in the active work session until the relevant verification and deployment have reached a terminal state. Do not stop at a commit, a successful build, a queued deploy, or a “running” status.
+
+1. **Before editing:** confirm the repository, working branch, target environment/service, currently live commit, and the user's production boundaries. Read this project map first. Do not deploy unrelated sibling services or merge to protected/production branches without authorization.
+2. **Track the change:** record the reported symptom, reproduction/evidence, diagnosed root cause, intended fix, files expected to change, and safety constraints before editing.
+3. **Test the exact candidate revision:** run the applicable formatting/type/build/lint/unit/integration/security checks. Wait for every required CI workflow to reach a terminal state. Fix failed checks and rerun them against the corrected commit. Do not report a check as passed if it is still queued or running.
+4. **Deploy and WAIT:** once candidate checks pass, follow the actual hosting platform's deployment ID/status/logs/events for the exact commit. Keep checking while it is queued, building, deploying, or starting. Then verify the public/runtime health endpoint, static assets/API smoke tests and responsive preview as applicable. Do not treat CI success as deployment success.
+5. **If deployment fails:** inspect the failure event and build/runtime logs; classify it as a source/build/configuration defect, health/runtime failure, external dependency failure, permissions issue, or platform/quota block. Fix actual code/config failures, rerun all affected checks, redeploy, and repeat until deployment and smoke checks pass. If blocked by external limits (such as exhausted build minutes), do not claim success, do not spam retries, preserve the last known-good deployment, record the exact platform error and required unblock action, and continue only when a safe retry is possible.
+6. **Verify what users receive:** confirm the live service is serving the candidate commit, then perform the relevant browser/UI workflow. Separate “CI passed”, “deploy is live”, “public smoke passed”, “authenticated workflow passed”, and “broker action confirmed”. Never infer one from another. Never fake scans, fills, wins/losses, or broker confirmations.
+7. **Record the result before stopping:** update this map with root cause, files changed, branch/commit/PR, checks with links and terminal pass/fail states, deployment ID/status/commit, live smoke/browser evidence, unresolved blockers and the exact next action. If any required step has not passed, label the change **BLOCKED / NOT VERIFIED**, not “fixed”. For new tasks/conversations, read this map and inspect current live deployment state again before editing.
+8. **Cross-platform rule:** apply this gate to Render, Vercel, Cloudflare, GitHub Actions, or any future build/deploy platform. Use platform-specific status/log tools rather than assuming a commit succeeded. Do not promise background monitoring when no monitoring process is actually running; carry out the checks in the active task session and clearly identify any hard blocker that prevents a pass.
+
 ## Guardrails — do not skip
 
 - Repository: [S35213/Sharfx](https://github.com/S35213/Sharfx).
@@ -160,3 +173,12 @@ If a new conversation starts, read this file first, then inspect the live branch
 - **Not proven yet:** no authenticated browser session was available. The connected TinyFish wallet blocked the previous interactive run before it started. Render's unauthenticated smoke and desktop/mobile preview passed, but the signed-in Signal Bot and Trade Bot cycle still need the user's actual in-app check.
 - **No trading action:** no live or demo broker order was submitted, modified or closed as part of these checks.
 - **Next safe action:** inspect the Bot tab in the user's signed-in session and read `Decision diagnostics` plus `Last bot issue / held check`. If a block persists, fix the displayed cause without bypassing freshness, minimum-lot, risk, margin or protection checks.
+
+
+## 2026-10-19 — Release-gate incident: Render quota blocked documentation deploy
+
+- **Failed deployment:** Render deployment `dep-dbb0dne7bikc73f4fuj0`, commit `e87729bbd041188c376fc1c56d6163bc6cb926fd`, ended as `build_failed` at 2026-10-19 12:02:40 UTC.
+- **Verified platform reason:** Render event `pipeline_minutes_exhausted` for build `bld-dbb0dne7bikc73f4fujg`. The workspace had exhausted build-pipeline minutes. This indicates a hosting quota block; it is not evidence that the Trade Bot source itself failed compilation.
+- **Last known-good application deploy:** `dep-dbb0cenlk1mc73dbcl70`, commit `ddabec62952cae01c0019f6fed94df67984ef240`, status `live` at 2026-10-19 12:00:56 UTC. Keep this as the last known-good state until a later revision can actually deploy and pass smoke checks.
+- **Important distinction:** the failed revision contains a project-map documentation change. Render auto-deploy is triggered by commits to the connected branch, including documentation-only changes. Do not claim the new documentation revision is deployed. Avoid further commits to the Render-connected branch while the known quota block remains; use a separate documentation/review branch until the quota is available.
+- **Required next action:** when Render build minutes are restored, merge/apply the release-gate policy, then observe the resulting exact Render deployment to a terminal state and verify live health/smoke. If it fails, inspect the new event and logs and continue the fix/retry cycle. Do not manually trigger repeated builds while the same quota block remains.
